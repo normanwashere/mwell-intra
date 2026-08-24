@@ -307,6 +307,9 @@ test("renders the four public modes and an outcome-first Home before metadata", 
   assert.equal(html.slice(question, documentControls).includes("Source checksum"), false);
   assert.match(html.slice(question, documentControls), /data-guide-id="stock-receiving-putaway"/);
   assert.match(html.slice(question, documentControls), /data-role-entry/);
+  assert.match(html, /openRole\?\.addEventListener\('click'/);
+  assert.match(html, /modeId: 'roles', guideId: roleId/);
+  assert.match(html, /<table tabindex="0"><thead><tr><th scope="col">Module<\/th>/);
 });
 
 test("renders all canonical task, role, and System guides in contract order", () => {

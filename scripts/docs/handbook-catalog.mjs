@@ -356,6 +356,22 @@ const CATALOG = [
     ],
   },
   {
+    source: "docs/releases/2026-08-24-OUTCOME-FIRST-HANDBOOK.md",
+    id: "outcome-first-handbook-release",
+    primaryTab: "release",
+    relatedTabs: ["start", "roles", "architecture"],
+    contentType: "release-note",
+    audience: ["release-reviewer", "trainer", "operator", "architect", "auditor"],
+    summary: "Outcome-first standalone handbook architecture, acceptance coverage, and certification evidence.",
+    keywords: ["handbook", "outcome-first", "certification", "responsive", "accessibility", "release"],
+    sortOrder: 63,
+    collapse: "reference",
+    relatedSources: [
+      "docs/TECHNICAL_AND_FUNCTIONAL_SPECIFICATION.md",
+      "docs/TRAINING_AND_HANDOVER_CONTENT.md",
+    ],
+  },
+  {
     source: "docs/runbooks/POLICY-ALIGNMENT-CUTOVER.md",
     id: "policy-alignment-cutover",
     primaryTab: "infrastructure",

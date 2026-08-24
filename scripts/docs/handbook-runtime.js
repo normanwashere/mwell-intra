@@ -22,6 +22,8 @@
     const screenshotViewer = document.querySelector('[data-screenshot-surface]');
     const screenshotViewerImage = screenshotViewer?.querySelector('[data-screenshot-viewer-image]');
     const screenshotViewerCaption = screenshotViewer?.querySelector('[data-screenshot-viewer-caption]');
+    const roleEntry = document.querySelector('[data-role-entry]');
+    const openRole = document.querySelector('[data-open-role]');
     const modeIds = new Set(tabs.map((tab) => tab.dataset.mode));
     const handbookIndex = Array.isArray(window.__HANDBOOK_INDEX__) ? window.__HANDBOOK_INDEX__ : [];
     const systemSearchIntentTerms = Array.isArray(window.__HANDBOOK_SYSTEM_INTENTS__) ? window.__HANDBOOK_SYSTEM_INTENTS__.map(normalizeSearchText).filter(Boolean) : [];
@@ -675,7 +677,7 @@
       if (!viewport || !canvas || !diagram || !svg || !width || !height) return false;
       shell.dataset.diagramWidth = String(width);
       shell.dataset.diagramHeight = String(height);
-      const fitPadding = 32;
+      const fitPadding = viewport.clientWidth < 480 ? 8 : 32;
       if (scale === 'fit') {
         const widthFitScale = Math.max(1, viewport.clientWidth - fitPadding) / width;
         const readableFitScale = Math.min(.56, widthFitScale);
@@ -772,6 +774,11 @@
     document.querySelectorAll('details[data-section-id]').forEach((details) => details.addEventListener('toggle', syncDisclosureState));
     search.addEventListener('input', () => setSearchState({ ...activeRoute, query: search.value }, { writeHash: true }));
     searchScopeButtons.forEach((button) => button.addEventListener('click', () => setSearchState({ ...activeRoute, scope: button.dataset.searchScope }, { writeHash: true })));
+    openRole?.addEventListener('click', () => {
+      const roleId = roleEntry?.value;
+      if (!roleId) { roleEntry?.focus(); return; }
+      activateRoute({ ...activeRoute, modeId: 'roles', guideId: roleId, headingId: null, historyMode: 'push', restoreScroll: false, focusTarget: true });
+    });
     document.querySelector('#theme').addEventListener('click', () => { const root = document.documentElement; root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark'; schedulePersistence(); });
     drawerTriggers.forEach((button) => button.addEventListener('click', () => setDrawerVisible(button.dataset.openDrawer, true)));
     document.querySelectorAll('[data-close-drawer]').forEach((button) => button.addEventListener('click', () => setDrawerVisible(button.dataset.closeDrawer, false)));
@@ -841,7 +848,7 @@
       shell.querySelectorAll('[data-diagram-zoom]').forEach((button) => button.addEventListener('click', () => { const action = button.dataset.diagramZoom; const current = typeof scale === 'number' ? scale : 1; scale = action === 'reset' ? 1 : Math.min(1.8, Math.max(.25, current + (action === 'in' ? .1 : -.1))); diagramZoom = { ...diagramZoom, [id]: scale }; applyDiagramZoom(shell, scale); schedulePersistence(); }));
     });
     const restoreMermaidLayout = prepareMermaidLayout();
-    mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'base', flowchart: { htmlLabels: true, useMaxWidth: true }, themeVariables: { primaryColor: '#e7f2fb', primaryTextColor: '#17233b', primaryBorderColor: '#0875bd', lineColor: '#506681', secondaryColor: '#e8faf5', tertiaryColor: '#fff4e8', fontFamily: 'Inter, Segoe UI, Arial, sans-serif' } });
+    mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'base', flowchart: { htmlLabels: true, useMaxWidth: true, nodeSpacing: 24, rankSpacing: 42 }, themeVariables: { primaryColor: '#e7f2fb', primaryTextColor: '#17233b', primaryBorderColor: '#0875bd', lineColor: '#506681', secondaryColor: '#e8faf5', tertiaryColor: '#fff4e8', fontFamily: 'Inter, Segoe UI, Arial, sans-serif' } });
     const mermaidReady = mermaid.run({ querySelector: '.mermaid' }).catch((error) => { console.error('Diagram rendering failed', error); });
     let lastHandledHash = location.hash;
     const handleHistoryNavigation = () => {

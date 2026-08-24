@@ -1,8 +1,8 @@
 # Mwell Intra Technical and Functional Specification
 
-**Reviewed:** August 23, 2026
+**Reviewed:** August 25, 2026
 **Procurement application behavior baseline:** `32170e425e125c63597ea8e05c6287a7cd256f5b`
-**Evidence status:** schema boundary verified on UAT; commit-bound browser certification remains the release gate
+**Evidence status:** schema boundary verified on UAT; standalone handbook Task 8 certification is recorded in `docs/releases/2026-08-24-OUTCOME-FIRST-HANDBOOK.md`
 
 ## Product boundary
 
@@ -16,6 +16,63 @@ Mwell Intra is the shared operating platform for cross-department workflows. War
 - PostgreSQL schemas, row-level security, guarded functions, and immutable activity records for live authority.
 - Role and capability resolution controls routes, commands, records, and onboarding curricula.
 - The standalone operating handbook is packaged with each certified release and maps guidance to current routes, roles, process diagrams and governing references.
+
+## Standalone handbook architecture
+
+### Four-mode presentation model
+
+The standalone handbook exposes four public modes in this order:
+
+1. **Home** starts with the question “What do you need to do?”, frequent operational outcomes, role entry, specialist support, and recent guides.
+2. **Tasks** contains exactly 13 canonical end-to-end guides for currently implemented workflows.
+3. **Roles** contains exactly 11 canonical persona guides with workspaces, authority, prohibited actions, handoffs, recovery, simulation, and sign-off evidence.
+4. **System** contains administration, architecture/data, infrastructure/continuity, security/governance, release/QA, imports, training readiness, and the governed source register.
+
+Home, Tasks, Roles, and System are presentation modes, not database roles or application modules. The source registry remains independent from this navigation so one governed source may support several user-facing guides without duplicating its canonical body.
+
+### Source and guide separation
+
+`scripts/docs/handbook-catalog.mjs` is the fail-closed registry for every maintained Markdown and CSV source. Missing, duplicate, stale, or unclassified sources fail generation. `scripts/docs/handbook-guides.mjs` separately defines Home, task, role, and System presentation contracts. The generator composes exact source sections into operational guidance while rendering every governed source body exactly once under System source references. Document controls link back to that canonical body and expose owner, version, checksum, release identity, and review date only when opened.
+
+The generated artifact is `docs/manual/index.html`. It embeds CSS, runtime JavaScript, Mermaid, the typed search index, the legacy-route map, and certified screenshots so it can operate without application authentication or network access. It contains no live private data or Supabase credential.
+
+### Canonical routing and migration
+
+The runtime owns one canonical route with the fields `mode`, `guide`, `heading`, `query`, and `scope`. Explicit URL state overrides local state. Browser Back and Forward, reload, per-guide scroll, disclosures, recents, diagram view/zoom/pan, theme, and search state are persisted in `mwell-intra-handbook:v3` without reloading the document.
+
+Every maintained legacy `tab`, `article`, and heading deep link is generated into `LEGACY_ROUTES`, translated to the nearest canonical destination, and shown with a non-blocking moved-link notice. Invalid routes recover to Home with a visible search action. The one-time v2 migration removes the old record only after translating an exact known route.
+
+### Search and discovery
+
+Search indexes Task, Step, Decision, Role, Troubleshooting, and System-reference records. Exact operational intent, action, and synonym matches rank before governance and release evidence for ordinary user queries. Results show type, role/module context, excerpt, match reason, and an exact same-document destination. Controlled no-result recovery offers common task terms, role browsing, and the System filter without leaving an empty panel.
+
+### Responsive, accessibility, and print contract
+
+- Acceptance widths are 1440, 1280, 1024, 768, 430, 390, 360, and 320 CSS pixels.
+- Desktop uses contextual navigation, the reading canvas, and a bounded page outline. Compact layouts move modes, theme, print, and contents into reachable drawers.
+- Keyboard operation covers tabs, search, guides, drawers, disclosures, screenshot viewer, diagrams, and print. Focus returns to the invoking control when a compact surface closes.
+- Touch targets are at least 44 by 44 CSS pixels. Serious and critical Axe findings, page-level overflow, clipped content, and sticky-control overlap fail browser certification.
+- Mermaid provides fitted task diagrams, zoom controls, overview/role/decision perspectives where available, and a complete text equivalent with branches and terminal outcomes.
+- Certified screenshots use responsive `<picture>` sources, visible numbered interaction targets, a full-screen viewer, descriptive alternatives, focus trapping, Escape, and trigger-focus return.
+- Print supports the current guide, current mode, or complete handbook without mutating saved disclosure state.
+
+### Handbook evidence and attestation
+
+Stage evidence is governed by:
+
+- `docs/manual/assets/knowledge-base/task-stage-evidence.json` for 52 stage bindings and desktop/mobile hashes;
+- `docs/manual/assets/knowledge-base/task-stage-ci-attestation.json` for the independently anchored GitHub run response;
+- `scripts/qa/handbook-evidence-targets.mjs` for workflow-specific controls and source context;
+- `scripts/docs/verify-handbook-ci-attestation.mjs` for repository, workflow, run, conclusion, head SHA, branch, attempt, timestamp, field-set, and digest validation;
+- `outputs/handbook-visual-review/` for current Task 8 viewport captures.
+
+The strict model rejects wrong hosts, routes, roles, targets, contexts, paths, hashes, reuse, stale timestamps, future timestamps, non-attested commits, fake runs, failed runs, and jointly mutated approval records. Current commands and exact results are maintained in `docs/releases/2026-08-24-OUTCOME-FIRST-HANDBOOK.md`.
+
+### Task 8 certification result
+
+The final model contains 29 maintained sources, four public modes, 13 task guides with 52 stages, 11 role guides, 48 decisions, 96 branches, 27 terminal outcomes, and 307 legacy-route migrations. The unit trio passed 81 of 81 tests. Strict evidence coverage and provenance returned zero warnings and zero errors, and the independent CI attestation verified. The eight-project browser suite passed 116 tests with 100 project-conditional skips and zero failures in 19.6 minutes. Its 24 captures cover light, dark, and print at 1440, 1280, 1024, 768, 430, 390, 360, and 320 CSS pixels.
+
+Repository verification passed: documentation build/check from all 29 sources, lint with 15 of 15 Turbo tasks and no errors, typecheck with 15 of 15 Turbo tasks, and release-documentation verification with no operational source changed. The three existing lint warnings are recorded by exact file and line in the release record. Local pnpm commands emitted the declared-engine warning because certification ran on Node `v20.18.1` and pnpm `9.15.9` while the repository requires Node 22 or newer and pnpm 10.
 
 ## Procurement policy contract
 

@@ -851,7 +851,8 @@ export function renderHandbookShell({ model, guides, searchIndex, styles, runtim
   const articles = guides.filter(({ type }) => type !== "home").map((guide) =>
     guide.type === "task" ? taskArticle(guide, guideById)
       : guide.type === "role" ? roleArticle(guide, guideById)
-        : systemArticle(guide)).join("\n");
+        : systemArticle(guide)).join("\n")
+    .replaceAll("<table>", '<table tabindex="0">');
   const initialSearchState = { query: "", scope: "all" };
   return `<!doctype html>
 <html lang="en" data-theme="light">

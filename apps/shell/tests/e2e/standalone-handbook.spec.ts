@@ -60,6 +60,220 @@ const operationalSearchCases = [
   ['cycle count variance', 'inventory-count-variance'],
 ] as const;
 
+const canonicalTaskGuides = [
+  ['procurement-request-approval', 4, 1],
+  ['vendor-accreditation-renewal', 4, 1],
+  ['warehouse-location-bin-setup', 2, 0],
+  ['stock-receiving-putaway', 4, 1],
+  ['ecommerce-order-intake', 4, 2],
+  ['ecommerce-fulfillment-delivery', 4, 4],
+  ['returns-replacements-refunds-rma', 4, 2],
+  ['department-inventory-release', 3, 2],
+  ['event-stock-custody', 3, 3],
+  ['inventory-count-variance', 4, 4],
+  ['department-doa-activation', 3, 1],
+  ['finance-readiness-evidence', 5, 3],
+  ['product-readiness-pricing-go-live', 4, 3],
+] as const;
+
+const canonicalRoleGuides = [
+  'platform_administrator',
+  'general_employee',
+  'operations_associate',
+  'operations_lead',
+  'procurement_lead',
+  'finance_controller',
+  'legal_compliance_lead',
+  'marketing_events_lead',
+  'product_owner',
+  'leadership_insights',
+  'vendor_representative',
+] as const;
+
+const requiredTaskSections = [
+  'outcome',
+  'flow',
+  'who-is-involved',
+  'before-you-start',
+  'steps',
+  'decisions-and-exceptions',
+  'completion-checklist',
+  'related-tasks',
+  'policy-basis',
+  'document-controls',
+] as const;
+
+const requiredRoleSections = [
+  'role-purpose-and-department',
+  'your-workspace',
+  'work-queue-and-priorities',
+  'permitted-actions',
+  'decisions-and-approval-authority',
+  'prohibited-actions',
+  'handoffs-received-and-sent',
+  'guided-simulation',
+  'negative-and-recovery-scenario',
+  'completion-evidence-and-training-sign-off',
+  'capability-codes-and-document-controls',
+] as const;
+
+test('first-use Home leads with outcomes, role entry, and governed support', async ({ page }) => {
+  await page.addInitScript(() => localStorage.clear());
+  await page.goto('/');
+
+  await expect(page).toHaveURL(/#mode=home&guide=home$/);
+  const home = page.locator('[data-guide-id="home"][data-guide-type="home"]');
+  await expect(home.getByRole('heading', { level: 1 })).toHaveText('What do you need to do?');
+  await expect(home.locator('[data-home-section="start-a-task"] a[data-guide-id]')).toHaveCount(6);
+  await expect(home.locator('[data-role-entry] option')).toHaveCount(canonicalRoleGuides.length + 1);
+  await expect(home.locator('[data-home-section="manage-support"]')).toBeVisible();
+  await expect(home.getByText('Source filename', { exact: true })).toBeHidden();
+  await expect(home.getByText('Source checksum', { exact: true })).toBeHidden();
+
+  await home.locator('[data-role-entry]').selectOption('operations_associate');
+  await page.evaluate(() => { (window as typeof window & { __sameDocument?: string }).__sameDocument = 'preserved'; });
+  await home.locator('[data-open-role]').click();
+  expect(await page.evaluate(() => (window as typeof window & { __sameDocument?: string }).__sameDocument)).toBe('preserved');
+  await expect(page).toHaveURL(/#mode=roles&guide=operations_associate$/);
+  await expectFocusedBelowStickyChrome(page.locator('article[data-guide-id="operations_associate"] h1'));
+
+  const results = await new AxeBuilder({ page }).analyze();
+  expect(results.violations.filter(({ impact }) => impact === 'critical' || impact === 'serious')).toEqual([]);
+});
+
+test('all canonical task guides expose complete stages, decisions, evidence, and terminal outcomes', async ({ page }, testInfo) => {
+  test.setTimeout(180_000);
+  if (!['desktop-1440', 'mobile-320'].includes(testInfo.project.name)) test.skip();
+
+  let totalDecisions = 0;
+  let totalBranches = 0;
+  let totalTerminalOutcomes = 0;
+  for (const [guideId, decisionCount, terminalCount] of canonicalTaskGuides) {
+    await page.goto(`/#mode=tasks&guide=${guideId}`);
+    const guide = page.locator(`article[data-guide-id="${guideId}"]`);
+    await expect(guide).toBeVisible();
+    await expect(guide.getByRole('heading', { level: 1 })).toBeVisible();
+    for (const sectionId of requiredTaskSections) {
+      await expect(guide.locator(`[data-guide-section="${sectionId}"]`), `${guideId} must render ${sectionId}`).toHaveCount(1);
+    }
+
+    await expect(guide.locator('[data-task-stage]'), `${guideId} must retain its four operating stages`).toHaveCount(4);
+    await expect(guide.locator('[data-screen-evidence="certified"]'), `${guideId} must pair every stage with certified evidence`).toHaveCount(4);
+    await expect(guide.locator('[data-screen-evidence="pending"]')).toHaveCount(0);
+    await expect(guide.getByRole('region', { name: 'Task flow diagram' })).toBeVisible();
+    await expect(guide.locator('.flow-text-equivalent')).toBeVisible();
+
+    const decisions = guide.locator('[data-task-decision]');
+    const branches = decisions.locator('[data-decision-branch]');
+    const terminalBranches = branches.filter({ hasText: 'Terminal outcome; this task instance does not resume.' });
+    await expect(decisions, `${guideId} decision count`).toHaveCount(decisionCount);
+    await expect(branches, `${guideId} decision branch count`).toHaveCount(decisionCount * 2);
+    await expect(terminalBranches, `${guideId} terminal outcome count`).toHaveCount(terminalCount);
+    await expect(branches.locator('dt', { hasText: 'Outcome' })).toHaveCount(decisionCount * 2);
+    await expect(branches.locator('dt', { hasText: 'Recovery action' })).toHaveCount(decisionCount * 2);
+    await expect(branches.locator('dt', { hasText: 'Destination' })).toHaveCount(decisionCount * 2);
+    await expect(guide.locator('[data-guide-section="completion-checklist"] li').first()).toBeVisible();
+    await expect(guide.locator('details[data-guide-section="policy-basis"]')).not.toHaveAttribute('open', '');
+    await expect(guide.locator('details[data-guide-section="document-controls"]')).not.toHaveAttribute('open', '');
+
+    totalDecisions += decisionCount;
+    totalBranches += decisionCount * 2;
+    totalTerminalOutcomes += terminalCount;
+  }
+
+  expect(totalDecisions).toBe(48);
+  expect(totalBranches).toBe(96);
+  expect(totalTerminalOutcomes).toBe(27);
+});
+
+test('all canonical role guides expose authority, handoffs, recovery, and guided simulations', async ({ page }, testInfo) => {
+  test.setTimeout(120_000);
+  if (!['desktop-1440', 'mobile-320'].includes(testInfo.project.name)) test.skip();
+
+  for (const guideId of canonicalRoleGuides) {
+    await page.goto(`/#mode=roles&guide=${guideId}`);
+    const guide = page.locator(`article[data-guide-id="${guideId}"]`);
+    await expect(guide).toBeVisible();
+    await expect(guide.getByRole('heading', { level: 1 })).toBeVisible();
+    for (const sectionId of requiredRoleSections) {
+      await expect(guide.locator(`[data-guide-section="${sectionId}"]`), `${guideId} must render ${sectionId}`).toHaveCount(1);
+    }
+    const simulation = guide.locator('[data-guide-section="guided-simulation"]');
+    await expect(simulation.getByText('Start route:', { exact: true })).toBeVisible();
+    await expect(simulation.getByRole('heading', { name: 'Success criteria' })).toBeVisible();
+    await expect(guide.locator('[data-guide-section="prohibited-actions"] li').first()).toBeVisible();
+    await expect(guide.locator('[data-guide-section="handoffs-received-and-sent"] li').first()).toBeVisible();
+    await expect(guide.locator('[data-guide-section="negative-and-recovery-scenario"]')).toContainText(/Negative case|Recovery/);
+    await expect(guide.locator('details[data-guide-section="capability-codes-and-document-controls"]')).not.toHaveAttribute('open', '');
+  }
+
+  const insights = page.locator('article[data-guide-id="leadership_insights"]');
+  await page.goto('/#mode=roles&guide=leadership_insights&heading=guided-simulation');
+  await expect(insights.locator('[data-guide-section="guided-simulation"]')).toContainText('/insights');
+  await expect(insights.locator('[data-guide-section="guided-simulation"]')).toContainText(/read-only|mutation controls are absent/i);
+  await expect(insights.locator('[data-guide-section="prohibited-actions"]')).toContainText('Mutate operational records');
+  await expect(insights.locator('[data-guide-section="completion-evidence-and-training-sign-off"]')).toContainText('Source links');
+});
+
+test('governed source controls remain collapsed, unique, and canonically addressable', async ({ page }, testInfo) => {
+  if (testInfo.project.name !== 'desktop-1440') test.skip();
+  await page.goto('/#mode=system&guide=source-references');
+
+  const sourceBodies = page.locator('article[data-guide-id="source-references"] [data-source-body]');
+  expect(await sourceBodies.count()).toBeGreaterThanOrEqual(28);
+  const sourceFiles = await sourceBodies.evaluateAll((elements) => elements.map((element) => (element as HTMLElement).dataset.sourceFile));
+  expect(new Set(sourceFiles).size).toBe(sourceFiles.length);
+  expect(await sourceBodies.evaluateAll((elements) => elements.every((element) => !element.hasAttribute('open')))).toBe(true);
+
+  const sourceLinks = page.locator('[data-canonical-source-link]');
+  expect(await sourceLinks.count()).toBeGreaterThanOrEqual(28);
+  const invalidLinks = await sourceLinks.evaluateAll((links) => links.map((link) => link.getAttribute('href') ?? '').filter((href) => !/^#mode=system&guide=source-references&heading=source-/.test(href.replaceAll('&amp;', '&'))));
+  expect(invalidLinks).toEqual([]);
+});
+
+test('every legacy deep link migrates to an existing canonical destination', async ({ page }, testInfo) => {
+  test.setTimeout(180_000);
+  if (testInfo.project.name !== 'desktop-1440') test.skip();
+  await page.goto('/');
+
+  const failures = await page.evaluate(async () => {
+    type LegacyRoute = {
+      legacyTabId: string;
+      legacyArticleId: string;
+      legacyHeadingId?: string | null;
+      modeId: string;
+      guideId: string;
+      headingId?: string | null;
+    };
+    const routes = (window as typeof window & { __HANDBOOK_LEGACY_ROUTES__?: LegacyRoute[] }).__HANDBOOK_LEGACY_ROUTES__ ?? [];
+    const failures: string[] = [];
+    for (const route of routes) {
+      const legacy = new URLSearchParams({ tab: route.legacyTabId, article: route.legacyArticleId });
+      if (route.legacyHeadingId) legacy.set('heading', route.legacyHeadingId);
+      const expected = new URLSearchParams({ mode: route.modeId, guide: route.guideId });
+      if (route.headingId) expected.set('heading', route.headingId);
+      const expectedHash = `#${expected.toString()}`;
+      await new Promise<void>((resolve) => {
+        const finish = () => requestAnimationFrame(() => resolve());
+        window.addEventListener('hashchange', finish, { once: true });
+        location.hash = legacy.toString();
+      });
+      const guide = document.querySelector(`[data-guide][data-guide-id="${CSS.escape(route.guideId)}"]`) as HTMLElement | null;
+      const heading = route.headingId
+        ? document.getElementById(`${route.guideId}-${route.headingId}`)
+        : guide?.querySelector('h1');
+      if (location.hash !== expectedHash || !guide || guide.hidden || !heading) {
+        failures.push(`${legacy.toString()} -> ${location.hash}; expected ${expectedHash}`);
+      }
+    }
+    return { count: routes.length, failures };
+  });
+
+  expect(failures.count).toBeGreaterThanOrEqual(283);
+  expect(failures.failures).toEqual([]);
+  await expect(page.locator('#route-notice')).toContainText(/link has moved/i);
+});
+
 test('search certifies operational answers and canonical destinations', async ({ page }) => {
   test.setTimeout(120_000);
   await page.goto('/');
@@ -517,7 +731,7 @@ test('keeps the current mode label synchronized across activation history recove
 });
 
 test('fits visible Mermaid content inside its viewport and preserves dark contrast', async ({ page }, testInfo) => {
-  if (!['desktop-1440', 'tablet-768', 'mobile-430', 'mobile-320'].includes(testInfo.project.name)) test.skip();
+  if (!['desktop-1440', 'desktop-1280', 'desktop-1024', 'tablet-768', 'mobile-430', 'mobile-390', 'mobile-360', 'mobile-320'].includes(testInfo.project.name)) test.skip();
   await page.goto('/#mode=tasks&guide=procurement-request-approval');
   const shell = page.locator('article[data-guide-id="procurement-request-approval"] .diagram-shell').first();
   await expect(shell).toHaveAttribute('data-diagram-scale', 'fit');
@@ -975,9 +1189,9 @@ test('limits every print scope without mutating disclosures', async ({ page }) =
   expect(printOverflow).toBeLessThanOrEqual(1);
 });
 
-test('captures desktop, tablet, and mobile visual review evidence when requested', async ({ page }, testInfo) => {
+test('captures all eight acceptance viewports for strict visual review when requested', async ({ page }, testInfo) => {
   test.setTimeout(90_000);
-  if (process.env.HANDBOOK_CAPTURE !== '1' || !['desktop-1440', 'tablet-768', 'mobile-430', 'mobile-320'].includes(testInfo.project.name)) test.skip();
+  if (process.env.HANDBOOK_CAPTURE !== '1') test.skip();
 
   const captureDir = fileURLToPath(new URL('../../../../outputs/handbook-visual-review/', import.meta.url));
   await mkdir(captureDir, { recursive: true });

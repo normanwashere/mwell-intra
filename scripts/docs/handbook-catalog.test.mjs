@@ -51,6 +51,16 @@ test("classifies the August 23 department authority and UAT remediation release 
   }
 });
 
+test("classifies the outcome-first handbook certification release", () => {
+  const source = "docs/releases/2026-08-24-OUTCOME-FIRST-HANDBOOK.md";
+  const document = HANDBOOK_DOCUMENTS.find((entry) => entry.source === source);
+
+  assert.ok(document, `${source} is classified`);
+  assert.equal(document.primaryTab, "release");
+  assert.equal(document.contentType, "release-note");
+  assert.ok(document.relatedTabs.includes("architecture"));
+});
+
 test("places the MPIC extract exactly in governance with workflow and architecture visibility", () => {
   const policy = HANDBOOK_DOCUMENTS.find(({ source }) => source === "docs/policy/MPIC_PROCUREMENT_POLICY_FEBRUARY_2025.md");
 

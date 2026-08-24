@@ -1,8 +1,8 @@
 # Mwell Intra Training and Handover Content
 
-**Reviewed:** August 23, 2026
+**Reviewed:** August 25, 2026
 **Procurement application behavior baseline:** `32170e425e125c63597ea8e05c6287a7cd256f5b`
-**Evidence status:** deployed UAT behavior; commit-bound live certification remains the release gate
+**Evidence status:** deployed UAT behavior; standalone handbook Task 8 certification is recorded in `docs/releases/2026-08-24-OUTCOME-FIRST-HANDBOOK.md`
 
 This is the maintained source for trainer, developer, and infrastructure handover materials. Presentation exports must use this content and the screenshots from the matching certification artifact.
 
@@ -15,6 +15,43 @@ Learners must be able to:
 - Verify persisted state after a successful command.
 - Avoid duplicate writes after refresh, timeout, or uncertain network state.
 - Use the standalone handbook to find the current procedure, governing reference and application route.
+
+## Standalone handbook training path
+
+The handbook is a standalone training and handover artifact. Teach its four modes as different learner intents:
+
+1. Start on **Home** and choose a frequent outcome or select the learner's canonical role.
+2. Use **Tasks** while performing work. Read Outcome and Flow first, then follow each numbered stage, expected result, read/write contract, evidence, and handoff.
+3. Use **Roles** before a simulation to confirm workspace, authority, prohibited actions, handoffs, negative scenario, recovery, and completion evidence.
+4. Use **System** for administration, architecture, infrastructure, security, release/QA, imports, or the governed source register.
+
+Do not train learners to browse source filenames first. Policy basis, capability codes, checksums, and document controls are supporting evidence and remain collapsed until needed. Operational steps live in the canonical task guide; role and System guides link to those steps rather than replacing them.
+
+### Guided discovery drill
+
+Each learner must find a named task, role, and troubleshooting answer using Home or search in no more than three deliberate interactions. Search practice includes `receive stock`, `pick and pack`, `approve request`, `renew vendor`, `cycle count`, `report damaged item`, `reset password`, `three-way match`, and `DOA`. The learner must explain the result type, applicable role/module, match reason, and exact destination before opening it.
+
+### Role simulation drill
+
+Use the role guide's **Guided simulation** as the source of the scenario, start route, success criteria, negative case, and recovery. The 11 canonical simulations are part of the handbook acceptance matrix. Leadership / Insights is explicitly read-only: the learner opens `/insights`, traces a source-linked indicator, verifies freshness, and confirms operational mutation controls are absent.
+
+### Decision and recovery drill
+
+For the learner's linked task, open Flow first and then Decisions and exceptions. The learner must identify the decision owner, both branches, the next stage or decision, the recovery action, and whether the outcome terminates the task. The certified task set contains 48 decisions, 96 branches, and 27 terminal outcomes; trainers must not teach a rejected, escalated, cancelled, or controlled-hold branch as if it automatically resumes.
+
+### Responsive and accessibility drill
+
+Run one simulation on desktop and one at a compact mobile width. Learners must use Menu and In this guide without losing position, open and close a certified screenshot with focus returning to its trigger, operate one flow by keyboard, zoom or fit one Mermaid diagram, use its text equivalent, refresh the selected step, and print the current guide. The acceptance viewports are 1440, 1280, 1024, 768, 430, 390, 360, and 320 CSS pixels.
+
+### Trainer evidence
+
+Use only screenshots from `docs/manual/assets/knowledge-base/` whose binding appears in `task-stage-evidence.json`. Task 8 visual review captures are under `outputs/handbook-visual-review/`. The CI response used to approve stage evidence is `task-stage-ci-attestation.json`; it is supporting UAT provenance and does not by itself prove a production deployment. Exact test commands and results are recorded in `docs/releases/2026-08-24-OUTCOME-FIRST-HANDBOOK.md`.
+
+### Certified training baseline
+
+Training sign-off uses the Task 8 certified baseline: 13 task guides, 52 stage screenshots, 11 role simulations, 48 decisions, 96 branches, 27 terminal outcomes, and 307 migrated legacy links. The source-model unit trio passed 81 of 81 tests, strict evidence coverage and provenance produced zero warnings and zero errors, and CI attestation verified. Browser acceptance passed 116 tests with 100 project-conditional skips and zero failures across all eight responsive projects in 19.6 minutes. The 24 visual-review captures cover light, dark, and print at every certified width.
+
+Trainers and handover reviewers must use `docs/manual/index.html` generated from the same 29-source set and may inspect `outputs/handbook-visual-review/` for the responsive evidence. Lint, typecheck, generated-documentation, and release-documentation gates passed. The release record retains the three unrelated existing Procurement lint warnings and the local Node/pnpm engine warning; neither warning changes the learner procedure or grants production approval.
 
 ## Current Persona Training Register
 
