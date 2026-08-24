@@ -4,13 +4,25 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parse as parseCsv } from "csv-parse/sync";
 import { marked, Renderer } from "marked";
-import { HANDBOOK_TABS, resolveHandbookCatalog } from "./handbook-catalog.mjs";
+import { resolveHandbookCatalog } from "./handbook-catalog.mjs";
+import {
+  HANDBOOK_GUIDES,
+  HANDBOOK_MODES,
+  LEGACY_ROUTES,
+  validateHandbookGuides,
+} from "./handbook-guides.mjs";
 
 const root = path.resolve(fileURLToPath(new URL("../../", import.meta.url)));
 export const outputFile = "docs/manual/index.html";
 const mermaidBundleFile = path.join(root, "node_modules/mermaid/dist/mermaid.min.js");
 const handbookStylesFile = path.join(root, "scripts/docs/handbook-styles.css");
 const handbookRuntimeFile = path.join(root, "scripts/docs/handbook-runtime.js");
+const MODE_TAB_ALIASES = Object.freeze({
+  home: "start",
+  tasks: "workflows",
+  roles: "roles",
+  system: "system",
+});
 
 function normalize(file) {
   return file.replaceAll("\\", "/");
@@ -134,19 +146,29 @@ function routeHash({ tabId, articleId, headingId }) {
   return `#${params}`;
 }
 
+function canonicalGuideHash({ modeId, guideId, headingId }) {
+  const params = new URLSearchParams({ mode: modeId, guide: guideId });
+  if (headingId) params.set("heading", headingId);
+  return `#${params}`;
+}
+
+function compatibilityGuideHash({ modeId, guideId, headingId }) {
+  return routeHash({
+    tabId: MODE_TAB_ALIASES[modeId],
+    articleId: modeId === "home" ? undefined : `guide-${guideId}`,
+    headingId: headingId ? `${guideId}-${headingId}` : undefined,
+  });
+}
+
 function resolveDocumentLink(href, sourceFile, sourceIds, sourceRoutes) {
   if (/^(https?:|mailto:|#)/i.test(href)) return href;
   const [filePart, fragment] = href.split("#", 2);
   if (!filePart.toLowerCase().endsWith(".md")) return href;
   const target = normalize(path.relative(root, path.resolve(root, path.dirname(sourceFile), filePart)));
   const id = sourceIds.get(target);
-  const route = sourceRoutes.get(target);
+  const route = sourceRoutes.get(`${target}#${slug(fragment ?? "")}`) ?? sourceRoutes.get(target);
   return id && route
-    ? routeHash({
-      tabId: route.primaryTab,
-      articleId: id,
-      headingId: fragment ? `${id}-${slug(fragment)}` : undefined,
-    })
+    ? compatibilityGuideHash(route)
     : href;
 }
 
@@ -271,128 +293,435 @@ function decorateArticleHtml(document, html) {
   }).join("");
 }
 
-function buildSearchIndex(documents) {
-  return documents.flatMap((document) => {
-    const searchableTabs = [...new Set([document.primaryTab, ...document.relatedTabs])];
-    const diagramLabels = (text) => [...String(text).matchAll(/```mermaid\s*([\s\S]*?)```/g)]
-      .flatMap(([, diagram]) => [...diagram.matchAll(/\[([^\]]+)\]/g)].map(([, label]) => label))
-      .join(" ");
-    const sourceSearchText = `${plainMarkdownText(document.sourceText)} ${diagramLabels(document.sourceText)}`;
-    const records = [{
-      tabId: document.primaryTab,
-      tabIds: searchableTabs,
-      articleId: document.id,
-      headingId: null,
-      title: document.title,
-      heading: document.title,
-      summary: document.summary,
-      audience: document.audience,
-      keywords: document.keywords,
-      source: document.file,
-      text: searchExcerpt(sourceSearchText),
-      searchText: sourceSearchText,
-    }];
-
-    if (path.extname(document.file).toLowerCase() === ".csv") return records;
-
-    const tokens = marked.lexer(document.sourceText);
-    for (let index = 0; index < tokens.length; index += 1) {
-      const token = tokens[index];
-      if (token.type !== "heading" || token.depth === 1) continue;
-      const sectionTokens = [token];
-      for (let cursor = index + 1; cursor < tokens.length && tokens[cursor].type !== "heading"; cursor += 1) {
-        sectionTokens.push(tokens[cursor]);
-      }
-      const heading = plainMarkdownText(token.text);
-      const sectionSearchText = sectionTokens.map((sectionToken) => `${plainMarkdownText(sectionToken.text ?? sectionToken.raw)} ${diagramLabels(sectionToken.raw)}`).join(" ");
-      records.push({
-        tabId: document.primaryTab,
-        tabIds: searchableTabs,
-        articleId: document.id,
-        headingId: `${document.id}-${slug(token.text)}`,
-        title: document.title,
-        heading,
-        summary: document.summary,
-        audience: document.audience,
-        keywords: document.keywords,
-        source: document.file,
-        text: searchExcerpt(sectionSearchText),
-        searchText: sectionSearchText,
-      });
-    }
-    return records;
+function markdownHeadingEntries(source) {
+  return String(source).split(/\r?\n/).flatMap((line) => {
+    const match = line.match(/^(#{1,6})\s+(.+?)\s*$/);
+    return match ? [{ depth: match[1].length, text: match[2] }] : [];
   });
 }
 
-export function buildDocumentationHtml(sourceFiles = documentationSources()) {
-  const mermaidBundle = readFileSync(mermaidBundleFile, "utf8").replace(/[ \t]+$/gm, "");
-  const styles = normalizeText(readFileSync(handbookStylesFile, "utf8")).replace(/[ \t]+$/gm, "");
-  const runtime = normalizeText(readFileSync(handbookRuntimeFile, "utf8"))
-    .replace(/[ \t]+$/gm, "")
-    .replaceAll("</script", "<\\/script");
-  const sources = sourceFiles;
-  const sourceIds = new Map(sources.map((file) => [file, `doc-${slug(file.replace(/^docs\//, ""))}`]));
-  const { documents: catalogDocuments, errors } = resolveHandbookCatalog(sources);
+function extractSourceFragment(sourceRecord, heading) {
+  if (path.extname(sourceRecord.file).toLowerCase() === ".csv" || heading == null) {
+    return sourceRecord.sourceText;
+  }
+  const lines = sourceRecord.sourceText.split("\n");
+  const headings = lines.map((line, index) => {
+    const match = line.match(/^(#{1,6})\s+(.+?)\s*$/);
+    return match ? { index, depth: match[1].length, text: match[2] } : null;
+  }).filter(Boolean);
+  const selected = headings.find(({ text }) => text === heading);
+  if (!selected) throw new Error(`Missing exact source heading ${heading} in ${sourceRecord.file}.`);
+  const end = headings.find(({ index, depth }) => index > selected.index && depth <= selected.depth)?.index ?? lines.length;
+  return lines.slice(selected.index, end).join("\n");
+}
+
+export function loadDocumentationSources(sourceFiles = documentationSources()) {
+  const { documents: catalogDocuments, errors } = resolveHandbookCatalog(sourceFiles);
   if (errors.length) {
     throw new Error(`Handbook source registry validation failed:\n${errors.join("\n")}`);
   }
   const catalogBySource = new Map(catalogDocuments.map((document) => [document.source, document]));
-  const sourceRoutes = new Map(catalogDocuments.map((document) => [document.source, document]));
-  const tabById = new Map(HANDBOOK_TABS.map((tab) => [tab.id, tab]));
-  const documents = sources.map((file) => {
-    const source = normalizeText(readFileSync(path.join(root, file), "utf8"));
+  return sourceFiles.map((file) => {
+    const sourceText = normalizeText(readFileSync(path.join(root, file), "utf8"));
     const catalog = catalogBySource.get(file);
-    const { id: catalogId, ...metadata } = catalog;
     return {
-      ...metadata,
+      ...catalog,
       file,
-      id: sourceIds.get(file),
-      catalogId,
-      title: titleOf(source, file),
-      category: tabById.get(metadata.primaryTab).label,
-      sourceText: source,
-      html: decorateArticleHtml({ id: sourceIds.get(file), collapse: metadata.collapse }, renderSource(source, file, sourceIds, sourceRoutes)),
-      hash: createHash("sha256").update(source).digest("hex").slice(0, 12),
+      sourceText,
+      title: titleOf(sourceText, file),
+      legacyArticleId: `doc-${slug(file.replace(/^docs\//, ""))}`,
+      hash: createHash("sha256").update(sourceText).digest("hex"),
     };
   });
-  const orderedDocuments = [...documents].sort((left, right) =>
-    tabById.get(left.primaryTab).order - tabById.get(right.primaryTab).order ||
-    left.sortOrder - right.sortOrder ||
-    left.file.localeCompare(right.file),
-  );
-  const searchIndex = buildSearchIndex(orderedDocuments);
-  const initialSearchState = { query: "", scope: "all" };
-  const documentBySource = new Map(documents.map((document) => [document.file, document]));
-  const articleLink = (document, { related = false, relationLabel } = {}) => {
-    const label = relationLabel ?? document.title;
-    return `<a href="${escapeHtml(routeHash({ tabId: document.primaryTab, articleId: document.id }))}" data-article-link${related ? " data-related-link" : ""} data-tab="${escapeHtml(document.primaryTab)}" data-article="${escapeHtml(document.id)}" data-title="${escapeHtml(document.title)}" data-summary="${escapeHtml(document.summary)}" data-audience="${escapeHtml(document.audience.join(", "))}" data-content-type="${escapeHtml(document.contentType)}"><span>${escapeHtml(label)}</span><small>${escapeHtml(document.summary)}</small></a>`;
-  };
-  const panels = HANDBOOK_TABS.map((tab, index) => {
-    const primaryDocuments = orderedDocuments.filter((document) => document.primaryTab === tab.id);
-    const relatedDocuments = orderedDocuments.filter((document) => document.relatedTabs.includes(tab.id));
-    return `<section role="tabpanel" id="panel-${tab.id}" aria-labelledby="tab-${tab.id}" data-tab-panel${index === 0 ? "" : " hidden"} tabindex="0">
-      <header class="panel-header"><h2>${escapeHtml(tab.label)}</h2><p>${escapeHtml(tab.summary)}</p></header>
-      <div class="article-list">${primaryDocuments.map((document) => articleLink(document)).join("")}</div>
-      ${relatedDocuments.length ? `<section class="related-articles" aria-label="Related primary articles"><h3>Related primary articles</h3>${relatedDocuments.map((document) => articleLink(document, { related: true, relationLabel: `${document.title} (${tabById.get(document.primaryTab).label})` })).join("")}</section>` : ""}
-    </section>`;
-  }).join("");
-  const articles = orderedDocuments
-    .map((document, index) => {
-      const previous = orderedDocuments[index - 1];
-      const next = orderedDocuments[index + 1];
-      const related = document.relatedSources
-        .map((source) => documentBySource.get(source))
-        .filter(Boolean);
-      return `<article id="${document.id}" data-document data-tab="${escapeHtml(document.primaryTab)}" data-related-tabs="${escapeHtml(document.relatedTabs.join("|"))}" data-category="${escapeHtml(document.category)}" data-search="${escapeHtml(`${document.title} ${document.category} ${document.file} ${document.summary} ${document.keywords.join(" ")} ${document.audience.join(" ")}`.toLowerCase())}" hidden>
-        <header class="article-header"><div><span class="category">${escapeHtml(document.category)}</span><h1>${escapeHtml(document.title)}</h1><p>${escapeHtml(document.file)}</p></div><span class="source-hash" title="Source checksum">${document.hash}</span></header>
-        <div class="article-disclosure-controls" data-article-disclosures aria-label="Article section controls"><button type="button" data-disclosure-action="expand">Expand all</button><button type="button" data-disclosure-action="collapse">Collapse all</button></div>
-        <div class="article-body">${document.html}</div>
-        <nav class="article-pagination" aria-label="Article navigation">${previous ? `<a href="${escapeHtml(routeHash({ tabId: previous.primaryTab, articleId: previous.id }))}" data-article-link data-previous-link data-tab="${escapeHtml(previous.primaryTab)}" data-article="${escapeHtml(previous.id)}" data-title="${escapeHtml(previous.title)}" data-summary="${escapeHtml(previous.summary)}" data-audience="${escapeHtml(previous.audience.join(", "))}" data-content-type="${escapeHtml(previous.contentType)}">Previous: ${escapeHtml(previous.title)}</a>` : ""}${next ? `<a href="${escapeHtml(routeHash({ tabId: next.primaryTab, articleId: next.id }))}" data-article-link data-next-link data-tab="${escapeHtml(next.primaryTab)}" data-article="${escapeHtml(next.id)}" data-title="${escapeHtml(next.title)}" data-summary="${escapeHtml(next.summary)}" data-audience="${escapeHtml(next.audience.join(", "))}" data-content-type="${escapeHtml(next.contentType)}">Next: ${escapeHtml(next.title)}</a>` : ""}</nav>
-${related.length ? `        <nav class="related-sources" aria-label="Related sources"><h2>Related sources</h2>${related.map((relatedDocument) => articleLink(relatedDocument, { related: true })).join("")}</nav>` : ""}
-      </article>`;
-    })
-    .join("");
+}
 
+export function resolveHandbookModel(sourceInput, options = {}) {
+  const configured = Array.isArray(sourceInput)
+    ? { ...options, sources: sourceInput }
+    : { ...(sourceInput ?? {}) };
+  const sources = configured.sources ?? loadDocumentationSources();
+  const modes = configured.modes ?? HANDBOOK_MODES;
+  const guides = configured.guides ?? HANDBOOK_GUIDES;
+  const legacyRoutes = configured.legacyRoutes ?? LEGACY_ROUTES;
+  const validation = validateHandbookGuides({
+    modes,
+    guides,
+    legacyRoutes,
+    documents: sources.map(({ source, id, primaryTab, relatedTabs, contentType, audience, summary, keywords, sortOrder, collapse, relatedSources }) => ({
+      source,
+      id,
+      primaryTab,
+      relatedTabs,
+      contentType,
+      audience,
+      summary,
+      keywords,
+      sortOrder,
+      collapse,
+      relatedSources,
+    })),
+  });
+  if (validation.errors.length) {
+    throw new Error(`Handbook guide model validation failed:\n${validation.errors.join("\n")}`);
+  }
+
+  const sourceByFile = new Map(sources.map((source) => [source.file, source]));
+  const guideById = new Map(guides.map((guide) => [guide.id, guide]));
+  const sourceRoutes = new Map();
+  for (const source of sources) {
+    const articleRoute = legacyRoutes.find((route) =>
+      route.legacyTabId === source.primaryTab &&
+      route.legacyArticleId === source.legacyArticleId &&
+      route.legacyHeadingId == null);
+    if (articleRoute) sourceRoutes.set(source.file, articleRoute);
+    for (const { text } of markdownHeadingEntries(source.sourceText)) {
+      const legacyHeadingId = `${source.legacyArticleId}-${slug(text)}`;
+      const headingRoute = legacyRoutes.find((route) =>
+        route.legacyTabId === source.primaryTab &&
+        route.legacyArticleId === source.legacyArticleId &&
+        route.legacyHeadingId === legacyHeadingId);
+      if (headingRoute) sourceRoutes.set(`${source.file}#${slug(text)}`, headingRoute);
+    }
+  }
+
+  return { modes, guides, legacyRoutes, sources, sourceByFile, guideById, sourceRoutes };
+}
+
+export function composeHandbookGuides(model) {
+  return model.guides.map((guide) => {
+    const contextualSourceIds = new Map(model.sources.map((source) => [
+      source.file,
+      guide.id === "source-references" ? source.legacyArticleId : `${guide.id}-${source.legacyArticleId}`,
+    ]));
+    const sourceReferences = guide.sourceSections.map((sourceSection) => {
+      const source = model.sourceByFile.get(sourceSection.source);
+      if (!source) throw new Error(`${guide.id} references unavailable source ${sourceSection.source}.`);
+      const sourceText = extractSourceFragment(source, sourceSection.heading);
+      const rendered = renderSource(sourceText, source.file, contextualSourceIds, model.sourceRoutes);
+      return {
+        ...sourceSection,
+        file: source.file,
+        title: source.title,
+        contentType: source.contentType,
+        owner: guide.owner ?? "Mwell Intra Product and Operations",
+        version: guide.applicableBuild ?? "Current source-controlled version",
+        reviewDate: guide.lastReviewedDate ?? "Generated with the current handbook",
+        releaseIdentity: guide.applicableBuild ?? "Current generated handbook",
+        hash: source.hash,
+        sourceText,
+        html: decorateArticleHtml({
+          id: contextualSourceIds.get(source.file),
+          collapse: "none",
+        }, rendered),
+      };
+    });
+    return { ...guide, sourceReferences };
+  });
+}
+
+function guideSearchRecord({
+  type,
+  guide,
+  headingId,
+  title,
+  heading,
+  role = "",
+  module = "",
+  excerpt,
+  whyMatched,
+  keywords = [],
+  searchText,
+  audience = [],
+  source = "",
+}) {
+  const modeId = guide.modeId;
+  const tabId = MODE_TAB_ALIASES[modeId];
+  const compactExcerpt = searchExcerpt(plainMarkdownText(excerpt));
+  return {
+    type,
+    modeId,
+    guideId: guide.id,
+    headingId,
+    title,
+    heading,
+    role,
+    module,
+    excerpt: compactExcerpt,
+    whyMatched,
+    href: canonicalGuideHash({ modeId, guideId: guide.id, headingId }),
+    keywords,
+    searchText: plainMarkdownText(searchText),
+    tabId,
+    tabIds: [tabId],
+    articleId: `guide-${guide.id}`,
+    summary: compactExcerpt,
+    audience,
+    source,
+    text: compactExcerpt,
+  };
+}
+
+export function buildGuideSearchIndex(guides) {
+  const guideById = new Map(guides.map((guide) => [guide.id, guide]));
+  const roleLabel = (id) => guideById.get(id)?.canonicalName ?? guideById.get(id)?.title ?? id;
+  const records = [];
+
+  for (const guide of guides.filter(({ type }) => type === "task")) {
+    const roles = guide.participatingRoles.map(roleLabel);
+    const sources = guide.governingSources.join(" ");
+    records.push(guideSearchRecord({
+      type: "Task",
+      guide,
+      headingId: "outcome",
+      title: guide.title,
+      heading: "Outcome",
+      role: roles.join(", "),
+      module: guide.module,
+      excerpt: guide.outcome,
+      whyMatched: "Task outcome, module, role, or keyword",
+      keywords: guide.keywords,
+      searchText: [guide.title, guide.outcome, guide.summary, guide.module, roles, guide.keywords, guide.startCondition].flat().join(" "),
+      audience: roles,
+      source: sources,
+    }));
+    for (const [index, stage] of guide.steps.entries()) {
+      const stageRole = roleLabel(stage.performingRole);
+      records.push(guideSearchRecord({
+        type: "Step",
+        guide,
+        headingId: stage.id,
+        title: guide.title,
+        heading: `${index + 1}. ${stage.label}`,
+        role: stageRole,
+        module: stage.module,
+        excerpt: `${stage.instruction} ${stage.expectedResult}`,
+        whyMatched: "Procedure step, route, result, or evidence",
+        keywords: guide.keywords,
+        searchText: [stage.label, stage.instruction, stage.route, stage.expectedResult, stage.dataRead, stage.dataWritten, stage.evidenceRetained, stage.nextHandoff, guide.keywords].flat().join(" "),
+        audience: [stageRole],
+        source: sources,
+      }));
+    }
+    for (const decision of guide.decisionPoints) {
+      records.push(guideSearchRecord({
+        type: "Decision",
+        guide,
+        headingId: "decisions-and-exceptions",
+        title: guide.title,
+        heading: decision.label,
+        role: roles.join(", "),
+        module: guide.module,
+        excerpt: `${decision.label} ${guide.recovery}`,
+        whyMatched: "Decision, denial, exception, or recovery",
+        keywords: [...guide.keywords, "decision", "exception"],
+        searchText: [decision.label, guide.denialChecks, guide.recovery, guide.keywords].flat().join(" "),
+        audience: roles,
+        source: sources,
+      }));
+    }
+    records.push(guideSearchRecord({
+      type: "Troubleshooting",
+      guide,
+      headingId: "decisions-and-exceptions",
+      title: `${guide.title}: recover or escalate`,
+      heading: "Recovery",
+      role: roles.join(", "),
+      module: guide.module,
+      excerpt: guide.recovery,
+      whyMatched: "Recovery and denial guidance",
+      keywords: [...guide.keywords, "recovery", "denied", "blocked"],
+      searchText: [guide.recovery, guide.denialChecks, guide.decisionLabels].flat().join(" "),
+      audience: roles,
+      source: sources,
+    }));
+  }
+
+  for (const guide of guides.filter(({ type }) => type === "role")) {
+    const modules = [...new Set(guide.workspaceMap.map(({ module }) => module))];
+    records.push(guideSearchRecord({
+      type: "Role",
+      guide,
+      headingId: "role-purpose-and-department",
+      title: guide.canonicalName,
+      heading: "Role purpose and department",
+      role: guide.canonicalName,
+      module: modules.join(", "),
+      excerpt: guide.purpose,
+      whyMatched: "Role name, alias, module, or permitted work",
+      keywords: guide.keywords,
+      searchText: [guide.canonicalName, guide.displayedAliases, guide.purpose, guide.departmentAndScope, modules, guide.permittedActions, guide.linkedTasks].flat().join(" "),
+      audience: [guide.canonicalName, ...guide.displayedAliases],
+      source: guide.governingSources.join(" "),
+    }));
+    records.push(guideSearchRecord({
+      type: "Troubleshooting",
+      guide,
+      headingId: "negative-and-recovery-scenario",
+      title: `${guide.canonicalName}: denied or blocked work`,
+      heading: "Negative and recovery scenario",
+      role: guide.canonicalName,
+      module: modules.join(", "),
+      excerpt: `${guide.guidedSimulation.negativeScenario} ${guide.guidedSimulation.recovery}`,
+      whyMatched: "Role denial and recovery guidance",
+      keywords: [...guide.keywords, "denied", "recovery"],
+      searchText: [guide.denialChecks, guide.escalationAndRecovery, guide.guidedSimulation.negativeScenario, guide.guidedSimulation.recovery].flat().join(" "),
+      audience: [guide.canonicalName],
+      source: guide.governingSources.join(" "),
+    }));
+  }
+
+  for (const guide of guides.filter(({ type }) => type === "system")) {
+    records.push(guideSearchRecord({
+      type: "System reference",
+      guide,
+      headingId: "overview",
+      title: guide.title,
+      heading: "Overview",
+      excerpt: guide.summary,
+      whyMatched: "System responsibility, audience, or keyword",
+      keywords: guide.keywords,
+      searchText: [guide.title, guide.summary, guide.audience, guide.keywords].flat().join(" "),
+      audience: guide.audience,
+      source: guide.governingSources.join(" "),
+    }));
+    for (const reference of guide.sourceReferences) {
+      records.push(guideSearchRecord({
+        type: "System reference",
+        guide,
+        headingId: reference.id,
+        title: reference.heading ?? reference.title,
+        heading: guide.title,
+        excerpt: reference.sourceText,
+        whyMatched: "Governed source title or content",
+        keywords: guide.keywords,
+        searchText: [reference.title, reference.heading, reference.sourceText, guide.keywords].flat().join(" "),
+        audience: guide.audience,
+        source: reference.file,
+      }));
+    }
+  }
+  return records;
+}
+
+function renderItems(items, emptyMessage = "None recorded.") {
+  return items?.length
+    ? `<ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+    : `<p>${escapeHtml(emptyMessage)}</p>`;
+}
+
+function guideLink(guide, { label = guide.title, summary = guide.summary, headingId, related = false } = {}) {
+  const tabId = MODE_TAB_ALIASES[guide.modeId];
+  return `<a href="${escapeHtml(compatibilityGuideHash({ modeId: guide.modeId, guideId: guide.id, headingId }))}" data-guide-link data-article-link${related ? " data-related-link" : ""} data-mode="${escapeHtml(guide.modeId)}" data-guide-id="${escapeHtml(guide.id)}" data-tab="${escapeHtml(tabId)}" data-article="guide-${escapeHtml(guide.id)}"${headingId ? ` data-heading="${escapeHtml(`${guide.id}-${headingId}`)}"` : ""} data-title="${escapeHtml(guide.title)}" data-summary="${escapeHtml(guide.summary)}" data-audience="${escapeHtml((guide.audience ?? guide.participatingRoles ?? []).join(", "))}" data-content-type="${escapeHtml(guide.type)}"><span>${escapeHtml(label)}</span>${summary ? `<small>${escapeHtml(summary)}</small>` : ""}</a>`;
+}
+
+function sourceReference(reference) {
+  return `<details class="source-reference" data-source-reference="${escapeHtml(reference.id)}" data-source-file="${escapeHtml(reference.file)}" data-section-id="source:${escapeHtml(reference.file)}:${escapeHtml(reference.id)}"><summary id="${escapeHtml(reference.id)}-source-reference"><span>${escapeHtml(reference.heading ?? reference.title)}</span><small>${escapeHtml(reference.file)}</small></summary><div class="source-reference-content">${reference.html}</div></details>`;
+}
+
+function sourceControlRows(references) {
+  return references.map((reference) => `<section class="source-control" data-source-control="${escapeHtml(reference.id)}"><h3>${escapeHtml(reference.heading ?? reference.title)}</h3><dl><dt>Source filename</dt><dd>${escapeHtml(reference.file)}</dd><dt>Owner</dt><dd>${escapeHtml(reference.owner)}</dd><dt>Version</dt><dd>${escapeHtml(reference.version)}</dd><dt>Source checksum</dt><dd><code>${escapeHtml(reference.hash)}</code></dd><dt>Release identity</dt><dd>${escapeHtml(reference.releaseIdentity)}</dd><dt>Review date</dt><dd>${escapeHtml(reference.reviewDate)}</dd></dl></section>`).join("");
+}
+
+function documentControls(guide, references, { includeReferences = true, sectionId = "document-controls", label = "Document controls" } = {}) {
+  return `<details class="guide-support document-controls" data-guide-section="${escapeHtml(sectionId)}" data-section-id="${escapeHtml(`${guide.id}:${sectionId}`)}"><summary id="${escapeHtml(`${guide.id}-${sectionId}`)}"><span role="heading" aria-level="2">${escapeHtml(label)}</span></summary><div class="guide-support-content">${sourceControlRows(guide.sourceReferences)}${includeReferences && references.length ? `<section class="guide-source-references" aria-label="Source references"><h3>Source references</h3>${references.map(sourceReference).join("")}</section>` : ""}</div></details>`;
+}
+
+function guideSection(guide, id, label, content, attributes = "") {
+  return `<section id="${escapeHtml(`${guide.id}-${id}`)}" data-guide-section="${escapeHtml(id)}"${attributes}><h2>${escapeHtml(label)}</h2>${content}</section>`;
+}
+
+function mermaidLabel(value) {
+  return String(value).replace(/[\[\]{}"\n]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function taskFlow(guide) {
+  const lines = ["flowchart TD", `START([${mermaidLabel(guide.startCondition)}])`];
+  guide.steps.forEach((stage, index) => lines.push(`S${index + 1}["${index + 1}. ${mermaidLabel(stage.label)}"]`));
+  if (guide.steps.length) {
+    lines.push("START --> S1");
+    for (let index = 1; index < guide.steps.length; index += 1) lines.push(`S${index} --> S${index + 1}`);
+  }
+  guide.decisionPoints.forEach((decision, index) => lines.push(`D${index + 1}{"${mermaidLabel(decision.label)}"}`));
+  const lastStep = `S${guide.steps.length}`;
+  if (guide.decisionPoints.length) {
+    lines.push(`${lastStep} --> D1`);
+    guide.decisionPoints.forEach((_, index) => {
+      const current = `D${index + 1}`;
+      const next = index + 1 < guide.decisionPoints.length ? `D${index + 2}` : "COMPLETE";
+      lines.push(`${current} -->|Yes| ${next}`);
+      lines.push(`${current} -->|No| RECOVERY`);
+    });
+  } else {
+    lines.push(`${lastStep} --> COMPLETE`);
+  }
+  lines.push("RECOVERY[Correction or recovery] --> HOLD([Controlled hold or escalation])");
+  lines.push("COMPLETE([Completion criteria met])");
+  const source = lines.join("\n");
+  const stages = guide.steps.map(({ label }) => label).join("|");
+  const textEquivalent = `<div class="flow-text-equivalent"><h3>Flow text equivalent</h3><ol>${guide.steps.map((stage, index) => `<li>${index + 1}. ${escapeHtml(stage.label)} by ${escapeHtml(stage.performingRole)}.</li>`).join("")}</ol><p><strong>Decisions:</strong> ${escapeHtml(guide.decisionPoints.map(({ label }) => label).join(" "))}</p><p><strong>Terminal outcomes:</strong> Completion criteria met, or controlled hold and escalation after recovery.</p></div>`;
+  return `<figure class="diagram-shell" data-diagram-id="${escapeHtml(`${guide.id}:flow:overview`)}" data-flow-workflow="${escapeHtml(guide.id)}" data-flow-view="overview" data-flow-stages="${escapeHtml(stages)}"><div class="diagram-toolbar" aria-label="Diagram zoom controls"><button type="button" data-diagram-fit aria-label="Fit diagram to available space">Fit</button><button type="button" data-diagram-zoom="reset" aria-label="Show diagram at 100 percent">100%</button><button type="button" data-diagram-zoom="out" aria-label="Zoom diagram out">−</button><button type="button" data-diagram-zoom="in" aria-label="Zoom diagram in">+</button></div><div class="diagram-viewport" data-diagram-viewport role="region" tabindex="0" aria-label="Task flow diagram"><div class="diagram-canvas"><div class="mermaid">${escapeHtml(source)}</div></div></div><figcaption>Complete task flow with decision and terminal outcomes.</figcaption></figure>${textEquivalent}`;
+}
+
+function taskArticle(guide, guideById) {
+  const roleName = (id) => guideById.get(id)?.canonicalName ?? guideById.get(id)?.title ?? id;
+  const policyReferences = guide.sourceReferences.filter(({ purpose }) => purpose === "policy-basis");
+  const supportReferences = guide.sourceReferences.filter(({ purpose }) => purpose !== "policy-basis");
+  const involved = guide.participatingRoles.map((id) => {
+    const role = guideById.get(id);
+    return role ? `<li>${guideLink(role, { label: roleName(id), summary: "" })}</li>` : `<li>${escapeHtml(roleName(id))}</li>`;
+  }).join("");
+  const prerequisites = `<h3>Required access</h3>${renderItems(guide.requiredAccess)}<h3>Inputs and evidence</h3>${renderItems(guide.inputsAndEvidence)}<h3>Start condition</h3><p>${escapeHtml(guide.startCondition)}</p>`;
+  const stages = `<ol class="task-stages">${guide.steps.map((stage, index) => `<li id="${escapeHtml(`${guide.id}-${stage.id}`)}" data-task-stage="${escapeHtml(stage.id)}"><header><span>Step ${index + 1}</span><h3>${escapeHtml(stage.label)}</h3><p>${escapeHtml(roleName(stage.performingRole))} | ${escapeHtml(stage.module)} | <code>${escapeHtml(stage.route)}</code></p></header><p>${escapeHtml(stage.instruction)}</p><aside class="screen-evidence-pending" data-screen-evidence="pending" data-screenshot-binding="${escapeHtml(stage.screenshot.bindingId)}" role="status"><strong>Screen evidence pending review</strong><p>The procedure remains usable while the stage-specific application evidence is reviewed.</p></aside><dl><dt>Expected visible result</dt><dd>${escapeHtml(stage.expectedResult)}</dd><dt>Data read</dt><dd>${escapeHtml(stage.dataRead.join("; "))}</dd><dt>Data written</dt><dd>${escapeHtml(stage.dataWritten.join("; "))}</dd><dt>Evidence retained</dt><dd>${escapeHtml(stage.evidenceRetained.join("; "))}</dd><dt>Next handoff</dt><dd>${escapeHtml(roleName(stage.nextHandoff))}</dd></dl></li>`).join("")}</ol>`;
+  const decisions = `<h3>Decision points</h3>${renderItems(guide.decisionPoints.map(({ label }) => label))}<h3>Denial checks</h3>${renderItems(guide.denialChecks)}<h3>Recovery</h3><p>${escapeHtml(guide.recovery)}</p><h3>Task handoff</h3><p>${escapeHtml(guide.handoff)}</p>`;
+  const completion = `<h3>Observable application state</h3>${renderItems(guide.completionCriteria)}<h3>Retained evidence</h3>${renderItems(guide.completionEvidence)}<h3>Downstream owner and unfinished states</h3><p>${escapeHtml(guide.handoff)}</p>${renderItems(guide.denialChecks)}`;
+  const related = guide.relatedTasks.map((id) => guideById.get(id)).filter(Boolean);
+  const policy = `<details class="guide-support policy-basis" data-guide-section="policy-basis" data-section-id="${escapeHtml(`${guide.id}:policy-basis`)}"><summary id="${escapeHtml(`${guide.id}-policy-basis`)}"><span role="heading" aria-level="2">Why this rule exists</span></summary><div class="guide-support-content">${policyReferences.length ? policyReferences.map(sourceReference).join("") : "<p>No separate policy extract is mapped to this guide.</p>"}</div></details>`;
+  return `<article id="guide-${escapeHtml(guide.id)}" data-guide data-document data-guide-id="${escapeHtml(guide.id)}" data-guide-type="task" data-mode="tasks" data-tab="workflows" data-related-tabs="" data-category="Tasks" data-search="${escapeHtml([guide.title, guide.summary, guide.keywords].flat().join(" ").toLowerCase())}" hidden><header class="article-header"><div><span class="category">Task</span><h1>${escapeHtml(guide.title)}</h1><p>${escapeHtml(guide.summary)}</p></div></header><div class="article-body">${guideSection(guide, "outcome", "Outcome", `<p>${escapeHtml(guide.outcome)}</p>`)}${guideSection(guide, "flow", "Flow", taskFlow(guide))}${guideSection(guide, "who-is-involved", "Who is involved", `<ul>${involved}</ul><p><strong>Accountable closer:</strong> ${escapeHtml(roleName(guide.steps.at(-1)?.performingRole ?? guide.participatingRoles.at(-1)))}</p>`)}${guideSection(guide, "before-you-start", "Before you start", prerequisites)}${guideSection(guide, "steps", "Steps", stages)}${guideSection(guide, "decisions-and-exceptions", "Decisions and exceptions", decisions)}${guideSection(guide, "completion-checklist", "Completion checklist", completion)}${guideSection(guide, "related-tasks", "Related tasks", related.length ? `<div class="article-list">${related.map((item) => guideLink(item, { related: true })).join("")}</div>` : "<p>No direct continuation or recovery guide.</p>")}${policy}${documentControls(guide, supportReferences)}</div></article>`;
+}
+
+function roleArticle(guide, guideById) {
+  const linkedTasks = guide.linkedTasks.map((id) => guideById.get(id)).filter(Boolean);
+  const workspace = `<table><thead><tr><th scope="col">Module</th><th scope="col">Landing route</th></tr></thead><tbody>${guide.workspaceMap.map(({ module, landingRoute }) => `<tr><td>${escapeHtml(module)}</td><td><code>${escapeHtml(landingRoute)}</code></td></tr>`).join("")}</tbody></table>`;
+  const simulationTask = guideById.get(guide.guidedSimulation.linkedTaskId);
+  const simulation = `<h3>${escapeHtml(guide.guidedSimulation.title)}</h3><p>${escapeHtml(guide.guidedSimulation.scenario)}</p><p><strong>Start route:</strong> <code>${escapeHtml(guide.guidedSimulation.startRoute)}</code></p>${simulationTask ? guideLink(simulationTask, { label: `Open task: ${simulationTask.title}`, summary: "" }) : ""}<h3>Success criteria</h3>${renderItems(guide.guidedSimulation.successCriteria)}`;
+  const recovery = `<h3>Negative case</h3><p>${escapeHtml(guide.guidedSimulation.negativeScenario)}</p><h3>Recovery</h3><p>${escapeHtml(guide.guidedSimulation.recovery)}</p><h3>Denial checks</h3>${renderItems(guide.denialChecks)}`;
+  return `<article id="guide-${escapeHtml(guide.id)}" data-guide data-document data-guide-id="${escapeHtml(guide.id)}" data-guide-type="role" data-mode="roles" data-tab="roles" data-related-tabs="" data-category="Roles" data-search="${escapeHtml([guide.title, guide.summary, guide.keywords].flat().join(" ").toLowerCase())}" hidden><header class="article-header"><div><span class="category">Role</span><h1>${escapeHtml(guide.canonicalName)}</h1><p>${escapeHtml(guide.summary)}</p></div></header><div class="article-body">${guideSection(guide, "role-purpose-and-department", "Role purpose and department", `<p>${escapeHtml(guide.purpose)}</p><p><strong>Department and scope:</strong> ${escapeHtml(guide.departmentAndScope)}</p><p><strong>Assignment owner:</strong> ${escapeHtml(guide.assignmentOwner)}</p>`)}${guideSection(guide, "your-workspace", "Your workspace", `${workspace}<h3>Required access</h3>${renderItems(guide.requiredAccess)}`)}${guideSection(guide, "work-queue-and-priorities", "Work queue and priorities", renderItems(guide.workQueueOrStartConditions))}${guideSection(guide, "permitted-actions", "Permitted actions", renderItems(guide.permittedActions))}${guideSection(guide, "decisions-and-approval-authority", "Decisions and approval authority", renderItems(guide.authorityLimits))}${guideSection(guide, "prohibited-actions", "Prohibited actions", renderItems(guide.prohibitedActions))}${guideSection(guide, "handoffs-received-and-sent", "Handoffs received and sent", renderItems(guide.handoffs))}${guideSection(guide, "guided-simulation", "Guided simulation", simulation)}${guideSection(guide, "negative-and-recovery-scenario", "Negative and recovery scenario", recovery)}${guideSection(guide, "escalation-and-support", "Escalation and support", `<p>${escapeHtml(guide.escalationAndRecovery)}</p>`)}${guideSection(guide, "completion-evidence-and-training-sign-off", "Completion evidence and training sign-off", `<h3>Evidence responsibilities</h3>${renderItems(guide.evidenceResponsibilities)}<h3>Training sign-off</h3>${renderItems(guide.trainingReadiness)}<h3>Related tasks</h3><div class="article-list">${linkedTasks.map((task) => guideLink(task)).join("")}</div>`)}${documentControls(guide, guide.sourceReferences, { sectionId: "capability-codes-and-document-controls", label: "Capability codes and document controls" })}</div></article>`;
+}
+
+function systemArticle(guide) {
+  const references = guide.sourceReferences.map(sourceReference).join("");
+  return `<article id="guide-${escapeHtml(guide.id)}" data-guide data-document data-guide-id="${escapeHtml(guide.id)}" data-guide-type="system" data-mode="system" data-tab="system" data-related-tabs="" data-category="System" data-search="${escapeHtml([guide.title, guide.summary, guide.keywords].flat().join(" ").toLowerCase())}" hidden><header class="article-header"><div><span class="category">System</span><h1>${escapeHtml(guide.title)}</h1><p>${escapeHtml(guide.summary)}</p></div></header><div class="article-body">${guideSection(guide, "overview", "Overview", `<p>${escapeHtml(guide.summary)}</p><p><strong>Audience:</strong> ${escapeHtml(guide.audience.join(", "))}</p>`)}${guideSection(guide, "source-references", "Source references", references || "<p>No governed reference is mapped.</p>")}${documentControls(guide, [], { includeReferences: false })}</div></article>`;
+}
+
+function homeGuide(guide, guides, guideById) {
+  const frequentIds = [
+    "procurement-request-approval",
+    "vendor-accreditation-renewal",
+    "stock-receiving-putaway",
+    "ecommerce-fulfillment-delivery",
+    "returns-replacements-refunds-rma",
+    "inventory-count-variance",
+  ];
+  const frequentTasks = frequentIds.map((id) => guideById.get(id)).filter(Boolean);
+  const roles = guides.filter(({ type }) => type === "role");
+  const systemGuides = guides.filter(({ type }) => type === "system");
+  return `<section class="hero home-guide" data-guide data-guide-id="home" data-guide-type="home" data-mode="home"><span class="category">Mwell Intra handbook</span><h1>What do you need to do?</h1><section id="home-start-a-task" data-home-section="start-a-task"><h2>Start a task</h2><div class="article-list frequent-tasks">${frequentTasks.map((task) => guideLink(task)).join("")}</div></section><section id="home-learn-my-role" data-home-section="learn-my-role"><h2>Learn my role</h2><label for="role-entry">Choose your role</label><select id="role-entry" data-role-entry><option value="">Select a role</option>${roles.map((role) => `<option value="${escapeHtml(role.id)}">${escapeHtml(role.canonicalName)}</option>`).join("")}</select><button type="button" data-open-role>Open role</button><div class="article-list role-entry-links">${roles.map((role) => guideLink(role, { summary: "" })).join("")}</div></section><section id="home-manage-support" data-home-section="manage-support"><h2>Manage or support Mwell Intra</h2><div class="article-list">${systemGuides.map((item) => guideLink(item)).join("")}</div></section><section id="home-recent-guides" data-home-section="recent-guides"><h2>Recent guides</h2><ol data-recent-guides><li>No recent guides yet.</li></ol></section>${documentControls(guide, guide.sourceReferences)}</section>`;
+}
+
+function modePanel(mode, guides) {
+  const tabId = MODE_TAB_ALIASES[mode.id];
+  const modeGuides = guides.filter((guide) => guide.modeId === mode.id && guide.type !== "home");
+  return `<section id="mode-panel-${escapeHtml(mode.id)}" class="mode-panel-shell"><div role="tabpanel" id="panel-${escapeHtml(tabId)}" aria-labelledby="mode-${escapeHtml(mode.id)}" data-mode-panel data-mode="${escapeHtml(mode.id)}" data-tab-panel${mode.id === "home" ? "" : " hidden"} tabindex="0"><header class="panel-header"><h2>${escapeHtml(mode.label)}</h2><p>${escapeHtml(mode.summary)}</p></header>${modeGuides.length ? `<div class="article-list">${modeGuides.map((guide) => guideLink(guide)).join("")}</div>` : "<p>Choose an outcome, role, or system responsibility from Home.</p>"}</div></section>`;
+}
+
+export function renderHandbookShell({ model, guides, searchIndex, styles, runtime, mermaidBundle }) {
+  const guideById = new Map(guides.map((guide) => [guide.id, guide]));
+  const home = guideById.get("home");
+  const articles = guides.filter(({ type }) => type !== "home").map((guide) =>
+    guide.type === "task" ? taskArticle(guide, guideById)
+      : guide.type === "role" ? roleArticle(guide, guideById)
+        : systemArticle(guide)).join("\n");
+  const initialSearchState = { query: "", scope: "all" };
   return `<!doctype html>
 <html lang="en" data-theme="light">
 <head>
@@ -408,27 +737,40 @@ ${styles}
 <body id="top">
   <header class="topbar">
     <div class="brand"><strong>mwell</strong><span>Intra handbook</span></div>
-    <div class="search-wrap"><input id="search" type="search" placeholder="Search the complete handbook" aria-label="Search handbook" autocomplete="off"><div class="search-scope" role="group" aria-label="Search scope"><button type="button" data-search-scope="tab" aria-pressed="false">This tab</button><button type="button" data-search-scope="all" aria-pressed="true">All tabs</button></div></div>
-    <div class="toolbar"><button class="drawer-trigger" type="button" data-open-drawer="contents" aria-controls="contents-rail" aria-expanded="false">Contents</button><button class="drawer-trigger" type="button" data-open-drawer="toc" aria-controls="page-toc" aria-expanded="false">On this page</button><button id="theme" type="button" aria-label="Toggle color theme">Theme</button><div class="print-control"><button type="button" data-print-trigger aria-controls="print-menu" aria-expanded="false" aria-haspopup="dialog">Print</button><div id="print-menu" class="print-menu" role="dialog" aria-label="Print options" tabindex="-1" hidden><button type="button" data-print-scope="article">Current article</button><button type="button" data-print-scope="tab">Active tab</button><button type="button" data-print-scope="all">Complete handbook</button></div></div></div>
+    <div class="search-wrap"><input id="search" type="search" placeholder="What do you need help with?" aria-label="What do you need help with?" autocomplete="off"><div class="search-scope" role="group" aria-label="Search scope"><button type="button" data-search-scope="tab" aria-pressed="false">This mode</button><button type="button" data-search-scope="all" aria-pressed="true">All guides</button></div></div>
+    <div class="toolbar"><span data-current-mode>Home</span><button class="drawer-trigger" type="button" data-open-drawer="contents" aria-controls="contents-rail" aria-expanded="false">Contents</button><button class="drawer-trigger" type="button" data-open-drawer="toc" aria-controls="page-toc" aria-expanded="false">On this page</button><button id="theme" type="button" aria-label="Toggle color theme">Theme</button><div class="print-control"><button type="button" data-print-trigger aria-controls="print-menu" aria-expanded="false" aria-haspopup="dialog">Print</button><div id="print-menu" class="print-menu" role="dialog" aria-label="Print options" tabindex="-1" hidden><button type="button" data-print-scope="article">Current guide</button><button type="button" data-print-scope="tab">Current mode</button><button type="button" data-print-scope="all">Complete handbook</button></div></div></div>
   </header>
   <div class="handbook-shell">
-    <nav class="tab-rail" role="tablist" aria-label="Handbook sections">${HANDBOOK_TABS.map((tab, index) => `<button role="tab" id="tab-${tab.id}" aria-controls="panel-${tab.id}" aria-selected="${index === 0}" tabindex="${index === 0 ? 0 : -1}" type="button" data-tab-button data-tab="${tab.id}">${escapeHtml(tab.label)}</button>`).join("")}</nav>
-    <aside id="contents-rail" class="contents-rail" aria-labelledby="contents-title"><div class="drawer-heading"><h2 id="contents-title">Contents</h2><button type="button" data-close-drawer="contents" aria-label="Close contents">Close</button></div><div class="summary"><strong>${documents.length}</strong>maintained source documents<div class="result-count" id="result-count" aria-live="polite">Choose an article to read</div></div><section class="search-results" id="search-results" aria-label="Search results" hidden></section>${panels}</aside>
+    <nav class="tab-rail" role="tablist" aria-label="Handbook modes">${model.modes.map((mode, index) => `<button role="tab" id="mode-${escapeHtml(mode.id)}" aria-controls="mode-panel-${escapeHtml(mode.id)}" aria-selected="${index === 0}" tabindex="${index === 0 ? 0 : -1}" type="button" data-mode-button data-mode="${escapeHtml(mode.id)}" data-tab-button data-tab="${escapeHtml(MODE_TAB_ALIASES[mode.id])}">${escapeHtml(mode.label)}</button>`).join("")}</nav>
+    <aside id="contents-rail" class="contents-rail" aria-labelledby="contents-title"><div class="drawer-heading"><h2 id="contents-title">Contents</h2><button type="button" data-close-drawer="contents" aria-label="Close contents">Close</button></div><div class="summary"><strong>Find a guide</strong><div class="result-count" id="result-count" aria-live="polite">Choose a task, role, or system guide</div></div><section class="search-results" id="search-results" aria-label="Search results" hidden></section>${model.modes.map((mode) => modePanel(mode, guides)).join("")}</aside>
     <main class="reading-canvas" tabindex="-1">
-      <section class="route-notice" id="route-notice" role="status" hidden><span>This handbook link is no longer available. You are back at Start Here.</span><div><button type="button" data-recovery-search>Search</button><button type="button" data-dismiss-notice aria-label="Dismiss message">Dismiss</button></div></section>
-      <section class="hero"><span class="category">Standalone operating handbook</span><h1>Mwell Intra</h1><p>One searchable, printable reference for users, trainers, developers, infrastructure teams, control owners, and release reviewers. It includes rendered process diagrams, application procedures, screenshots, governed reference extracts, technical specifications, and release controls.</p><div class="hero-meta"><span>${documents.length} maintained sources</span><span>Source-controlled release set</span><span>Self-contained HTML</span></div></section>
-      <p class="empty" id="empty" hidden>No document matches this search and category.</p>
+      <section class="route-notice" id="route-notice" role="status" hidden><span>This handbook link has moved. The nearest current guide is open.</span><div><button type="button" data-recovery-search>Search</button><button type="button" data-dismiss-notice aria-label="Dismiss message">Dismiss</button></div></section>
+      ${homeGuide(home, guides, guideById)}
+      <p class="empty" id="empty" hidden>No guide matches this search and mode.</p>
       ${articles}
     </main>
     <aside id="page-toc" class="page-toc" aria-labelledby="page-toc-title"><div class="drawer-heading"><h2 id="page-toc-title">On this page</h2><button type="button" data-close-drawer="toc" aria-label="Close table of contents">Close</button></div><nav data-page-toc aria-label="On this page"></nav></aside>
   </div>
-  <script data-handbook-index>window.__HANDBOOK_INDEX__ = ${serializeForScript(searchIndex)}; window.__HANDBOOK_SEARCH_STATE__ = ${serializeForScript(initialSearchState)};</script>
+  <script data-handbook-index>window.__HANDBOOK_INDEX__ = ${serializeForScript(searchIndex)}; window.__HANDBOOK_LEGACY_ROUTES__ = ${serializeForScript(model.legacyRoutes)}; window.__HANDBOOK_MODES__ = ${serializeForScript(model.modes)}; window.__HANDBOOK_SEARCH_STATE__ = ${serializeForScript(initialSearchState)};</script>
   <script>${mermaidBundle}</script>
   <script data-handbook-runtime>
 ${runtime}
   </script>
 </body>
 </html>`;
+}
+
+export function buildDocumentationHtml(sourceFiles = documentationSources()) {
+  const sources = loadDocumentationSources(sourceFiles);
+  const model = resolveHandbookModel(sources);
+  const guides = composeHandbookGuides(model);
+  const searchIndex = buildGuideSearchIndex(guides);
+  const mermaidBundle = readFileSync(mermaidBundleFile, "utf8").replace(/[ \t]+$/gm, "");
+  const styles = normalizeText(readFileSync(handbookStylesFile, "utf8")).replace(/[ \t]+$/gm, "");
+  const runtime = normalizeText(readFileSync(handbookRuntimeFile, "utf8"))
+    .replace(/[ \t]+$/gm, "")
+    .replaceAll("</script", "<\\/script");
+  return renderHandbookShell({ model, guides, searchIndex, styles, runtime, mermaidBundle });
 }
 
 export function writeDocumentationHtml({ check = false } = {}) {

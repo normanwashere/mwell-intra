@@ -2,10 +2,41 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import {
+import * as documentationGenerator from "./build-app-documentation.mjs";
+import { HANDBOOK_GUIDES, HANDBOOK_MODES, LEGACY_ROUTES } from "./handbook-guides.mjs";
+
+const {
   buildDocumentationHtml,
   documentationSources,
-} from "./build-app-documentation.mjs";
+} = documentationGenerator;
+
+const TASK_SECTION_IDS = Object.freeze([
+  "outcome",
+  "flow",
+  "who-is-involved",
+  "before-you-start",
+  "steps",
+  "decisions-and-exceptions",
+  "completion-checklist",
+  "related-tasks",
+  "policy-basis",
+  "document-controls",
+]);
+
+const ROLE_SECTION_IDS = Object.freeze([
+  "role-purpose-and-department",
+  "your-workspace",
+  "work-queue-and-priorities",
+  "permitted-actions",
+  "decisions-and-approval-authority",
+  "prohibited-actions",
+  "handoffs-received-and-sent",
+  "guided-simulation",
+  "negative-and-recovery-scenario",
+  "escalation-and-support",
+  "completion-evidence-and-training-sign-off",
+  "capability-codes-and-document-controls",
+]);
 
 const EXPECTED_PROCUREMENT_STAGE_LABELS = Object.freeze([
   "Define need",
@@ -205,11 +236,149 @@ function generatorFunction(name, nextFunction, bindings = {}) {
   return new Function(...Object.keys(bindings), `${source}; return ${name};`)(...Object.values(bindings));
 }
 
+function embeddedWindowValue(html, name) {
+  const match = html.match(new RegExp(`window\\.${name} = ([\\s\\S]*?);(?: window\\.|</script>)`));
+  assert.ok(match, `missing embedded window.${name}`);
+  return JSON.parse(match[1]);
+}
+
+function articleHtml(html, guideId) {
+  const match = html.match(new RegExp(`<article[^>]+data-guide-id="${guideId}"[\\s\\S]*?</article>`));
+  assert.ok(match, `missing rendered guide ${guideId}`);
+  return match[0];
+}
+
+test("exports deterministic outcome-first generator phases", () => {
+  for (const helper of [
+    "loadDocumentationSources",
+    "resolveHandbookModel",
+    "composeHandbookGuides",
+    "buildGuideSearchIndex",
+    "renderHandbookShell",
+  ]) {
+    assert.equal(typeof documentationGenerator[helper], "function", helper);
+  }
+
+  const sources = documentationGenerator.loadDocumentationSources(documentationSources());
+  const model = documentationGenerator.resolveHandbookModel(sources);
+  const guides = documentationGenerator.composeHandbookGuides(model);
+  const searchIndex = documentationGenerator.buildGuideSearchIndex(guides);
+  const html = documentationGenerator.renderHandbookShell({
+    model,
+    guides,
+    searchIndex,
+    styles: "/* phase-test */",
+    runtime: "window.__PHASE_TEST__ = true;",
+    mermaidBundle: "window.mermaid = window.mermaid || {};",
+  });
+
+  assert.equal(sources.length, documentationSources().length);
+  assert.deepEqual(model.modes.map(({ id }) => id), HANDBOOK_MODES.map(({ id }) => id));
+  assert.equal(guides.length, HANDBOOK_GUIDES.length);
+  assert.ok(searchIndex.some(({ type }) => type === "Step"));
+  assert.match(html, /What do you need to do\?/);
+});
+
+test("renders the four public modes and an outcome-first Home before metadata", () => {
+  const html = buildDocumentationHtml();
+  const modeLabels = [...html.matchAll(/<button[^>]+data-mode-button[^>]*>([^<]+)<\/button>/g)]
+    .map((match) => normalizeWhitespace(match[1]));
+
+  assert.deepEqual(modeLabels, ["Home", "Tasks", "Roles", "System"]);
+  assert.equal((html.match(/data-mode-panel/g) ?? []).length, 4);
+  assert.doesNotMatch(html, /<button[^>]+data-mode-button[^>]*>(?:Start Here|Workflows|Roles &amp; Training|Architecture|Infrastructure|Security &amp; Governance|Release &amp; QA)<\/button>/);
+
+  const question = html.indexOf("What do you need to do?");
+  const frequentTasks = html.indexOf("Start a task", question);
+  const roleEntry = html.indexOf("Learn my role", frequentTasks);
+  const systemEntry = html.indexOf("Manage or support Mwell Intra", roleEntry);
+  const recentGuides = html.indexOf("Recent guides", systemEntry);
+  const documentControls = html.indexOf("Document controls", recentGuides);
+  assert.ok(question >= 0 && question < frequentTasks);
+  assert.ok(frequentTasks < roleEntry && roleEntry < systemEntry);
+  assert.ok(systemEntry < recentGuides && recentGuides < documentControls);
+  assert.equal(html.slice(question, documentControls).includes("Source checksum"), false);
+  assert.match(html.slice(question, documentControls), /data-guide-id="stock-receiving-putaway"/);
+  assert.match(html.slice(question, documentControls), /data-role-entry/);
+});
+
+test("renders all canonical task, role, and System guides in contract order", () => {
+  const html = buildDocumentationHtml();
+  assert.equal((html.match(/<article[^>]+data-guide-type="task"/g) ?? []).length, 13);
+  assert.equal((html.match(/<article[^>]+data-guide-type="role"/g) ?? []).length, 11);
+  assert.equal((html.match(/<article[^>]+data-guide-type="system"/g) ?? []).length, 8);
+
+  const task = articleHtml(html, "procurement-request-approval");
+  const taskSections = [...task.matchAll(/data-guide-section="([^"]+)"/g)].map((match) => match[1]);
+  assert.deepEqual(taskSections, TASK_SECTION_IDS);
+  assert.match(task, /data-task-stage="step-1"[\s\S]*?General Employee[\s\S]*?\/procurement\/requests\/new/);
+  assert.match(task, /Expected visible result/);
+  assert.match(task, /Data read/);
+  assert.match(task, /Data written/);
+  assert.match(task, /Evidence retained/);
+  assert.match(task, /Next handoff/);
+
+  const role = articleHtml(html, "operations_associate");
+  const roleSections = [...role.matchAll(/data-guide-section="([^"]+)"/g)].map((match) => match[1]);
+  assert.deepEqual(roleSections, ROLE_SECTION_IDS);
+  assert.match(role, /Guided simulation/);
+  assert.match(role, /Negative and recovery scenario/);
+  assert.match(role, /Completion evidence and training sign-off/);
+});
+
+test("renders every future step screenshot as pending review without enforcing strict coverage", () => {
+  const html = buildDocumentationHtml();
+  const taskStages = HANDBOOK_GUIDES.filter(({ type }) => type === "task")
+    .flatMap(({ steps }) => steps);
+
+  assert.equal(taskStages.length, 52);
+  assert.equal((html.match(/data-screen-evidence="pending"/g) ?? []).length, taskStages.length);
+  assert.equal((html.match(/Screen evidence pending review/g) ?? []).length, taskStages.length);
+  assert.doesNotMatch(html, /data-screen-evidence="certified"/);
+  assert.doesNotMatch(html, /data-certified-screenshot/);
+});
+
+test("collapses policy, source, capability, and document controls while preserving governed content", () => {
+  const html = buildDocumentationHtml();
+  const task = articleHtml(html, "procurement-request-approval");
+  const role = articleHtml(html, "operations_associate");
+  const sourceLibrary = articleHtml(html, "source-references");
+
+  assert.match(task, /<details[^>]+data-guide-section="policy-basis"(?![^>]*\bopen\b)/);
+  assert.match(task, /<details[^>]+data-guide-section="document-controls"(?![^>]*\bopen\b)/);
+  assert.match(role, /<details[^>]+data-guide-section="capability-codes-and-document-controls"(?![^>]*\bopen\b)/);
+  assert.equal(
+    (sourceLibrary.match(/<details[^>]+data-source-reference=/g) ?? []).length,
+    documentationSources().length,
+  );
+  for (const source of documentationSources()) {
+    assert.match(sourceLibrary, new RegExp(`data-source-file="${source.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
+  }
+  assert.match(sourceLibrary, /Mwell Intra Process Reference Library/);
+  assert.match(sourceLibrary, /user@example\.com/);
+});
+
+test("embeds typed search records and every legacy route", () => {
+  const html = buildDocumentationHtml();
+  const index = embeddedWindowValue(html, "__HANDBOOK_INDEX__");
+  const legacyRoutes = embeddedWindowValue(html, "__HANDBOOK_LEGACY_ROUTES__");
+
+  assert.ok(index.some(({ type, guideId }) => type === "Task" && guideId === "stock-receiving-putaway"));
+  assert.ok(index.some(({ type, guideId, headingId }) => type === "Step" && guideId === "stock-receiving-putaway" && headingId === "step-1"));
+  assert.ok(index.some(({ type }) => type === "Decision"));
+  assert.ok(index.some(({ type, guideId }) => type === "Role" && guideId === "operations_associate"));
+  assert.ok(index.some(({ type }) => type === "Troubleshooting"));
+  assert.ok(index.some(({ type }) => type === "System reference"));
+  assert.ok(index.every(({ modeId, guideId, headingId, title, excerpt, href }) =>
+    modeId && guideId && headingId && title && excerpt && href));
+  assert.deepEqual(legacyRoutes, LEGACY_ROUTES);
+});
+
 test("builds one self-contained handbook from every canonical source", () => {
   const html = buildDocumentationHtml();
   const sources = documentationSources();
   assert.match(html, /Mwell Intra Standalone Operating Handbook/);
-  assert.match(html, /Search the complete handbook/);
+  assert.match(html, /What do you need help with\?/);
   assert.match(html, /Technical and Functional Specification/);
   assert.match(html, /User Training And Operations Manual/);
   assert.match(html, /WMS Feedback Release/);
@@ -257,12 +426,13 @@ test("includes the canonical mWell source, incorporated MPIC reference, and thre
   assert.match(html, /at least three usable responses/i);
 });
 
-test("keeps one incorporated MPIC reference article with separated sections in required order", () => {
+test("keeps one incorporated MPIC source-library reference with separated sections in required order", () => {
   const html = buildDocumentationHtml();
   const source = repositoryFile("docs/policy/MPIC_PROCUREMENT_POLICY_FEBRUARY_2025.md");
   const headings = [...source.matchAll(/^## (.+)$/gm)].map((match) => match[1]);
 
-  assert.equal((html.match(/<article id="doc-policy-mpic-procurement-policy-february-2025-md"/g) ?? []).length, 1);
+  const sourceLibrary = articleHtml(html, "source-references");
+  assert.equal((sourceLibrary.match(/data-source-file="docs\/policy\/MPIC_PROCUREMENT_POLICY_FEBRUARY_2025\.md"/g) ?? []).length, 1);
   assert.equal(documentationSources().filter((file) => file === "docs/policy/MPIC_PROCUREMENT_POLICY_FEBRUARY_2025.md").length, 1);
   assert.deepEqual(headings, [
     "Source identity",
@@ -415,26 +585,25 @@ test("embeds local presentation assets without external requests", () => {
   assert.doesNotMatch(html, /<link\s+[^>]*rel=["']stylesheet/i);
 });
 
-test("renders seven accessible tabs and every source once", () => {
+test("renders four accessible mode tabs and every canonical guide once", () => {
   const html = buildDocumentationHtml();
-  assert.equal((html.match(/role="tab"/g) ?? []).length, 7);
-  assert.equal((html.match(/role="tabpanel"/g) ?? []).length, 7);
-  for (const id of ["start", "workflows", "roles", "architecture", "infrastructure", "security", "release"]) {
-    assert.match(html, new RegExp(`id="tab-${id}"`));
-    assert.match(html, new RegExp(`id="panel-${id}"`));
+  assert.equal((html.match(/role="tab"/g) ?? []).length, 4);
+  assert.equal((html.match(/role="tabpanel"/g) ?? []).length, 4);
+  for (const id of ["home", "tasks", "roles", "system"]) {
+    assert.match(html, new RegExp(`id="mode-${id}"`));
+    assert.match(html, new RegExp(`id="mode-panel-${id}"`));
   }
-  assert.equal((html.match(/<article[^>]+data-document/g) ?? []).length, documentationSources().length);
+  assert.equal((html.match(/data-guide(?:\s|>)/g) ?? []).length, HANDBOOK_GUIDES.length);
 });
 
-test("renders primary article navigation and in-place route support", () => {
+test("renders canonical guide navigation and in-place route support", () => {
   const html = buildDocumentationHtml();
   assert.match(html, /data-article-link/);
+  assert.match(html, /data-guide-link/);
   assert.match(html, /data-page-toc/);
   assert.match(html, /data-related-link/);
-  assert.match(html, /data-previous-link/);
-  assert.match(html, /data-next-link/);
-  assert.match(html, /data-previous-link[^>]+data-title=/);
-  assert.match(html, /data-next-link[^>]+data-content-type=/);
+  assert.match(html, /data-related-link[^>]+data-title=/);
+  assert.match(html, /data-related-link[^>]+data-content-type=/);
   assert.match(html, /function activateRoute\(\{ tabId, articleId, headingId, historyMode, restoreScroll \}\)/);
   assert.match(html, /history\.pushState/);
   assert.match(html, /history\.replaceState/);
@@ -444,46 +613,47 @@ test("renders primary article navigation and in-place route support", () => {
 test("renders progressive disclosures with stable state keys", () => {
   const html = buildDocumentationHtml();
 
-  assert.match(html, /<details[^>]+data-section-id="doc-[^"]+:[^"]+"/);
+  assert.match(html, /<details[^>]+data-section-id="procurement-request-approval:policy-basis"/);
+  assert.match(html, /<details[^>]+data-section-id="procurement-request-approval:document-controls"/);
   assert.match(html, /<summary\b/);
-  assert.match(html, /data-article-disclosures/);
-  assert.match(html, /Expand all/);
-  assert.match(html, /Collapse all/);
   assert.match(html, /mwell-intra-handbook:v2/);
-  assert.match(html, /data-section-id="doc-manual-mwell-intra-user-manual-md:doc-manual-mwell-intra-user-manual-md-start-here" open/);
+  assert.doesNotMatch(html, /data-section-id="procurement-request-approval:(?:policy-basis|document-controls)"[^>]+open/);
 });
 
-test("embeds heading-level search records with match metadata", () => {
+test("embeds guide-level typed search records with match metadata", () => {
   const html = buildDocumentationHtml();
   const indexMatch = html.match(/window\.__HANDBOOK_INDEX__ = (\[[\s\S]*?\]);/);
 
   assert.ok(indexMatch, "the generated handbook embeds a search index");
   const index = JSON.parse(indexMatch[1]);
-  const heading = index.find((record) => record.headingId && record.headingId !== record.articleId);
+  const step = index.find((record) => record.type === "Step");
 
-  assert.equal(index[0].tabId, "start");
-  assert.ok(heading, "the index contains a heading-level record");
-  assert.deepEqual(index.map((record) => record.tabId), [...index.map((record) => record.tabId)].sort((left, right) => {
-    const tabOrder = ["start", "workflows", "roles", "architecture", "infrastructure", "security", "release"];
-    return tabOrder.indexOf(left) - tabOrder.indexOf(right);
-  }));
-  assert.equal(new Set(index.map((record) => record.articleId)).size, (index.filter((record, position) => position === 0 || record.articleId !== index[position - 1].articleId)).length);
-  assert.deepEqual(Object.keys(heading), [
-    "tabId",
-    "tabIds",
-    "articleId",
+  assert.equal(index[0].type, "Task");
+  assert.ok(step, "the index contains a step-level record");
+  assert.deepEqual(Object.keys(step), [
+    "type",
+    "modeId",
+    "guideId",
     "headingId",
     "title",
     "heading",
+    "role",
+    "module",
+    "excerpt",
+    "whyMatched",
+    "href",
+    "keywords",
+    "searchText",
+    "tabId",
+    "tabIds",
+    "articleId",
     "summary",
     "audience",
-    "keywords",
     "source",
     "text",
-    "searchText",
   ]);
-  assert.ok(heading.text.length <= 240);
-  assert.ok(index.some((record) => record.tabIds.includes("workflows") && /prepare payment handoff/i.test(record.searchText)), "workflow diagram labels remain searchable without exposing source fences");
+  assert.ok(step.text.length <= 240);
+  assert.ok(index.some((record) => record.type === "Step" && /create and validate the request/i.test(record.searchText)), "structured task stages remain searchable without exposing source fences");
   assert.match(html, /"scope":"all"/);
   assert.match(html, /aria-live="polite"/);
   assert.doesNotMatch(indexMatch[1], /<\/script/i);
@@ -571,7 +741,7 @@ test("normalizes persisted handbook state without accepting malformed values", (
 });
 
 test("keeps semantic diagram state IDs stable when diagrams are inserted or reordered", () => {
-  const decorateArticleHtml = generatorFunction("decorateArticleHtml", "buildSearchIndex", {
+  const decorateArticleHtml = generatorFunction("decorateArticleHtml", "markdownHeadingEntries", {
     escapeHtml: (value) => value,
     disclosureDefaultOpen: () => true,
     createHash,
@@ -629,14 +799,14 @@ test("serializes a tab-only scope without a query and parses it on refresh", () 
   assert.equal(defaultScopeHash, "#tab=start");
 });
 
-test("serializes tab routes safely while preserving browser query semantics", () => {
+test("serializes compatibility routes safely while exposing canonical guide semantics", () => {
   const html = buildDocumentationHtml();
-  const match = html.match(/href="(#tab=start&amp;article=doc-manual-mwell-intra-user-manual-md)" data-article-link/);
+  const match = html.match(/href="(#tab=workflows&amp;article=guide-stock-receiving-putaway)"[^>]+data-guide-link[^>]+data-mode="tasks"/);
   assert.ok(match);
   const browserHref = match[1].replaceAll("&amp;", "&");
   const params = new URLSearchParams(browserHref.slice(1));
   assert.deepEqual(Object.fromEntries(params), {
-    tab: "start",
-    article: "doc-manual-mwell-intra-user-manual-md",
+    tab: "workflows",
+    article: "guide-stock-receiving-putaway",
   });
 });
