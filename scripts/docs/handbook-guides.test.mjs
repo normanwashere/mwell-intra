@@ -258,6 +258,58 @@ function legacyRouteFor(source, heading) {
   );
 }
 
+const USER_MANUAL_OPERATIONAL_TARGETS = [
+  ["Comprehensive Launch Flow", "tasks", "procurement-request-approval", "flow"],
+  ["Procurement Flow", "tasks", "procurement-request-approval", "flow"],
+  ["Procurement Role Procedures", "tasks", "procurement-request-approval", "who-is-involved"],
+  ["Requester", "roles", "general_employee", "role-purpose-and-department"],
+  ["Department Head", "roles", "operations_lead", "role-purpose-and-department"],
+  ["Procurement Lead", "roles", "procurement_lead", "role-purpose-and-department"],
+  ["Legal/Compliance", "roles", "legal_compliance_lead", "role-purpose-and-department"],
+  ["Technical Reviewer", "tasks", "procurement-request-approval", "who-is-involved"],
+  ["Warehouse/Operations", "roles", "operations_associate", "role-purpose-and-department"],
+  ["Finance Controller", "roles", "finance_controller", "role-purpose-and-department"],
+  ["Vendor Representative", "roles", "vendor_representative", "role-purpose-and-department"],
+  ["Platform Admin", "roles", "platform_administrator", "role-purpose-and-department"],
+  ["Vendor Accreditation Flow", "tasks", "vendor-accreditation-renewal", "flow"],
+  ["Warehouse Flow", "tasks", "stock-receiving-putaway", "flow"],
+  ["Setup and Bins", "tasks", "warehouse-location-bin-setup", "setup-and-bins"],
+  ["Receiving and Inspection", "tasks", "stock-receiving-putaway", "steps"],
+  ["Allocation, Events, and Returns", "tasks", "event-stock-custody", "steps"],
+  ["Ecommerce Fulfillment and Pick & Pack", "tasks", "ecommerce-fulfillment-delivery", "steps"],
+  ["Customer Returns and Original Release Matching", "tasks", "returns-replacements-refunds-rma", "steps"],
+  ["Counts and Adjustments", "tasks", "inventory-count-variance", "counts-adjustments"],
+  ["DOA Administration", "tasks", "department-doa-activation", "doa-administration"],
+  ["Troubleshooting and Recovery", "system", "training-operational-readiness", "overview"],
+  ["Flow-First Operational Journeys", "system", "training-operational-readiness", "overview"],
+  ["Procurement to Payment", "tasks", "procurement-request-approval", "procure-to-payment"],
+  ["Vendor Accreditation", "tasks", "vendor-accreditation-renewal", "vendor-accreditation"],
+  ["Receiving and Putaway", "tasks", "stock-receiving-putaway", "receiving-putaway"],
+  ["Ecommerce Fulfillment", "tasks", "ecommerce-fulfillment-delivery", "steps"],
+  ["Returns and Replacements", "tasks", "returns-replacements-refunds-rma", "returns-replacements"],
+  ["Inventory Release", "tasks", "department-inventory-release", "inventory-release"],
+  ["Event Custody", "tasks", "event-stock-custody", "event-custody"],
+  ["Inventory Integrity", "tasks", "inventory-count-variance", "inventory-integrity"],
+];
+
+const PROCESS_LIBRARY_OPERATIONAL_TARGETS = [
+  ["Procurement Policy Operating Extract", "tasks", "procurement-request-approval", "procurement-policy-extract"],
+  ["Canonical 13-step procurement-to-payment overview", "tasks", "procurement-request-approval", "flow"],
+  ["Solicitation document and type classification", "tasks", "procurement-request-approval", "decisions-and-exceptions"],
+  ["Bid quorum and failed-bid recovery", "tasks", "procurement-request-approval", "decisions-and-exceptions"],
+  ["Exception eligibility", "tasks", "procurement-request-approval", "decisions-and-exceptions"],
+  ["Best-value award and recommendation variance", "tasks", "procurement-request-approval", "decisions-and-exceptions"],
+  ["Receiving, quality and RMA", "tasks", "stock-receiving-putaway", "receiving-quality-rma"],
+  ["Payment evidence and file closure", "tasks", "finance-readiness-evidence", "payment-evidence"],
+  ["Operating rules", "tasks", "procurement-request-approval", "policy-basis"],
+  ["LGL004 Vendor Accreditation Operating Extract", "tasks", "vendor-accreditation-renewal", "vendor-operating-extract"],
+  ["Common vendor facts and declarations", "tasks", "vendor-accreditation-renewal", "decisions-and-exceptions"],
+  ["Entity evidence branches", "tasks", "vendor-accreditation-renewal", "decisions-and-exceptions"],
+  ["Technology-provider qualification", "tasks", "vendor-accreditation-renewal", "decisions-and-exceptions"],
+  ["Technology Provider MNDA Operating Extract", "tasks", "vendor-accreditation-renewal", "decisions-and-exceptions"],
+  ["Ecommerce Tracker-to-Intra Mapping", "tasks", "ecommerce-order-intake", "tracker-mapping"],
+];
+
 test("publishes exactly four ordered public modes independent of legacy tabs", () => {
   assert.deepEqual(
     HANDBOOK_MODES.map(({ id, order }) => [id, order]),
@@ -527,6 +579,40 @@ test("legacy workflow, role, and System headings resolve to their nearest canoni
   }
 });
 
+test("every operational user-manual and process-library heading has a canonical target", () => {
+  const sources = [
+    ["docs/manual/MWELL_INTRA_USER_MANUAL.md", USER_MANUAL_OPERATIONAL_TARGETS],
+    ["docs/PROCESS_REFERENCE_LIBRARY.md", PROCESS_LIBRARY_OPERATIONAL_TARGETS],
+  ];
+  for (const [source, cases] of sources) {
+    for (const [heading, modeId, guideId, headingId] of cases) {
+      const route = legacyRouteFor(source, heading);
+      assert.ok(route, `${source}#${heading}`);
+      assert.deepEqual(
+        { modeId: route.modeId, guideId: route.guideId, headingId: route.headingId },
+        { modeId, guideId, headingId },
+        `${source}#${heading}`,
+      );
+    }
+  }
+});
+
+test("no operational workflow or role heading falls back to Home document controls", () => {
+  for (const [source, cases] of [
+    ["docs/manual/MWELL_INTRA_USER_MANUAL.md", USER_MANUAL_OPERATIONAL_TARGETS],
+    ["docs/PROCESS_REFERENCE_LIBRARY.md", PROCESS_LIBRARY_OPERATIONAL_TARGETS],
+  ]) {
+    for (const [heading] of cases) {
+      const route = legacyRouteFor(source, heading);
+      assert.notDeepEqual(
+        { modeId: route.modeId, guideId: route.guideId, headingId: route.headingId },
+        { modeId: "home", guideId: "home", headingId: "document-controls" },
+        `${source}#${heading}`,
+      );
+    }
+  }
+});
+
 test("the canonical model validates without warnings or errors", () => {
   assert.deepEqual(validateHandbookGuides(), { warnings: [], errors: [] });
 });
@@ -680,11 +766,81 @@ test("semantic invariants reject wrong-but-existing canonical metadata", () => {
       const guide = guides.find(({ id }) => id === "procurement-request-approval");
       guide.steps[1].screenshot.bindingId = guide.steps[0].screenshot.bindingId;
     }, /duplicate screenshot binding/],
+    ["wrong valid stage role", (guides) => {
+      guides.find(({ id }) => id === "procurement-request-approval").steps[0].performingRole = "product_owner";
+    }, /step contract/],
+    ["wrong existing stage route", (guides) => {
+      guides.find(({ id }) => id === "procurement-request-approval").steps[0].route = "/events";
+    }, /step contract/],
+    ["duplicate stage ID", (guides) => {
+      const guide = guides.find(({ id }) => id === "procurement-request-approval");
+      guide.steps[1].id = guide.steps[0].id;
+    }, /duplicate stage ID/],
+    ["altered screenshot binding", (guides) => {
+      guides.find(({ id }) => id === "procurement-request-approval").steps[0].screenshot.bindingId = "procurement-request-approval:replacement";
+    }, /step contract/],
+    ["duplicate related task", (guides) => {
+      const guide = guides.find(({ id }) => id === "procurement-request-approval");
+      guide.relatedTasks.push(guide.relatedTasks[0]);
+    }, /duplicate related task/],
+    ["removed related task", (guides) => {
+      guides.find(({ id }) => id === "procurement-request-approval").relatedTasks.pop();
+    }, /related task contract/],
+    ["wrong valid related task", (guides) => {
+      guides.find(({ id }) => id === "procurement-request-approval").relatedTasks[0] = "ecommerce-order-intake";
+    }, /related task contract/],
   ];
 
   for (const [label, mutate, expected] of cases) {
     const guides = cloneGuides();
     mutate(guides);
     assert.match(validateHandbookGuides({ guides }).errors.join("\n"), expected, label);
+  }
+});
+
+test("fake screenshot certification and exact path or target drift are rejected", () => {
+  const fakeGuides = cloneGuides();
+  const fakeStage = fakeGuides.find(({ id }) => id === "procurement-request-approval").steps[0];
+  fakeStage.screenshot = {
+    ...fakeStage.screenshot,
+    status: "certified",
+    path: "docs/manual/assets/knowledge-base/employee-desktop.png",
+    target: { label: "Anything", landmark: "arbitrary" },
+  };
+  assert.match(
+    validateHandbookGuides({ guides: fakeGuides }).errors.join("\n"),
+    /has no approved screenshot contract/,
+  );
+  assert.match(
+    handbookGuideModel.validateHandbookEvidenceCoverage({ guides: fakeGuides }).errors.join("\n"),
+    /pending certified screenshot evidence/,
+  );
+
+  const approved = {
+    taskId: "procurement-request-approval",
+    stageId: "step-1",
+    bindingId: "procurement-request-approval:step-1",
+    path: "docs/manual/assets/knowledge-base/flowchart-procure-to-pay-desktop.png",
+    target: { label: "Create request", landmark: "procurement-form" },
+  };
+  for (const mutate of [
+    (screenshot) => { screenshot.path = "docs/manual/assets/live-20260711/06-procurement-request-mobile-320.png"; },
+    (screenshot) => { screenshot.target = { label: "Wrong target", landmark: "procurement-form" }; },
+  ]) {
+    const guides = cloneGuides();
+    const screenshot = guides.find(({ id }) => id === approved.taskId).steps[0].screenshot;
+    Object.assign(screenshot, {
+      status: "certified",
+      path: approved.path,
+      target: approved.target,
+    });
+    mutate(screenshot);
+    assert.match(
+      validateHandbookGuides({
+        guides,
+        approvedScreenshotContracts: [approved],
+      }).errors.join("\n"),
+      /does not match its approved screenshot contract/,
+    );
   }
 });

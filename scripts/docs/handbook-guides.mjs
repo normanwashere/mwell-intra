@@ -1002,6 +1002,32 @@ export const HANDBOOK_GUIDES = deepFreeze([
   ...SYSTEM_GUIDES.map(systemGuide),
 ]);
 
+// Task 7 populates this registry only after capture currency and target review.
+// Until then, no stage can truthfully claim certified screenshot evidence.
+export const APPROVED_SCREENSHOT_CONTRACTS = deepFreeze([]);
+
+function stepInvariant(step) {
+  const screenshot = step.screenshot ?? {};
+  return {
+    id: step.id,
+    performingRole: step.performingRole,
+    module: step.module,
+    route: step.route,
+    instruction: step.instruction,
+    screenshot: {
+      bindingId: screenshot.bindingId,
+      status: screenshot.status,
+      path: screenshot.path,
+      target: screenshot.target == null ? null : { ...screenshot.target },
+    },
+    expectedResult: step.expectedResult,
+    dataRead: [...(step.dataRead ?? [])],
+    dataWritten: [...(step.dataWritten ?? [])],
+    evidenceRetained: [...(step.evidenceRetained ?? [])],
+    nextHandoff: step.nextHandoff,
+  };
+}
+
 function invariantProjection(guide) {
   return {
     id: guide.id,
@@ -1009,12 +1035,14 @@ function invariantProjection(guide) {
     status: guide.status,
     availability: guide.availability,
     relatedGuides: [...guide.relatedGuides],
+    relatedTasks: [...(guide.relatedTasks ?? [])],
     participatingRoles: [...(guide.participatingRoles ?? [])],
     linkedTasks: [...(guide.linkedTasks ?? [])],
     sourceSections: guide.sourceSections.map(
       ({ id, source, heading, purpose }) => ({ id, source, heading, purpose }),
     ),
     screenshotReferences: [...guide.screenshotReferences],
+    steps: (guide.steps ?? []).map(stepInvariant),
     workspaceMap: (guide.workspaceMap ?? []).map(
       ({ id, module, landingRoute }) => ({ id, module, landingRoute }),
     ),
@@ -1041,8 +1069,15 @@ function legacyArticleId(source) {
   return `doc-${slug(source.replace(/^docs\//, ""))}`;
 }
 
+function markdownHeadingRecords(source) {
+  return [...source.matchAll(/^(#{1,6})\s+(.+?)\s*$/gm)].map((match) => ({
+    depth: match[1].length,
+    heading: match[2],
+  }));
+}
+
 function markdownHeadings(source) {
-  return [...source.matchAll(/^#{1,6}\s+(.+?)\s*$/gm)].map((match) => match[1]);
+  return markdownHeadingRecords(source).map(({ heading }) => heading);
 }
 
 const LEGACY_TARGET_BY_SOURCE_ID = {
@@ -1077,12 +1112,42 @@ const LEGACY_TARGET_BY_SOURCE_ID = {
 };
 
 const EXPLICIT_LEGACY_HEADING_TARGETS = {
+  "user-manual#Comprehensive Launch Flow": ["tasks", "procurement-request-approval", "flow"],
+  "user-manual#Procurement Flow": ["tasks", "procurement-request-approval", "flow"],
+  "user-manual#Procurement Role Procedures": ["tasks", "procurement-request-approval", "who-is-involved"],
+  "user-manual#Requester": ["roles", "general_employee", "role-purpose-and-department"],
+  "user-manual#Department Head": ["roles", "operations_lead", "role-purpose-and-department"],
+  "user-manual#Procurement Lead": ["roles", "procurement_lead", "role-purpose-and-department"],
+  "user-manual#Legal/Compliance": ["roles", "legal_compliance_lead", "role-purpose-and-department"],
+  "user-manual#Technical Reviewer": ["tasks", "procurement-request-approval", "who-is-involved"],
+  "user-manual#Warehouse/Operations": ["roles", "operations_associate", "role-purpose-and-department"],
+  "user-manual#Finance Controller": ["roles", "finance_controller", "role-purpose-and-department"],
+  "user-manual#Vendor Representative": ["roles", "vendor_representative", "role-purpose-and-department"],
+  "user-manual#Platform Admin": ["roles", "platform_administrator", "role-purpose-and-department"],
+  "user-manual#Vendor Accreditation Flow": ["tasks", "vendor-accreditation-renewal", "flow"],
+  "user-manual#Warehouse Flow": ["tasks", "stock-receiving-putaway", "flow"],
+  "user-manual#Receiving and Inspection": ["tasks", "stock-receiving-putaway", "steps"],
+  "user-manual#Allocation, Events, and Returns": ["tasks", "event-stock-custody", "steps"],
+  "user-manual#Ecommerce Fulfillment and Pick & Pack": ["tasks", "ecommerce-fulfillment-delivery", "steps"],
+  "user-manual#Customer Returns and Original Release Matching": ["tasks", "returns-replacements-refunds-rma", "steps"],
+  "user-manual#Troubleshooting and Recovery": ["system", "training-operational-readiness", "overview"],
+  "user-manual#Flow-First Operational Journeys": ["system", "training-operational-readiness", "overview"],
   "user-manual#Ecommerce Fulfillment": ["tasks", "ecommerce-fulfillment-delivery", "steps"],
+  "process-reference-library#Canonical 13-step procurement-to-payment overview": ["tasks", "procurement-request-approval", "flow"],
+  "process-reference-library#Solicitation document and type classification": ["tasks", "procurement-request-approval", "decisions-and-exceptions"],
+  "process-reference-library#Bid quorum and failed-bid recovery": ["tasks", "procurement-request-approval", "decisions-and-exceptions"],
+  "process-reference-library#Exception eligibility": ["tasks", "procurement-request-approval", "decisions-and-exceptions"],
+  "process-reference-library#Best-value award and recommendation variance": ["tasks", "procurement-request-approval", "decisions-and-exceptions"],
+  "process-reference-library#Operating rules": ["tasks", "procurement-request-approval", "policy-basis"],
+  "process-reference-library#Common vendor facts and declarations": ["tasks", "vendor-accreditation-renewal", "decisions-and-exceptions"],
+  "process-reference-library#Entity evidence branches": ["tasks", "vendor-accreditation-renewal", "decisions-and-exceptions"],
+  "process-reference-library#Technology-provider qualification": ["tasks", "vendor-accreditation-renewal", "decisions-and-exceptions"],
+  "process-reference-library#Technology Provider MNDA Operating Extract": ["tasks", "vendor-accreditation-renewal", "decisions-and-exceptions"],
   "user-training-operations-manual#Role Modules": ["roles", "general_employee", "your-workspace"],
   "training-handover#Role procedure checks": ["roles", "general_employee", "guided-simulation"],
 };
 
-function legacyHeadingTarget(document, heading) {
+function exactLegacyHeadingTarget(document, heading) {
   const explicit = EXPLICIT_LEGACY_HEADING_TARGETS[`${document.id}#${heading}`];
   if (explicit) return explicit;
   for (const guide of HANDBOOK_GUIDES) {
@@ -1091,7 +1156,16 @@ function legacyHeadingTarget(document, heading) {
     );
     if (sourceSection) return [guide.modeId, guide.id, sourceSection.id];
   }
-  return LEGACY_TARGET_BY_SOURCE_ID[document.id];
+  return null;
+}
+
+function legacySystemTarget(document) {
+  const target = LEGACY_TARGET_BY_SOURCE_ID[document.id];
+  if (target?.[0] === "system") return target;
+  if (["training-handover", "user-training-operations-manual"].includes(document.id)) {
+    return ["system", "training-operational-readiness", "source-references"];
+  }
+  return ["system", "source-references", "source-references"];
 }
 
 function buildLegacyRoutes(documents = HANDBOOK_DOCUMENTS, rootDirectory = root) {
@@ -1111,8 +1185,13 @@ function buildLegacyRoutes(documents = HANDBOOK_DOCUMENTS, rootDirectory = root)
     if (!document.source.endsWith(".md")) return routes;
     const absolute = path.join(rootDirectory, document.source);
     if (!existsSync(absolute)) return routes;
-    for (const heading of markdownHeadings(readFileSync(absolute, "utf8"))) {
-      const headingTarget = legacyHeadingTarget(document, heading) ?? target;
+    const hierarchy = [];
+    for (const { depth, heading } of markdownHeadingRecords(readFileSync(absolute, "utf8"))) {
+      while (hierarchy.length && hierarchy.at(-1).depth >= depth) hierarchy.pop();
+      const headingTarget =
+        exactLegacyHeadingTarget(document, heading) ??
+        hierarchy.at(-1)?.target ??
+        legacySystemTarget(document);
       routes.push({
         ...base,
         modeId: headingTarget[0],
@@ -1120,6 +1199,7 @@ function buildLegacyRoutes(documents = HANDBOOK_DOCUMENTS, rootDirectory = root)
         headingId: headingTarget[2],
         legacyHeadingId: `${articleId}-${slug(heading)}`,
       });
+      hierarchy.push({ depth, target: headingTarget });
     }
     return routes;
   });
@@ -1142,6 +1222,10 @@ function sameContract(actual, expected) {
   return JSON.stringify(actual) === JSON.stringify(expected);
 }
 
+function screenshotContractKey(taskId, stageId) {
+  return `${taskId}#${stageId}`;
+}
+
 function routeKey(route) {
   return JSON.stringify([
     route.legacyTabId,
@@ -1156,6 +1240,7 @@ export function validateHandbookGuides({
   legacyRoutes = LEGACY_ROUTES,
   documents = HANDBOOK_DOCUMENTS,
   invariants = HANDBOOK_GUIDE_INVARIANTS,
+  approvedScreenshotContracts = APPROVED_SCREENSHOT_CONTRACTS,
   rootDirectory = root,
 } = {}) {
   const errors = [];
@@ -1184,6 +1269,12 @@ export function validateHandbookGuides({
   const mappedSources = new Set();
   const selectorPurposes = new Map();
   const screenshotBindingCounts = new Map();
+  const approvedScreenshotByStage = new Map(
+    approvedScreenshotContracts.map((contract) => [
+      screenshotContractKey(contract.taskId, contract.stageId),
+      contract,
+    ]),
+  );
 
   for (const guide of guides) {
     if (!modeIdSet.has(guide.modeId)) {
@@ -1223,6 +1314,9 @@ export function validateHandbookGuides({
           errors.push(`task ${guide.id} references non-role guide ${roleId}.`);
         }
       }
+      for (const taskId of duplicateValues(guide.relatedTasks ?? [])) {
+        errors.push(`task ${guide.id} has duplicate related task ${taskId}.`);
+      }
       for (const taskId of guide.relatedTasks ?? []) {
         const relatedTask = guideById.get(taskId);
         if (!relatedTask) {
@@ -1230,6 +1324,9 @@ export function validateHandbookGuides({
         } else if (relatedTask.type !== "task") {
           errors.push(`task ${guide.id} links to non-task guide ${taskId}.`);
         }
+      }
+      for (const stageId of duplicateValues((guide.steps ?? []).map(({ id }) => id))) {
+        errors.push(`task ${guide.id} has duplicate stage ID ${stageId}.`);
       }
       for (const [index, stage] of (guide.steps ?? []).entries()) {
         const stageId = stage.id ?? `step-${index + 1}`;
@@ -1265,6 +1362,33 @@ export function validateHandbookGuides({
             (!isPopulated(stage.screenshot.path) || !isPopulated(stage.screenshot.target))
           ) {
             errors.push(`task ${guide.id} stage ${stageId} has incomplete certified screenshot evidence.`);
+          }
+          if (stage.screenshot.status === "certified") {
+            const approved = approvedScreenshotByStage.get(
+              screenshotContractKey(guide.id, stageId),
+            );
+            if (!approved) {
+              errors.push(`task ${guide.id} stage ${stageId} has no approved screenshot contract.`);
+            } else {
+              const actual = {
+                bindingId: stage.screenshot.bindingId,
+                path: stage.screenshot.path,
+                target: stage.screenshot.target,
+              };
+              const expected = {
+                bindingId: approved.bindingId,
+                path: approved.path,
+                target: approved.target,
+              };
+              if (!sameContract(actual, expected)) {
+                errors.push(`task ${guide.id} stage ${stageId} does not match its approved screenshot contract.`);
+              }
+            }
+            if (!guide.screenshotReferences.includes(stage.screenshot.path)) {
+              errors.push(`task ${guide.id} stage ${stageId} certified screenshot is not bound to the guide.`);
+            } else if (!existsSync(path.join(rootDirectory, stage.screenshot.path))) {
+              errors.push(`task ${guide.id} stage ${stageId} certified screenshot file is missing.`);
+            }
           }
         }
       }
@@ -1407,6 +1531,9 @@ export function validateHandbookGuides({
       if (!sameContract(guide.relatedGuides, invariant.relatedGuides)) {
         errors.push(`${guide.id} violates its related guide contract.`);
       }
+      if (!sameContract(guide.relatedTasks ?? [], invariant.relatedTasks)) {
+        errors.push(`${guide.id} violates its related task contract.`);
+      }
       if (!sameContract(guide.participatingRoles ?? [], invariant.participatingRoles)) {
         errors.push(`${guide.id} violates its participating role contract.`);
       }
@@ -1421,6 +1548,10 @@ export function validateHandbookGuides({
       }
       if (!sameContract(guide.screenshotReferences, invariant.screenshotReferences)) {
         errors.push(`${guide.id} violates its screenshot reference contract.`);
+      }
+      const stepContract = (guide.steps ?? []).map(stepInvariant);
+      if (!sameContract(stepContract, invariant.steps)) {
+        errors.push(`${guide.id} violates its step contract.`);
       }
       if (!sameContract(guide.workspaceMap ?? [], invariant.workspaceMap)) {
         errors.push(`${guide.id} violates its workspace map contract.`);
@@ -1505,18 +1636,32 @@ export function validateHandbookGuides({
 
 export function validateHandbookEvidenceCoverage({
   guides = HANDBOOK_GUIDES,
+  approvedScreenshotContracts = APPROVED_SCREENSHOT_CONTRACTS,
   rootDirectory = root,
 } = {}) {
   const errors = [];
   const warnings = [];
+  const approvedScreenshotByStage = new Map(
+    approvedScreenshotContracts.map((contract) => [
+      screenshotContractKey(contract.taskId, contract.stageId),
+      contract,
+    ]),
+  );
 
   for (const guide of guides.filter(({ type }) => type === "task")) {
     const references = new Set(guide.screenshotReferences ?? []);
     for (const stage of guide.steps ?? []) {
       const screenshot = stage.screenshot ?? {};
       const target = screenshot.target ?? {};
+      const approved = approvedScreenshotByStage.get(
+        screenshotContractKey(guide.id, stage.id),
+      );
       const certified =
         screenshot.status === "certified" &&
+        approved != null &&
+        screenshot.bindingId === approved.bindingId &&
+        screenshot.path === approved.path &&
+        sameContract(screenshot.target, approved.target) &&
         isPopulated(screenshot.path) &&
         isPopulated(target.label) &&
         isPopulated(target.landmark) &&
