@@ -47,6 +47,24 @@ const EXPECTED_ROLES = [
   ["vendor_representative", "Vendor Representative"],
 ];
 
+const PERSONA_REGISTER_SOURCES = [
+  "docs/manual/MWELL_INTRA_USER_MANUAL.md",
+  "docs/PROCESS_REFERENCE_LIBRARY.md",
+  "docs/TRAINING_AND_HANDOVER_CONTENT.md",
+];
+
+function canonicalPersonaNames(source) {
+  const start = "<!-- canonical-personas:start -->";
+  const end = "<!-- canonical-personas:end -->";
+  const startIndex = source.indexOf(start);
+  const endIndex = source.indexOf(end);
+  assert.notEqual(startIndex, -1, `missing ${start}`);
+  assert.notEqual(endIndex, -1, `missing ${end}`);
+  return [...source.slice(startIndex + start.length, endIndex).matchAll(/^\| ([^|]+) \|/gm)]
+    .map(([, name]) => name.trim())
+    .filter((name) => name !== "Current persona" && name !== "---");
+}
+
 const TASK_FIELDS = [
   "id",
   "outcome",
@@ -412,6 +430,19 @@ test("publishes the exact current 11-persona role catalog", () => {
   }
 });
 
+test("reconciles the exact 11-persona register across manual, process, and training sources", () => {
+  const expectedNames = EXPECTED_ROLES.map(([, name]) => name);
+  for (const sourcePath of PERSONA_REGISTER_SOURCES) {
+    const source = readFileSync(path.join(root, sourcePath), "utf8");
+    assert.deepEqual(canonicalPersonaNames(source), expectedNames, sourcePath);
+    assert.match(
+      source,
+      /capabilit(?:y|ies).+not (?:an |additional )?(?:persona|user type)/is,
+      `${sourcePath} must distinguish scoped capabilities from personas`,
+    );
+  }
+});
+
 test("guide metadata is deeply immutable and guide IDs are globally unique", () => {
   assertDeepFrozen(HANDBOOK_MODES);
   assertDeepFrozen(HANDBOOK_GUIDES);
@@ -433,9 +464,11 @@ test("task and role guides contain every required structured field", () => {
         assert.equal(isPopulated(stage[field]), true, `${guide.id}.${stage.id}.${field}`);
       }
       assert.equal(stage.route.startsWith("/"), true, `${guide.id}.${stage.id}.route`);
-      assert.equal(stage.screenshot.status, "pending");
-      assert.equal(stage.screenshot.path, null);
-      assert.equal(stage.screenshot.target, null);
+      assert.equal(stage.screenshot.status, "certified");
+      assert.match(stage.screenshot.path, /-desktop\.png$/);
+      assert.match(stage.screenshot.mobilePath, /-mobile\.png$/);
+      assert.equal(isPopulated(stage.screenshot.target), true);
+      assert.equal(stage.screenshot.variants.length, 2);
     }
     for (const decision of guide.decisionPoints) {
       for (const field of DECISION_FIELDS) {
@@ -513,15 +546,19 @@ test("validation rejects missing or invalid decision placement and branch target
   }
 });
 
-test("strict task evidence coverage remains mechanically incomplete until Task 7", () => {
+test("strict task evidence coverage is complete for every implemented stage", () => {
   assert.equal(typeof handbookGuideModel.validateHandbookEvidenceCoverage, "function");
   const result = handbookGuideModel.validateHandbookEvidenceCoverage();
   const taskSteps = HANDBOOK_GUIDES.filter(({ type }) => type === "task")
     .flatMap(({ steps }) => steps);
 
+  assert.equal(taskSteps.length, 52);
   assert.equal(result.warnings.length, 0);
-  assert.equal(result.errors.length, taskSteps.length);
-  assert.match(result.errors[0], /pending certified screenshot evidence/);
+  assert.deepEqual(result.errors, []);
+  assert.equal(
+    taskSteps.every(({ screenshot }) => screenshot.status === "certified"),
+    true,
+  );
 });
 
 test("validation reports every missing required task stage field", () => {
@@ -889,31 +926,24 @@ test("fake screenshot certification and exact path or target drift are rejected"
   };
   assert.match(
     validateHandbookGuides({ guides: fakeGuides }).errors.join("\n"),
-    /has no approved screenshot contract/,
+    /does not match its approved screenshot contract/,
   );
   assert.match(
     handbookGuideModel.validateHandbookEvidenceCoverage({ guides: fakeGuides }).errors.join("\n"),
-    /pending certified screenshot evidence/,
+    /does not match its approved screenshot evidence contract/,
   );
 
-  const approved = {
-    taskId: "procurement-request-approval",
-    stageId: "step-1",
-    bindingId: "procurement-request-approval:step-1",
-    path: "docs/manual/assets/knowledge-base/flowchart-procure-to-pay-desktop.png",
-    target: { label: "Create request", landmark: "procurement-form" },
-  };
+  const approved = structuredClone(
+    handbookGuideModel.APPROVED_SCREENSHOT_CONTRACTS.find(
+      ({ taskId, stageId }) => taskId === "procurement-request-approval" && stageId === "step-1",
+    ),
+  );
   for (const mutate of [
     (screenshot) => { screenshot.path = "docs/manual/assets/live-20260711/06-procurement-request-mobile-320.png"; },
     (screenshot) => { screenshot.target = { label: "Wrong target", landmark: "procurement-form" }; },
   ]) {
     const guides = cloneGuides();
     const screenshot = guides.find(({ id }) => id === approved.taskId).steps[0].screenshot;
-    Object.assign(screenshot, {
-      status: "certified",
-      path: approved.path,
-      target: approved.target,
-    });
     mutate(screenshot);
     assert.match(
       validateHandbookGuides({
@@ -921,6 +951,30 @@ test("fake screenshot certification and exact path or target drift are rejected"
         approvedScreenshotContracts: [approved],
       }).errors.join("\n"),
       /does not match its approved screenshot contract/,
+    );
+  }
+});
+
+test("evidence certification fails closed on host, route, role, currency, assertions, hashes, and reuse", () => {
+  const cases = [
+    ["host", (guides) => { guides.find(({ type }) => type === "task").steps[0].screenshot.host = "https://example.invalid"; }, /invalid UAT evidence host/],
+    ["route", (guides) => { guides.find(({ type }) => type === "task").steps[0].screenshot.route = "/wrong"; }, /mismatched route evidence/],
+    ["role", (guides) => { guides.find(({ type }) => type === "task").steps[0].screenshot.role = "product_owner"; }, /mismatched persona evidence/],
+    ["stale", (guides) => { guides.find(({ type }) => type === "task").steps[0].screenshot.capturedAt = "2026-08-01T00:00:00.000Z"; }, /stale or invalid capture metadata/],
+    ["login bounce", (guides) => { guides.find(({ type }) => type === "task").steps[0].screenshot.assertions.loginBounce = true; }, /required live-capture assertions/],
+    ["hash", (guides) => { guides.find(({ type }) => type === "task").steps[0].screenshot.variants[0].sha256 = "0".repeat(64); }, /hash does not match/],
+    ["duplicate", (guides) => {
+      const stages = guides.find(({ id }) => id === "procurement-request-approval").steps;
+      stages[1].screenshot.variants[0].path = stages[0].screenshot.variants[0].path;
+    }, /duplicates screenshot path/],
+  ];
+  for (const [label, mutate, expected] of cases) {
+    const guides = cloneGuides();
+    mutate(guides);
+    assert.match(
+      handbookGuideModel.validateHandbookEvidenceCoverage({ guides }).errors.join("\n"),
+      expected,
+      label,
     );
   }
 });

@@ -1,0 +1,2973 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-24T16:15:39.504Z",
+  "host": "https://mwell-intra-uat.vercel.app",
+  "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+  "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+  "stages": [
+    {
+      "taskId": "procurement-request-approval",
+      "stageId": "step-1",
+      "bindingId": "procurement-request-approval:step-1",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/procurement/requests/new",
+      "role": "general_employee",
+      "target": {
+        "label": "Continue",
+        "landmark": "request validation and next-step control"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/procurement-request-approval-step-1-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "9f586fb667d27bdd8157141b4b5c27605d73592810f2f66970256a6e2dbdd3f1",
+          "targetBox": {
+            "x": 1167,
+            "y": 844,
+            "width": 121,
+            "height": 44
+          },
+          "targetLabel": "Continue"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/procurement-request-approval-step-1-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "18511aa846cf27e8c34ae7d729d46e6326466dba6e497f45b230edc09f5245ae",
+          "targetBox": {
+            "x": 253,
+            "y": 660,
+            "width": 121,
+            "height": 44
+          },
+          "targetLabel": "Continue"
+        }
+      ]
+    },
+    {
+      "taskId": "procurement-request-approval",
+      "stageId": "step-2",
+      "bindingId": "procurement-request-approval:step-2",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/procurement/requests",
+      "role": "general_employee",
+      "target": {
+        "label": "New request",
+        "landmark": "request queue and submission entry"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/procurement-request-approval-step-2-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "06fe1bb8b3ce53b8fe7c55769d70e8f37243ce10532669f034bfc4049481bc98",
+          "targetBox": {
+            "x": 296,
+            "y": 275,
+            "width": 126,
+            "height": 44
+          },
+          "targetLabel": "New request"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/procurement-request-approval-step-2-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "8f0fa03db8d225f42e6efffcb92f2f84cab8f112f27d91cd008eb2edc34778bd",
+          "targetBox": {
+            "x": 32,
+            "y": 315,
+            "width": 126,
+            "height": 44
+          },
+          "targetLabel": "New request"
+        }
+      ]
+    },
+    {
+      "taskId": "procurement-request-approval",
+      "stageId": "step-3",
+      "bindingId": "procurement-request-approval:step-3",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/procurement/approvals",
+      "role": "operations_lead",
+      "target": {
+        "label": "Approvals",
+        "landmark": "assigned approval action"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/procurement-request-approval-step-3-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "017365deb9cbb0a8b217409895e79a3155a7d83336e031ff2fd4d00d0f1e8f28",
+          "targetBox": {
+            "x": 394,
+            "y": 89,
+            "width": 121,
+            "height": 44
+          },
+          "targetLabel": "Approvals"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/procurement-request-approval-step-3-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "25a378e518328b6442f09de466cd72e1aba6d9b50187cfce0e97526ef5ae160e",
+          "targetBox": {
+            "x": 135,
+            "y": 118,
+            "width": 119,
+            "height": 44
+          },
+          "targetLabel": "Approvals"
+        }
+      ]
+    },
+    {
+      "taskId": "procurement-request-approval",
+      "stageId": "step-4",
+      "bindingId": "procurement-request-approval:step-4",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/procurement/requests",
+      "role": "procurement_lead",
+      "target": {
+        "label": "Purchase requests",
+        "landmark": "approved request evidence"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/procurement-request-approval-step-4-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "a46b7d944f93403bbb2fd99dc2aed582eec8ac04a72c0142d007cebd07716a2f",
+          "targetBox": {
+            "x": 296,
+            "y": 195,
+            "width": 1004,
+            "height": 35
+          },
+          "targetLabel": "Purchase requests"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/procurement-request-approval-step-4-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "11afe103768c1789bb5e85bde651f0b64d604dd043b3adacdbac37863334024e",
+          "targetBox": {
+            "x": 32,
+            "y": 220,
+            "width": 270,
+            "height": 29
+          },
+          "targetLabel": "Purchase requests"
+        }
+      ]
+    },
+    {
+      "taskId": "vendor-accreditation-renewal",
+      "stageId": "step-1",
+      "bindingId": "vendor-accreditation-renewal:step-1",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/legal/invites/new",
+      "role": "legal_compliance_lead",
+      "target": {
+        "label": "Continue",
+        "landmark": "vendor identity and risk-scope progression"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/vendor-accreditation-renewal-step-1-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "ca4967a7f91192ca32f198a6a829bc13260ddd4b2c868e65ea0b825d3218e0cf",
+          "targetBox": {
+            "x": 1042,
+            "y": 803,
+            "width": 121,
+            "height": 44
+          },
+          "targetLabel": "Continue"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/vendor-accreditation-renewal-step-1-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "a2496f8b4b0926b364a2c5ece0bdb0c0c6ecd984ce19118a9d823737d22cfedb",
+          "targetBox": {
+            "x": 29,
+            "y": 607,
+            "width": 332,
+            "height": 44
+          },
+          "targetLabel": "Continue"
+        }
+      ]
+    },
+    {
+      "taskId": "vendor-accreditation-renewal",
+      "stageId": "step-2",
+      "bindingId": "vendor-accreditation-renewal:step-2",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/vendor/",
+      "role": "vendor_representative",
+      "target": {
+        "label": "Your application",
+        "landmark": "vendor evidence submission"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/vendor-accreditation-renewal-step-2-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "3546fe71c35c57770df31e3a866ee52bc68fe3c008dd7c6c584f580f414e536e",
+          "targetBox": {
+            "x": 440,
+            "y": 227,
+            "width": 154,
+            "height": 28
+          },
+          "targetLabel": "Your application"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/vendor-accreditation-renewal-step-2-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "9d562cec37d45a4f30e8716fbc262ec6bc0d249bab383f6838a1ecc7b81c15ee",
+          "targetBox": {
+            "x": 16,
+            "y": 237,
+            "width": 137,
+            "height": 22
+          },
+          "targetLabel": "Your application"
+        }
+      ]
+    },
+    {
+      "taskId": "vendor-accreditation-renewal",
+      "stageId": "step-3",
+      "bindingId": "vendor-accreditation-renewal:step-3",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/legal/",
+      "role": "legal_compliance_lead",
+      "target": {
+        "label": "Accreditation cases",
+        "landmark": "accreditation review action"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/vendor-accreditation-renewal-step-3-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "66e9d045e2a35f1c0b3fb39c0300a8f78382a6f70ab26093ece5bec9e3b22fbe",
+          "targetBox": {
+            "x": 272,
+            "y": 704,
+            "width": 185,
+            "height": 28
+          },
+          "targetLabel": "Accreditation cases"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/vendor-accreditation-renewal-step-3-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "2fb290f0e3e2871eb4fb8281394144d4cf482e91f70ed2b5ceb5ef1e3703cddf",
+          "targetBox": {
+            "x": 16,
+            "y": 407,
+            "width": 165,
+            "height": 22
+          },
+          "targetLabel": "Accreditation cases"
+        }
+      ]
+    },
+    {
+      "taskId": "vendor-accreditation-renewal",
+      "stageId": "step-4",
+      "bindingId": "vendor-accreditation-renewal:step-4",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/legal/",
+      "role": "legal_compliance_lead",
+      "target": {
+        "label": "Record governed decision",
+        "landmark": "accreditation decision control"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/vendor-accreditation-renewal-step-4-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "15498c73d50097a02c0f0c607691413ac8532d0120a886727859056bbef568f2",
+          "targetBox": {
+            "x": 285,
+            "y": 380,
+            "width": 1110,
+            "height": 44
+          },
+          "targetLabel": "Record governed decision"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/vendor-accreditation-renewal-step-4-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "73b952618be534857a92f05af1c8016d4590eac8d9052a9c200ee47bfcf57099",
+          "targetBox": {
+            "x": 29,
+            "y": 304,
+            "width": 332,
+            "height": 44
+          },
+          "targetLabel": "Record governed decision"
+        }
+      ]
+    },
+    {
+      "taskId": "warehouse-location-bin-setup",
+      "stageId": "step-1",
+      "bindingId": "warehouse-location-bin-setup:step-1",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/warehouse/storage",
+      "role": "operations_lead",
+      "target": {
+        "label": "Storage",
+        "landmark": "storage area setup"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/warehouse-location-bin-setup-step-1-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "a78aa95902f593b3f7f4fde90fa66f9b947baa4ad7b19f59bf87bd7ea9833bae",
+          "targetBox": {
+            "x": 56,
+            "y": 416,
+            "width": 175,
+            "height": 20
+          },
+          "targetLabel": "Storage"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/warehouse-location-bin-setup-step-1-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "b405a41bea085d502b2043708b49c73d0640658df40bf27cc580abbf3c5f04ad",
+          "targetBox": {
+            "x": 68,
+            "y": 106,
+            "width": 175,
+            "height": 29
+          },
+          "targetLabel": "Storage"
+        }
+      ]
+    },
+    {
+      "taskId": "warehouse-location-bin-setup",
+      "stageId": "step-2",
+      "bindingId": "warehouse-location-bin-setup:step-2",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/warehouse/locations",
+      "role": "operations_lead",
+      "target": {
+        "label": "Add location",
+        "landmark": "location creation control"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/warehouse-location-bin-setup-step-2-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "696ad0366c98bf2e1f116b25cacee780c89ef96df8a6cc4613d870bec93e7666",
+          "targetBox": {
+            "x": 1264,
+            "y": 110,
+            "width": 136,
+            "height": 44
+          },
+          "targetLabel": "Add location"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/warehouse-location-bin-setup-step-2-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "d570790b2608f55180a7161060d81c89c72de77a32a4e637dfd0567b4c0d160e",
+          "targetBox": {
+            "x": 16,
+            "y": 175,
+            "width": 136,
+            "height": 44
+          },
+          "targetLabel": "Add location"
+        }
+      ]
+    },
+    {
+      "taskId": "warehouse-location-bin-setup",
+      "stageId": "step-3",
+      "bindingId": "warehouse-location-bin-setup:step-3",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/warehouse/locations",
+      "role": "operations_lead",
+      "target": {
+        "label": "Locations",
+        "landmark": "location and bin validation"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/warehouse-location-bin-setup-step-3-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "c38afc7891139cd9764611b0e150fe987fadbedf8866c6043b5915653ba3018b",
+          "targetBox": {
+            "x": 56,
+            "y": 272,
+            "width": 143,
+            "height": 20
+          },
+          "targetLabel": "Locations"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/warehouse-location-bin-setup-step-3-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "ac1199915b3d956616bf05ed1193e2305dba366f8b257a99aae4614087bd37a7",
+          "targetBox": {
+            "x": 68,
+            "y": 106,
+            "width": 121,
+            "height": 29
+          },
+          "targetLabel": "Locations"
+        }
+      ]
+    },
+    {
+      "taskId": "warehouse-location-bin-setup",
+      "stageId": "step-4",
+      "bindingId": "warehouse-location-bin-setup:step-4",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/warehouse/purchase-orders",
+      "role": "operations_associate",
+      "target": {
+        "label": "Purchase Orders",
+        "landmark": "receiving-ready purchase order"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/warehouse-location-bin-setup-step-4-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "4a4f0a7d5c5be2dee05c8eeaa6e468c5f2f8e214cee8223ac5192273606ac0bb",
+          "targetBox": {
+            "x": 348,
+            "y": 106,
+            "width": 208,
+            "height": 29
+          },
+          "targetLabel": "Purchase Orders"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/warehouse-location-bin-setup-step-4-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "dccdcd7da9af8acd8292bd84277a2503f6f6993a5bcdf53ab0bcc8b08c5d100d",
+          "targetBox": {
+            "x": 68,
+            "y": 106,
+            "width": 208,
+            "height": 29
+          },
+          "targetLabel": "Purchase Orders"
+        }
+      ]
+    },
+    {
+      "taskId": "stock-receiving-putaway",
+      "stageId": "step-1",
+      "bindingId": "stock-receiving-putaway:step-1",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/warehouse/purchase-orders",
+      "role": "operations_associate",
+      "target": {
+        "label": "No purchase orders",
+        "landmark": "authorized inbound receipt"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/stock-receiving-putaway-step-1-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "79aa54a9c879b8b7e95e5e8a51ebef493575ed59522fb654f9c17121372b7eef",
+          "targetBox": {
+            "x": 768,
+            "y": 537,
+            "width": 160,
+            "height": 24
+          },
+          "targetLabel": "No purchase orders"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/stock-receiving-putaway-step-1-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "abd6adac8198bba2b3cf3ad9a18e8e7627b18f309bc384e248f188c2a661e870",
+          "targetBox": {
+            "x": 115,
+            "y": 500,
+            "width": 160,
+            "height": 24
+          },
+          "targetLabel": "No purchase orders"
+        }
+      ]
+    },
+    {
+      "taskId": "stock-receiving-putaway",
+      "stageId": "step-2",
+      "bindingId": "stock-receiving-putaway:step-2",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/warehouse/receiving",
+      "role": "operations_associate",
+      "target": {
+        "label": "Add to receipt",
+        "landmark": "receipt line control"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/stock-receiving-putaway-step-2-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "f3e2d9278d591b0e757d7130803764fae2b31ee08a3334bcdf25665b93f8c65c",
+          "targetBox": {
+            "x": 485,
+            "y": 372,
+            "width": 177,
+            "height": 44
+          },
+          "targetLabel": "Add to receipt"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/stock-receiving-putaway-step-2-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "ee177080232a47fdf6583aa452f978cedb486b54272f58e2eca5d9fefd889527",
+          "targetBox": {
+            "x": 33,
+            "y": 361,
+            "width": 324,
+            "height": 44
+          },
+          "targetLabel": "Add to receipt"
+        }
+      ]
+    },
+    {
+      "taskId": "stock-receiving-putaway",
+      "stageId": "step-3",
+      "bindingId": "stock-receiving-putaway:step-3",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/warehouse/quality",
+      "role": "operations_lead",
+      "target": {
+        "label": "Inspect",
+        "landmark": "quality inspection action"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/stock-receiving-putaway-step-3-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "dfbf7eafae044e692c63405c73d1f71a0582bc68981ae3a6a9a13bd7fc1cf5c4",
+          "targetBox": {
+            "x": 1310,
+            "y": 361,
+            "width": 73,
+            "height": 44
+          },
+          "targetLabel": "Inspect"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/stock-receiving-putaway-step-3-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "22077176a06d74179879648abf47765a49ff5ed60a0376fe4af5d994512d25e0",
+          "targetBox": {
+            "x": 33,
+            "y": 461,
+            "width": 324,
+            "height": 44
+          },
+          "targetLabel": "Inspect"
+        }
+      ]
+    },
+    {
+      "taskId": "stock-receiving-putaway",
+      "stageId": "step-4",
+      "bindingId": "stock-receiving-putaway:step-4",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/warehouse/storage",
+      "role": "operations_associate",
+      "target": {
+        "label": "Put away",
+        "landmark": "putaway action"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/stock-receiving-putaway-step-4-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "37a31562d277199f5d03a07846cbaa1d0db08a91c5c365c3149ebfd2aef85617",
+          "targetBox": {
+            "x": 1192,
+            "y": 110,
+            "width": 113,
+            "height": 44
+          },
+          "targetLabel": "Put away"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/stock-receiving-putaway-step-4-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "1ed8e4cf7afa59fcdb363d76f3b0c378c3612e014757941a9a1782395dbdf003",
+          "targetBox": {
+            "x": 16,
+            "y": 175,
+            "width": 113,
+            "height": 44
+          },
+          "targetLabel": "Put away"
+        }
+      ]
+    },
+    {
+      "taskId": "ecommerce-order-intake",
+      "stageId": "step-1",
+      "bindingId": "ecommerce-order-intake:step-1",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/warehouse/fulfillment",
+      "role": "operations_associate",
+      "target": {
+        "label": "New order / demand",
+        "landmark": "order intake choice"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/ecommerce-order-intake-step-1-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "7ab9ad7dfdf74a231a9769eccd8c653abba549fd5cbea8c678f7fac203656dc0",
+          "targetBox": {
+            "x": 1224,
+            "y": 372,
+            "width": 176,
+            "height": 62
+          },
+          "targetLabel": "New order / demand"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/ecommerce-order-intake-step-1-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "afd8b37e61a1ac75c2abe6c0345669e556953360e0389260746f2fefdc343f03",
+          "targetBox": {
+            "x": 16,
+            "y": 642,
+            "width": 358,
+            "height": 44
+          },
+          "targetLabel": "New order / demand"
+        }
+      ]
+    },
+    {
+      "taskId": "ecommerce-order-intake",
+      "stageId": "step-2",
+      "bindingId": "ecommerce-order-intake:step-2",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/warehouse/fulfillment",
+      "role": "operations_associate",
+      "target": {
+        "label": "Orders and event demand",
+        "landmark": "order data entry"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/ecommerce-order-intake-step-2-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "dc47f1451b7c80f33c5b1497184fb26a0d2ab14f6eb4465cc3cc13f2bb7945a4",
+          "targetBox": {
+            "x": 296,
+            "y": 366,
+            "width": 539,
+            "height": 28
+          },
+          "targetLabel": "Orders and event demand"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/ecommerce-order-intake-step-2-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "d49e1289aab338c79332a448286523915902e86677f9e429560c006f1876005b",
+          "targetBox": {
+            "x": 16,
+            "y": 458,
+            "width": 358,
+            "height": 28
+          },
+          "targetLabel": "Orders and event demand"
+        }
+      ]
+    },
+    {
+      "taskId": "ecommerce-order-intake",
+      "stageId": "step-3",
+      "bindingId": "ecommerce-order-intake:step-3",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/warehouse/fulfillment",
+      "role": "operations_associate",
+      "target": {
+        "label": "Import existing tracker",
+        "landmark": "tracker validation and duplicate handling"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/ecommerce-order-intake-step-3-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "c1287a51470299680d74630b48682b3d249a3717dbb6501b38af64ea5cabdad9",
+          "targetBox": {
+            "x": 1024,
+            "y": 372,
+            "width": 191,
+            "height": 62
+          },
+          "targetLabel": "Import existing tracker"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/ecommerce-order-intake-step-3-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "6e8000e07d78f3ab84742e18c409865734fab980d53631863a1bf2f4f03a569a",
+          "targetBox": {
+            "x": 16,
+            "y": 590,
+            "width": 358,
+            "height": 44
+          },
+          "targetLabel": "Import existing tracker"
+        }
+      ]
+    },
+    {
+      "taskId": "ecommerce-order-intake",
+      "stageId": "step-4",
+      "bindingId": "ecommerce-order-intake:step-4",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/warehouse/fulfillment",
+      "role": "operations_associate",
+      "target": {
+        "label": "View order details",
+        "landmark": "fulfillment queue record"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/ecommerce-order-intake-step-4-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "c86bf09359428e6d31b286721bc8227a6c45723e6822e89bd2f52c73f6cdc3b6",
+          "targetBox": {
+            "x": 313,
+            "y": 372,
+            "width": 184,
+            "height": 44
+          },
+          "targetLabel": "View order details"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/ecommerce-order-intake-step-4-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "642d62aa7e0d0f9b05cc8bcc09bdac9247ae8bea6de82cd5a722de0baae18c7f",
+          "targetBox": {
+            "x": 33,
+            "y": 361,
+            "width": 324,
+            "height": 44
+          },
+          "targetLabel": "View order details"
+        }
+      ]
+    },
+    {
+      "taskId": "ecommerce-fulfillment-delivery",
+      "stageId": "step-1",
+      "bindingId": "ecommerce-fulfillment-delivery:step-1",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/warehouse/fulfillment",
+      "role": "operations_associate",
+      "target": {
+        "label": "Allocate stock",
+        "landmark": "allocation and picking action"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/ecommerce-fulfillment-delivery-step-1-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "fee8b5c57b2bd0525776ab551ec5911767b0227c58b43e8c37394b9fb7fbb719",
+          "targetBox": {
+            "x": 313,
+            "y": 372,
+            "width": 133,
+            "height": 44
+          },
+          "targetLabel": "Allocate stock"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/ecommerce-fulfillment-delivery-step-1-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "37cd4121d428fa29a60eee467b3234e710c94458f3d61da7f96fdb0ce977416b",
+          "targetBox": {
+            "x": 33,
+            "y": 352,
+            "width": 101,
+            "height": 62
+          },
+          "targetLabel": "Allocate stock"
+        }
+      ]
+    },
+    {
+      "taskId": "ecommerce-fulfillment-delivery",
+      "stageId": "step-2",
+      "bindingId": "ecommerce-fulfillment-delivery:step-2",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/warehouse/fulfillment",
+      "role": "operations_associate",
+      "target": {
+        "label": "View order details",
+        "landmark": "scan and pack action"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/ecommerce-fulfillment-delivery-step-2-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "8d80ad2fdda4852b28b0c61cc41ce33a061fde4260f271803910d9c964ba1762",
+          "targetBox": {
+            "x": 313,
+            "y": 372,
+            "width": 184,
+            "height": 44
+          },
+          "targetLabel": "View order details"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/ecommerce-fulfillment-delivery-step-2-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "ad4b4da9aa9cfa14090bfd3e3a644d609744de6d480f1158c67c2bac8cb297cb",
+          "targetBox": {
+            "x": 33,
+            "y": 361,
+            "width": 324,
+            "height": 44
+          },
+          "targetLabel": "View order details"
+        }
+      ]
+    },
+    {
+      "taskId": "ecommerce-fulfillment-delivery",
+      "stageId": "step-3",
+      "bindingId": "ecommerce-fulfillment-delivery:step-3",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/warehouse/fulfillment",
+      "role": "operations_associate",
+      "target": {
+        "label": "Update delivery",
+        "landmark": "dispatch action"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/ecommerce-fulfillment-delivery-step-3-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "b8820adeebf2702a4ea678d7c4231b755092f1e4346701a372ea20d924ccaa8b",
+          "targetBox": {
+            "x": 497,
+            "y": 372,
+            "width": 145,
+            "height": 44
+          },
+          "targetLabel": "Update delivery"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/ecommerce-fulfillment-delivery-step-3-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "27bd2e4520b08a1a3d1de7d992282addf9d794f6497ae83c166eaa650d3bf388",
+          "targetBox": {
+            "x": 33,
+            "y": 361,
+            "width": 324,
+            "height": 44
+          },
+          "targetLabel": "Update delivery"
+        }
+      ]
+    },
+    {
+      "taskId": "ecommerce-fulfillment-delivery",
+      "stageId": "step-4",
+      "bindingId": "ecommerce-fulfillment-delivery:step-4",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/warehouse/fulfillment",
+      "role": "operations_lead",
+      "target": {
+        "label": "Update delivery",
+        "landmark": "delivery outcome control"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/ecommerce-fulfillment-delivery-step-4-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "af1c47337f96cde2c6d426bb8fe2b9ee26f93aca29f5691ec4d7d45db6348ce4",
+          "targetBox": {
+            "x": 1055,
+            "y": 372,
+            "width": 145,
+            "height": 44
+          },
+          "targetLabel": "Update delivery"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/ecommerce-fulfillment-delivery-step-4-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "92f1330ca2b85e029e92bf0f241f0bd06e33fd6a817c21b7c892a895e18c0f71",
+          "targetBox": {
+            "x": 33,
+            "y": 361,
+            "width": 324,
+            "height": 44
+          },
+          "targetLabel": "Update delivery"
+        }
+      ]
+    },
+    {
+      "taskId": "returns-replacements-refunds-rma",
+      "stageId": "step-1",
+      "bindingId": "returns-replacements-refunds-rma:step-1",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/warehouse/returns",
+      "role": "operations_associate",
+      "target": {
+        "label": "Returns",
+        "landmark": "original release lookup"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/returns-replacements-refunds-rma-step-1-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "275c4d882856b2d6b4fbb006a499aaa905a3584b46397c692c270c0b9b6acc0f",
+          "targetBox": {
+            "x": 56,
+            "y": 320,
+            "width": 175,
+            "height": 20
+          },
+          "targetLabel": "Returns"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/returns-replacements-refunds-rma-step-1-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "8bcde427a04e46d5ff226b61d68c0190b87efef145605edd614ad302fed03b12",
+          "targetBox": {
+            "x": 68,
+            "y": 106,
+            "width": 221,
+            "height": 29
+          },
+          "targetLabel": "Returns"
+        }
+      ]
+    },
+    {
+      "taskId": "returns-replacements-refunds-rma",
+      "stageId": "step-2",
+      "bindingId": "returns-replacements-refunds-rma:step-2",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/warehouse/returns",
+      "role": "operations_associate",
+      "target": {
+        "label": "Returns",
+        "landmark": "return receipt and inspection"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/returns-replacements-refunds-rma-step-2-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "bfdcbecfd953acf4e3c1eb071b1a17896b00fd822359cc656a6c2c786aacd921",
+          "targetBox": {
+            "x": 56,
+            "y": 320,
+            "width": 175,
+            "height": 20
+          },
+          "targetLabel": "Returns"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/returns-replacements-refunds-rma-step-2-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "095f79dc9fd0a3f5795c9bc8a9b4a782097aa099eb4ad7a88bd7b6f74bc49b12",
+          "targetBox": {
+            "x": 68,
+            "y": 106,
+            "width": 221,
+            "height": 29
+          },
+          "targetLabel": "Returns"
+        }
+      ]
+    },
+    {
+      "taskId": "returns-replacements-refunds-rma",
+      "stageId": "step-3",
+      "bindingId": "returns-replacements-refunds-rma:step-3",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/warehouse/quality",
+      "role": "operations_lead",
+      "target": {
+        "label": "Inspect",
+        "landmark": "governed quality resolution"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/returns-replacements-refunds-rma-step-3-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "dfbf7eafae044e692c63405c73d1f71a0582bc68981ae3a6a9a13bd7fc1cf5c4",
+          "targetBox": {
+            "x": 1310,
+            "y": 361,
+            "width": 73,
+            "height": 44
+          },
+          "targetLabel": "Inspect"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/returns-replacements-refunds-rma-step-3-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "22077176a06d74179879648abf47765a49ff5ed60a0376fe4af5d994512d25e0",
+          "targetBox": {
+            "x": 33,
+            "y": 461,
+            "width": 324,
+            "height": 44
+          },
+          "targetLabel": "Inspect"
+        }
+      ]
+    },
+    {
+      "taskId": "returns-replacements-refunds-rma",
+      "stageId": "step-4",
+      "bindingId": "returns-replacements-refunds-rma:step-4",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/warehouse/returns",
+      "role": "operations_associate",
+      "target": {
+        "label": "Returns",
+        "landmark": "final return disposition"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/returns-replacements-refunds-rma-step-4-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "6f944dfa3dbe6a844c9dd4f80eaec2bc260fab61bf948c3a88f2e1e212d61c9f",
+          "targetBox": {
+            "x": 56,
+            "y": 320,
+            "width": 175,
+            "height": 20
+          },
+          "targetLabel": "Returns"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/returns-replacements-refunds-rma-step-4-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "fa47bcb6cdf66f94e821e2380c02815e037aba7c065743c2102cace1471168a0",
+          "targetBox": {
+            "x": 68,
+            "y": 106,
+            "width": 221,
+            "height": 29
+          },
+          "targetLabel": "Returns"
+        }
+      ]
+    },
+    {
+      "taskId": "department-inventory-release",
+      "stageId": "step-1",
+      "bindingId": "department-inventory-release:step-1",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/warehouse/fulfillment",
+      "role": "general_employee",
+      "target": {
+        "label": "New stock request",
+        "landmark": "department stock request"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/department-inventory-release-step-1-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "700f541adf78bb9d7424c83c5d1c3f47601b4311d7a1b1e51bec87886d8b20b7",
+          "targetBox": {
+            "x": 1213,
+            "y": 370,
+            "width": 187,
+            "height": 44
+          },
+          "targetLabel": "New stock request"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/department-inventory-release-step-1-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "87f39ec6cc08372a0f4860a65d2590f49e60d5c67c5d1fa87810be7c2935e7f3",
+          "targetBox": {
+            "x": 16,
+            "y": 602,
+            "width": 358,
+            "height": 44
+          },
+          "targetLabel": "New stock request"
+        }
+      ]
+    },
+    {
+      "taskId": "department-inventory-release",
+      "stageId": "step-2",
+      "bindingId": "department-inventory-release:step-2",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/warehouse/approvals",
+      "role": "operations_lead",
+      "target": {
+        "label": "Stock approvals",
+        "landmark": "stock request approval"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/department-inventory-release-step-2-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "ff3f85aad2a369fdde3181f17fef64cddf0d26d73e42e9e022363e883f18651c",
+          "targetBox": {
+            "x": 56,
+            "y": 784,
+            "width": 175,
+            "height": 20
+          },
+          "targetLabel": "Stock approvals"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/department-inventory-release-step-2-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "c72f7a705d4a31f3e6c0cf0e5366090ef7973fe3eb47fdc97bc92698c7d3f258",
+          "targetBox": {
+            "x": 68,
+            "y": 106,
+            "width": 203,
+            "height": 29
+          },
+          "targetLabel": "Stock approvals"
+        }
+      ]
+    },
+    {
+      "taskId": "department-inventory-release",
+      "stageId": "step-3",
+      "bindingId": "department-inventory-release:step-3",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/warehouse/fulfillment",
+      "role": "operations_lead",
+      "target": {
+        "label": "Department requests",
+        "landmark": "department request allocation queue"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/department-inventory-release-step-3-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "9f5356163dfcd0fd776cbdc704100a6a6106cf258eb970decb69560bb6a104b3",
+          "targetBox": {
+            "x": 575,
+            "y": 298,
+            "width": 271,
+            "height": 44
+          },
+          "targetLabel": "Department requests"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/department-inventory-release-step-3-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "f2924d8abbb70ae3e9e7bd1757dd6ed7b32b6b8b6d531ae1439ac14dd8170119",
+          "targetBox": {
+            "x": 197,
+            "y": 406,
+            "width": 173,
+            "height": 44
+          },
+          "targetLabel": "Department requests"
+        }
+      ]
+    },
+    {
+      "taskId": "department-inventory-release",
+      "stageId": "step-4",
+      "bindingId": "department-inventory-release:step-4",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/warehouse/fulfillment",
+      "role": "general_employee",
+      "target": {
+        "label": "Acknowledge receipt",
+        "landmark": "recipient custody acknowledgement"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/department-inventory-release-step-4-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "6da4f78f8fc2d88169da62357ba8692a97e7216f69b8b819300c11a27c08646e",
+          "targetBox": {
+            "x": 1055,
+            "y": 372,
+            "width": 182,
+            "height": 44
+          },
+          "targetLabel": "Acknowledge receipt"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/department-inventory-release-step-4-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "ef4fc48ac3749755cab9b03e56d4d8de2dcd67f296dd9c1161938e3e27299bd5",
+          "targetBox": {
+            "x": 33,
+            "y": 361,
+            "width": 324,
+            "height": 44
+          },
+          "targetLabel": "Acknowledge receipt"
+        }
+      ]
+    },
+    {
+      "taskId": "event-stock-custody",
+      "stageId": "step-1",
+      "bindingId": "event-stock-custody:step-1",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/events",
+      "role": "general_employee",
+      "target": {
+        "label": "New event",
+        "landmark": "event request action"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/event-stock-custody-step-1-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "6181bfa62c0fdb50ea48e24d04ff8c4f79376b2b8309fcc63518398bb8b3066d",
+          "targetBox": {
+            "x": 296,
+            "y": 236,
+            "width": 130,
+            "height": 44
+          },
+          "targetLabel": "New event"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/event-stock-custody-step-1-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "cc03449a910703daf49361f56cb160f9cd319b982f522d75b6baf567b16564bb",
+          "targetBox": {
+            "x": 32,
+            "y": 325,
+            "width": 130,
+            "height": 44
+          },
+          "targetLabel": "New event"
+        }
+      ]
+    },
+    {
+      "taskId": "event-stock-custody",
+      "stageId": "step-2",
+      "bindingId": "event-stock-custody:step-2",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/warehouse/fulfillment",
+      "role": "operations_associate",
+      "target": {
+        "label": "Allocate stock",
+        "landmark": "event stock transfer"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/event-stock-custody-step-2-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "e6e8f1d7e92dfe3718f139f3cd497cf17a9e6aaa798d22c9101d555642ca913b",
+          "targetBox": {
+            "x": 313,
+            "y": 372,
+            "width": 133,
+            "height": 44
+          },
+          "targetLabel": "Allocate stock"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/event-stock-custody-step-2-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "fa28b398d90b044cb08777e9564b8a39c41f48730f5848de4c9bff02ca4ade9f",
+          "targetBox": {
+            "x": 33,
+            "y": 352,
+            "width": 101,
+            "height": 62
+          },
+          "targetLabel": "Allocate stock"
+        }
+      ]
+    },
+    {
+      "taskId": "event-stock-custody",
+      "stageId": "step-3",
+      "bindingId": "event-stock-custody:step-3",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/events",
+      "role": "marketing_events_lead",
+      "target": {
+        "label": "Event readiness and fulfillment",
+        "landmark": "event use and return record"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/event-stock-custody-step-3-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "c1320a8d2e36c920c5120762e123bd87273d8da5fc9b3ca43610e08a2d815037",
+          "targetBox": {
+            "x": 272,
+            "y": 482,
+            "width": 661,
+            "height": 28
+          },
+          "targetLabel": "Event readiness and fulfillment"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/event-stock-custody-step-3-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "4acadf0772b6addb4f0138e7a1cc8b62e37bf26a6a3b36d428246df0cdb5b565",
+          "targetBox": {
+            "x": 16,
+            "y": 635,
+            "width": 358,
+            "height": 22
+          },
+          "targetLabel": "Event readiness and fulfillment"
+        }
+      ]
+    },
+    {
+      "taskId": "event-stock-custody",
+      "stageId": "step-4",
+      "bindingId": "event-stock-custody:step-4",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/events",
+      "role": "finance_controller",
+      "target": {
+        "label": "Event readiness and fulfillment",
+        "landmark": "event reconciliation decision"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/event-stock-custody-step-4-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "59e097d8ef90e82846a22bc2e1bf9776512c15f5acdb232d09132ea5ed65d672",
+          "targetBox": {
+            "x": 272,
+            "y": 482,
+            "width": 661,
+            "height": 28
+          },
+          "targetLabel": "Event readiness and fulfillment"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/event-stock-custody-step-4-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "a5aec0720948ed6bafd2c86ebfd0a77ca43ef13214e7d0b6f0e74d7756d62bfb",
+          "targetBox": {
+            "x": 16,
+            "y": 635,
+            "width": 358,
+            "height": 22
+          },
+          "targetLabel": "Event readiness and fulfillment"
+        }
+      ]
+    },
+    {
+      "taskId": "inventory-count-variance",
+      "stageId": "step-1",
+      "bindingId": "inventory-count-variance:step-1",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/warehouse/cycle-counts",
+      "role": "operations_associate",
+      "target": {
+        "label": "Cycle Counts",
+        "landmark": "cycle count start"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/inventory-count-variance-step-1-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "62058c0ee36e4476c98608f23f9aef2121c77c47a779040c14bd88c268e84d95",
+          "targetBox": {
+            "x": 56,
+            "y": 624,
+            "width": 175,
+            "height": 20
+          },
+          "targetLabel": "Cycle Counts"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/inventory-count-variance-step-1-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "e8947bb922e696f5285cebbdab42ac1ce921c88f213080f9192104314d9f51a4",
+          "targetBox": {
+            "x": 68,
+            "y": 106,
+            "width": 165,
+            "height": 29
+          },
+          "targetLabel": "Cycle Counts"
+        }
+      ]
+    },
+    {
+      "taskId": "inventory-count-variance",
+      "stageId": "step-2",
+      "bindingId": "inventory-count-variance:step-2",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/warehouse/cycle-counts",
+      "role": "operations_associate",
+      "target": {
+        "label": "Submit count",
+        "landmark": "observed quantity submission"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/inventory-count-variance-step-2-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "b8c6954512dfe78a736c42027accf0526fd67672e0da93376111a141a0fa2cba",
+          "targetBox": {
+            "x": 296,
+            "y": 816,
+            "width": 1104,
+            "height": 44
+          },
+          "targetLabel": "Submit count"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/inventory-count-variance-step-2-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "604e8afb720e3f4344220a26e478acb5c2aa45636a583d540ce06d44b189036d",
+          "targetBox": {
+            "x": 16,
+            "y": 613,
+            "width": 358,
+            "height": 44
+          },
+          "targetLabel": "Submit count"
+        }
+      ]
+    },
+    {
+      "taskId": "inventory-count-variance",
+      "stageId": "step-3",
+      "bindingId": "inventory-count-variance:step-3",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/warehouse/approvals",
+      "role": "operations_lead",
+      "target": {
+        "label": "Stock approvals",
+        "landmark": "variance approval decision"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/inventory-count-variance-step-3-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "fa29cdc1c6e8b79bd8882d4a54752791f5b07aee14c73b0632cc705449d17593",
+          "targetBox": {
+            "x": 56,
+            "y": 784,
+            "width": 175,
+            "height": 20
+          },
+          "targetLabel": "Stock approvals"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/inventory-count-variance-step-3-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "eb5e860e15b0372952e8c7175215e8564f3cb2f7cf9f65110e6d84f1d56dfc25",
+          "targetBox": {
+            "x": 68,
+            "y": 106,
+            "width": 203,
+            "height": 29
+          },
+          "targetLabel": "Stock approvals"
+        }
+      ]
+    },
+    {
+      "taskId": "inventory-count-variance",
+      "stageId": "step-4",
+      "bindingId": "inventory-count-variance:step-4",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/warehouse/cycle-counts",
+      "role": "operations_lead",
+      "target": {
+        "label": "Cycle Counts",
+        "landmark": "approved count result"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/inventory-count-variance-step-4-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "a6ba2f4c2b1974071d91a4b33b7e1218bc02956ff1beff540d2908f7dfa29e4b",
+          "targetBox": {
+            "x": 56,
+            "y": 688,
+            "width": 175,
+            "height": 20
+          },
+          "targetLabel": "Cycle Counts"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/inventory-count-variance-step-4-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "ad776211bacb93caef7dffc5dfeb51eaebdd615556da609c01344fa815c203ca",
+          "targetBox": {
+            "x": 68,
+            "y": 106,
+            "width": 165,
+            "height": 29
+          },
+          "targetLabel": "Cycle Counts"
+        }
+      ]
+    },
+    {
+      "taskId": "department-doa-activation",
+      "stageId": "step-1",
+      "bindingId": "department-doa-activation:step-1",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/admin/doa",
+      "role": "platform_administrator",
+      "target": {
+        "label": "Create revision",
+        "landmark": "versioned DOA draft"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/department-doa-activation-step-1-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "bf70cdcb74ace75bce035ebd9300aaf3db031580c4b5c4be3a6c91acee80a40f",
+          "targetBox": {
+            "x": 293,
+            "y": 434,
+            "width": 127,
+            "height": 44
+          },
+          "targetLabel": "Create revision"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/department-doa-activation-step-1-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "05e38bc14bfbb1654205d5b6ad2fdebe87931fdd6c59d43e22f70f59d39efd62",
+          "targetBox": {
+            "x": 33,
+            "y": 515,
+            "width": 324,
+            "height": 44
+          },
+          "targetLabel": "Create revision"
+        }
+      ]
+    },
+    {
+      "taskId": "department-doa-activation",
+      "stageId": "step-2",
+      "bindingId": "department-doa-activation:step-2",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/admin/doa",
+      "role": "platform_administrator",
+      "target": {
+        "label": "Add tier",
+        "landmark": "DOA tier definition"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/department-doa-activation-step-2-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "4cea32a8a7b052ec4bd156e28d2a8d48f45a0ef1e2894885697d77579a289f4b",
+          "targetBox": {
+            "x": 1285,
+            "y": 481,
+            "width": 102,
+            "height": 44
+          },
+          "targetLabel": "Add tier"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/department-doa-activation-step-2-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "22dda7b3578094809a67ed33dbeca59241f90d85d370d444782770ed3d0c4055",
+          "targetBox": {
+            "x": 255,
+            "y": 304,
+            "width": 102,
+            "height": 44
+          },
+          "targetLabel": "Add tier"
+        }
+      ]
+    },
+    {
+      "taskId": "department-doa-activation",
+      "stageId": "step-3",
+      "bindingId": "department-doa-activation:step-3",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/admin/doa",
+      "role": "legal_compliance_lead",
+      "target": {
+        "label": "Activate",
+        "landmark": "DOA activation action"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/department-doa-activation-step-3-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "920fbbe19c6889f56d164004ad69fef362d7a5200b6998d1a26ca95437061af5",
+          "targetBox": {
+            "x": 428,
+            "y": 434,
+            "width": 81,
+            "height": 44
+          },
+          "targetLabel": "Activate"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/department-doa-activation-step-3-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "8ba8d3322949ff8be6d0109cc5122f076f9bc720b79a64e71fe226f1b9d5a2bb",
+          "targetBox": {
+            "x": 33,
+            "y": 567,
+            "width": 324,
+            "height": 44
+          },
+          "targetLabel": "Activate"
+        }
+      ]
+    },
+    {
+      "taskId": "department-doa-activation",
+      "stageId": "step-4",
+      "bindingId": "department-doa-activation:step-4",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/admin/doa",
+      "role": "platform_administrator",
+      "target": {
+        "label": "Department coverage",
+        "landmark": "procurement DOA readback"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/department-doa-activation-step-4-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "3d7c55bc573b5f785a0df3630c0eca8dbcc44f4c986d32f4056575fe6a175ba5",
+          "targetBox": {
+            "x": 272,
+            "y": 269,
+            "width": 1136,
+            "height": 28
+          },
+          "targetLabel": "Department coverage"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/department-doa-activation-step-4-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "9af71fcfd94c8bb477201951d753e18b4871db75dec79932eed1e4c0c3712d55",
+          "targetBox": {
+            "x": 16,
+            "y": 354,
+            "width": 358,
+            "height": 28
+          },
+          "targetLabel": "Department coverage"
+        }
+      ]
+    },
+    {
+      "taskId": "finance-readiness-evidence",
+      "stageId": "step-1",
+      "bindingId": "finance-readiness-evidence:step-1",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/finance",
+      "role": "finance_controller",
+      "target": {
+        "label": "Finance",
+        "landmark": "Finance control center"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/finance-readiness-evidence-step-1-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "196e8dc9cc354bfe075fac7fd94055a3075d84746873bbb0ba1f1eec9e1422aa",
+          "targetBox": {
+            "x": 12,
+            "y": 324,
+            "width": 215,
+            "height": 44
+          },
+          "targetLabel": "Finance"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/finance-readiness-evidence-step-1-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "ac602646378633290fe703be757a5d8bc91de43b0fb3dd9fde57c2840aa6a70d",
+          "targetBox": {
+            "x": 83,
+            "y": 773,
+            "width": 75,
+            "height": 64
+          },
+          "targetLabel": "Finance"
+        }
+      ]
+    },
+    {
+      "taskId": "finance-readiness-evidence",
+      "stageId": "step-2",
+      "bindingId": "finance-readiness-evidence:step-2",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/finance",
+      "role": "finance_controller",
+      "target": {
+        "label": "Open / Cross-module activity",
+        "landmark": "source record trace"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/finance-readiness-evidence-step-2-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "c31112420609bdb909f13207c35da0bce7c084ed68aec53d0be390e25d0c71e7",
+          "targetBox": {
+            "x": 12,
+            "y": 840,
+            "width": 215,
+            "height": 44
+          },
+          "targetLabel": "Open"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/finance-readiness-evidence-step-2-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "7217f0aa611913c0d126eb4e7c363d1809b962455f03590bfa5abc08acbdfb00",
+          "targetBox": {
+            "x": 16,
+            "y": 363,
+            "width": 358,
+            "height": 22
+          },
+          "targetLabel": "Cross-module activity"
+        }
+      ]
+    },
+    {
+      "taskId": "finance-readiness-evidence",
+      "stageId": "step-3",
+      "bindingId": "finance-readiness-evidence:step-3",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/finance",
+      "role": "finance_controller",
+      "target": {
+        "label": "Payment readiness",
+        "landmark": "readiness blocker review"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/finance-readiness-evidence-step-3-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "6c031ddba5f14a8883515a516462613bf3a298175bcb47bedbaeac9259d96bad",
+          "targetBox": {
+            "x": 296,
+            "y": 178,
+            "width": 672,
+            "height": 42
+          },
+          "targetLabel": "Payment readiness"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/finance-readiness-evidence-step-3-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "85e646025965ec8ce84428b48619c96c53d5b0ea726d57dd95a669ad5385610f",
+          "targetBox": {
+            "x": 32,
+            "y": 225,
+            "width": 270,
+            "height": 84
+          },
+          "targetLabel": "Payment readiness"
+        }
+      ]
+    },
+    {
+      "taskId": "finance-readiness-evidence",
+      "stageId": "step-4",
+      "bindingId": "finance-readiness-evidence:step-4",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/finance",
+      "role": "finance_controller",
+      "target": {
+        "label": "Payment readiness",
+        "landmark": "Finance readiness decision"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/finance-readiness-evidence-step-4-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "fbbb35cbac997435ab55eb524b58316ea3c6be5751794769d3f87af8ff882f46",
+          "targetBox": {
+            "x": 296,
+            "y": 178,
+            "width": 672,
+            "height": 42
+          },
+          "targetLabel": "Payment readiness"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/finance-readiness-evidence-step-4-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "96b5f77ac6d360dd2f681a66f0b419f3b3605bdf542cd78372b3d4e064c51321",
+          "targetBox": {
+            "x": 32,
+            "y": 225,
+            "width": 270,
+            "height": 84
+          },
+          "targetLabel": "Payment readiness"
+        }
+      ]
+    },
+    {
+      "taskId": "product-readiness-pricing-go-live",
+      "stageId": "step-1",
+      "bindingId": "product-readiness-pricing-go-live:step-1",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/product",
+      "role": "general_employee",
+      "target": {
+        "label": "New readiness package",
+        "landmark": "readiness and pricing submission"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/product-readiness-pricing-go-live-step-1-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "c1eba2f16ab9a49a54281865e1dc7cd3a427724e2569700a8de36c7ecc66333b",
+          "targetBox": {
+            "x": 296,
+            "y": 236,
+            "width": 197,
+            "height": 44
+          },
+          "targetLabel": "New readiness package"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/product-readiness-pricing-go-live-step-1-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "f52175297e8e6f79cb5328d2786dbc4cf27c1b155fdd6088319bab8007bd6687",
+          "targetBox": {
+            "x": 32,
+            "y": 276,
+            "width": 197,
+            "height": 44
+          },
+          "targetLabel": "New readiness package"
+        }
+      ]
+    },
+    {
+      "taskId": "product-readiness-pricing-go-live",
+      "stageId": "step-2",
+      "bindingId": "product-readiness-pricing-go-live:step-2",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/product",
+      "role": "product_owner",
+      "target": {
+        "label": "Approve go-live",
+        "landmark": "Product Owner review"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/product-readiness-pricing-go-live-step-2-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "70f7e8eab524f73d8b24cf4c2e039a2c661857a95879c5e68f54ae670e237060",
+          "targetBox": {
+            "x": 430,
+            "y": 262,
+            "width": 578,
+            "height": 375
+          },
+          "targetLabel": "Approve go-live"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/product-readiness-pricing-go-live-step-2-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "bf82b4eaffb1fb7443fd8380b5bd0c6c7aea797170e2474d5d882473eaccbf3d",
+          "targetBox": {
+            "x": 4,
+            "y": 444,
+            "width": 382,
+            "height": 390
+          },
+          "targetLabel": "Approve go-live"
+        }
+      ]
+    },
+    {
+      "taskId": "product-readiness-pricing-go-live",
+      "stageId": "step-3",
+      "bindingId": "product-readiness-pricing-go-live:step-3",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/product",
+      "role": "product_owner",
+      "target": {
+        "label": "Approve go-live",
+        "landmark": "Product Owner decision"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/product-readiness-pricing-go-live-step-3-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "96f22a4fe355e011c36fbaef1d256ec3ac1c1169f09a212cd15d215000d83747",
+          "targetBox": {
+            "x": 840,
+            "y": 577,
+            "width": 144,
+            "height": 44
+          },
+          "targetLabel": "Approve go-live"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/product-readiness-pricing-go-live-step-3-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "1c97980015ef09acc01aed4885fd01d739ec7eabce4b8b16373cb1050d3f8c49",
+          "targetBox": {
+            "x": 20,
+            "y": 772,
+            "width": 350,
+            "height": 44
+          },
+          "targetLabel": "Approve go-live"
+        }
+      ]
+    },
+    {
+      "taskId": "product-readiness-pricing-go-live",
+      "stageId": "step-4",
+      "bindingId": "product-readiness-pricing-go-live:step-4",
+      "status": "certified",
+      "host": "https://mwell-intra-uat.vercel.app",
+      "route": "/product",
+      "role": "operations_lead",
+      "target": {
+        "label": "Acknowledge Operations handoff",
+        "landmark": "Operations handoff acknowledgement"
+      },
+      "capturedAt": "2026-08-24T16:15:39.504Z",
+      "sourceCommit": "138e326f05d016d26393841cbf57695787cfe226",
+      "certificationRun": "https://github.com/normanwashere/mwell-intra/actions/runs/32653705717",
+      "assertions": {
+        "hostMatched": true,
+        "routeMatched": true,
+        "roleMatched": true,
+        "targetVisible": true,
+        "loginBounce": false,
+        "browserErrors": 0,
+        "horizontalOverflow": false,
+        "sensitiveData": "synthetic-uat-only",
+        "numberedCallout": true
+      },
+      "variants": [
+        {
+          "viewport": "desktop",
+          "path": "docs/manual/assets/knowledge-base/product-readiness-pricing-go-live-step-4-desktop.png",
+          "width": 1440,
+          "height": 900,
+          "sha256": "ac2ef4b9ffbc02d699c7542993026268647e030061a4ad8bdcd124fbb6a19f2e",
+          "targetBox": {
+            "x": 293,
+            "y": 648,
+            "width": 520,
+            "height": 45
+          },
+          "targetLabel": "Acknowledge Operations handoff"
+        },
+        {
+          "viewport": "mobile",
+          "path": "docs/manual/assets/knowledge-base/product-readiness-pricing-go-live-step-4-mobile.png",
+          "width": 390,
+          "height": 844,
+          "sha256": "39ccfd8fb0e714cac5147130864b2ad967fc58e2d6bde1ad150998d76394550a",
+          "targetBox": {
+            "x": 33,
+            "y": 656,
+            "width": 324,
+            "height": 44
+          },
+          "targetLabel": "Acknowledge Operations handoff"
+        }
+      ]
+    }
+  ]
+}

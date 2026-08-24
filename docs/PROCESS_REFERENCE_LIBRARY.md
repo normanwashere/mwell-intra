@@ -18,6 +18,26 @@
 | Active department DOA revision in Mwell Intra | Governed system record; effective-dated and immutable after activation | Named approval authority by department, category, amount and delegation | Department owner; administered by Platform Admin or Legal Admin | The active revision controls. Draft and temporary lists have no approval authority until activated |
 | Republic Act No. 10173 and approved retention schedule | Regulatory and internal control source | Personal-data handling, evidence access, retention and deletion | Privacy, Legal and Information Security | Operational handling and retention rules are maintained in the security and retention sections |
 
+## Current Persona Register
+
+Mwell Intra uses the following 11 operating personas. Policy labels, job titles, and module role codes are scoped capabilities or control labels, not additional personas and not authority by themselves. Detailed permitted actions, prohibitions, handoffs, recovery paths, and application routes are maintained once in the canonical role guides; this library remains the authoritative source for policy and process controls.
+
+<!-- canonical-personas:start -->
+| Current persona | Governed operating scope |
+| --- | --- |
+| Platform Administrator | Identity, minimum-role, configuration, audit, and authorized DOA administration |
+| General Employee | Own requests and contributions before independent review or operational release |
+| Operations Associate | Attributable physical Warehouse execution and custody evidence |
+| Operations Lead | Warehouse control decisions, setup, exceptions, releases, variances, and assigned approvals |
+| Procurement Lead | Procurement route, sourcing, vendor-readiness, commitment, and closure evidence |
+| Finance Controller | Independent valuation, matching, settlement, and payment-readiness review |
+| Legal & Compliance Lead | Vendor, legal-instrument, compliance, and authorized DOA control decisions |
+| Marketing & Events Lead | Event demand, custody coordination, outcome evidence, and settlement submission |
+| Product Owner | Product readiness, pricing, and go-live decisions |
+| Leadership / Insights | Governed read-only cross-module analysis and source tracing |
+| Vendor Representative | Own-organization application, declaration, evidence, and correction submissions |
+<!-- canonical-personas:end -->
+
 ## Reference-to-Process Map
 
 ```mermaid

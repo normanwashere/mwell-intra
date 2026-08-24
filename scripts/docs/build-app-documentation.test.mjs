@@ -333,16 +333,18 @@ test("renders all canonical task, role, and System guides in contract order", ()
   assert.match(role, /Completion evidence and training sign-off/);
 });
 
-test("renders every future step screenshot as pending review without enforcing strict coverage", () => {
+test("renders certified responsive evidence for every implemented task stage", () => {
   const html = buildDocumentationHtml();
   const taskStages = HANDBOOK_GUIDES.filter(({ type }) => type === "task")
     .flatMap(({ steps }) => steps);
 
   assert.equal(taskStages.length, 52);
-  assert.equal((html.match(/data-screen-evidence="pending"/g) ?? []).length, taskStages.length);
-  assert.equal((html.match(/Screen evidence pending review/g) ?? []).length, taskStages.length);
-  assert.doesNotMatch(html, /data-screen-evidence="certified"/);
-  assert.doesNotMatch(html, /data-certified-screenshot/);
+  assert.equal((html.match(/data-screen-evidence="certified"/g) ?? []).length, taskStages.length);
+  assert.equal((html.match(/data-certified-screenshot/g) ?? []).length, taskStages.length);
+  assert.equal((html.match(/data-screen-variant="desktop"/g) ?? []).length, taskStages.length);
+  assert.equal((html.match(/data-screen-variant="mobile"/g) ?? []).length, taskStages.length);
+  assert.doesNotMatch(html, /data-screen-evidence="pending"/);
+  assert.doesNotMatch(html, /Screen evidence pending review/);
 });
 
 test("collapses policy, source, capability, and document controls while preserving governed content", () => {

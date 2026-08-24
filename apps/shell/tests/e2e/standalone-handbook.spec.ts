@@ -797,11 +797,11 @@ test('mobile task controls expose stable stage navigation without covering conte
   expect(overlap, 'sticky guide controls must not cover the article header').toBe(0);
 });
 
-test('mobile and desktop screenshot viewer traps focus returns focus and ignores pending evidence', async ({ page }, testInfo) => {
+test('mobile and desktop certified screenshot viewer traps focus and returns focus', async ({ page }, testInfo) => {
   if (!['desktop-1440', 'mobile-320'].includes(testInfo.project.name)) test.skip();
-  await page.goto('/#mode=system&guide=source-references&heading=source-user-manual');
-  await page.locator('details:has(.doc-image)').first().evaluate((details: HTMLDetailsElement) => { details.open = true; });
-  const trigger = page.locator('[data-open-screenshot-surface]').first();
+  await page.goto('/#mode=tasks&guide=stock-receiving-putaway&heading=steps');
+  const guide = page.locator('article[data-guide-id="stock-receiving-putaway"]');
+  const trigger = guide.locator('[data-screen-evidence="certified"] [data-open-screenshot-surface]').first();
   await expect(trigger).toBeVisible();
   await trigger.scrollIntoViewIfNeeded();
   await trigger.click();
@@ -820,10 +820,9 @@ test('mobile and desktop screenshot viewer traps focus returns focus and ignores
   await expect(viewer).toBeHidden();
   await expect(trigger).toBeFocused();
 
-  await page.goto('/#mode=tasks&guide=stock-receiving-putaway&heading=steps');
-  const pendingEvidence = page.locator('article[data-guide-id="stock-receiving-putaway"] [data-screen-evidence="pending"]').first();
-  await expect(pendingEvidence).toBeVisible();
-  await expect(pendingEvidence.locator('button, [data-open-screenshot-surface]')).toHaveCount(0);
+  await expect(guide.locator('[data-screen-evidence="certified"]')).toHaveCount(4);
+  await expect(guide.locator('[data-screen-evidence="pending"]')).toHaveCount(0);
+  await expect(guide.locator('[data-screen-evidence="certified"] [data-open-screenshot-surface]')).toHaveCount(4);
 });
 
 test('completes the keyboard-only handbook journey without drawer or diagram traps', async ({ page }, testInfo) => {

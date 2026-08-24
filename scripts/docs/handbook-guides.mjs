@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -8,6 +9,16 @@ const root = path.resolve(fileURLToPath(new URL("../../", import.meta.url)));
 const OWNER = "Mwell Intra Product and Operations";
 const EFFECTIVE_DATE = "2026-08-24";
 const APPLICABLE_BUILD = "2026-08-23 UAT baseline";
+const EVIDENCE_MANIFEST_PATH = path.join(
+  root,
+  "docs/manual/assets/knowledge-base/task-stage-evidence.json",
+);
+const EVIDENCE_MANIFEST = existsSync(EVIDENCE_MANIFEST_PATH)
+  ? JSON.parse(readFileSync(EVIDENCE_MANIFEST_PATH, "utf8"))
+  : { schemaVersion: 1, stages: [] };
+const EVIDENCE_BY_BINDING = new Map(
+  (EVIDENCE_MANIFEST.stages ?? []).map((contract) => [contract.bindingId, contract]),
+);
 
 const TASK_FIELDS = [
   "id", "outcome", "summary", "participatingRoles", "module",
@@ -334,7 +345,7 @@ const TASK_DEFINITIONS = [
     title: "Request and release department inventory",
     outcome: "Department inventory is released to an authorized recipient with custody evidence and no unfinished allocation.",
     summary: "Request department stock, approve where required, release it from Warehouse, and retain recipient evidence.",
-    roles: ["general_employee", "operations_associate", "operations_lead"],
+    roles: ["general_employee", "operations_lead"],
     module: "Warehouse",
     start: "A department has an approved operational need for available stock.",
     access: ["Business-unit request access", "Warehouse allocation and release access"],
@@ -359,7 +370,7 @@ const TASK_DEFINITIONS = [
     title: "Transfer, use, return, and reconcile event stock",
     outcome: "Event stock is fully reconciled across transfer, use, return, and final custody.",
     summary: "Coordinate event demand, warehouse transfer, event custody, returns, and variance resolution.",
-    roles: ["general_employee", "marketing_events_lead", "operations_associate", "operations_lead"],
+    roles: ["general_employee", "marketing_events_lead", "operations_associate", "finance_controller"],
     module: "Events and Warehouse",
     start: "An approved event requires stock from Warehouse.",
     access: ["Events request or coordination access", "Warehouse event custody access"],
@@ -368,7 +379,7 @@ const TASK_DEFINITIONS = [
     decisions: ["Is the event authorized?", "Was stock used, returned, damaged, lost, or unresolved?"],
     denial: ["View-only roles cannot mutate event custody", "Duplicate event requests are denied"],
     recovery: "Retain unresolved custody, correct stale or duplicate data, and escalate any variance before closure.",
-    handoff: "Marketing and Events accepts custody from Warehouse and returns reconciled stock and evidence.",
+    handoff: "Marketing and Events accepts custody from Warehouse, submits reconciled outcomes, and hands the completed settlement evidence to Finance for independent approval.",
     completion: ["All issued quantities have a terminal disposition", "Custody handoffs are visible", "Variance has an owner"],
     evidence: ["Event and allocation identifiers", "Custody handoffs", "Use, return, and variance evidence"],
     related: ["department-inventory-release", "inventory-count-variance"],
@@ -492,8 +503,8 @@ const TASK_STAGE_ROLES = {
   "ecommerce-order-intake": ["operations_associate", "operations_associate", "operations_associate", "operations_associate"],
   "ecommerce-fulfillment-delivery": ["operations_associate", "operations_associate", "operations_associate", "operations_lead"],
   "returns-replacements-refunds-rma": ["operations_associate", "operations_associate", "operations_lead", "operations_associate"],
-  "department-inventory-release": ["general_employee", "operations_lead", "operations_associate", "general_employee"],
-  "event-stock-custody": ["general_employee", "operations_associate", "marketing_events_lead", "operations_lead"],
+  "department-inventory-release": ["general_employee", "operations_lead", "operations_lead", "general_employee"],
+  "event-stock-custody": ["general_employee", "operations_associate", "marketing_events_lead", "finance_controller"],
   "inventory-count-variance": ["operations_associate", "operations_associate", "operations_lead", "operations_lead"],
   "department-doa-activation": ["platform_administrator", "platform_administrator", "legal_compliance_lead", "platform_administrator"],
   "finance-readiness-evidence": ["finance_controller", "finance_controller", "finance_controller", "finance_controller"],
@@ -502,7 +513,7 @@ const TASK_STAGE_ROLES = {
 
 const TASK_STAGE_ROUTES = {
   "procurement-request-approval": ["/procurement/requests/new", "/procurement/requests", "/procurement/approvals", "/procurement/requests"],
-  "vendor-accreditation-renewal": ["/legal/invites/new", "/vendor", "/legal/cases", "/legal/cases"],
+  "vendor-accreditation-renewal": ["/legal/invites/new", "/vendor/", "/legal/", "/legal/"],
   "warehouse-location-bin-setup": ["/warehouse/storage", "/warehouse/locations", "/warehouse/locations", "/warehouse/purchase-orders"],
   "stock-receiving-putaway": ["/warehouse/purchase-orders", "/warehouse/receiving", "/warehouse/quality", "/warehouse/storage"],
   "ecommerce-order-intake": ["/warehouse/fulfillment", "/warehouse/fulfillment", "/warehouse/fulfillment", "/warehouse/fulfillment"],
@@ -643,13 +654,13 @@ const TASK_DECISION_TREES = {
       decisionBranch("Not accepted", "The recipient refused, was unavailable, or custody evidence is missing.", "stage", "step-3", "The release must be reversed or reassigned before closure.", "Restore controlled custody, correct the recipient handoff, and repeat release confirmation.")),
   ],
   "event-stock-custody": [
-    taskDecision("decision-1", "after", "step-1", "operations_lead", "Is the event need authorized and non-duplicate?",
+    taskDecision("decision-1", "after", "step-1", "marketing_events_lead", "Is the event need authorized and non-duplicate?",
       decisionBranch("Authorized", "The event, requester, quantity, dates, and approval are current and unique.", "stage", "step-2", "Warehouse can transfer stock to event custody.", "Continue without correction."),
       decisionBranch("Denied or duplicate", "Authority is missing, stale, or a duplicate event request exists.", "outcome", "cancellation", "No stock transfers and the event request ends cancelled or returned.", "Correct and submit a new valid request only when an authorized need remains.", true)),
     taskDecision("decision-2", "after", "step-3", "marketing_events_lead", "Does every issued quantity have a recorded use, return, damage, loss, or unresolved state?",
-      decisionBranch("Recorded", "All event custody quantities have attributable disposition records.", "stage", "step-4", "Operations can reconcile the event stock.", "Continue without correction."),
+      decisionBranch("Recorded", "All event custody quantities have attributable disposition records.", "stage", "step-4", "Finance can independently review the submitted settlement.", "Continue without correction."),
       decisionBranch("Missing disposition", "One or more issued quantities lack a current custody outcome.", "stage", "step-3", "Reconciliation remains blocked.", "Recover or document the missing custody outcome, then submit the event return again.")),
-    taskDecision("decision-3", "after", "step-4", "operations_lead", "Is every event variance resolved or assigned to an accountable owner?",
+    taskDecision("decision-3", "after", "step-4", "finance_controller", "Is every event variance resolved or assigned to an accountable owner?",
       decisionBranch("Resolved", "Returned, used, damaged, and lost quantities reconcile with evidence and ownership.", "outcome", "completion", "The event custody record reaches explainable completion.", "Retain the custody and variance evidence.", true),
       decisionBranch("Unresolved", "A quantity or custody discrepancy has no accepted disposition or owner.", "outcome", "escalation", "The event remains open under variance escalation.", "Retain custody history and escalate the discrepancy before closure.", true)),
   ],
@@ -715,6 +726,10 @@ function taskStage(definition, label, index) {
   const roles = TASK_STAGE_ROLES[definition.id];
   const routes = TASK_STAGE_ROUTES[definition.id];
   const performingRole = roles[index];
+  const bindingId = `${definition.id}:step-${index + 1}`;
+  const evidence = EVIDENCE_BY_BINDING.get(bindingId);
+  const desktop = evidence?.variants?.find(({ viewport }) => viewport === "desktop");
+  const mobile = evidence?.variants?.find(({ viewport }) => viewport === "mobile");
   return {
     id: `step-${index + 1}`,
     label,
@@ -723,10 +738,19 @@ function taskStage(definition, label, index) {
     route: routes[index],
     instruction: `${label}.`,
     screenshot: {
-      bindingId: `${definition.id}:step-${index + 1}`,
-      status: "pending",
-      path: null,
-      target: null,
+      bindingId,
+      status: evidence?.status ?? "pending",
+      path: desktop?.path ?? null,
+      mobilePath: mobile?.path ?? null,
+      target: evidence?.target ?? null,
+      host: evidence?.host ?? null,
+      route: evidence?.route ?? null,
+      role: evidence?.role ?? null,
+      capturedAt: evidence?.capturedAt ?? null,
+      sourceCommit: evidence?.sourceCommit ?? null,
+      certificationRun: evidence?.certificationRun ?? null,
+      assertions: evidence?.assertions ?? null,
+      variants: evidence?.variants ?? [],
     },
     expectedResult: `${label} is recorded and visible in ${definition.module}.`,
     dataRead: definition.inputs,
@@ -739,6 +763,7 @@ function taskStage(definition, label, index) {
 function taskGuide(definition) {
   const decisionPoints = TASK_DECISION_TREES[definition.id];
   const decisionLabels = decisionPoints.map(({ question }) => question);
+  const steps = definition.steps.map((label, index) => taskStage(definition, label, index));
   return {
     id: definition.id,
     type: "task",
@@ -757,7 +782,7 @@ function taskGuide(definition) {
       requiredAccess: definition.access,
       inputsAndEvidence: definition.inputs,
     },
-    steps: definition.steps.map((label, index) => taskStage(definition, label, index)),
+    steps,
     decisionLabels,
     decisionPoints,
     denialChecks: definition.denial,
@@ -776,7 +801,12 @@ function taskGuide(definition) {
     status: "current",
     availability: "implemented",
     sourceSections: definition.sources,
-    screenshotReferences: definition.screenshots,
+    screenshotReferences: unique([
+      ...definition.screenshots,
+      ...steps.flatMap(({ screenshot }) =>
+        (screenshot.variants ?? []).map(({ path: screenshotPath }) => screenshotPath),
+      ),
+    ]),
     sections: guideSections(TASK_SECTION_IDS),
   };
 }
@@ -810,7 +840,7 @@ const ROLE_DEFINITIONS = [
     id: "operations_associate", name: "Operations Associate", aliases: ["Warehouse Operator"],
     purpose: "Execute physical warehouse transactions and preserve accurate custody and ledger evidence.", department: "Operations, Warehouse and Logistics; operator scope.", owner: "Operations Lead",
     access: ["Warehouse operator workspace"], queue: ["Inbound receipts", "Fulfillment", "Counts", "Allocations, events, and returns"],
-    tasks: ["warehouse-location-bin-setup", "stock-receiving-putaway", "ecommerce-order-intake", "ecommerce-fulfillment-delivery", "returns-replacements-refunds-rma", "department-inventory-release", "event-stock-custody", "inventory-count-variance"],
+    tasks: ["warehouse-location-bin-setup", "stock-receiving-putaway", "ecommerce-order-intake", "ecommerce-fulfillment-delivery", "returns-replacements-refunds-rma", "event-stock-custody", "inventory-count-variance"],
     permitted: ["Record authorized physical transactions", "Submit counts and exceptions", "Complete assigned custody handoffs"], prohibited: ["Approve own variances", "Perform Procurement receipt", "Release held stock without disposition"],
     authority: ["May attest to observed quantities and physical state; supervisor decisions remain separate"], handoffs: ["Receives authorized inbound, orders, and requests", "Sends exceptions and variances to Operations Lead"],
     denial: ["Duplicate posting, negative stock, and supervisor-only decisions are denied"], escalation: "Stop the affected movement, retain physical custody, and escalate discrepancies to the Operations Lead.",
@@ -1210,9 +1240,9 @@ export const HANDBOOK_GUIDES = deepFreeze([
   ...SYSTEM_GUIDES.map(systemGuide),
 ]);
 
-// Task 7 populates this registry only after capture currency and target review.
-// Until then, no stage can truthfully claim certified screenshot evidence.
-export const APPROVED_SCREENSHOT_CONTRACTS = deepFreeze([]);
+export const APPROVED_SCREENSHOT_CONTRACTS = deepFreeze(
+  (EVIDENCE_MANIFEST.stages ?? []).map((contract) => ({ ...contract })),
+);
 
 function stepInvariant(step) {
   const screenshot = step.screenshot ?? {};
@@ -1226,7 +1256,19 @@ function stepInvariant(step) {
       bindingId: screenshot.bindingId,
       status: screenshot.status,
       path: screenshot.path,
+      mobilePath: screenshot.mobilePath,
       target: screenshot.target == null ? null : { ...screenshot.target },
+      host: screenshot.host,
+      route: screenshot.route,
+      role: screenshot.role,
+      capturedAt: screenshot.capturedAt,
+      sourceCommit: screenshot.sourceCommit,
+      certificationRun: screenshot.certificationRun,
+      assertions: screenshot.assertions == null ? null : { ...screenshot.assertions },
+      variants: (screenshot.variants ?? []).map((variant) => ({
+        ...variant,
+        targetBox: variant.targetBox == null ? null : { ...variant.targetBox },
+      })),
     },
     expectedResult: step.expectedResult,
     dataRead: [...(step.dataRead ?? [])],
@@ -1457,6 +1499,38 @@ function screenshotContractKey(taskId, stageId) {
   return `${taskId}#${stageId}`;
 }
 
+function screenshotProjection(screenshot) {
+  return {
+    bindingId: screenshot?.bindingId,
+    status: screenshot?.status,
+    path: screenshot?.path,
+    mobilePath: screenshot?.mobilePath,
+    target: screenshot?.target,
+    host: screenshot?.host,
+    route: screenshot?.route,
+    role: screenshot?.role,
+    capturedAt: screenshot?.capturedAt,
+    sourceCommit: screenshot?.sourceCommit,
+    certificationRun: screenshot?.certificationRun,
+    assertions: screenshot?.assertions,
+    variants: screenshot?.variants,
+  };
+}
+
+function approvedScreenshotProjection(contract) {
+  const desktop = contract?.variants?.find(({ viewport }) => viewport === "desktop");
+  const mobile = contract?.variants?.find(({ viewport }) => viewport === "mobile");
+  return screenshotProjection({
+    ...contract,
+    path: desktop?.path,
+    mobilePath: mobile?.path,
+  });
+}
+
+function fileSha256(absolutePath) {
+  return createHash("sha256").update(readFileSync(absolutePath)).digest("hex");
+}
+
 function routeKey(route) {
   return JSON.stringify([
     route.legacyTabId,
@@ -1574,7 +1648,7 @@ export function validateHandbookGuides({
           errors.push(`task ${guide.id} stage ${stageId} has invalid route ${stage.route}.`);
         }
         if (stage.screenshot) {
-          for (const field of ["bindingId", "status", "path", "target"]) {
+          for (const field of ["bindingId", "status", "path", "mobilePath", "target", "host", "route", "role", "capturedAt", "sourceCommit", "certificationRun", "assertions", "variants"]) {
             if (!Object.hasOwn(stage.screenshot, field)) {
               errors.push(`task ${guide.id} stage ${stageId} screenshot is missing required field ${field}.`);
             }
@@ -1601,16 +1675,8 @@ export function validateHandbookGuides({
             if (!approved) {
               errors.push(`task ${guide.id} stage ${stageId} has no approved screenshot contract.`);
             } else {
-              const actual = {
-                bindingId: stage.screenshot.bindingId,
-                path: stage.screenshot.path,
-                target: stage.screenshot.target,
-              };
-              const expected = {
-                bindingId: approved.bindingId,
-                path: approved.path,
-                target: approved.target,
-              };
+              const actual = screenshotProjection(stage.screenshot);
+              const expected = approvedScreenshotProjection(approved);
               if (!sameContract(actual, expected)) {
                 errors.push(`task ${guide.id} stage ${stageId} does not match its approved screenshot contract.`);
               }
@@ -1619,6 +1685,11 @@ export function validateHandbookGuides({
               errors.push(`task ${guide.id} stage ${stageId} certified screenshot is not bound to the guide.`);
             } else if (!existsSync(path.join(rootDirectory, stage.screenshot.path))) {
               errors.push(`task ${guide.id} stage ${stageId} certified screenshot file is missing.`);
+            }
+            if (!guide.screenshotReferences.includes(stage.screenshot.mobilePath)) {
+              errors.push(`task ${guide.id} stage ${stageId} certified mobile screenshot is not bound to the guide.`);
+            } else if (!existsSync(path.join(rootDirectory, stage.screenshot.mobilePath))) {
+              errors.push(`task ${guide.id} stage ${stageId} certified mobile screenshot file is missing.`);
             }
           }
         }
@@ -1941,6 +2012,9 @@ export function validateHandbookEvidenceCoverage({
 } = {}) {
   const errors = [];
   const warnings = [];
+  const expectedHost = "https://mwell-intra-uat.vercel.app";
+  const earliestCapture = Date.parse("2026-08-23T00:00:00.000Z");
+  const usedPaths = new Map();
   const approvedScreenshotByStage = new Map(
     approvedScreenshotContracts.map((contract) => [
       screenshotContractKey(contract.taskId, contract.stageId),
@@ -1956,23 +2030,115 @@ export function validateHandbookEvidenceCoverage({
       const approved = approvedScreenshotByStage.get(
         screenshotContractKey(guide.id, stage.id),
       );
-      const certified =
-        screenshot.status === "certified" &&
-        approved != null &&
-        screenshot.bindingId === approved.bindingId &&
-        screenshot.path === approved.path &&
-        sameContract(screenshot.target, approved.target) &&
-        isPopulated(screenshot.path) &&
-        isPopulated(target.label) &&
-        isPopulated(target.landmark) &&
-        references.has(screenshot.path) &&
-        existsSync(path.join(rootDirectory, screenshot.path));
-      if (!certified) {
+      const prefix = `task ${guide.id} stage ${stage.id}`;
+      if (screenshot.status !== "certified" || !approved) {
         errors.push(
-          `task ${guide.id} stage ${stage.id} has pending certified screenshot evidence.`,
+          `${prefix} has pending certified screenshot evidence.`,
         );
+        continue;
+      }
+      if (!sameContract(screenshotProjection(screenshot), approvedScreenshotProjection(approved))) {
+        errors.push(`${prefix} does not match its approved screenshot evidence contract.`);
+      }
+      if (
+        approved.taskId !== guide.id ||
+        approved.stageId !== stage.id ||
+        screenshot.bindingId !== `${guide.id}:${stage.id}`
+      ) {
+        errors.push(`${prefix} has mismatched task or stage binding metadata.`);
+      }
+      if (screenshot.host !== expectedHost || screenshot.host !== approved.host) {
+        errors.push(`${prefix} has an invalid UAT evidence host.`);
+      }
+      if (screenshot.route !== stage.route || screenshot.route !== approved.route) {
+        errors.push(`${prefix} has mismatched route evidence.`);
+      }
+      if (screenshot.role !== stage.performingRole || screenshot.role !== approved.role) {
+        errors.push(`${prefix} has mismatched persona evidence.`);
+      }
+      if (
+        !isPopulated(target.label) ||
+        !isPopulated(target.landmark) ||
+        !sameContract(target, approved.target)
+      ) {
+        errors.push(`${prefix} has invalid target evidence.`);
+      }
+      if (
+        !Number.isFinite(Date.parse(screenshot.capturedAt)) ||
+        Date.parse(screenshot.capturedAt) < earliestCapture
+      ) {
+        errors.push(`${prefix} has stale or invalid capture metadata.`);
+      }
+      if (!/^[a-f0-9]{40}$/.test(screenshot.sourceCommit ?? "")) {
+        errors.push(`${prefix} has invalid source commit metadata.`);
+      }
+      if (!/^https:\/\/github\.com\/[^/]+\/[^/]+\/actions\/runs\/\d+$/.test(screenshot.certificationRun ?? "")) {
+        errors.push(`${prefix} has invalid certification run metadata.`);
+      }
+      const assertions = screenshot.assertions ?? {};
+      const assertionContract = {
+        hostMatched: true,
+        routeMatched: true,
+        roleMatched: true,
+        targetVisible: true,
+        loginBounce: false,
+        browserErrors: 0,
+        horizontalOverflow: false,
+        sensitiveData: "synthetic-uat-only",
+        numberedCallout: true,
+      };
+      if (!sameContract(assertions, assertionContract)) {
+        errors.push(`${prefix} does not retain the required live-capture assertions.`);
+      }
+      const variants = screenshot.variants ?? [];
+      const variantIds = variants.map(({ viewport }) => viewport).sort();
+      if (!sameContract(variantIds, ["desktop", "mobile"])) {
+        errors.push(`${prefix} must retain exactly one desktop and one mobile capture.`);
+      }
+      for (const variant of variants) {
+        const expectedSize = variant.viewport === "desktop"
+          ? { width: 1440, height: 900 }
+          : { width: 390, height: 844 };
+        if (variant.width !== expectedSize.width || variant.height !== expectedSize.height) {
+          errors.push(`${prefix} ${variant.viewport} capture has invalid dimensions.`);
+        }
+        if (!isPopulated(variant.targetLabel) || !isPopulated(variant.targetBox)) {
+          errors.push(`${prefix} ${variant.viewport} capture has no visible target binding.`);
+        }
+        const box = variant.targetBox ?? {};
+        if (
+          ![box.x, box.y, box.width, box.height].every(Number.isFinite) ||
+          box.width <= 0 || box.height <= 0 || box.x < 0 || box.y < 0 ||
+          box.x + box.width > variant.width + 1 ||
+          box.y + box.height > variant.height + 1
+        ) {
+          errors.push(`${prefix} ${variant.viewport} capture has an invalid target box.`);
+        }
+        if (!references.has(variant.path)) {
+          errors.push(`${prefix} ${variant.viewport} capture is not bound to the guide.`);
+          continue;
+        }
+        const absolute = path.resolve(rootDirectory, variant.path ?? "");
+        const relative = path.relative(rootDirectory, absolute);
+        if (relative.startsWith("..") || path.isAbsolute(relative) || !existsSync(absolute)) {
+          errors.push(`${prefix} ${variant.viewport} capture file is missing or outside the handbook root.`);
+          continue;
+        }
+        if (!/^[a-f0-9]{64}$/.test(variant.sha256 ?? "") || fileSha256(absolute) !== variant.sha256) {
+          errors.push(`${prefix} ${variant.viewport} capture hash does not match the certified image.`);
+        }
+        const previous = usedPaths.get(variant.path);
+        if (previous && previous !== screenshot.bindingId) {
+          errors.push(`${prefix} duplicates screenshot path already bound to ${previous}.`);
+        } else {
+          usedPaths.set(variant.path, screenshot.bindingId);
+        }
       }
     }
+  }
+
+  if (approvedScreenshotContracts.length !== 52) {
+    errors.push(`approved screenshot registry contains ${approvedScreenshotContracts.length} contracts instead of 52.`);
   }
 
   return { warnings, errors };

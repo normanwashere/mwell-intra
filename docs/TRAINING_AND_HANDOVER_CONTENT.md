@@ -16,6 +16,26 @@ Learners must be able to:
 - Avoid duplicate writes after refresh, timeout, or uncertain network state.
 - Use the standalone handbook to find the current procedure, governing reference and application route.
 
+## Current Persona Training Register
+
+Training and sign-off use exactly these 11 operating personas. Module role codes and older procedure labels are scoped capabilities or teaching aliases, not additional personas and not independent authority. Trainers link each learner to the canonical role guide and its canonical task simulations instead of restating the full operating procedure here.
+
+<!-- canonical-personas:start -->
+| Current persona | Required training emphasis |
+| --- | --- |
+| Platform Administrator | Minimum-role assignment, governed configuration, audit, and authorized DOA administration |
+| General Employee | Own-request creation, correction, submission, and self-approval denial |
+| Operations Associate | Floor receiving, scanning, putaway, fulfillment, returns, transfers, and counts |
+| Operations Lead | Warehouse setup, controlled exceptions, releases, variances, and assigned approvals |
+| Procurement Lead | Route confirmation, sourcing, vendor readiness, commitment, handoff, and closure |
+| Finance Controller | Independent matching, valuation, settlement, and payment-readiness evidence |
+| Legal & Compliance Lead | Vendor invitation, accreditation, legal evidence, compliance, and authorized DOA checks |
+| Marketing & Events Lead | Event demand, custody, use/return evidence, reconciliation, and settlement submission |
+| Product Owner | Readiness, pricing, go-live decisions, and Operations handoff |
+| Leadership / Insights | Read-only metrics, source tracing, and data-quality escalation |
+| Vendor Representative | Own-case application, evidence, correction, acknowledgement, and cross-vendor denial |
+<!-- canonical-personas:end -->
+
 ## Updated Warehouse demonstration
 
 1. Import or create an ecommerce order with customer, address, channel, payment, and product fields.
@@ -49,7 +69,7 @@ Use `mWell Procurement Policy and Procedures - Revised Modern Visual - Word Upda
 
 ### Role procedure checks
 
-For Requester, Department Head, Procurement Lead, Legal/Compliance, technical reviewer, Warehouse/Operations, Finance Controller, vendor representative, and Platform Admin, the learner must state and demonstrate the role's start condition, permitted action, prohibited action, handoff, denial check, recovery, and completion evidence from the standalone manual.
+For the 11 current personas in the training register, the learner must state and demonstrate the canonical role guide's start condition, permitted action, prohibited action, handoff, denial check, recovery, and completion evidence. Legacy labels such as Requester, Department Head, technical reviewer, and Warehouse/Operations are discussed only when explaining a scoped capability, a controlled assignment, or a source-policy term; they do not create another persona or grant authority.
 
 ## Negative scenarios
 

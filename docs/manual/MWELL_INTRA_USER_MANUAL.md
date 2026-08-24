@@ -34,28 +34,23 @@ Never share passwords, tokens, private keys, or confidential documents in suppor
 
 ## User Types and Responsibilities
 
-| User type                      | Primary responsibility                                                    | Main handoff              |
-| ------------------------------ | ------------------------------------------------------------------------- | ------------------------- |
-| Core staff                     | Use this handbook to find the governed workflow and complete shared tasks | Platform Admin for access |
-| Platform Admin                 | Identities, scoped roles, audit review, DOA access                        | Department owner          |
-| Vendor portal                  | Application, evidence, instruments, corrections, renewal                  | Legal                     |
-| Warehouse Logistics Supervisor | Receiving, inspection, tagging, putaway                                   | Operations / Finance      |
-| Warehouse Operations           | Allocation, issue, transfer, return, reconciliation                       | Business unit / Finance   |
-| Warehouse Finance              | Valuation, variance, reconciliation, approvals                            | Warehouse Admin           |
-| Warehouse BI Analyst           | Governed analysis and reports                                             | Operational owners        |
-| Warehouse Business Unit        | Inventory demand and outcome confirmation                                 | Operations                |
-| Warehouse Marketing            | Event demand, custody, usage, return                                      | Operations                |
-| Warehouse Procurement          | Receivable PO and supplier coordination                                   | Logistics Supervisor      |
-| Warehouse Pricing              | Landed cost and controlled price proposals                                | Finance                   |
-| Warehouse Admin                | Locations, areas, bins, routes, imports                                   | Logistics Supervisor      |
-| Procurement Requester          | Need, justification, line items, evidence                                 | Procurement Officer       |
-| Procurement Officer            | Sourcing route, competition, vendor readiness, PO                         | Approver / Warehouse      |
-| Procurement Approver           | Named DOA decision                                                        | Next approval tier        |
-| Procurement Finance            | Financial approval, acceptance, payment readiness                         | Finance processing        |
-| Procurement Admin              | Procurement controls and exception oversight                              | Platform / Legal          |
-| Legal Reviewer                 | Evidence, instruments, risk, accreditation decision                       | Vendor / Procurement      |
-| Legal Compliance               | Compliance disposition, expiry, renewal                                   | Legal Admin               |
-| Legal Admin                    | Invitations, Legal workflow, department DOA                               | Vendor / Legal Reviewer   |
+Mwell Intra currently uses exactly 11 operating personas. Module role codes such as `warehouse:finance`, `procurement:requester`, or `events:coordinator` are scoped capabilities inside these personas; they are not additional user types and do not create approval authority. A title never replaces the active department DOA or an independently assigned control role.
+
+<!-- canonical-personas:start -->
+| Current persona | Primary responsibility | Explicit authority boundary and main handoff |
+| --- | --- | --- |
+| Platform Administrator | Identities, minimum-role assignments, governed configuration, and authorized DOA administration | Administers approved configuration only; business decisions remain with the assigned owner |
+| General Employee | Creates and corrects own Procurement, department inventory, Events, and Product contributions | Cannot approve own work, release stock, or make owner/Finance decisions |
+| Operations Associate | Performs floor receiving, scanning, putaway, fulfillment, returns, event transfer, and counts | Cannot approve controlled exceptions or use Operations Lead authority |
+| Operations Lead | Reviews assigned Procurement approvals and governs Warehouse setup, exceptions, releases, and variances | Cannot replace Legal, Finance, Product Owner, or active DOA authority |
+| Procurement Lead | Confirms sourcing routes, vendor readiness, competition, PO evidence, and Procurement closure | Does not post physical receipt, Legal eligibility, or Finance readiness |
+| Finance Controller | Reviews cross-module valuation, matching, event settlement, and payment-readiness evidence | Does not manufacture operational acceptance or replace source-module decisions |
+| Legal & Compliance Lead | Manages vendor invitations, accreditation, instruments, compliance decisions, and authorized DOA checks | Does not award Procurement work or substitute a title for active authority |
+| Marketing & Events Lead | Coordinates event planning, demand, custody outcomes, returns, and settlement submission | Warehouse controls physical issue/return; Finance independently approves submitted settlement |
+| Product Owner | Owns Product readiness, pricing, and go-live decisions | Operations acknowledges approved handoff; Product does not perform Warehouse or Finance work |
+| Leadership / Insights | Reads governed cross-module metrics and drill-down context | Read-only analysis; cannot mutate source transactions |
+| Vendor Representative | Submits only their organization’s application, evidence, acknowledgements, and corrections | Cannot see another vendor or claim Mwell approval, award, or payment status |
+<!-- canonical-personas:end -->
 
 ## Comprehensive Launch Flow
 
@@ -112,6 +107,8 @@ Each procedure is standalone. Stop when its denial check fails; never use anothe
 
 ### Requester
 
+**Current persona mapping:** General Employee. `Requester` is the Procurement capability exercised by that persona.
+
 - **Start condition:** A department need has an identified requester, budget context, cost center, required date, and business purpose.
 - **Permitted action:** Create or correct the request; classify goods/materials or services; enter line items, specification or scope, acceptance criteria, alternatives, risk, and attachments; submit the current version.
 - **Prohibited action:** Do not approve your own request, confirm the final route, choose an exception by preference, fabricate vendor competition, post a receipt, or assert Finance readiness.
@@ -121,6 +118,8 @@ Each procedure is standalone. Stop when its denial check fails; never use anothe
 - **Completion evidence:** Submitted request ID and version, requester identity, classification, budget/cost-center evidence, specification or scope, acceptance criteria, attachments, and submission timestamp.
 
 ### Department Head
+
+**Current persona mapping:** Operations Lead only when that test identity is the active assigned Procurement approver. `Department Head` remains a DOA control label, not a separate persona or automatic authority grant.
 
 - **Start condition:** The current effective DOA assigns your identity a valid approval step. The Department Head title alone does not assign either neutral variance-decision stage.
 - **Permitted action:** Review the current request version, route axes, amount, budget, assigned decision evidence, recommendation, rationale, and prior decisions; approve, reject, or return with a specific reason within the assigned step.
@@ -132,6 +131,8 @@ Each procedure is standalone. Stop when its denial check fails; never use anothe
 
 ### Procurement Lead
 
+**Current persona mapping:** Procurement Lead.
+
 - **Start condition:** A submitted request is ready for route confirmation, sourcing, award, commitment, monitoring, payment-pack preparation, or file closure.
 - **Permitted action:** Confirm solicitation document, procurement mode, governance tier, active profile and reasons; issue equal versioned packages; monitor the three-to-four invite target and response quorum; record tabulation, best-value recommendation, exceptions, PO/agreement, vendor notices, payment pack, and closure request.
 - **Prohibited action:** Do not change requester facts, treat amount as the RFQ/RFP switch, open fewer than three sealed responses without governed recovery, select an automatic lowest-price winner, decide Legal eligibility, post Warehouse acceptance, approve your own award, or release payment.
@@ -141,6 +142,8 @@ Each procedure is standalone. Stop when its denial check fails; never use anothe
 - **Completion evidence:** Route decision with all three axes, policy/DOA snapshot, sourcing communications and responses, evaluations, recommendation/variance evidence, approved commitment, monitoring trail, payment pack, and closure event.
 
 ### Legal/Compliance
+
+**Current persona mapping:** Legal & Compliance Lead.
 
 - **Start condition:** Vendor accreditation, probation, scoped temporary clearance, legal instrument, compliance evidence, or an exception requiring Legal review is assigned to your authority.
 - **Permitted action:** Review current commercial/legal evidence; request correction; make the authorized accreditation, probation, clearance, suspension/revocation, or instrument decision with evidence and notice.
@@ -152,6 +155,8 @@ Each procedure is standalone. Stop when its denial check fails; never use anothe
 
 ### Technical Reviewer
 
+**Current persona mapping:** No separate current persona. This is a controlled specialist assignment described by Procurement policy; it must be assigned to an eligible current identity before use and does not inherit decision authority.
+
 - **Start condition:** Procurement assigns a current solicitation response set and evaluation criteria for technical review.
 - **Permitted action:** Evaluate compliance, quality/specification, delivery, warranty, support, training, security/privacy, and other assigned criteria; record comments and evidence within the five-working-day source SLA.
 - **Prohibited action:** Do not view or alter commercial data when the controlled evaluation separates it, change the solicitation after bids close, pick the final winner, approve your own request, or use undocumented criteria.
@@ -161,6 +166,8 @@ Each procedure is standalone. Stop when its denial check fails; never use anothe
 - **Completion evidence:** Reviewer/assignment, package version, criteria and scores/disposition, evidence, comments, due/completion timestamps, and conflict declaration.
 
 ### Warehouse/Operations
+
+**Current persona mapping:** Operations Associate performs floor transactions; Operations Lead performs controlled setup, approval, exception, and variance decisions.
 
 - **Start condition:** An issued approved PO/agreement or service milestone is ready for delivery, receipt, inspection, custody, or acceptance.
 - **Permitted action:** Record actual quantity, identity, serial/lot, condition, evidence, custody and QC; accept conforming delivery; quarantine/reject non-conformance; record service/milestone acceptance when you are the authorized owner.
@@ -172,6 +179,8 @@ Each procedure is standalone. Stop when its denial check fails; never use anothe
 
 ### Finance Controller
 
+**Current persona mapping:** Finance Controller.
+
 - **Start condition:** Procurement submits a versioned payment-readiness pack or a source-policy petty-cash/financial exception requires Finance decision.
 - **Permitted action:** Validate itemized invoice/OR/SI, approved PO/agreement, accepted quantity/value, payment terms, tax/withholding, foreign-vendor evidence, variance, active threshold/profile and current authority; approve, return, or deny readiness.
 - **Prohibited action:** Do not manufacture receipt/acceptance, waive missing evidence without authority, exceed accepted value, rely on the source PHP 50,000 value as approval authority, decide your own conflicting variance, or release payment from stale evidence.
@@ -182,6 +191,8 @@ Each procedure is standalone. Stop when its denial check fails; never use anothe
 
 ### Vendor Representative
 
+**Current persona mapping:** Vendor Representative.
+
 - **Start condition:** Your vendor organization receives an invitation, clarification, PO/agreement, delivery issue, correction request, accreditation task, or RMA notice.
 - **Permitted action:** Access only your organization; acknowledge the exact package/PO; submit attributable responses before the deadline; ask clarifications; provide current evidence; report delay; complete correction, replacement, warranty, RMA, credit, or delivery action.
 - **Prohibited action:** Do not view another vendor's response, reuse another recipient's acknowledgment, submit against a superseded package, bypass the deadline, alter Mwell decisions, or claim accreditation/award/payment status.
@@ -191,6 +202,8 @@ Each procedure is standalone. Stop when its denial check fails; never use anothe
 - **Completion evidence:** Vendor identity, organization, package/PO version, acknowledgment, submission/clarification/delivery timestamps, response/evidence hashes, and correction or RMA outcome.
 
 ### Platform Admin
+
+**Current persona mapping:** Platform Administrator.
 
 - **Start condition:** An authorized owner requests role, capability, policy-profile, holiday calendar, or DOA configuration/support, or a denial indicates configuration may be incomplete.
 - **Permitted action:** Administer approved effective-dated configuration, validate gaps/overlaps, grant minimum scoped access, preserve history, and provide audit/configuration evidence.
@@ -571,10 +584,10 @@ flowchart LR
 ```mermaid
 %% handbook-flow: workflow=event-custody; view=role; stages=Demand|Approval|Transfer|Event|Outcome|Return|Settlement
 flowchart LR
-  M[Marketing and Events] --> A[Approver]
-  A --> O[Operations]
-  O --> W[Warehouse]
-  W --> F[Finance]
+  R[General Employee requester] --> M[Marketing and Events Lead]
+  M --> W[Operations Associate: physical transfer]
+  W --> M
+  M --> F[Finance Controller: independent settlement approval]
 ```
 
 ```mermaid
@@ -588,6 +601,12 @@ flowchart TD
   R --> K{Re-kit eligible?}
   K -->|Yes| Q[Open-box re-kitting]
   K -->|No| C[Controlled disposition]
+  S --> F{Finance evidence complete?}
+  G --> F
+  Q --> F
+  C --> F
+  F -->|No| M[Return to Marketing and Events for correction]
+  F -->|Yes| Z[Approve settlement]
 ```
 
 **Completion criteria:** event demand, approval, transfer scans, sales/giveaway quantities, returned/lost/damaged evidence, re-kitting decision and Finance settlement reconcile to the final event balance.
