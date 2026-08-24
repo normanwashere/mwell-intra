@@ -9169,7 +9169,9 @@ globalThis["mermaid"] = globalThis.__esbuild_esm_mermaid_nm["mermaid"].default;
     let persistenceTimer = null;
     let diagramsReady = false;
     let activeDrawer = null;
-    let drawerReturnFocus = null;
+    let activeCompactSurface = null;
+    let compactSurfaceReturnFocus = null;
+    let compactModalInertState = new Map();
     let printScope = 'guide';
 
     function normalizeStoredState(value) {
@@ -9285,50 +9287,114 @@ globalThis["mermaid"] = globalThis.__esbuild_esm_mermaid_nm["mermaid"].default;
 
     function isDrawerViewport() { return window.matchMedia('(max-width: 1180px)').matches; }
     function setHeaderOffset() { document.documentElement.style.setProperty('--handbook-header-height', `${topbar.offsetHeight}px`); }
+
+    function compactSurfaceElement(name) {
+      if (name === 'search' || name === 'contents') return drawers.contents;
+      if (name === 'toc') return drawers.toc;
+      if (name === 'print') return printMenu;
+      return document.querySelector(`[data-screenshot-surface="${CSS.escape(String(name || '').replace(/^screenshot:/, ''))}"]`);
+    }
+
+    function compactSurfaceTrigger(name) {
+      if (name === 'search') return search;
+      if (name === 'print') return printTrigger;
+      if (name === 'contents' || name === 'toc') return drawerTriggers.find((button) => button.dataset.openDrawer === name) || null;
+      return document.querySelector(`[data-open-screenshot-surface="${CSS.escape(String(name || '').replace(/^screenshot:/, ''))}"]`);
+    }
+
+    function setCompactSurfaceExpanded(name, expanded) {
+      const trigger = compactSurfaceTrigger(name);
+      if (trigger && name !== 'search') trigger.setAttribute('aria-expanded', String(expanded));
+      if (name === 'search') drawerTriggers.filter((button) => button.dataset.openDrawer === 'contents').forEach((button) => button.setAttribute('aria-expanded', String(expanded)));
+    }
+
+    function clearCompactModalIsolation() {
+      compactModalInertState.forEach((wasInert, element) => { element.inert = wasInert; });
+      compactModalInertState = new Map();
+    }
+
+    function isolateCompactModal(surface) {
+      clearCompactModalIsolation();
+      for (let branch = surface; branch && branch !== document.body; branch = branch.parentElement) {
+        const parent = branch.parentElement;
+        if (!parent) break;
+        [...parent.children].filter((sibling) => sibling !== branch).forEach((sibling) => {
+          if (!compactModalInertState.has(sibling)) compactModalInertState.set(sibling, sibling.inert);
+          sibling.inert = true;
+        });
+      }
+    }
+
+    function closeCompactSurface({ restoreFocus = true } = {}) {
+      if (!activeCompactSurface) return;
+      const name = activeCompactSurface;
+      const surface = compactSurfaceElement(name);
+      const returnFocus = compactSurfaceReturnFocus;
+      activeCompactSurface = null;
+      compactSurfaceReturnFocus = null;
+      clearCompactModalIsolation();
+      document.body.classList.remove('drawer-open');
+      if (surface) {
+        surface.hidden = true;
+        surface.removeAttribute('data-search-surface');
+        surface.removeAttribute('aria-modal');
+        if (name === 'contents' || name === 'toc') surface.removeAttribute('role');
+      }
+      setCompactSurfaceExpanded(name, false);
+      if (name === 'contents' || name === 'toc') activeDrawer = null;
+      if (restoreFocus && returnFocus?.isConnected) returnFocus.focus();
+    }
+
+    function openCompactSurface(name, { focusSurface = true } = {}) {
+      const surface = compactSurfaceElement(name);
+      if (!surface || !isDrawerViewport()) return false;
+      const previousSurface = activeCompactSurface;
+      if (previousSurface === name) return true;
+      closeCompactSurface({ restoreFocus: false });
+      activeCompactSurface = name;
+      compactSurfaceReturnFocus = name === 'search' ? search : (document.activeElement instanceof HTMLElement ? document.activeElement : compactSurfaceTrigger(name));
+      surface.hidden = false;
+      setCompactSurfaceExpanded(name, true);
+      if (name === 'search') {
+        activeDrawer = null;
+        surface.setAttribute('data-search-surface', '');
+        surface.removeAttribute('role');
+        surface.removeAttribute('aria-modal');
+        if (previousSurface && previousSurface !== 'search') search.focus();
+        return true;
+      }
+      surface.removeAttribute('data-search-surface');
+      surface.setAttribute('role', 'dialog');
+      surface.setAttribute('aria-modal', 'true');
+      activeDrawer = name === 'contents' || name === 'toc' ? name : null;
+      document.body.classList.add('drawer-open');
+      isolateCompactModal(surface);
+      if (focusSurface) focusableIn(surface)[0]?.focus();
+      return true;
+    }
+
     function setSearchSurfaceVisible(visible, { restoreFocus = true } = {}) {
       const drawer = drawers.contents;
       if (!drawer || !isDrawerViewport()) return;
       if (!visible) {
-        if (!drawer.hasAttribute('data-search-surface')) return;
-        drawer.hidden = true;
-        drawer.removeAttribute('data-search-surface');
-        drawerTriggers.filter((button) => button.dataset.openDrawer === 'contents').forEach((button) => button.setAttribute('aria-expanded', 'false'));
-        if (restoreFocus) search.focus();
+        if (activeCompactSurface !== 'search' && !drawer.hasAttribute('data-search-surface')) return;
+        closeCompactSurface({ restoreFocus });
         return;
       }
-      if (activeDrawer === 'contents') return;
-      drawer.hidden = false;
-      drawer.setAttribute('data-search-surface', '');
-      drawer.removeAttribute('role');
-      drawer.removeAttribute('aria-modal');
-      drawerTriggers.filter((button) => button.dataset.openDrawer === 'contents').forEach((button) => button.setAttribute('aria-expanded', 'true'));
+      openCompactSurface('search', { focusSurface: false });
     }
 
     function setDrawerVisible(name, visible, { restoreFocus = true } = {}) {
       const drawer = drawers[name];
       if (!drawer || !isDrawerViewport()) return;
-      if (!visible && drawer.hasAttribute('data-search-surface')) {
-        setSearchSurfaceVisible(false, { restoreFocus });
-        return;
-      }
       if (!visible) {
-        drawer.hidden = true; drawer.removeAttribute('role'); drawer.removeAttribute('aria-modal');
-        drawerTriggers.filter((button) => button.dataset.openDrawer === name).forEach((button) => button.setAttribute('aria-expanded', 'false'));
-        if (activeDrawer === name) activeDrawer = null;
-        document.body.classList.toggle('drawer-open', Boolean(activeDrawer));
-        if (restoreFocus && drawerReturnFocus) drawerReturnFocus.focus();
-        drawerReturnFocus = null;
+        if (activeCompactSurface === name || (name === 'contents' && activeCompactSurface === 'search')) closeCompactSurface({ restoreFocus });
         return;
       }
-      if (activeDrawer && activeDrawer !== name) setDrawerVisible(activeDrawer, false, { restoreFocus: false });
-      drawer.removeAttribute('data-search-surface');
-      drawerReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-      drawer.hidden = false; drawer.setAttribute('role', 'dialog'); drawer.setAttribute('aria-modal', 'true');
-      drawerTriggers.filter((button) => button.dataset.openDrawer === name).forEach((button) => button.setAttribute('aria-expanded', 'true'));
-      activeDrawer = name; document.body.classList.add('drawer-open');
-      drawer.querySelector('[data-close-drawer]')?.focus();
+      openCompactSurface(name);
     }
     function resetDrawers() {
+      closeCompactSurface({ restoreFocus: false });
       Object.entries(drawers).forEach(([name, drawer]) => {
         if (!drawer) return;
         drawer.removeAttribute('data-search-surface');
@@ -9337,10 +9403,10 @@ globalThis["mermaid"] = globalThis.__esbuild_esm_mermaid_nm["mermaid"].default;
       });
       activeDrawer = null; document.body.classList.remove('drawer-open');
       drawerTriggers.forEach((button) => button.setAttribute('aria-expanded', 'false'));
+      if (printMenu) { printMenu.hidden = true; printMenu.removeAttribute('aria-modal'); }
+      printTrigger?.setAttribute('aria-expanded', 'false');
       setHeaderOffset();
     }
-    function closeOpenDrawer() { if (activeDrawer) setDrawerVisible(activeDrawer, false, { restoreFocus: false }); }
-    function closeSearchSurface() { setSearchSurfaceVisible(false, { restoreFocus: false }); }
     function focusableIn(element) { return [...element.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])')].filter((candidate) => !candidate.hidden && candidate.getClientRects().length > 0); }
     function applyPrintScope(scope) {
       printScope = ['guide', 'mode', 'all'].includes(scope) ? scope : 'guide';
@@ -9622,8 +9688,7 @@ globalThis["mermaid"] = globalThis.__esbuild_esm_mermaid_nm["mermaid"].default;
     }
 
     function activateRoute({ modeId, guideId, headingId, query, scope, historyMode, restoreScroll, focusTarget, showSearchSurface = false }) {
-      closeOpenDrawer();
-      closeSearchSurface();
+      closeCompactSurface({ restoreFocus: false });
       if (activeRoute.guideId && guides.some((guide) => guide.dataset.guideId === activeRoute.guideId)) guideScroll = { ...guideScroll, [activeRoute.guideId]: window.scrollY };
       const guide = guides.find((candidate) => candidate.dataset.guideId === guideId) || null;
       const article = guide?.matches('article[data-document]') ? guide : null;
@@ -9774,17 +9839,15 @@ globalThis["mermaid"] = globalThis.__esbuild_esm_mermaid_nm["mermaid"].default;
     document.querySelector('#theme').addEventListener('click', () => { const root = document.documentElement; root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark'; schedulePersistence(); });
     drawerTriggers.forEach((button) => button.addEventListener('click', () => setDrawerVisible(button.dataset.openDrawer, true)));
     document.querySelectorAll('[data-close-drawer]').forEach((button) => button.addEventListener('click', () => setDrawerVisible(button.dataset.closeDrawer, false)));
-    Object.entries(drawers).forEach(([name, drawer]) => drawer?.addEventListener('keydown', (event) => {
-      if (!isDrawerViewport() || activeDrawer !== name) return;
-      if (event.key === 'Escape') { event.preventDefault(); setDrawerVisible(name, false); return; }
-      if (event.key !== 'Tab') return;
-      const items = focusableIn(drawer); if (!items.length) return;
-      const first = items[0]; const last = items[items.length - 1];
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-      if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-    }));
+    document.querySelectorAll('[data-open-screenshot-surface]').forEach((button) => button.addEventListener('click', () => openCompactSurface(`screenshot:${button.dataset.openScreenshotSurface}`)));
+    document.querySelectorAll('[data-close-screenshot-surface]').forEach((button) => button.addEventListener('click', () => closeCompactSurface()));
     function setPrintMenuVisible(visible, { focusOption = false } = {}) {
       if (!printMenu || !printTrigger) return;
+      if (isDrawerViewport()) {
+        if (visible) openCompactSurface('print');
+        else if (activeCompactSurface === 'print') closeCompactSurface();
+        return;
+      }
       printMenu.hidden = !visible;
       printTrigger.setAttribute('aria-expanded', String(visible));
       if (visible && focusOption) printMenu.querySelector('button')?.focus();
@@ -9801,6 +9864,18 @@ globalThis["mermaid"] = globalThis.__esbuild_esm_mermaid_nm["mermaid"].default;
     document.querySelector('[data-dismiss-notice]').addEventListener('click', () => { routeNotice.hidden = true; });
     window.addEventListener('scroll', () => { if (activeRoute.guideId) guideScroll = { ...guideScroll, [activeRoute.guideId]: window.scrollY }; schedulePersistence(); }, { passive: true });
     document.addEventListener('keydown', (event) => {
+      if (isDrawerViewport() && activeCompactSurface && activeCompactSurface !== 'search') {
+        const surface = compactSurfaceElement(activeCompactSurface);
+        if (event.key === '/') { event.preventDefault(); return; }
+        if (event.key === 'Escape') { event.preventDefault(); closeCompactSurface(); return; }
+        if (event.key === 'Tab' && surface) {
+          const items = focusableIn(surface); if (!items.length) return;
+          const first = items[0]; const last = items[items.length - 1];
+          if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+          if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+        }
+        return;
+      }
       if (event.key === 'Escape' && drawers.contents?.hasAttribute('data-search-surface')) { event.preventDefault(); setSearchSurfaceVisible(false); return; }
       if (event.key === 'Escape' && printMenu && !printMenu.hidden) { event.preventDefault(); setPrintMenuVisible(false); printTrigger?.focus(); return; }
       if (event.key === '/' && !/input|textarea|select/i.test(document.activeElement.tagName)) { event.preventDefault(); search.focus(); }

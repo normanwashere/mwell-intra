@@ -171,6 +171,85 @@ test('compact search keeps focus coherent across typing restore activation and E
   await expectFocusedBelowStickyChrome(page.locator('#stock-receiving-putaway-step-3 h3'));
 });
 
+test('compact search and modal surfaces coordinate visibility focus and shortcuts', async ({ page }, testInfo) => {
+  if (!['mobile-430', 'mobile-390', 'mobile-320'].includes(testInfo.project.name)) test.skip();
+  await page.goto('/#mode=tasks&guide=stock-receiving-putaway');
+
+  const searchbox = page.getByRole('searchbox');
+  const contents = page.locator('#contents-rail');
+  const toc = page.locator('#page-toc');
+  const printMenu = page.locator('#print-menu');
+  const contentsTrigger = page.getByRole('button', { name: 'Contents', exact: true });
+  const tocTrigger = page.getByRole('button', { name: 'On this page', exact: true });
+  const printTrigger = page.getByRole('button', { name: 'Print', exact: true });
+  const compactSurfaces = page.locator('#contents-rail, #page-toc, #print-menu, [data-screenshot-surface]');
+  const expectOneVisibleSurfaceWithoutOverlap = async (expected: ReturnType<typeof page.locator>) => {
+    await expect(expected).toBeVisible();
+    const geometry = await compactSurfaces.evaluateAll((elements) => {
+      const visible = elements.filter((element) => !element.hasAttribute('hidden') && element.getClientRects().length > 0);
+      const overlaps = visible.flatMap((element, index) => visible.slice(index + 1).map((other) => {
+        const first = element.getBoundingClientRect();
+        const second = other.getBoundingClientRect();
+        return Math.max(0, Math.min(first.right, second.right) - Math.max(first.left, second.left))
+          * Math.max(0, Math.min(first.bottom, second.bottom) - Math.max(first.top, second.top));
+      }));
+      return { visibleCount: visible.length, overlapArea: overlaps.reduce((total, area) => total + area, 0) };
+    });
+    expect(geometry).toEqual({ visibleCount: 1, overlapArea: 0 });
+  };
+
+  await searchbox.fill('report damaged item');
+  await expect(searchbox).toBeFocused();
+  await expectOneVisibleSurfaceWithoutOverlap(contents);
+  await expect(contents).not.toHaveAttribute('aria-modal');
+  await expect(contentsTrigger).toHaveAttribute('aria-expanded', 'true');
+
+  await tocTrigger.click();
+  await expectOneVisibleSurfaceWithoutOverlap(toc);
+  await expect(contents).toBeHidden();
+  await expect(contentsTrigger).toHaveAttribute('aria-expanded', 'false');
+  await expect(tocTrigger).toHaveAttribute('aria-expanded', 'true');
+  await expect(toc).toHaveAttribute('aria-modal', 'true');
+  expect(await toc.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+
+  await page.keyboard.press('/');
+  expect(await toc.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+  await expect(searchbox).not.toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(toc).toBeHidden();
+  await expect(tocTrigger).toHaveAttribute('aria-expanded', 'false');
+  await expect(tocTrigger).toBeFocused();
+
+  await searchbox.focus();
+  await searchbox.fill('cycle count');
+  await expectOneVisibleSurfaceWithoutOverlap(contents);
+  await contentsTrigger.click();
+  await expectOneVisibleSurfaceWithoutOverlap(contents);
+  await expect(contents).not.toHaveAttribute('data-search-surface');
+  await expect(contents).toHaveAttribute('aria-modal', 'true');
+  await expect(contentsTrigger).toHaveAttribute('aria-expanded', 'true');
+  expect(await contents.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await expect(contents).toBeHidden();
+  await expect(contentsTrigger).toHaveAttribute('aria-expanded', 'false');
+  await expect(contentsTrigger).toBeFocused();
+
+  await searchbox.focus();
+  await searchbox.fill('receive stock');
+  await expectOneVisibleSurfaceWithoutOverlap(contents);
+  await printTrigger.click();
+  await expectOneVisibleSurfaceWithoutOverlap(printMenu);
+  await expect(contents).toBeHidden();
+  await expect(printMenu).toHaveAttribute('aria-modal', 'true');
+  await expect(printTrigger).toHaveAttribute('aria-expanded', 'true');
+  expect(await printMenu.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(printMenu).toBeHidden();
+  await expect(printTrigger).toHaveAttribute('aria-expanded', 'false');
+  await expect(printTrigger).toBeFocused();
+});
+
 test('search suggestions activate canonical route state through history', async ({ page }, testInfo) => {
   if (!['desktop-1440', 'mobile-390'].includes(testInfo.project.name)) test.skip();
   await page.goto('/#mode=tasks&guide=stock-receiving-putaway');
