@@ -3,26 +3,75 @@ import { expect, test } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
-test('navigates, searches, restores state, and has no serious accessibility findings', async ({ page }) => {
+test('navigates canonical and legacy routes, restores per-guide state, and recovers invalid links', async ({ page }) => {
+  test.setTimeout(60_000);
   await page.goto('/');
-  await page.getByRole('tab', { name: 'Workflows' }).click();
-  await page.getByRole('searchbox').fill('three-way match');
-  await page.getByRole('link', { name: /three-way match/i }).first().click();
-  const before = page.url();
+  await page.evaluate(() => {
+    localStorage.clear();
+    localStorage.setItem('mwell-intra-handbook:v2', JSON.stringify({
+      activeTab: 'workflows',
+      activeArticle: 'guide-stock-receiving-putaway',
+      expandedIds: ['stock-receiving-putaway:policy-basis'],
+      tabScroll: { workflows: 420 },
+      query: '',
+      scope: 'tab',
+      theme: 'dark',
+    }));
+    history.replaceState({}, '', location.pathname);
+  });
   await page.reload();
-  await expect(page).toHaveURL(before);
-  await expect(page.getByRole('tab', { name: 'Workflows' })).toHaveAttribute('aria-selected', 'true');
-  const assertNoSeriousAccessibilityFindings = async () => {
-    const results = await new AxeBuilder({ page }).analyze();
-    expect(results.violations.filter(({ impact }) => impact === 'critical' || impact === 'serious')).toEqual([]);
-  };
-  await assertNoSeriousAccessibilityFindings();
-  await page.getByRole('button', { name: 'Toggle color theme' }).click();
-  await assertNoSeriousAccessibilityFindings();
+  await expect(page).toHaveURL(/#mode=tasks&guide=stock-receiving-putaway&scope=mode$/);
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  expect(await page.evaluate(() => localStorage.getItem('mwell-intra-handbook:v2'))).toBeNull();
+  const migrated = await page.evaluate(() => JSON.parse(localStorage.getItem('mwell-intra-handbook:v3') ?? '{}'));
+  expect(migrated.activeRoute).toEqual({ modeId: 'tasks', guideId: 'stock-receiving-putaway', headingId: null });
+  expect(migrated.guideScroll['stock-receiving-putaway']).toBe(420);
+  expect(migrated.disclosures['stock-receiving-putaway']).toContain('stock-receiving-putaway:policy-basis');
+
+  await page.goto('/#mode=roles&guide=operations_associate');
+  await expect(page.getByRole('tab', { name: 'Roles' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('article[data-guide-id="operations_associate"] h1')).toBeFocused();
+
+  await page.goto('/#mode=tasks&guide=stock-receiving-putaway&heading=steps');
+  const stepsHeading = page.locator('#stock-receiving-putaway-steps > h2');
+  await expect(stepsHeading).toBeFocused();
+  await expect.poll(() => stepsHeading.evaluate((heading) => heading.getBoundingClientRect().top)).toBeGreaterThanOrEqual(0);
+
+  await page.goto('/#tab=start&article=doc-manual-mwell-intra-user-manual-md&heading=doc-manual-mwell-intra-user-manual-md-warehouse-flow');
+  await expect(page).toHaveURL(/#mode=tasks&guide=stock-receiving-putaway&heading=flow$/);
+  await expect(page.locator('#route-notice')).toContainText(/link has moved/i);
+
+  await page.goto('/#mode=tasks&guide=stock-receiving-putaway');
+  await page.evaluate(() => { (window as typeof window & { __sameDocument?: string }).__sameDocument = 'preserved'; });
+  const policy = page.locator('article[data-guide-id="stock-receiving-putaway"] details[data-guide-section="policy-basis"]');
+  if (await policy.getAttribute('open') === null) await policy.locator('summary').click();
+  await page.evaluate(() => window.scrollTo(0, 700));
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(300);
+  await page.waitForTimeout(150);
+  const relatedGuide = page.locator('article[data-guide-id="stock-receiving-putaway"] a[data-related-link]').first();
+  await relatedGuide.click();
+  expect(await page.evaluate(() => (window as typeof window & { __sameDocument?: string }).__sameDocument)).toBe('preserved');
+  await page.goBack();
+  await expect(page).toHaveURL(/#mode=tasks&guide=stock-receiving-putaway$/);
+  await expect(policy).toHaveAttribute('open', '');
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(300);
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(300);
+  await page.reload();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(300);
+
+  const results = await new AxeBuilder({ page }).analyze();
+  expect(results.violations.filter(({ impact }) => impact === 'critical' || impact === 'serious')).toEqual([]);
+
+  await page.goto('/#mode=tasks&guide=missing-guide');
+  await expect(page).toHaveURL(/#mode=home&guide=home$/);
+  await expect(page.locator('#route-notice')).toContainText(/could not find/i);
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
+  await expect(page.getByRole('searchbox')).toBeFocused();
 });
 
 test('never creates page-level horizontal overflow', async ({ page }) => {
-  await page.goto('/#tab=workflows');
+  await page.goto('/#mode=tasks&guide=stock-receiving-putaway');
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(1);
 });
@@ -32,7 +81,7 @@ test('keeps contents and table of contents reachable through the 1180px boundary
 
   for (const width of [1024, 1180]) {
     await page.setViewportSize({ width, height: 900 });
-    await page.goto('/#tab=workflows&article=doc-manual-mwell-intra-user-manual-md');
+    await page.goto('/#mode=tasks&guide=stock-receiving-putaway');
     const contents = page.getByRole('button', { name: 'Contents', exact: true });
     const toc = page.getByRole('button', { name: 'On this page', exact: true });
     await expect(contents).toBeVisible();
@@ -48,7 +97,7 @@ test('keeps contents and table of contents reachable through the 1180px boundary
 test('keeps every mobile toolbar control touch-safe', async ({ page }, testInfo) => {
   if (!['mobile-430', 'mobile-390', 'mobile-360', 'mobile-320'].includes(testInfo.project.name)) test.skip();
 
-  await page.goto('/#tab=workflows&article=doc-manual-mwell-intra-user-manual-md');
+  await page.goto('/#mode=tasks&guide=stock-receiving-putaway');
   const viewportWidth = page.viewportSize()?.width ?? 0;
   const controls = await Promise.all(['Contents', 'On this page', 'Toggle color theme', 'Print'].map(async (name) => {
     const control = page.getByRole('button', { name, exact: true });
@@ -73,27 +122,44 @@ test('keeps every mobile toolbar control touch-safe', async ({ page }, testInfo)
 });
 
 test('completes the keyboard-only handbook journey without drawer or diagram traps', async ({ page }, testInfo) => {
-  await page.goto('/#tab=workflows&article=procurement-to-payment');
-  await page.getByRole('tab', { name: 'Workflows' }).focus();
+  test.setTimeout(60_000);
+  await page.goto('/#mode=tasks&guide=procurement-request-approval');
+  await page.getByRole('tab', { name: 'Tasks' }).focus();
   await page.keyboard.press('ArrowRight');
-  await expect(page.getByRole('tab', { name: 'Roles & Training' })).toBeFocused();
-  await expect(page.getByRole('tab', { name: 'Roles & Training' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('tab', { name: 'Roles' })).toBeFocused();
+  await expect(page.getByRole('tab', { name: 'Roles' })).toHaveAttribute('aria-selected', 'true');
   await page.keyboard.press('ArrowLeft');
-  await expect(page.getByRole('tab', { name: 'Workflows' })).toBeFocused();
-  await expect(page.getByRole('tab', { name: 'Workflows' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('tab', { name: 'Tasks' })).toBeFocused();
+  await expect(page.getByRole('tab', { name: 'Tasks' })).toHaveAttribute('aria-selected', 'true');
   await page.keyboard.press('End');
-  await expect(page.getByRole('tab', { name: 'Release & QA' })).toBeFocused();
+  await expect(page.getByRole('tab', { name: 'System' })).toBeFocused();
   await page.keyboard.press('Home');
-  await expect(page.getByRole('tab', { name: 'Start Here' })).toBeFocused();
+  await expect(page.getByRole('tab', { name: 'Home' })).toBeFocused();
   await page.keyboard.press('/');
   await expect(page.getByRole('searchbox')).toBeFocused();
 
-  await page.goto('/#tab=workflows&article=doc-manual-mwell-intra-user-manual-md');
-  const expandAll = page.getByRole('button', { name: 'Expand all', exact: true });
-  await expandAll.focus();
+  const tasksTab = page.getByRole('tab', { name: 'Tasks' });
+  await tasksTab.focus();
   await page.keyboard.press('Enter');
+  if ((page.viewportSize()?.width ?? 1440) <= 1180) {
+    const contentsTrigger = page.getByRole('button', { name: 'Contents', exact: true });
+    await contentsTrigger.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('dialog', { name: 'Contents' })).toBeVisible();
+  }
+  const procurementGuide = page.locator('#panel-workflows a[data-guide-id="procurement-request-approval"]');
+  await procurementGuide.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('article[data-guide-id="procurement-request-approval"] h1')).toBeFocused();
+  const policyDisclosure = page.locator('article[data-guide-id="procurement-request-approval"] details[data-guide-section="policy-basis"]');
+  const policySummary = policyDisclosure.locator('summary');
+  await expect(policyDisclosure).not.toHaveAttribute('open', '');
+  await policySummary.focus();
+  await expect(policySummary).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(policyDisclosure).toHaveAttribute('open', '');
 
-  if ((page.viewportSize()?.width ?? 1024) <= 767) {
+  if ((page.viewportSize()?.width ?? 1440) <= 1180) {
     for (const [triggerName, dialogName] of [['Contents', 'Contents'], ['On this page', 'On this page']] as const) {
       const trigger = page.getByRole('button', { name: triggerName, exact: true });
       await trigger.focus();
@@ -116,6 +182,7 @@ test('completes the keyboard-only handbook journey without drawer or diagram tra
     }
   }
 
+  await page.goto('/#mode=system&guide=source-references&heading=source-user-manual');
   const workflow = page.locator('[data-workflow-id="procurement-to-payment"]').first();
   const decisions = workflow.getByRole('button', { name: 'Decisions', exact: true });
   await decisions.focus();
@@ -137,7 +204,7 @@ test('completes the keyboard-only handbook journey without drawer or diagram tra
 });
 
 test('limits every print scope without mutating disclosures', async ({ page }) => {
-  await page.goto('/#tab=workflows&article=doc-manual-mwell-intra-user-manual-md');
+  await page.goto('/#mode=tasks&guide=procurement-request-approval');
   const activeArticle = page.locator('article[data-document]:not([hidden])');
   const closedDetails = activeArticle.locator('details:not([open])').first();
   const wasClosed = await closedDetails.count().then(Boolean);
@@ -191,7 +258,7 @@ test('captures desktop, tablet, and mobile visual review evidence when requested
 
   const captureDir = fileURLToPath(new URL('../../../../outputs/handbook-visual-review/', import.meta.url));
   await mkdir(captureDir, { recursive: true });
-  await page.goto('/#tab=workflows&article=doc-manual-mwell-intra-user-manual-md');
+  await page.goto('/#mode=tasks&guide=procurement-request-approval');
   await expect(page.getByRole('region', { name: /workflow stages/i }).first()).toBeVisible();
   await page.screenshot({ path: `${captureDir}${testInfo.project.name}-light.png`, fullPage: true });
   await page.getByRole('button', { name: 'Toggle color theme' }).click();

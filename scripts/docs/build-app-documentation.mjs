@@ -168,7 +168,7 @@ function resolveDocumentLink(href, sourceFile, sourceIds, sourceRoutes) {
   const id = sourceIds.get(target);
   const route = sourceRoutes.get(`${target}#${slug(fragment ?? "")}`) ?? sourceRoutes.get(target);
   return id && route
-    ? compatibilityGuideHash(route)
+    ? canonicalGuideHash(route)
     : href;
 }
 
@@ -405,10 +405,10 @@ export function composeHandbookGuides(model) {
       const canonicalTargetId = sourceSection.heading && sourceSection.heading !== rootHeading
         ? `${source.legacyArticleId}-${slug(sourceSection.heading)}`
         : `source-references-${librarySection.id}`;
-      const canonicalSourceHref = routeHash({
-        tabId: MODE_TAB_ALIASES.system,
-        articleId: "guide-source-references",
-        headingId: canonicalTargetId,
+      const canonicalSourceHref = canonicalGuideHash({
+        modeId: "system",
+        guideId: "source-references",
+        headingId: librarySection.id,
       });
       const rendered = ownsGovernedBodies
         ? renderSource(sourceText, source.file, sourceIds, model.sourceRoutes)
@@ -638,11 +638,11 @@ function renderItems(items, emptyMessage = "None recorded.") {
 
 function guideLink(guide, { label = guide.title, summary = guide.summary, headingId, related = false } = {}) {
   const tabId = MODE_TAB_ALIASES[guide.modeId];
-  return `<a href="${escapeHtml(compatibilityGuideHash({ modeId: guide.modeId, guideId: guide.id, headingId }))}" data-guide-link data-article-link${related ? " data-related-link" : ""} data-mode="${escapeHtml(guide.modeId)}" data-guide-id="${escapeHtml(guide.id)}" data-tab="${escapeHtml(tabId)}" data-article="guide-${escapeHtml(guide.id)}"${headingId ? ` data-heading="${escapeHtml(`${guide.id}-${headingId}`)}"` : ""} data-title="${escapeHtml(guide.title)}" data-summary="${escapeHtml(guide.summary)}" data-audience="${escapeHtml((guide.audience ?? guide.participatingRoles ?? []).join(", "))}" data-content-type="${escapeHtml(guide.type)}"><span>${escapeHtml(label)}</span>${summary ? `<small>${escapeHtml(summary)}</small>` : ""}</a>`;
+  return `<a href="${escapeHtml(canonicalGuideHash({ modeId: guide.modeId, guideId: guide.id, headingId }))}" data-guide-link data-article-link${related ? " data-related-link" : ""} data-mode="${escapeHtml(guide.modeId)}" data-guide-id="${escapeHtml(guide.id)}" data-tab="${escapeHtml(tabId)}" data-article="guide-${escapeHtml(guide.id)}"${headingId ? ` data-heading="${escapeHtml(`${guide.id}-${headingId}`)}"` : ""} data-title="${escapeHtml(guide.title)}" data-summary="${escapeHtml(guide.summary)}" data-audience="${escapeHtml((guide.audience ?? guide.participatingRoles ?? []).join(", "))}" data-content-type="${escapeHtml(guide.type)}"><span>${escapeHtml(label)}</span>${summary ? `<small>${escapeHtml(summary)}</small>` : ""}</a>`;
 }
 
 function canonicalSourceLink(reference) {
-  return `<a href="${escapeHtml(reference.canonicalSourceHref)}" data-canonical-source-link data-article-link data-tab="system" data-article="guide-source-references" data-heading="${escapeHtml(reference.canonicalTargetId)}">Open governed source in the System library</a>`;
+  return `<a href="${escapeHtml(reference.canonicalSourceHref)}" data-canonical-source-link data-article-link data-mode="system" data-guide-id="source-references" data-tab="system" data-article="guide-source-references" data-heading="${escapeHtml(reference.canonicalTargetId)}">Open governed source in the System library</a>`;
 }
 
 function sourceReferenceBody(guide, reference) {
