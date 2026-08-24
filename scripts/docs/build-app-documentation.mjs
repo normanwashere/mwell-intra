@@ -436,9 +436,16 @@ export function composeHandbookGuides(model) {
   });
 }
 
+export const SYSTEM_SEARCH_INTENT_TERMS = Object.freeze([
+  "doa", "delegation", "delegation of authority", "authority", "policy", "governance",
+  "compliance", "security", "control", "retention", "architecture", "infrastructure",
+  "release", "qa", "audit", "schema", "admin", "administration", "configuration",
+  "training", "readiness", "system", "technical", "continuity", "backup", "source", "uat",
+]);
+
 const CONTROLLED_SEARCH_TERMS = Object.freeze({
   "finance-readiness-evidence:Step:step-2": ["three-way match", "match purchase order receipt invoice"],
-  "procurement-request-approval:Task:outcome": ["approve request", "RFQ", "request for quotation"],
+  "procurement-request-approval:Task:outcome": ["approve request", "RFQ", "request for quotation", "policy", "control"],
   "stock-receiving-putaway:Task:outcome": ["receive stock", "receiving", "receipt"],
   "stock-receiving-putaway:Step:step-3": ["report damaged item", "damaged stock", "quarantine"],
   "platform_administrator:Troubleshooting:negative-and-recovery-scenario": ["reset password", "invalid login", "access denied", "password recovery", "sign in blocked"],
@@ -448,6 +455,8 @@ const CONTROLLED_SEARCH_TERMS = Object.freeze({
   "event-stock-custody:Decision:decision-2": ["lost event stock", "damaged event stock"],
   "inventory-count-variance:Task:outcome": ["cycle count", "cycle count variance"],
   "department-doa-activation:Task:outcome": ["DOA", "delegation of authority"],
+  "platform_administrator:Role:role-purpose-and-department": ["security", "admin", "administration", "configuration"],
+  "administration-configuration:System reference:overview": ["DOA", "delegation", "delegation of authority", "authority", "admin", "administration", "configuration"],
 });
 
 function guideSearchRecord({
@@ -854,7 +863,7 @@ ${styles}
     </main>
     <aside id="page-toc" class="page-toc" aria-labelledby="page-toc-title"><div class="drawer-heading"><h2 id="page-toc-title">On this page</h2><button type="button" data-close-drawer="toc" aria-label="Close table of contents">Close</button></div><nav data-page-toc aria-label="On this page"></nav></aside>
   </div>
-  <script data-handbook-index>window.__HANDBOOK_INDEX__ = ${serializeForScript(searchIndex)}; window.__HANDBOOK_LEGACY_ROUTES__ = ${serializeForScript(model.legacyRoutes)}; window.__HANDBOOK_MODES__ = ${serializeForScript(model.modes)}; window.__HANDBOOK_SEARCH_STATE__ = ${serializeForScript(initialSearchState)};</script>
+  <script data-handbook-index>window.__HANDBOOK_INDEX__ = ${serializeForScript(searchIndex)}; window.__HANDBOOK_SYSTEM_INTENTS__ = ${serializeForScript(SYSTEM_SEARCH_INTENT_TERMS)}; window.__HANDBOOK_LEGACY_ROUTES__ = ${serializeForScript(model.legacyRoutes)}; window.__HANDBOOK_MODES__ = ${serializeForScript(model.modes)}; window.__HANDBOOK_SEARCH_STATE__ = ${serializeForScript(initialSearchState)};</script>
   <script>${mermaidBundle}</script>
   <script data-handbook-runtime>
 ${runtime}

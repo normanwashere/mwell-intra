@@ -8,6 +8,7 @@ import { HANDBOOK_GUIDES, HANDBOOK_MODES, LEGACY_ROUTES } from "./handbook-guide
 const {
   buildDocumentationHtml,
   documentationSources,
+  SYSTEM_SEARCH_INTENT_TERMS,
 } = documentationGenerator;
 
 const TASK_SECTION_IDS = Object.freeze([
@@ -695,7 +696,7 @@ test("renders canonical guide navigation and in-place route support", () => {
   assert.match(html, /data-related-link/);
   assert.match(html, /data-related-link[^>]+data-title=/);
   assert.match(html, /data-related-link[^>]+data-content-type=/);
-  assert.match(html, /function activateRoute\(\{ modeId, guideId, headingId, query, scope, historyMode, restoreScroll, focusTarget \}\)/);
+  assert.match(html, /function activateRoute\(\{ modeId, guideId, headingId, query, scope, historyMode, restoreScroll, focusTarget, showSearchSurface = false \}\)/);
   assert.doesNotMatch(html, /let searchState/);
   assert.match(html, /history\.pushState/);
   assert.match(html, /history\.replaceState/);
@@ -794,6 +795,19 @@ test("indexes operational language against canonical task and role destinations"
     assert.ok(match.role || match.module, `${query} must expose role or module context`);
     assert.ok(match.excerpt.length > 20, `${query} must expose an actionable excerpt`);
   }
+});
+
+test("publishes the maintained governance search intent vocabulary", () => {
+  const requiredIntents = [
+    "doa", "delegation", "delegation of authority", "authority", "policy", "governance",
+    "compliance", "security", "control", "retention", "architecture", "infrastructure",
+    "release", "qa", "audit", "schema", "admin", "administration", "configuration",
+    "training", "readiness", "system", "technical", "continuity", "backup", "source", "uat",
+  ];
+
+  assert.deepEqual(SYSTEM_SEARCH_INTENT_TERMS, requiredIntents);
+  const html = buildDocumentationHtml();
+  assert.deepEqual(embeddedWindowValue(html, "__HANDBOOK_SYSTEM_INTENTS__"), requiredIntents);
 });
 
 test("renders scoped explainable search without navigation reloads", () => {

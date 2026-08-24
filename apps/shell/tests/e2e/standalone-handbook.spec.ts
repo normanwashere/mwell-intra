@@ -29,6 +29,7 @@ const operationalSearchCases = [
   ['reset password', 'platform_administrator'],
   ['cycle count', 'inventory-count-variance'],
   ['DOA', 'department-doa-activation'],
+  ['delegation of authority', 'department-doa-activation'],
   ['receive stock', 'stock-receiving-putaway'],
   ['pick and pack', 'ecommerce-fulfillment-delivery'],
   ['invalid login', 'platform_administrator'],
@@ -103,11 +104,140 @@ test('search offers accessible no-result recovery', async ({ page }) => {
   await expect(recovery.getByRole('link', { name: /system/i })).toBeVisible();
   expect(await recovery.evaluate((element) => element.parentElement?.id)).toBe('contents-rail');
   if ((page.viewportSize()?.width ?? 1440) <= 1180) {
-    await expect(page.getByRole('dialog', { name: 'Contents' })).toContainText(/no direct answer found/i);
+    await expect(page.locator('#contents-rail')).toContainText(/no direct answer found/i);
+    await expect(page.locator('#contents-rail')).not.toHaveAttribute('aria-modal');
   }
   await recovery.getByRole('link', { name: /receive stock/i }).click();
   await expect(page.getByRole('searchbox')).toHaveValue('receive stock');
   await expect(page.locator('#search-results [data-guide-id="stock-receiving-putaway"]').first()).toBeVisible();
+});
+
+test('search includes governance System intent without displacing operational answers', async ({ page }) => {
+  await page.goto('/');
+  const cases = [
+    ['DOA', 'department-doa-activation', 'administration-configuration'],
+    ['delegation of authority', 'department-doa-activation', 'administration-configuration'],
+    ['policy', 'procurement-request-approval', 'security-governance'],
+    ['security', 'platform_administrator', 'security-governance'],
+  ] as const;
+
+  for (const [query, operationalGuideId, systemGuideId] of cases) {
+    await page.getByRole('searchbox').fill(query);
+    const results = page.locator('#search-results [data-search-result]');
+    await expect(results.first()).toBeVisible();
+    await expect(page.locator(`#search-results [data-result-type="System reference"][data-guide-id="${systemGuideId}"]`).first()).toBeVisible();
+    const topThree = await results.evaluateAll((links) => links.slice(0, 3).map((link) => (link as HTMLElement).dataset.guideId));
+    expect(topThree, `${query} should retain an operational answer in the top three`).toContain(operationalGuideId);
+  }
+});
+
+test('compact search keeps focus coherent across typing restore activation and Escape', async ({ page }, testInfo) => {
+  if (!['mobile-430', 'mobile-390', 'mobile-320'].includes(testInfo.project.name)) test.skip();
+  await page.goto('/#mode=tasks&guide=stock-receiving-putaway');
+  const searchbox = page.getByRole('searchbox');
+  const contents = page.locator('#contents-rail');
+
+  await searchbox.focus();
+  await searchbox.pressSequentially('report damaged item');
+  await expect(searchbox).toBeFocused();
+  await expect(contents).toBeVisible();
+  await expect(contents).not.toHaveAttribute('aria-modal');
+  await expect(contents).not.toHaveAttribute('role', 'dialog');
+  await expect(page.locator('#result-count')).toContainText(/result/);
+
+  await page.keyboard.press('Escape');
+  await expect(contents).toBeHidden();
+  await expect(searchbox).toBeFocused();
+
+  const contentsTrigger = page.getByRole('button', { name: 'Contents', exact: true });
+  await contentsTrigger.click();
+  await expect(contents).toHaveAttribute('aria-modal', 'true');
+  await expect(contents.getByRole('button', { name: /close contents/i })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(contents).toBeHidden();
+  await expect(contentsTrigger).toBeFocused();
+
+  await page.goto('/#mode=tasks&guide=stock-receiving-putaway&heading=step-3&q=report+damaged+item&scope=all');
+  await page.reload();
+  await expect(contents).toBeVisible();
+  await expect(contents).not.toHaveAttribute('aria-modal');
+  await expect(page.locator('#stock-receiving-putaway-step-3 h3')).toBeFocused();
+
+  const result = page.locator('#search-results [data-result-type="Step"][data-guide-id="stock-receiving-putaway"]').first();
+  await page.evaluate(() => { (window as typeof window & { __sameDocument?: string }).__sameDocument = 'preserved'; });
+  await result.click();
+  await expect(contents).toBeHidden();
+  expect(await page.evaluate(() => (window as typeof window & { __sameDocument?: string }).__sameDocument)).toBe('preserved');
+  await expectFocusedBelowStickyChrome(page.locator('#stock-receiving-putaway-step-3 h3'));
+});
+
+test('search suggestions activate canonical route state through history', async ({ page }, testInfo) => {
+  if (!['desktop-1440', 'mobile-390'].includes(testInfo.project.name)) test.skip();
+  await page.goto('/#mode=tasks&guide=stock-receiving-putaway');
+  const searchbox = page.getByRole('searchbox');
+  const resultStatus = page.locator('#result-count');
+  await searchbox.fill('zzzz no handbook answer');
+  await expect(searchbox).toBeFocused();
+  await expect(resultStatus).toHaveText(/0 results/);
+  await expect(page.locator('#empty [role="status"]')).toContainText(/try a related term/i);
+
+  await page.locator('#empty [data-search-suggestion="receive stock"]').click();
+  await expect(page).toHaveURL(/#mode=home&guide=home&q=receive\+stock&scope=all$/);
+  await expect(page.getByRole('tab', { name: 'Home' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('[data-guide-id="home"]')).toBeVisible();
+  await expect(page.locator('#search-results [data-guide-id="stock-receiving-putaway"]').first()).toBeVisible();
+  await expect(page.locator('#search-results [data-search-result]').first()).toBeFocused();
+  await expect(resultStatus).not.toHaveText(/0 results/);
+
+  await page.goBack();
+  await expect(page).toHaveURL(/#mode=tasks&guide=stock-receiving-putaway&q=zzzz\+no\+handbook\+answer&scope=all$/);
+  await expect(page.getByRole('tab', { name: 'Tasks' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('article[data-guide-id="stock-receiving-putaway"]')).toBeVisible();
+  await expect(resultStatus).toHaveText(/0 results/);
+
+  await page.goForward();
+  await expect(page).toHaveURL(/#mode=home&guide=home&q=receive\+stock&scope=all$/);
+  await expect(page.getByRole('tab', { name: 'Home' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('[data-guide-id="home"]')).toBeVisible();
+  await expect(resultStatus).not.toHaveText(/0 results/);
+});
+
+test('search result types activate and focus their exact canonical destinations', async ({ page }, testInfo) => {
+  if (!['desktop-1440', 'mobile-390'].includes(testInfo.project.name)) test.skip();
+  const cases = [
+    ['receive stock', 'Task', 'stock-receiving-putaway'],
+    ['report damaged item', 'Step', 'stock-receiving-putaway'],
+    ['lost event stock', 'Decision', 'event-stock-custody'],
+    ['Operations Associate', 'Role', 'operations_associate'],
+    ['reset password', 'Troubleshooting', 'platform_administrator'],
+    ['security', 'System reference', 'security-governance'],
+  ] as const;
+
+  for (const [query, type, guideId] of cases) {
+    await page.goto('/#mode=home&guide=home');
+    const searchbox = page.getByRole('searchbox');
+    await searchbox.fill(query);
+    await expect(searchbox).toBeFocused();
+    const result = page.locator(`#search-results [data-result-type="${type}"][data-guide-id="${guideId}"]`).first();
+    await expect(result, `${type} result for ${query}`).toBeVisible();
+    const href = await result.getAttribute('href');
+    const headingId = new URLSearchParams(href?.replace(/^#/, '')).get('heading');
+    expect(headingId).toBeTruthy();
+    await page.evaluate(() => { (window as typeof window & { __sameDocument?: string }).__sameDocument = 'preserved'; });
+    await result.click();
+    expect(await page.evaluate(() => (window as typeof window & { __sameDocument?: string }).__sameDocument)).toBe('preserved');
+    await expect(page).toHaveURL(new RegExp(`#mode=(?:tasks|roles|system)&guide=${guideId}&heading=${headingId}`));
+    const focusState = await page.evaluate(({ guideId, headingId }) => {
+      const anchor = document.getElementById(`${guideId}-${headingId}`);
+      const focused = document.activeElement;
+      return {
+        withinDestination: Boolean(anchor && focused && (anchor === focused || anchor.contains(focused))),
+        tagName: focused?.tagName,
+      };
+    }, { guideId, headingId });
+    expect(focusState.withinDestination, `${type} should focus ${guideId}-${headingId}`).toBe(true);
+    expect(focusState.tagName).toMatch(/^(H[1-6]|SUMMARY)$/);
+  }
 });
 
 test('navigates canonical and legacy routes, restores per-guide state, and recovers invalid links', async ({ page }) => {

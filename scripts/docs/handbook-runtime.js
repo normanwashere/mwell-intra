@@ -20,6 +20,7 @@
     const printMenu = document.querySelector('#print-menu');
     const modeIds = new Set(tabs.map((tab) => tab.dataset.mode));
     const handbookIndex = Array.isArray(window.__HANDBOOK_INDEX__) ? window.__HANDBOOK_INDEX__ : [];
+    const systemSearchIntentTerms = Array.isArray(window.__HANDBOOK_SYSTEM_INTENTS__) ? window.__HANDBOOK_SYSTEM_INTENTS__.map(normalizeSearchText).filter(Boolean) : [];
     const legacyRoutes = Array.isArray(window.__HANDBOOK_LEGACY_ROUTES__) ? window.__HANDBOOK_LEGACY_ROUTES__ : [];
     const storageKey = 'mwell-intra-handbook:v3';
     const legacyStorageKey = 'mwell-intra-handbook:v2';
@@ -38,7 +39,6 @@
     let activeDrawer = null;
     let drawerReturnFocus = null;
     let printScope = 'guide';
-    let searchDrawerTimer = null;
 
     function normalizeStoredState(value) {
       const stored = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
@@ -153,9 +153,32 @@
 
     function isDrawerViewport() { return window.matchMedia('(max-width: 1180px)').matches; }
     function setHeaderOffset() { document.documentElement.style.setProperty('--handbook-header-height', `${topbar.offsetHeight}px`); }
+    function setSearchSurfaceVisible(visible, { restoreFocus = true } = {}) {
+      const drawer = drawers.contents;
+      if (!drawer || !isDrawerViewport()) return;
+      if (!visible) {
+        if (!drawer.hasAttribute('data-search-surface')) return;
+        drawer.hidden = true;
+        drawer.removeAttribute('data-search-surface');
+        drawerTriggers.filter((button) => button.dataset.openDrawer === 'contents').forEach((button) => button.setAttribute('aria-expanded', 'false'));
+        if (restoreFocus) search.focus();
+        return;
+      }
+      if (activeDrawer === 'contents') return;
+      drawer.hidden = false;
+      drawer.setAttribute('data-search-surface', '');
+      drawer.removeAttribute('role');
+      drawer.removeAttribute('aria-modal');
+      drawerTriggers.filter((button) => button.dataset.openDrawer === 'contents').forEach((button) => button.setAttribute('aria-expanded', 'true'));
+    }
+
     function setDrawerVisible(name, visible, { restoreFocus = true } = {}) {
       const drawer = drawers[name];
       if (!drawer || !isDrawerViewport()) return;
+      if (!visible && drawer.hasAttribute('data-search-surface')) {
+        setSearchSurfaceVisible(false, { restoreFocus });
+        return;
+      }
       if (!visible) {
         drawer.hidden = true; drawer.removeAttribute('role'); drawer.removeAttribute('aria-modal');
         drawerTriggers.filter((button) => button.dataset.openDrawer === name).forEach((button) => button.setAttribute('aria-expanded', 'false'));
@@ -166,6 +189,7 @@
         return;
       }
       if (activeDrawer && activeDrawer !== name) setDrawerVisible(activeDrawer, false, { restoreFocus: false });
+      drawer.removeAttribute('data-search-surface');
       drawerReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       drawer.hidden = false; drawer.setAttribute('role', 'dialog'); drawer.setAttribute('aria-modal', 'true');
       drawerTriggers.filter((button) => button.dataset.openDrawer === name).forEach((button) => button.setAttribute('aria-expanded', 'true'));
@@ -175,6 +199,7 @@
     function resetDrawers() {
       Object.entries(drawers).forEach(([name, drawer]) => {
         if (!drawer) return;
+        drawer.removeAttribute('data-search-surface');
         if (isDrawerViewport()) drawer.hidden = true;
         else { drawer.hidden = false; drawer.removeAttribute('role'); drawer.removeAttribute('aria-modal'); }
       });
@@ -183,6 +208,7 @@
       setHeaderOffset();
     }
     function closeOpenDrawer() { if (activeDrawer) setDrawerVisible(activeDrawer, false, { restoreFocus: false }); }
+    function closeSearchSurface() { setSearchSurfaceVisible(false, { restoreFocus: false }); }
     function focusableIn(element) { return [...element.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])')].filter((candidate) => !candidate.hidden && candidate.getClientRects().length > 0); }
     function applyPrintScope(scope) {
       printScope = ['guide', 'mode', 'all'].includes(scope) ? scope : 'guide';
@@ -263,6 +289,11 @@
       return null;
     }
 
+    function hasSystemSearchIntent(query) {
+      const words = new Set(query.split(' ').filter(Boolean));
+      return systemSearchIntentTerms.some((term) => term.includes(' ') ? query.includes(term) : words.has(term));
+    }
+
     function searchExcerptForQuery(value, query, limit = 240) {
       const text = String(value || '').replace(/\s+/g, ' ').trim();
       const needle = normalizeSearchText(query);
@@ -276,7 +307,7 @@
     function rankSearchResults() {
       const query = normalizeSearchText(activeRoute.query);
       if (!query) return [];
-      const systemIntent = activeRoute.modeId === 'system' || /\b(system|technical|architecture|schema|release|audit|governance|security|infrastructure|continuity|backup|retention|source|uat|qa|login|password|access)\b/.test(query);
+      const systemIntent = activeRoute.modeId === 'system' || hasSystemSearchIntent(query);
       const ranked = handbookIndex
         .filter((record) => (activeRoute.scope === 'all' || record.modeId === activeRoute.modeId) && (record.modeId !== 'system' || systemIntent))
         .map((record, index) => ({ record, index, match: describeMatch(record, query) }))
@@ -284,7 +315,7 @@
         .sort((left, right) => left.match.rank - right.match.rank || left.index - right.index);
       const seen = new Set();
       const perGuide = new Map();
-      return ranked.filter(({ record }) => {
+      const deduplicated = ranked.filter(({ record }) => {
         const logicalKey = record.type === 'System reference'
           ? `${record.type}:${record.guideId}`
           : `${record.type}:${record.guideId}:${record.headingId}`;
@@ -294,6 +325,11 @@
         perGuide.set(record.guideId, guideCount + 1);
         return true;
       });
+      if (systemIntent && activeRoute.scope === 'all' && activeRoute.modeId !== 'system') {
+        const systemResult = deduplicated.find(({ record }) => record.modeId === 'system');
+        if (systemResult) return [...deduplicated.filter(({ record }) => record.modeId !== 'system').slice(0, 7), systemResult];
+      }
+      return deduplicated.slice(0, 8);
     }
 
     function openSearchMatches() {
@@ -351,12 +387,8 @@
       searchScopeButtons.forEach((button) => button.setAttribute('aria-pressed', String((button.dataset.searchScope === 'tab' ? 'mode' : button.dataset.searchScope) === next.scope)));
       if (isSearching) openSearchMatches();
       renderSearchResults();
-      window.clearTimeout(searchDrawerTimer);
-      if (isSearching && isDrawerViewport()) {
-        searchDrawerTimer = window.setTimeout(() => {
-          if (activeRoute.query === next.query && document.activeElement === search) setDrawerVisible('contents', true);
-        }, 350);
-      }
+      if (isDrawerViewport() && isSearching && document.activeElement === search) setSearchSurfaceVisible(true);
+      if (isDrawerViewport() && !isSearching) setSearchSurfaceVisible(false, { restoreFocus: false });
       if (writeHash) history.replaceState({}, '', routeHash(activeRoute));
       schedulePersistence();
     }
@@ -457,12 +489,15 @@
       renderRecentGuides();
     }
 
-    function activateRoute({ modeId, guideId, headingId, query, scope, historyMode, restoreScroll, focusTarget }) {
+    function activateRoute({ modeId, guideId, headingId, query, scope, historyMode, restoreScroll, focusTarget, showSearchSurface = false }) {
       closeOpenDrawer();
+      closeSearchSurface();
       if (activeRoute.guideId && guides.some((guide) => guide.dataset.guideId === activeRoute.guideId)) guideScroll = { ...guideScroll, [activeRoute.guideId]: window.scrollY };
       const guide = guides.find((candidate) => candidate.dataset.guideId === guideId) || null;
       const article = guide?.matches('article[data-document]') ? guide : null;
       activeRoute = { modeId, guideId: guide?.dataset.guideId || null, headingId: headingId || null, query: String(query || '').trim(), scope: scope === 'mode' || scope === 'tab' ? 'mode' : 'all' };
+      search.value = activeRoute.query;
+      searchScopeButtons.forEach((button) => button.setAttribute('aria-pressed', String((button.dataset.searchScope === 'tab' ? 'mode' : button.dataset.searchScope) === activeRoute.scope)));
       applyPrintScope(printScope);
       const hash = routeHash(activeRoute);
       tabs.forEach((tab) => { const active = tab.dataset.mode === modeId; tab.setAttribute('aria-selected', String(active)); tab.tabIndex = active ? 0 : -1; });
@@ -470,6 +505,7 @@
       hero.hidden = guide !== hero; empty.hidden = true;
       articleLinks.forEach((link) => link.setAttribute('aria-current', link.dataset.guideId === guide?.dataset.guideId ? 'page' : 'false'));
       updatePageToc(article, headingId); openContainingDisclosure(routeAnchor(activeRoute)); renderSearchResults(); updateRecentGuides(activeRoute.guideId);
+      if (showSearchSurface && activeRoute.query) setSearchSurfaceVisible(true, { restoreFocus: false });
       if (historyMode === 'push') history.pushState({}, '', hash);
       if (historyMode === 'replace') history.replaceState({}, '', hash);
       if (restoreScroll === 'stored') restoreStoredPosition(activeRoute);
@@ -490,17 +526,17 @@
 
     function activateLinkedRoute(link, restoreScroll) {
       const route = parseRoute(link.getAttribute('href'));
-      setSearchState(route);
       const recovered = recoverRoute(route);
       if (isRouteValid(route)) routeNotice.hidden = true;
-      activateRoute({ ...recovered, historyMode: 'push', restoreScroll, focusTarget: true });
+      const isSuggestion = link.matches('[data-search-suggestion]');
+      activateRoute({ ...recovered, historyMode: 'push', restoreScroll, focusTarget: !isSuggestion, showSearchSurface: isSuggestion });
+      if (isSuggestion) searchResults.querySelector('[data-search-result]')?.focus();
     }
 
     function activateParsedRoute(historyMode, restoreScroll) {
       const params = new URLSearchParams(location.hash.replace(/^#/, ''));
       const wasLegacy = params.has('tab') || params.has('article');
       const parsedRoute = parseRoute();
-      setSearchState(parsedRoute);
       const recovered = recoverRoute(parsedRoute);
       if (wasLegacy && isRouteValid(parsedRoute)) {
         routeNotice.hidden = false;
@@ -509,7 +545,7 @@
       const hasSavedPosition = restoreScroll === 'stored' && recovered.guideId && Object.prototype.hasOwnProperty.call(guideScroll, recovered.guideId);
       const focusTarget = Boolean(recovered.headingId) || Boolean(recovered.guideId && !hasSavedPosition);
       const canonicalHash = routeHash(recovered);
-      activateRoute({ ...recovered, historyMode: location.hash === canonicalHash ? historyMode : 'replace', restoreScroll: hasSavedPosition ? 'stored' : false, focusTarget });
+      activateRoute({ ...recovered, historyMode: location.hash === canonicalHash ? historyMode : 'replace', restoreScroll: hasSavedPosition ? 'stored' : false, focusTarget, showSearchSurface: Boolean(recovered.query) });
       lastHandledHash = location.hash;
     }
 
@@ -595,13 +631,6 @@
       const disclosureAction = event.target.closest('button[data-disclosure-action]');
       if (disclosureAction) { const article = disclosureAction.closest('article[data-document]'); article.querySelectorAll('details[data-section-id]').forEach((details) => { details.open = disclosureAction.dataset.disclosureAction === 'expand'; }); syncDisclosureState(); return; }
       if (printMenu && !printMenu.hidden && !event.target.closest('.print-control')) setPrintMenuVisible(false);
-      const suggestion = event.target.closest('a[data-search-suggestion]');
-      if (suggestion && !event.defaultPrevented && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
-        event.preventDefault();
-        setSearchState(parseRoute(suggestion.getAttribute('href')), { writeHash: true });
-        searchResults.querySelector('[data-search-result]')?.focus();
-        return;
-      }
       const link = event.target.closest('a[data-search-result], a[data-guide-link], a[data-article-link], a[data-heading-link], a[data-route-link]');
       if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       event.preventDefault();
@@ -614,7 +643,7 @@
     drawerTriggers.forEach((button) => button.addEventListener('click', () => setDrawerVisible(button.dataset.openDrawer, true)));
     document.querySelectorAll('[data-close-drawer]').forEach((button) => button.addEventListener('click', () => setDrawerVisible(button.dataset.closeDrawer, false)));
     Object.entries(drawers).forEach(([name, drawer]) => drawer?.addEventListener('keydown', (event) => {
-      if (!isDrawerViewport()) return;
+      if (!isDrawerViewport() || activeDrawer !== name) return;
       if (event.key === 'Escape') { event.preventDefault(); setDrawerVisible(name, false); return; }
       if (event.key !== 'Tab') return;
       const items = focusableIn(drawer); if (!items.length) return;
@@ -640,6 +669,7 @@
     document.querySelector('[data-dismiss-notice]').addEventListener('click', () => { routeNotice.hidden = true; });
     window.addEventListener('scroll', () => { if (activeRoute.guideId) guideScroll = { ...guideScroll, [activeRoute.guideId]: window.scrollY }; schedulePersistence(); }, { passive: true });
     document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && drawers.contents?.hasAttribute('data-search-surface')) { event.preventDefault(); setSearchSurfaceVisible(false); return; }
       if (event.key === 'Escape' && printMenu && !printMenu.hidden) { event.preventDefault(); setPrintMenuVisible(false); printTrigger?.focus(); return; }
       if (event.key === '/' && !/input|textarea|select/i.test(document.activeElement.tagName)) { event.preventDefault(); search.focus(); }
     });
@@ -691,11 +721,9 @@
       restoreMermaidLayout();
       diagramsReady = true;
       document.querySelectorAll('[data-diagram-group]').forEach((group) => applyDiagramMode(group, group.dataset.pendingDiagramView || 'overview'));
-      setSearchState(initialRoute);
       const hasSavedPosition = recoveredInitialRoute.guideId && Object.prototype.hasOwnProperty.call(guideScroll, recoveredInitialRoute.guideId);
       const focusTarget = Boolean(recoveredInitialRoute.headingId) || Boolean(recoveredInitialRoute.guideId && !hasSavedPosition);
-      activateRoute({ ...recoveredInitialRoute, historyMode: 'replace', restoreScroll: hasSavedPosition ? 'stored' : false, focusTarget });
-      if (recoveredInitialRoute.query && isDrawerViewport()) setDrawerVisible('contents', true);
+      activateRoute({ ...recoveredInitialRoute, historyMode: 'replace', restoreScroll: hasSavedPosition ? 'stored' : false, focusTarget, showSearchSurface: Boolean(recoveredInitialRoute.query) });
       lastHandledHash = location.hash;
       window.requestAnimationFrame(refreshDiagramCanvases);
     });
