@@ -1,7 +1,26 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+
+async function expectFocusedBelowStickyChrome(target: Locator) {
+  await expect(target).toBeFocused();
+  const metrics = await target.evaluate((element) => {
+    const targetRect = element.getBoundingClientRect();
+    const occlusionBottom = [...document.querySelectorAll('body *')].reduce((bottom, candidate) => {
+      if (candidate === element || candidate.contains(element)) return bottom;
+      const style = getComputedStyle(candidate);
+      if (!['fixed', 'sticky'].includes(style.position) || style.visibility === 'hidden' || style.display === 'none') return bottom;
+      const rect = candidate.getBoundingClientRect();
+      const overlapsTarget = rect.right > targetRect.left + 1 && rect.left < targetRect.right - 1;
+      const declaredTop = Number.parseFloat(style.top);
+      const isAtStickyTop = Number.isFinite(declaredTop) && rect.top <= declaredTop + 1;
+      return overlapsTarget && isAtStickyTop && rect.bottom > 0 ? Math.max(bottom, rect.bottom) : bottom;
+    }, 0);
+    return { targetTop: targetRect.top, occlusionBottom };
+  });
+  expect(metrics.targetTop, `target must clear sticky chrome ending at ${metrics.occlusionBottom}px`).toBeGreaterThanOrEqual(metrics.occlusionBottom + 12);
+}
 
 test('navigates canonical and legacy routes, restores per-guide state, and recovers invalid links', async ({ page }) => {
   test.setTimeout(60_000);
@@ -10,8 +29,8 @@ test('navigates canonical and legacy routes, restores per-guide state, and recov
     localStorage.clear();
     localStorage.setItem('mwell-intra-handbook:v2', JSON.stringify({
       activeTab: 'workflows',
-      activeArticle: 'guide-stock-receiving-putaway',
-      expandedIds: ['stock-receiving-putaway:policy-basis'],
+      activeArticle: 'doc-process-reference-library-md',
+      expandedIds: ['procurement-request-approval:policy-basis'],
       tabScroll: { workflows: 420 },
       query: '',
       scope: 'tab',
@@ -20,22 +39,20 @@ test('navigates canonical and legacy routes, restores per-guide state, and recov
     history.replaceState({}, '', location.pathname);
   });
   await page.reload();
-  await expect(page).toHaveURL(/#mode=tasks&guide=stock-receiving-putaway&scope=mode$/);
+  await expect(page).toHaveURL(/#mode=tasks&guide=procurement-request-approval&heading=document-controls&scope=mode$/);
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   expect(await page.evaluate(() => localStorage.getItem('mwell-intra-handbook:v2'))).toBeNull();
   const migrated = await page.evaluate(() => JSON.parse(localStorage.getItem('mwell-intra-handbook:v3') ?? '{}'));
-  expect(migrated.activeRoute).toEqual({ modeId: 'tasks', guideId: 'stock-receiving-putaway', headingId: null });
-  expect(migrated.guideScroll['stock-receiving-putaway']).toBe(420);
-  expect(migrated.disclosures['stock-receiving-putaway']).toContain('stock-receiving-putaway:policy-basis');
+  expect(migrated.activeRoute).toEqual({ modeId: 'tasks', guideId: 'procurement-request-approval', headingId: 'document-controls', query: '', scope: 'mode' });
+  expect(migrated.disclosures['procurement-request-approval']).toContain('procurement-request-approval:policy-basis');
 
   await page.goto('/#mode=roles&guide=operations_associate');
   await expect(page.getByRole('tab', { name: 'Roles' })).toHaveAttribute('aria-selected', 'true');
-  await expect(page.locator('article[data-guide-id="operations_associate"] h1')).toBeFocused();
+  await expectFocusedBelowStickyChrome(page.locator('article[data-guide-id="operations_associate"] h1'));
 
   await page.goto('/#mode=tasks&guide=stock-receiving-putaway&heading=steps');
   const stepsHeading = page.locator('#stock-receiving-putaway-steps > h2');
-  await expect(stepsHeading).toBeFocused();
-  await expect.poll(() => stepsHeading.evaluate((heading) => heading.getBoundingClientRect().top)).toBeGreaterThanOrEqual(0);
+  await expectFocusedBelowStickyChrome(stepsHeading);
 
   await page.goto('/#tab=start&article=doc-manual-mwell-intra-user-manual-md&heading=doc-manual-mwell-intra-user-manual-md-warehouse-flow');
   await expect(page).toHaveURL(/#mode=tasks&guide=stock-receiving-putaway&heading=flow$/);
@@ -50,13 +67,25 @@ test('navigates canonical and legacy routes, restores per-guide state, and recov
   await page.waitForTimeout(150);
   const relatedGuide = page.locator('article[data-guide-id="stock-receiving-putaway"] a[data-related-link]').first();
   await relatedGuide.click();
+  const relatedUrl = page.url();
   expect(await page.evaluate(() => (window as typeof window & { __sameDocument?: string }).__sameDocument)).toBe('preserved');
   await page.goBack();
   await expect(page).toHaveURL(/#mode=tasks&guide=stock-receiving-putaway$/);
   await expect(policy).toHaveAttribute('open', '');
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(300);
-  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
-  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(300);
+  await page.goForward();
+  await expect(page).toHaveURL(relatedUrl);
+  await page.goBack();
+  await expect(page).toHaveURL(/#mode=tasks&guide=stock-receiving-putaway$/);
+  const scrollBeforeLifecycle = await page.evaluate(() => window.scrollY);
+  const lifecyclePage = await page.context().newPage();
+  await lifecyclePage.goto('about:blank');
+  await lifecyclePage.bringToFront();
+  await page.bringToFront();
+  const scrollAfterLifecycle = await page.evaluate(() => window.scrollY);
+  expect(scrollAfterLifecycle).toBeGreaterThan(300);
+  expect(Math.abs(scrollAfterLifecycle - scrollBeforeLifecycle)).toBeLessThan(100);
+  await lifecyclePage.close();
   await page.reload();
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(300);
 
@@ -68,6 +97,64 @@ test('navigates canonical and legacy routes, restores per-guide state, and recov
   await expect(page.locator('#route-notice')).toContainText(/could not find/i);
   await page.getByRole('button', { name: 'Search', exact: true }).click();
   await expect(page.getByRole('searchbox')).toBeFocused();
+  await page.goto('/#foo=bar');
+  await expect(page).toHaveURL(/#mode=home&guide=home$/);
+  await expect(page.locator('#route-notice')).toContainText(/could not find/i);
+  await page.goto('/');
+  await expect(page).toHaveURL(/#mode=home&guide=home$/);
+  await expect(page.locator('#route-notice')).toBeHidden();
+});
+
+test('restores Home recent guides and updates deduped order after navigation', async ({ page }, testInfo) => {
+  if (testInfo.project.name !== 'desktop-1440') test.skip();
+  await page.goto('/');
+  await page.evaluate(() => {
+    localStorage.clear();
+    localStorage.setItem('mwell-intra-handbook:v3', JSON.stringify({
+      activeRoute: { modeId: 'home', guideId: 'home', headingId: null, query: '', scope: 'all' },
+      recentGuides: ['stock-receiving-putaway', 'procurement-request-approval', 'stock-receiving-putaway'],
+      guideScroll: {}, disclosures: {}, diagramViews: {}, diagramZoom: {}, diagramModes: {}, theme: 'light',
+    }));
+    history.replaceState({}, '', location.pathname);
+  });
+  await page.reload();
+  const recentIds = () => page.locator('[data-recent-guides] a').evaluateAll((links) => links.map((link) => (link as HTMLElement).dataset.guideId));
+  await expect.poll(recentIds).toEqual(['stock-receiving-putaway', 'procurement-request-approval']);
+
+  await page.locator('[data-recent-guides] a[data-guide-id="procurement-request-approval"]').click();
+  await page.getByRole('tab', { name: 'Home' }).click();
+  await expect.poll(recentIds).toEqual(['procurement-request-approval', 'stock-receiving-putaway']);
+  await page.locator('[data-recent-guides] a[data-guide-id="stock-receiving-putaway"]').click();
+  await page.getByRole('tab', { name: 'Home' }).click();
+  await expect.poll(recentIds).toEqual(['stock-receiving-putaway', 'procurement-request-approval']);
+});
+
+test('restores v3 query scope and representative diagram state', async ({ page }, testInfo) => {
+  if (testInfo.project.name !== 'desktop-1440') test.skip();
+  const diagramId = 'doc-manual-mwell-intra-user-manual-md:flow:procurement-to-payment:decision';
+  await page.goto('/');
+  await page.evaluate(({ diagramId }) => {
+    localStorage.clear();
+    localStorage.setItem('mwell-intra-handbook:v3', JSON.stringify({
+      activeRoute: { modeId: 'system', guideId: 'source-references', headingId: 'source-user-manual', query: 'procurement', scope: 'mode' },
+      recentGuides: [], guideScroll: {}, disclosures: {},
+      diagramViews: { [diagramId]: { left: 24, top: 18 } },
+      diagramZoom: { [diagramId]: 1.2 },
+      diagramModes: { 'doc-manual-mwell-intra-user-manual-md:flow:procurement-to-payment': 'decision' },
+      theme: 'light',
+    }));
+    history.replaceState({}, '', location.pathname);
+  }, { diagramId });
+  await page.reload();
+  await expect(page).toHaveURL(/#mode=system&guide=source-references&heading=source-user-manual&q=procurement&scope=mode$/);
+  await expect(page.getByRole('searchbox')).toHaveValue('procurement');
+  await expect(page.getByRole('button', { name: 'This mode' })).toHaveAttribute('aria-pressed', 'true');
+  const workflow = page.locator('[data-workflow-id="procurement-to-payment"]').first();
+  await expect(workflow.getByRole('button', { name: 'Decisions', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  const diagram = page.locator(`[data-diagram-id="${diagramId}"]`);
+  await expect(diagram).toBeVisible();
+  await expect(diagram).toHaveAttribute('data-diagram-rendered-scale', '1.2');
+  await expect.poll(() => diagram.locator('[data-diagram-viewport]').evaluate((viewport) => ({ left: viewport.scrollLeft, top: viewport.scrollTop }))).toEqual({ left: 24, top: 18 });
 });
 
 test('never creates page-level horizontal overflow', async ({ page }) => {
@@ -210,19 +297,19 @@ test('limits every print scope without mutating disclosures', async ({ page }) =
   const wasClosed = await closedDetails.count().then(Boolean);
   const articles = page.locator('article[data-document]');
   const articleCount = await articles.count();
-  const workflowArticleCount = await articles.evaluateAll((elements) => elements.filter((article) => article.dataset.tab === 'workflows').length);
+  const taskGuideCount = await articles.evaluateAll((elements) => elements.filter((article) => article.dataset.mode === 'tasks').length);
   const printButton = page.getByRole('button', { name: 'Print' });
   await printButton.focus();
   await page.keyboard.press('ArrowDown');
   await expect(printButton).toHaveAttribute('aria-haspopup', 'dialog');
   await expect(page.getByRole('dialog', { name: 'Print options' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Current article' })).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Current guide' })).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(printButton).toBeFocused();
 
   for (const [buttonName, scope, expectedCount] of [
-    ['Current article', 'article', 1],
-    ['Active tab', 'tab', workflowArticleCount],
+    ['Current guide', 'guide', 1],
+    ['Current mode', 'mode', taskGuideCount],
     ['Complete handbook', 'all', articleCount],
   ] as const) {
     await printButton.focus();
@@ -232,8 +319,8 @@ test('limits every print scope without mutating disclosures', async ({ page }) =
     await page.keyboard.press('Enter');
     await expect(page.locator('html')).toHaveAttribute('data-print-scope', scope);
     expect(await articles.evaluateAll((elements) => elements.filter((article) => article.dataset.printInScope === 'true').length)).toBe(expectedCount);
-    if (scope === 'article') await expect(activeArticle).toHaveAttribute('data-print-in-scope', 'true');
-    if (scope === 'tab') expect(await articles.evaluateAll((elements) => elements.filter((article) => article.dataset.printInScope === 'true').every((article) => article.dataset.tab === 'workflows'))).toBe(true);
+    if (scope === 'guide') await expect(activeArticle).toHaveAttribute('data-print-in-scope', 'true');
+    if (scope === 'mode') expect(await articles.evaluateAll((elements) => elements.filter((article) => article.dataset.printInScope === 'true').every((article) => article.dataset.mode === 'tasks'))).toBe(true);
     if (scope === 'all') expect(await articles.evaluateAll((elements) => elements.every((article) => article.dataset.printInScope === 'true'))).toBe(true);
     if (wasClosed) await expect(closedDetails).not.toHaveAttribute('open', '');
   }
@@ -241,7 +328,7 @@ test('limits every print scope without mutating disclosures', async ({ page }) =
   await page.emulateMedia({ media: 'screen' });
   await printButton.focus();
   await page.keyboard.press('ArrowDown');
-  await page.getByRole('button', { name: 'Current article', exact: true }).focus();
+  await page.getByRole('button', { name: 'Current guide', exact: true }).focus();
   await page.keyboard.press('Enter');
   if (wasClosed) await expect(closedDetails).not.toHaveAttribute('open', '');
   await page.emulateMedia({ media: 'print' });
@@ -264,7 +351,7 @@ test('captures desktop, tablet, and mobile visual review evidence when requested
   await page.getByRole('button', { name: 'Toggle color theme' }).click();
   await page.screenshot({ path: `${captureDir}${testInfo.project.name}-dark.png`, fullPage: true });
   await page.getByRole('button', { name: 'Toggle color theme' }).click();
-  await page.evaluate(() => document.documentElement.dataset.printScope = 'article');
+  await page.evaluate(() => document.documentElement.dataset.printScope = 'guide');
   await page.emulateMedia({ media: 'print' });
   await page.screenshot({ path: `${captureDir}${testInfo.project.name}-print.png`, fullPage: true });
 });

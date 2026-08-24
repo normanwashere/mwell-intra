@@ -695,10 +695,14 @@ test("renders canonical guide navigation and in-place route support", () => {
   assert.match(html, /data-related-link/);
   assert.match(html, /data-related-link[^>]+data-title=/);
   assert.match(html, /data-related-link[^>]+data-content-type=/);
-  assert.match(html, /function activateRoute\(\{ modeId, guideId, headingId, historyMode, restoreScroll, focusTarget \}\)/);
+  assert.match(html, /function activateRoute\(\{ modeId, guideId, headingId, query, scope, historyMode, restoreScroll, focusTarget \}\)/);
+  assert.doesNotMatch(html, /let searchState/);
   assert.match(html, /history\.pushState/);
   assert.match(html, /history\.replaceState/);
   assert.doesNotMatch(html, /location\.(?:href|reload)/);
+  assert.match(html, /data-print-scope="guide">Current guide/);
+  assert.match(html, /data-print-scope="mode">Current mode/);
+  assert.match(html, /data-print-scope="all">Complete handbook/);
 });
 
 test("renders progressive disclosures with stable state keys", () => {
@@ -795,9 +799,7 @@ test("normalizes v3 per-guide state without accepting malformed values", () => {
   const normalizeStoredState = runtimeFunction("normalizeStoredState", "readStoredState");
 
   assert.deepEqual(normalizeStoredState({
-    activeRoute: { modeId: "system", guideId: "technical-architecture", headingId: "overview" },
-    query: "  tenant  ",
-    scope: "mode",
+    activeRoute: { modeId: "system", guideId: "technical-architecture", headingId: "overview", query: "  tenant  ", scope: "mode" },
     guideScroll: { "technical-architecture": 480, broken: "bottom" },
     recentGuides: ["technical-architecture", "technical-architecture", 4, "source-references"],
     disclosures: {
@@ -809,9 +811,7 @@ test("normalizes v3 per-guide state without accepting malformed values", () => {
     diagramModes: { "procurement-to-payment": "decision", broken: "sideways" },
     theme: "dark",
   }), {
-    activeRoute: { modeId: "system", guideId: "technical-architecture", headingId: "overview" },
-    query: "tenant",
-    scope: "mode",
+    activeRoute: { modeId: "system", guideId: "technical-architecture", headingId: "overview", query: "tenant", scope: "mode" },
     guideScroll: { "technical-architecture": 480 },
     recentGuides: ["technical-architecture", "source-references"],
     disclosures: { "technical-architecture": ["technical-architecture:runtime-architecture"] },
@@ -821,9 +821,7 @@ test("normalizes v3 per-guide state without accepting malformed values", () => {
     theme: "dark",
   });
   assert.deepEqual(normalizeStoredState(null), {
-    activeRoute: { modeId: "home", guideId: "home", headingId: null },
-    query: "",
-    scope: "all",
+    activeRoute: { modeId: "home", guideId: "home", headingId: null, query: "", scope: "all" },
     guideScroll: {},
     recentGuides: [],
     disclosures: {},
@@ -834,29 +832,27 @@ test("normalizes v3 per-guide state without accepting malformed values", () => {
   });
 });
 
-test("migrates v2 state into one v3 per-guide record", () => {
+test("migrates a genuine exact v2 legacy route into one v3 per-guide record", () => {
   const migrateV2State = runtimeFunction("migrateV2State", "readStoredState");
   const migrated = migrateV2State({
     activeTab: "workflows",
-    activeArticle: "guide-stock-receiving-putaway",
+    activeArticle: "doc-process-reference-library-md",
     query: "  inspect delivery  ",
     scope: "tab",
-    expandedIds: ["stock-receiving-putaway:policy-basis", "other-guide:document-controls"],
+    expandedIds: ["procurement-request-approval:policy-basis", "other-guide:document-controls"],
     diagramViews: { receiving: { left: 8, top: 12 } },
     diagramZoom: { receiving: 1.2 },
     diagramModes: { receiving: "role" },
     tabScroll: { workflows: 640 },
     theme: "dark",
-  }, () => ({ modeId: "tasks", guideId: "stock-receiving-putaway", headingId: null }));
+  }, LEGACY_ROUTES);
 
   assert.deepEqual(migrated, {
-    activeRoute: { modeId: "tasks", guideId: "stock-receiving-putaway", headingId: null },
-    query: "inspect delivery",
-    scope: "mode",
-    guideScroll: { "stock-receiving-putaway": 640 },
-    recentGuides: ["stock-receiving-putaway"],
+    activeRoute: { modeId: "tasks", guideId: "procurement-request-approval", headingId: "document-controls", query: "inspect delivery", scope: "mode" },
+    guideScroll: { "procurement-request-approval": 640 },
+    recentGuides: ["procurement-request-approval"],
     disclosures: {
-      "stock-receiving-putaway": ["stock-receiving-putaway:policy-basis"],
+      "procurement-request-approval": ["procurement-request-approval:policy-basis"],
       "other-guide": ["other-guide:document-controls"],
     },
     diagramViews: { receiving: { left: 8, top: 12 } },
@@ -864,6 +860,21 @@ test("migrates v2 state into one v3 per-guide record", () => {
     diagramModes: { receiving: "role" },
     theme: "dark",
   });
+});
+
+test("does not restore an unmapped compatibility article during v2 migration", () => {
+  const migrateV2State = runtimeFunction("migrateV2State", "readStoredState");
+  const migrated = migrateV2State({
+    activeTab: "workflows",
+    activeArticle: "guide-stock-receiving-putaway",
+    query: "stock",
+    scope: "tab",
+    tabScroll: { workflows: 900 },
+  }, LEGACY_ROUTES);
+
+  assert.deepEqual(migrated.activeRoute, { modeId: "home", guideId: "home", headingId: null, query: "stock", scope: "mode" });
+  assert.deepEqual(migrated.guideScroll, {});
+  assert.deepEqual(migrated.recentGuides, []);
 });
 
 test("keeps semantic diagram state IDs stable when diagrams are inserted or reordered", () => {
@@ -909,9 +920,9 @@ test("uses window as the handbook reading scroll owner", () => {
 });
 
 test("serializes and parses only canonical handbook routes", () => {
-  const routeHash = runtimeFunction("routeHash", "isDrawerViewport", { searchState: { query: "three-way match", scope: "mode" } });
+  const routeHash = runtimeFunction("routeHash", "isDrawerViewport");
   const parseRoute = runtimeFunction("parseRoute", "routeHash", { legacyRoutes: [] });
-  const hash = routeHash({ modeId: "tasks", guideId: "procurement-request-approval", headingId: "steps" });
+  const hash = routeHash({ modeId: "tasks", guideId: "procurement-request-approval", headingId: "steps", query: "three-way match", scope: "mode" });
 
   assert.equal(hash, "#mode=tasks&guide=procurement-request-approval&heading=steps&q=three-way+match&scope=mode");
   assert.deepEqual(parseRoute(hash), {
@@ -921,8 +932,34 @@ test("serializes and parses only canonical handbook routes", () => {
     query: "three-way match",
     scope: "mode",
   });
-  const defaultScopeHash = runtimeFunction("routeHash", "isDrawerViewport", { searchState: { query: "", scope: "all" } })({ modeId: "home", guideId: "home" });
+  const defaultScopeHash = routeHash({ modeId: "home", guideId: "home", headingId: null, query: "", scope: "all" });
   assert.equal(defaultScopeHash, "#mode=home&guide=home");
+  assert.deepEqual(parseRoute(""), { modeId: "home", guideId: "home", headingId: null, query: "", scope: "all" });
+  assert.deepEqual(parseRoute("#foo=bar"), { modeId: "", guideId: "", headingId: null, query: "", scope: "all" });
+});
+
+test("stores query and scope only inside the five-field active route", () => {
+  const currentStoredState = runtimeFunction("currentStoredState", "schedulePersistence", {
+    activeRoute: { modeId: "tasks", guideId: "procurement-request-approval", headingId: "steps", query: "approve", scope: "mode" },
+    guideScroll: {},
+    recentGuides: [],
+    disclosures: {},
+    diagramViews: {},
+    diagramZoom: {},
+    diagramModes: {},
+    document: { documentElement: { dataset: { theme: "light" } } },
+  });
+
+  assert.deepEqual(currentStoredState(), {
+    activeRoute: { modeId: "tasks", guideId: "procurement-request-approval", headingId: "steps", query: "approve", scope: "mode" },
+    guideScroll: {},
+    recentGuides: [],
+    disclosures: {},
+    diagramViews: {},
+    diagramZoom: {},
+    diagramModes: {},
+    theme: "light",
+  });
 });
 
 test("translates an exact legacy route but does not guess an unknown legacy target", () => {

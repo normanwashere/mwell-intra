@@ -22,11 +22,9 @@
     const legacyRoutes = Array.isArray(window.__HANDBOOK_LEGACY_ROUTES__) ? window.__HANDBOOK_LEGACY_ROUTES__ : [];
     const storageKey = 'mwell-intra-handbook:v3';
     const legacyStorageKey = 'mwell-intra-handbook:v2';
-    const configuredSearchState = window.__HANDBOOK_SEARCH_STATE__ || { query: '', scope: 'all' };
     const storedState = readStoredState();
     const restoredState = normalizeStoredState(storedState);
-    let searchState = { query: '', scope: configuredSearchState.scope === 'mode' || configuredSearchState.scope === 'tab' ? 'mode' : 'all' };
-    let activeRoute = { modeId: 'home', guideId: 'home', headingId: null };
+    let activeRoute = { modeId: 'home', guideId: 'home', headingId: null, query: '', scope: 'all' };
     let disclosures = Object.fromEntries(Object.entries(restoredState.disclosures).map(([guideId, ids]) => [guideId, new Set(ids)]));
     let disclosureStateBeforeSearch = null;
     let diagramViews = { ...restoredState.diagramViews };
@@ -38,7 +36,7 @@
     let diagramsReady = false;
     let activeDrawer = null;
     let drawerReturnFocus = null;
-    let printScope = 'article';
+    let printScope = 'guide';
     let searchDrawerTimer = null;
 
     function normalizeStoredState(value) {
@@ -47,6 +45,8 @@
       const modeId = typeof route.modeId === 'string' && route.modeId ? route.modeId : 'home';
       const guideId = typeof route.guideId === 'string' && route.guideId ? route.guideId : (modeId === 'home' ? 'home' : null);
       const headingId = typeof route.headingId === 'string' && route.headingId ? route.headingId : null;
+      const query = typeof route.query === 'string' ? route.query.trim() : '';
+      const scope = route.scope === 'mode' || route.scope === 'tab' ? 'mode' : 'all';
       const guideScroll = Object.fromEntries(Object.entries(stored.guideScroll && typeof stored.guideScroll === 'object' ? stored.guideScroll : {})
         .filter(([id, position]) => id && Number.isFinite(position) && position >= 0));
       const recentGuides = [...new Set(Array.isArray(stored.recentGuides) ? stored.recentGuides.filter((id) => typeof id === 'string' && id) : [])].slice(0, 10);
@@ -64,9 +64,7 @@
       const diagramModes = Object.fromEntries(Object.entries(stored.diagramModes && typeof stored.diagramModes === 'object' ? stored.diagramModes : {})
         .filter(([, mode]) => ['overview', 'role', 'decision'].includes(mode)));
       return {
-        activeRoute: { modeId, guideId, headingId },
-        query: typeof stored.query === 'string' ? stored.query.trim() : '',
-        scope: stored.scope === 'mode' || stored.scope === 'tab' ? 'mode' : 'all',
+        activeRoute: { modeId, guideId, headingId, query, scope },
         guideScroll,
         recentGuides,
         disclosures,
@@ -77,22 +75,25 @@
       };
     }
 
-    function migrateV2State(value, resolveRoute) {
+    function migrateV2State(value, routes) {
       const stored = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-      const activeRoute = resolveRoute(stored) || { modeId: 'home', guideId: 'home', headingId: null };
+      const legacyRoute = routes.find((route) => route.legacyTabId === stored.activeTab && route.legacyArticleId === stored.activeArticle && !route.legacyHeadingId);
+      const query = typeof stored.query === 'string' ? stored.query.trim() : '';
+      const scope = stored.scope === 'tab' || stored.scope === 'mode' ? 'mode' : 'all';
+      const activeRoute = legacyRoute
+        ? { modeId: legacyRoute.modeId, guideId: legacyRoute.guideId, headingId: legacyRoute.headingId || null, query, scope }
+        : { modeId: 'home', guideId: 'home', headingId: null, query, scope };
       const disclosures = {};
       (Array.isArray(stored.expandedIds) ? stored.expandedIds : []).filter((id) => typeof id === 'string' && id.includes(':')).forEach((id) => {
         const guideId = id.slice(0, id.indexOf(':'));
         disclosures[guideId] = [...new Set([...(disclosures[guideId] || []), id])];
       });
       const savedPosition = stored.tabScroll && typeof stored.tabScroll === 'object' ? stored.tabScroll[stored.activeTab] : null;
-      const guideScroll = activeRoute.guideId && Number.isFinite(savedPosition) && savedPosition >= 0 ? { [activeRoute.guideId]: savedPosition } : {};
+      const guideScroll = legacyRoute && activeRoute.guideId && Number.isFinite(savedPosition) && savedPosition >= 0 ? { [activeRoute.guideId]: savedPosition } : {};
       return {
         activeRoute,
-        query: typeof stored.query === 'string' ? stored.query.trim() : '',
-        scope: stored.scope === 'tab' || stored.scope === 'mode' ? 'mode' : 'all',
         guideScroll,
-        recentGuides: activeRoute.guideId && activeRoute.guideId !== 'home' ? [activeRoute.guideId] : [],
+        recentGuides: legacyRoute && activeRoute.guideId && activeRoute.guideId !== 'home' ? [activeRoute.guideId] : [],
         disclosures,
         diagramViews: stored.diagramViews && typeof stored.diagramViews === 'object' ? stored.diagramViews : {},
         diagramZoom: stored.diagramZoom && typeof stored.diagramZoom === 'object' ? stored.diagramZoom : {},
@@ -107,22 +108,13 @@
         if (stored) return JSON.parse(stored);
         const legacy = localStorage.getItem(legacyStorageKey);
         if (!legacy) return null;
-        const migrated = migrateV2State(JSON.parse(legacy), resolveStoredRoute);
+        const migrated = migrateV2State(JSON.parse(legacy), legacyRoutes);
         localStorage.setItem(storageKey, JSON.stringify(migrated));
         localStorage.removeItem(legacyStorageKey);
         return migrated;
       } catch (_) {
         return null;
       }
-    }
-
-    function resolveStoredRoute(state) {
-      const article = articles.find((candidate) => candidate.id === state.activeArticle);
-      if (article) return { modeId: article.dataset.mode, guideId: article.dataset.guideId, headingId: null };
-      const legacy = legacyRoutes.find((route) => route.legacyTabId === state.activeTab && route.legacyArticleId === state.activeArticle && !route.legacyHeadingId);
-      if (legacy) return { modeId: legacy.modeId, guideId: legacy.guideId, headingId: legacy.headingId || null };
-      const mode = tabs.find((tab) => tab.dataset.tab === state.activeTab)?.dataset.mode;
-      return mode ? { modeId: mode, guideId: mode === 'home' ? 'home' : null, headingId: null } : { modeId: 'home', guideId: 'home', headingId: null };
     }
 
     function normalizeSearchText(value) {
@@ -145,12 +137,12 @@
         if (translated) return { modeId: translated.modeId, guideId: translated.guideId, headingId: translated.headingId || null, query, scope };
         return { modeId: '', guideId: '', headingId: null, query, scope };
       }
-      return { modeId: 'home', guideId: 'home', headingId: null, query, scope };
+      if (!hash.replace(/^#/, '').trim()) return { modeId: 'home', guideId: 'home', headingId: null, query, scope };
+      return { modeId: '', guideId: '', headingId: null, query, scope };
     }
 
-    function routeHash({ modeId, guideId, headingId }) {
+    function routeHash({ modeId, guideId, headingId, query, scope }) {
       const params = new URLSearchParams({ mode: modeId });
-      const { query, scope } = searchState;
       if (guideId) params.set('guide', guideId);
       if (headingId) params.set('heading', headingId);
       if (query) params.set("q", query);
@@ -192,10 +184,10 @@
     function closeOpenDrawer() { if (activeDrawer) setDrawerVisible(activeDrawer, false, { restoreFocus: false }); }
     function focusableIn(element) { return [...element.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])')].filter((candidate) => !candidate.hidden && candidate.getClientRects().length > 0); }
     function applyPrintScope(scope) {
-      printScope = ['article', 'tab', 'all'].includes(scope) ? scope : 'article';
+      printScope = ['guide', 'mode', 'all'].includes(scope) ? scope : 'guide';
       document.documentElement.dataset.printScope = printScope;
       articles.forEach((article) => {
-        const include = printScope === 'all' || (printScope === 'tab' && article.dataset.mode === activeRoute.modeId) || (printScope === 'article' && article.dataset.guideId === activeRoute.guideId);
+        const include = printScope === 'all' || (printScope === 'mode' && article.dataset.mode === activeRoute.modeId) || (printScope === 'guide' && article.dataset.guideId === activeRoute.guideId);
         article.dataset.printInScope = String(include);
       });
     }
@@ -217,7 +209,7 @@
     }
 
     function syncDisclosureState() {
-      if (searchState.query || !activeRoute.guideId) return;
+      if (activeRoute.query || !activeRoute.guideId) return;
       const guide = guides.find((candidate) => candidate.dataset.guideId === activeRoute.guideId);
       if (!guide) return;
       disclosures[activeRoute.guideId] = new Set([...guide.querySelectorAll('details[data-section-id]')].filter((details) => details.open).map((details) => details.dataset.sectionId));
@@ -235,8 +227,6 @@
     function currentStoredState() {
       return {
         activeRoute,
-        query: searchState.query,
-        scope: searchState.scope,
         guideScroll,
         recentGuides,
         disclosures: Object.fromEntries(Object.entries(disclosures).map(([guideId, ids]) => [guideId, [...ids].sort()])),
@@ -278,9 +268,9 @@
     }
 
     function rankSearchResults() {
-      const query = normalizeSearchText(searchState.query);
+      const query = normalizeSearchText(activeRoute.query);
       if (!query) return [];
-      return handbookIndex.filter((record) => searchState.scope === 'all' || record.modeId === activeRoute.modeId).map((record, index) => ({ record, index, match: describeMatch(record, query) })).filter(({ match }) => match).sort((left, right) => left.match.rank - right.match.rank || left.index - right.index);
+      return handbookIndex.filter((record) => activeRoute.scope === 'all' || record.modeId === activeRoute.modeId).map((record, index) => ({ record, index, match: describeMatch(record, query) })).filter(({ match }) => match).sort((left, right) => left.match.rank - right.match.rank || left.index - right.index);
     }
 
     function openSearchMatches() {
@@ -289,16 +279,16 @@
 
     function renderSearchResults() {
       const results = rankSearchResults();
-      const searching = Boolean(normalizeSearchText(searchState.query));
+      const searching = Boolean(normalizeSearchText(activeRoute.query));
       searchResults.replaceChildren();
       searchResults.hidden = !searching;
       panels.forEach((panel) => { panel.hidden = searching || panel.dataset.mode !== activeRoute.modeId; });
       empty.hidden = !searching || results.length !== 0;
-      count.textContent = searching ? `${results.length} ${results.length === 1 ? 'result' : 'results'} in ${searchState.scope === 'all' ? 'all guides' : 'this mode'}` : 'Choose a guide to read';
+      count.textContent = searching ? `${results.length} ${results.length === 1 ? 'result' : 'results'} in ${activeRoute.scope === 'all' ? 'all guides' : 'this mode'}` : 'Choose a guide to read';
       if (!searching) return;
       results.forEach(({ record, match }) => {
         const result = document.createElement('a');
-        result.href = routeHash({ modeId: record.modeId, guideId: record.guideId, headingId: record.headingId });
+        result.href = routeHash({ modeId: record.modeId, guideId: record.guideId, headingId: record.headingId, query: activeRoute.query, scope: activeRoute.scope });
         result.dataset.searchResult = '';
         result.dataset.mode = record.modeId;
         result.dataset.guideId = record.guideId;
@@ -310,19 +300,25 @@
         location.textContent = `${tabs.find((tab) => tab.dataset.mode === record.modeId)?.textContent || record.modeId} / ${record.title}`;
         const heading = document.createElement('strong'); heading.textContent = record.heading;
         const reason = document.createElement('small'); reason.className = 'search-result-reason'; reason.textContent = match.reason;
-        const excerpt = document.createElement('small'); excerpt.className = 'search-result-excerpt'; excerpt.textContent = searchExcerptForQuery(record.searchText || record.text, searchState.query);
+        const excerpt = document.createElement('small'); excerpt.className = 'search-result-excerpt'; excerpt.textContent = searchExcerptForQuery(record.searchText || record.text, activeRoute.query);
         result.append(location, heading, reason, excerpt);
         searchResults.append(result);
       });
     }
 
     function setSearchState(nextState, { writeHash = false } = {}) {
-      const next = { query: String(nextState.query || '').trim(), scope: nextState.scope === 'mode' || nextState.scope === 'tab' ? 'mode' : 'all' };
-      const wasSearching = Boolean(searchState.query);
+      const next = {
+        modeId: typeof nextState.modeId === 'string' ? nextState.modeId : activeRoute.modeId,
+        guideId: nextState.guideId === undefined ? activeRoute.guideId : nextState.guideId,
+        headingId: nextState.headingId === undefined ? activeRoute.headingId : nextState.headingId,
+        query: String(nextState.query || '').trim(),
+        scope: nextState.scope === 'mode' || nextState.scope === 'tab' ? 'mode' : 'all',
+      };
+      const wasSearching = Boolean(activeRoute.query);
       const isSearching = Boolean(next.query);
       if (!wasSearching && isSearching) captureDisclosureState();
       if (wasSearching && !isSearching) restoreDisclosureState();
-      searchState = next;
+      activeRoute = next;
       search.value = next.query;
       searchScopeButtons.forEach((button) => button.setAttribute('aria-pressed', String((button.dataset.searchScope === 'tab' ? 'mode' : button.dataset.searchScope) === next.scope)));
       if (isSearching) openSearchMatches();
@@ -330,7 +326,7 @@
       window.clearTimeout(searchDrawerTimer);
       if (isSearching && isDrawerViewport()) {
         searchDrawerTimer = window.setTimeout(() => {
-          if (searchState.query === next.query && document.activeElement === search) setDrawerVisible('contents', true);
+          if (activeRoute.query === next.query && document.activeElement === search) setDrawerVisible('contents', true);
         }, 350);
       }
       if (writeHash) history.replaceState({}, '', routeHash(activeRoute));
@@ -345,7 +341,7 @@
         const domId = heading.id || heading.parentElement.id;
         const localHeadingId = domId.startsWith(`${article.dataset.guideId}-`) ? domId.slice(article.dataset.guideId.length + 1) : domId;
         const link = document.createElement('a');
-        link.href = routeHash({ modeId: article.dataset.mode, guideId: article.dataset.guideId, headingId: localHeadingId });
+        link.href = routeHash({ modeId: article.dataset.mode, guideId: article.dataset.guideId, headingId: localHeadingId, query: activeRoute.query, scope: activeRoute.scope });
         link.dataset.headingLink = ''; link.dataset.mode = article.dataset.mode; link.dataset.guideId = article.dataset.guideId; link.dataset.tab = article.dataset.tab; link.dataset.article = article.id; link.dataset.heading = domId;
         link.className = `toc-level-${heading.tagName.toLowerCase()}`; link.textContent = heading.textContent; link.setAttribute('aria-current', String(localHeadingId === headingId));
         pageToc.append(link);
@@ -388,11 +384,31 @@
       target.tabIndex = -1;
       target.scrollIntoView({ block: 'start', behavior: 'auto' });
       target.focus({ preventScroll: true });
+      positionTargetBelowStickyChrome(target);
     }
 
-    function updateRecentGuides(guideId) {
-      if (!guideId || guideId === 'home') return;
-      recentGuides = [guideId, ...recentGuides.filter((id) => id !== guideId)].slice(0, 8);
+    function visibleStickyChromeBottom(target) {
+      const targetRect = target.getBoundingClientRect();
+      return [...document.querySelectorAll('body *')].reduce((bottom, candidate) => {
+        if (candidate === target || candidate.contains(target) || !candidate.getClientRects().length) return bottom;
+        const style = getComputedStyle(candidate);
+        if ((style.position !== 'fixed' && style.position !== 'sticky') || style.visibility === 'hidden' || style.display === 'none') return bottom;
+        const rect = candidate.getBoundingClientRect();
+        if (rect.height <= 0 || rect.bottom <= 0 || rect.top >= innerHeight || rect.right <= targetRect.left || rect.left >= targetRect.right) return bottom;
+        const declaredTop = Number.parseFloat(style.top);
+        if (!Number.isFinite(declaredTop) || rect.top > declaredTop + 1) return bottom;
+        return Math.max(bottom, rect.bottom);
+      }, 0);
+    }
+
+    function positionTargetBelowStickyChrome(target) {
+      const gap = 16;
+      const targetTop = target.getBoundingClientRect().top;
+      const desiredTop = visibleStickyChromeBottom(target) + gap;
+      if (targetTop < desiredTop || targetTop > desiredTop + 1) window.scrollBy({ left: 0, top: targetTop - desiredTop, behavior: 'auto' });
+    }
+
+    function renderRecentGuides() {
       const list = document.querySelector('[data-recent-guides]');
       if (!list) return;
       list.replaceChildren(...recentGuides.map((id) => {
@@ -400,7 +416,7 @@
         const item = document.createElement('li');
         if (!guide) return item;
         const link = document.createElement('a');
-        link.href = routeHash({ modeId: guide.dataset.mode, guideId: id });
+        link.href = routeHash({ modeId: guide.dataset.mode, guideId: id, headingId: null, query: '', scope: 'all' });
         link.dataset.guideLink = ''; link.dataset.mode = guide.dataset.mode; link.dataset.guideId = id;
         link.textContent = guide.querySelector('h1')?.textContent || id;
         item.append(link);
@@ -408,12 +424,17 @@
       }));
     }
 
-    function activateRoute({ modeId, guideId, headingId, historyMode, restoreScroll, focusTarget }) {
+    function updateRecentGuides(guideId) {
+      if (guideId && guideId !== 'home') recentGuides = [guideId, ...recentGuides.filter((id) => id !== guideId)].slice(0, 8);
+      renderRecentGuides();
+    }
+
+    function activateRoute({ modeId, guideId, headingId, query, scope, historyMode, restoreScroll, focusTarget }) {
       closeOpenDrawer();
       if (activeRoute.guideId && guides.some((guide) => guide.dataset.guideId === activeRoute.guideId)) guideScroll = { ...guideScroll, [activeRoute.guideId]: window.scrollY };
       const guide = guides.find((candidate) => candidate.dataset.guideId === guideId) || null;
       const article = guide?.matches('article[data-document]') ? guide : null;
-      activeRoute = { modeId, guideId: guide?.dataset.guideId || null, headingId: headingId || null };
+      activeRoute = { modeId, guideId: guide?.dataset.guideId || null, headingId: headingId || null, query: String(query || '').trim(), scope: scope === 'mode' || scope === 'tab' ? 'mode' : 'all' };
       applyPrintScope(printScope);
       const hash = routeHash(activeRoute);
       tabs.forEach((tab) => { const active = tab.dataset.mode === modeId; tab.setAttribute('aria-selected', String(active)); tab.tabIndex = active ? 0 : -1; });
@@ -442,7 +463,9 @@
     function activateLinkedRoute(link, restoreScroll) {
       const route = parseRoute(link.getAttribute('href'));
       setSearchState(route);
-      activateRoute({ ...recoverRoute(route), historyMode: 'push', restoreScroll, focusTarget: true });
+      const recovered = recoverRoute(route);
+      if (isRouteValid(route)) routeNotice.hidden = true;
+      activateRoute({ ...recovered, historyMode: 'push', restoreScroll, focusTarget: true });
     }
 
     function activateParsedRoute(historyMode, restoreScroll) {
@@ -454,7 +477,7 @@
       if (wasLegacy && isRouteValid(parsedRoute)) {
         routeNotice.hidden = false;
         routeNotice.querySelector('span').textContent = 'This handbook link has moved. The current guide is open.';
-      }
+      } else if (isRouteValid(parsedRoute)) routeNotice.hidden = true;
       const hasSavedPosition = restoreScroll === 'stored' && recovered.guideId && Object.prototype.hasOwnProperty.call(guideScroll, recovered.guideId);
       const focusTarget = Boolean(recovered.headingId) || Boolean(recovered.guideId && !hasSavedPosition);
       const canonicalHash = routeHash(recovered);
@@ -528,14 +551,14 @@
     resetDrawers();
     applyPrintScope(printScope);
     tabs.forEach((tab, index) => {
-      tab.addEventListener('click', () => activateRoute({ modeId: tab.dataset.mode, guideId: tab.dataset.mode === 'home' ? 'home' : null, headingId: null, historyMode: 'push', restoreScroll: false, focusTarget: false }));
+      tab.addEventListener('click', () => activateRoute({ ...activeRoute, modeId: tab.dataset.mode, guideId: tab.dataset.mode === 'home' ? 'home' : null, headingId: null, historyMode: 'push', restoreScroll: false, focusTarget: false }));
       tab.addEventListener('keydown', (event) => {
         const keyToOffset = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 };
         if (event.key === 'Home' || event.key === 'End' || keyToOffset[event.key]) {
           event.preventDefault();
           const targetIndex = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (index + keyToOffset[event.key] + tabs.length) % tabs.length;
           const target = tabs[targetIndex];
-          activateRoute({ modeId: target.dataset.mode, guideId: target.dataset.mode === 'home' ? 'home' : null, headingId: null, historyMode: 'push', restoreScroll: false, focusTarget: false });
+          activateRoute({ ...activeRoute, modeId: target.dataset.mode, guideId: target.dataset.mode === 'home' ? 'home' : null, headingId: null, historyMode: 'push', restoreScroll: false, focusTarget: false });
           target.focus();
         }
       });
@@ -550,8 +573,8 @@
       activateLinkedRoute(link, true);
     });
     document.querySelectorAll('details[data-section-id]').forEach((details) => details.addEventListener('toggle', syncDisclosureState));
-    search.addEventListener('input', () => setSearchState({ query: search.value, scope: searchState.scope }, { writeHash: true }));
-    searchScopeButtons.forEach((button) => button.addEventListener('click', () => setSearchState({ query: searchState.query, scope: button.dataset.searchScope }, { writeHash: true })));
+    search.addEventListener('input', () => setSearchState({ ...activeRoute, query: search.value }, { writeHash: true }));
+    searchScopeButtons.forEach((button) => button.addEventListener('click', () => setSearchState({ ...activeRoute, scope: button.dataset.searchScope }, { writeHash: true })));
     document.querySelector('#theme').addEventListener('click', () => { const root = document.documentElement; root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark'; schedulePersistence(); });
     drawerTriggers.forEach((button) => button.addEventListener('click', () => setDrawerVisible(button.dataset.openDrawer, true)));
     document.querySelectorAll('[data-close-drawer]').forEach((button) => button.addEventListener('click', () => setDrawerVisible(button.dataset.closeDrawer, false)));
@@ -623,12 +646,12 @@
     const initialHash = location.hash;
     const initialParams = new URLSearchParams(initialHash.replace(/^#/, ''));
     const initialWasLegacy = initialParams.has('tab') || initialParams.has('article');
-    const initialRoute = initialHash ? parseRoute() : { ...restoredState.activeRoute, query: restoredState.query, scope: restoredState.scope };
+    const initialRoute = initialHash ? parseRoute() : restoredState.activeRoute;
     const recoveredInitialRoute = recoverRoute(initialRoute);
     if (initialWasLegacy && isRouteValid(initialRoute)) {
       routeNotice.hidden = false;
       routeNotice.querySelector('span').textContent = 'This handbook link has moved. The current guide is open.';
-    }
+    } else if (initialHash && isRouteValid(initialRoute)) routeNotice.hidden = true;
     mermaidReady.finally(() => {
       restoreMermaidLayout();
       diagramsReady = true;
