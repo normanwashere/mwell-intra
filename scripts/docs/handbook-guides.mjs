@@ -15,7 +15,7 @@ const TASK_FIELDS = [
   "decisionPoints", "denialChecks", "recovery", "handoff",
   "completionCriteria", "completionEvidence", "governingSources",
   "relatedTasks", "keywords", "owner", "effectiveDate",
-  "lastReviewedDate", "applicableBuild", "status",
+  "lastReviewedDate", "applicableBuild", "status", "availability",
 ];
 
 const ROLE_FIELDS = [
@@ -25,8 +25,30 @@ const ROLE_FIELDS = [
   "prohibitedActions", "authorityLimits", "handoffs", "denialChecks",
   "escalationAndRecovery", "evidenceResponsibilities", "trainingReadiness",
   "governingSources", "owner", "effectiveDate", "lastReviewedDate",
-  "applicableBuild", "status",
+  "applicableBuild", "status", "availability", "workspaceMap",
+  "guidedSimulation",
 ];
+
+const TASK_STAGE_FIELDS = [
+  "id", "label", "performingRole", "module", "route", "instruction",
+  "screenshot", "expectedResult", "dataRead", "dataWritten",
+  "evidenceRetained", "nextHandoff",
+];
+
+const ROLE_WORKSPACE_FIELDS = ["id", "module", "landingRoute"];
+const ROLE_SIMULATION_FIELDS = [
+  "id", "title", "linkedTaskId", "startRoute", "actorRole", "scenario",
+  "successCriteria", "negativeScenario", "recovery",
+];
+
+const PRESENTATION_PURPOSES = new Set([
+  "canonical-guide-body",
+  "policy-basis",
+  "system-record",
+  "downloadable-resource",
+  "governed-reference",
+  "role-summary",
+]);
 
 const TASK_SECTION_IDS = [
   "outcome",
@@ -450,6 +472,63 @@ const TASK_DEFINITIONS = [
   },
 ];
 
+const TASK_STAGE_ROLES = {
+  "procurement-request-approval": ["general_employee", "general_employee", "operations_lead", "procurement_lead"],
+  "vendor-accreditation-renewal": ["legal_compliance_lead", "vendor_representative", "legal_compliance_lead", "legal_compliance_lead"],
+  "warehouse-location-bin-setup": ["operations_lead", "operations_lead", "operations_lead", "operations_associate"],
+  "stock-receiving-putaway": ["operations_associate", "operations_associate", "operations_lead", "operations_associate"],
+  "ecommerce-order-intake": ["operations_associate", "operations_associate", "operations_associate", "operations_associate"],
+  "ecommerce-fulfillment-delivery": ["operations_associate", "operations_associate", "operations_associate", "operations_lead"],
+  "returns-replacements-refunds-rma": ["operations_associate", "operations_associate", "operations_lead", "operations_associate"],
+  "department-inventory-release": ["general_employee", "operations_lead", "operations_associate", "general_employee"],
+  "event-stock-custody": ["general_employee", "operations_associate", "marketing_events_lead", "operations_lead"],
+  "inventory-count-variance": ["operations_associate", "operations_associate", "operations_lead", "operations_lead"],
+  "department-doa-activation": ["platform_administrator", "platform_administrator", "legal_compliance_lead", "platform_administrator"],
+  "finance-readiness-evidence": ["finance_controller", "finance_controller", "finance_controller", "finance_controller"],
+  "product-readiness-pricing-go-live": ["general_employee", "product_owner", "product_owner", "operations_lead"],
+};
+
+const TASK_STAGE_ROUTES = {
+  "procurement-request-approval": ["/procurement/requests/new", "/procurement/requests", "/procurement/approvals", "/procurement/requests"],
+  "vendor-accreditation-renewal": ["/legal/invites/new", "/vendor", "/legal/cases", "/legal/cases"],
+  "warehouse-location-bin-setup": ["/warehouse/storage", "/warehouse/locations", "/warehouse/locations", "/warehouse/purchase-orders"],
+  "stock-receiving-putaway": ["/warehouse/purchase-orders", "/warehouse/receiving", "/warehouse/quality", "/warehouse/storage"],
+  "ecommerce-order-intake": ["/warehouse/fulfillment", "/warehouse/fulfillment", "/warehouse/fulfillment", "/warehouse/fulfillment"],
+  "ecommerce-fulfillment-delivery": ["/warehouse/fulfillment", "/warehouse/fulfillment", "/warehouse/fulfillment", "/warehouse/fulfillment"],
+  "returns-replacements-refunds-rma": ["/warehouse/returns", "/warehouse/returns", "/warehouse/quality", "/warehouse/returns"],
+  "department-inventory-release": ["/warehouse/fulfillment", "/warehouse/approvals", "/warehouse/fulfillment", "/warehouse/fulfillment"],
+  "event-stock-custody": ["/events", "/warehouse/fulfillment", "/events", "/events"],
+  "inventory-count-variance": ["/warehouse/cycle-counts", "/warehouse/cycle-counts", "/warehouse/approvals", "/warehouse/cycle-counts"],
+  "department-doa-activation": ["/admin/doa", "/admin/doa", "/admin/doa", "/admin/doa"],
+  "finance-readiness-evidence": ["/finance", "/finance", "/finance", "/finance"],
+  "product-readiness-pricing-go-live": ["/product", "/product", "/product", "/product"],
+};
+
+function taskStage(definition, label, index) {
+  const roles = TASK_STAGE_ROLES[definition.id];
+  const routes = TASK_STAGE_ROUTES[definition.id];
+  const performingRole = roles[index];
+  return {
+    id: `step-${index + 1}`,
+    label,
+    performingRole,
+    module: definition.module,
+    route: routes[index],
+    instruction: `${label}.`,
+    screenshot: {
+      bindingId: `${definition.id}:step-${index + 1}`,
+      status: "pending",
+      path: null,
+      target: null,
+    },
+    expectedResult: `${label} is recorded and visible in ${definition.module}.`,
+    dataRead: definition.inputs,
+    dataWritten: [`${label} state`, "Attributable actor and timestamp"],
+    evidenceRetained: definition.evidence,
+    nextHandoff: roles[index + 1] ?? "Task accountable closer",
+  };
+}
+
 function taskGuide(definition) {
   const decisionLabels = definition.decisions;
   return {
@@ -470,7 +549,7 @@ function taskGuide(definition) {
       requiredAccess: definition.access,
       inputsAndEvidence: definition.inputs,
     },
-    steps: definition.steps.map((label, index) => ({ id: `step-${index + 1}`, label })),
+    steps: definition.steps.map((label, index) => taskStage(definition, label, index)),
     decisionLabels,
     decisionPoints: decisionLabels.map((label, index) => ({ id: `decision-${index + 1}`, label })),
     denialChecks: definition.denial,
@@ -487,6 +566,7 @@ function taskGuide(definition) {
     lastReviewedDate: EFFECTIVE_DATE,
     applicableBuild: APPLICABLE_BUILD,
     status: "current",
+    availability: "implemented",
     sourceSections: definition.sources,
     screenshotReferences: definition.screenshots,
     sections: guideSections(TASK_SECTION_IDS),
@@ -610,12 +690,65 @@ const ROLE_DEFINITIONS = [
   },
 ];
 
+const ROLE_WORKSPACE_ROUTES = {
+  platform_administrator: ["/admin/users", "/admin/departments", "/admin/doa", "/admin/audit"],
+  general_employee: ["/procurement/requests/new", "/warehouse/fulfillment", "/events", "/work"],
+  operations_associate: ["/warehouse/purchase-orders", "/warehouse/quality", "/warehouse/storage", "/warehouse/fulfillment", "/warehouse/returns", "/warehouse/cycle-counts"],
+  operations_lead: ["/warehouse/quality", "/warehouse/approvals", "/warehouse/exceptions", "/warehouse/locations", "/procurement/approvals", "/product"],
+  procurement_lead: ["/procurement/requests", "/procurement/approvals", "/procurement/purchase-orders", "/warehouse/procurement"],
+  finance_controller: ["/finance", "/procurement/purchase-orders", "/events"],
+  legal_compliance_lead: ["/legal/cases", "/legal/invites/new", "/admin/doa"],
+  marketing_events_lead: ["/events"],
+  product_owner: ["/product", "/events"],
+  leadership_insights: ["/insights", "/work"],
+  vendor_representative: ["/vendor"],
+};
+
+const WORKSPACE_MODULE_LABELS = {
+  admin: "Administration",
+  procurement: "Procurement",
+  warehouse: "Warehouse",
+  events: "Events",
+  work: "My Work",
+  finance: "Finance",
+  legal: "Legal and Compliance",
+  product: "Product",
+  insights: "Insights",
+  vendor: "Vendor Portal",
+};
+
+function roleWorkspaceMap(roleId) {
+  return ROLE_WORKSPACE_ROUTES[roleId].map((landingRoute, index) => {
+    const routeRoot = landingRoute.split("/").filter(Boolean)[0];
+    return {
+      id: `workspace-${index + 1}`,
+      module: WORKSPACE_MODULE_LABELS[routeRoot],
+      landingRoute,
+    };
+  });
+}
+
+function guidedSimulation(definition, workspaceMap) {
+  return {
+    id: `${definition.id}-guided-simulation`,
+    title: `${definition.name} guided practice`,
+    linkedTaskId: definition.tasks[0],
+    startRoute: workspaceMap[0].landingRoute,
+    actorRole: definition.id,
+    scenario: `Complete the first assigned ${definition.name} work item through its governed handoff.`,
+    successCriteria: definition.training,
+    negativeScenario: definition.denial[0],
+    recovery: definition.escalation,
+  };
+}
+
 const ROLE_SOURCE_SECTIONS = [
   section("role-modules", "docs/USER_TRAINING_AND_OPERATIONS_MANUAL.md", "Role Modules", "role-summary"),
   section("role-procedure-checks", "docs/TRAINING_AND_HANDOVER_CONTENT.md", "Role procedure checks", "role-summary"),
 ];
 
 function roleGuide(definition) {
+  const workspaceMap = roleWorkspaceMap(definition.id);
   return {
     id: definition.id,
     type: "role",
@@ -645,6 +778,9 @@ function roleGuide(definition) {
     lastReviewedDate: EFFECTIVE_DATE,
     applicableBuild: APPLICABLE_BUILD,
     status: "current",
+    availability: "implemented",
+    workspaceMap,
+    guidedSimulation: guidedSimulation(definition, workspaceMap),
     relatedGuides: definition.tasks,
     sourceSections: ROLE_SOURCE_SECTIONS,
     screenshotReferences: [],
@@ -693,6 +829,33 @@ const SOURCE_REFERENCE_SECTIONS = HANDBOOK_DOCUMENTS.map((document) =>
   ));
 
 const SYSTEM_GUIDES = [
+  {
+    id: "administration-configuration",
+    title: "Administration and configuration",
+    summary: "Identity, organization, delegated authority, and controlled platform configuration.",
+    audience: ["administrator", "control-owner", "auditor"],
+    related: ["department-doa-activation", "security-governance", "source-references"],
+    sources: [
+      section("doa-administration-system", "docs/manual/MWELL_INTRA_USER_MANUAL.md", "DOA Administration"),
+      section("administrative-authority", "docs/TECHNICAL_AND_FUNCTIONAL_SPECIFICATION.md", "Security and authority", "policy-basis"),
+      section("platform-admin-procedure", "docs/manual/MWELL_INTRA_USER_MANUAL.md", "Platform Admin", "role-summary"),
+    ],
+    keywords: ["administration", "configuration", "users", "departments", "DOA"],
+  },
+  {
+    id: "training-operational-readiness",
+    title: "Training and operational readiness",
+    summary: "Role learning, guided practice, negative scenarios, handover, and sign-off.",
+    audience: ["trainer", "operator", "approver"],
+    related: ["general_employee", "release-qa", "source-references"],
+    sources: [
+      section("training-outcomes", "docs/TRAINING_AND_HANDOVER_CONTENT.md", "Training outcomes", "role-summary"),
+      section("training-format", "docs/USER_TRAINING_AND_OPERATIONS_MANUAL.md", "Training Format", "role-summary"),
+      section("training-negative-scenarios", "docs/TRAINING_AND_HANDOVER_CONTENT.md", "Negative scenarios", "role-summary"),
+      section("handover-evidence", "docs/TRAINING_AND_HANDOVER_CONTENT.md", "Handover evidence", "governed-reference"),
+    ],
+    keywords: ["training", "readiness", "simulation", "handover", "sign-off"],
+  },
   {
     id: "architecture-data",
     title: "Architecture and data design",
@@ -799,6 +962,7 @@ function systemGuide(definition) {
     lastReviewedDate: EFFECTIVE_DATE,
     applicableBuild: APPLICABLE_BUILD,
     status: "current",
+    availability: "implemented",
     sections: guideSections(["overview", "source-references", "document-controls"]),
   };
 }
@@ -826,6 +990,8 @@ const HOME_GUIDE = {
     "docs/manual/assets/knowledge-base/knowledge-home-mobile.png",
   ],
   keywords: ["home", "start", "task", "role", "system"],
+  status: "current",
+  availability: "implemented",
   sections: guideSections(["start-a-task", "learn-my-role", "manage-support", "recent-guides", "document-controls"]),
 };
 
@@ -835,6 +1001,34 @@ export const HANDBOOK_GUIDES = deepFreeze([
   ...ROLE_DEFINITIONS.map(roleGuide),
   ...SYSTEM_GUIDES.map(systemGuide),
 ]);
+
+function invariantProjection(guide) {
+  return {
+    id: guide.id,
+    type: guide.type,
+    status: guide.status,
+    availability: guide.availability,
+    relatedGuides: [...guide.relatedGuides],
+    participatingRoles: [...(guide.participatingRoles ?? [])],
+    linkedTasks: [...(guide.linkedTasks ?? [])],
+    sourceSections: guide.sourceSections.map(
+      ({ id, source, heading, purpose }) => ({ id, source, heading, purpose }),
+    ),
+    screenshotReferences: [...guide.screenshotReferences],
+    workspaceMap: (guide.workspaceMap ?? []).map(
+      ({ id, module, landingRoute }) => ({ id, module, landingRoute }),
+    ),
+    guidedSimulation: guide.guidedSimulation
+      ? { ...guide.guidedSimulation }
+      : null,
+  };
+}
+
+// The validator compares caller-supplied guide data with this immutable
+// canonical projection, rather than accepting any structurally valid target.
+export const HANDBOOK_GUIDE_INVARIANTS = deepFreeze(Object.fromEntries(
+  HANDBOOK_GUIDES.map((guide) => [guide.id, invariantProjection(guide)]),
+));
 
 function slug(value) {
   return value
@@ -882,6 +1076,24 @@ const LEGACY_TARGET_BY_SOURCE_ID = {
   "uat-live-certification": ["system", "release-qa", "source-references"],
 };
 
+const EXPLICIT_LEGACY_HEADING_TARGETS = {
+  "user-manual#Ecommerce Fulfillment": ["tasks", "ecommerce-fulfillment-delivery", "steps"],
+  "user-training-operations-manual#Role Modules": ["roles", "general_employee", "your-workspace"],
+  "training-handover#Role procedure checks": ["roles", "general_employee", "guided-simulation"],
+};
+
+function legacyHeadingTarget(document, heading) {
+  const explicit = EXPLICIT_LEGACY_HEADING_TARGETS[`${document.id}#${heading}`];
+  if (explicit) return explicit;
+  for (const guide of HANDBOOK_GUIDES) {
+    const sourceSection = guide.sourceSections.find(
+      (item) => item.source === document.source && item.heading === heading,
+    );
+    if (sourceSection) return [guide.modeId, guide.id, sourceSection.id];
+  }
+  return LEGACY_TARGET_BY_SOURCE_ID[document.id];
+}
+
 function buildLegacyRoutes(documents = HANDBOOK_DOCUMENTS, rootDirectory = root) {
   return documents.flatMap((document) => {
     const target = LEGACY_TARGET_BY_SOURCE_ID[document.id];
@@ -900,8 +1112,12 @@ function buildLegacyRoutes(documents = HANDBOOK_DOCUMENTS, rootDirectory = root)
     const absolute = path.join(rootDirectory, document.source);
     if (!existsSync(absolute)) return routes;
     for (const heading of markdownHeadings(readFileSync(absolute, "utf8"))) {
+      const headingTarget = legacyHeadingTarget(document, heading) ?? target;
       routes.push({
         ...base,
+        modeId: headingTarget[0],
+        guideId: headingTarget[1],
+        headingId: headingTarget[2],
         legacyHeadingId: `${articleId}-${slug(heading)}`,
       });
     }
@@ -914,6 +1130,16 @@ export const LEGACY_ROUTES = deepFreeze(buildLegacyRoutes());
 function isPopulated(value) {
   if (Array.isArray(value)) return value.length > 0;
   return typeof value === "string" ? value.trim().length > 0 : value != null;
+}
+
+function duplicateValues(values) {
+  const counts = new Map();
+  for (const value of values) counts.set(value, (counts.get(value) ?? 0) + 1);
+  return [...counts].filter(([, count]) => count > 1).map(([value]) => value);
+}
+
+function sameContract(actual, expected) {
+  return JSON.stringify(actual) === JSON.stringify(expected);
 }
 
 function routeKey(route) {
@@ -929,6 +1155,7 @@ export function validateHandbookGuides({
   guides = HANDBOOK_GUIDES,
   legacyRoutes = LEGACY_ROUTES,
   documents = HANDBOOK_DOCUMENTS,
+  invariants = HANDBOOK_GUIDE_INVARIANTS,
   rootDirectory = root,
 } = {}) {
   const errors = [];
@@ -956,6 +1183,7 @@ export function validateHandbookGuides({
   const documentSources = new Set(documents.map(({ source }) => source));
   const mappedSources = new Set();
   const selectorPurposes = new Map();
+  const screenshotBindingCounts = new Map();
 
   for (const guide of guides) {
     if (!modeIdSet.has(guide.modeId)) {
@@ -970,6 +1198,9 @@ export function validateHandbookGuides({
     else if (guide.modeId !== expectedMode) {
       errors.push(`${guide.id} must use mode ${expectedMode}, not ${guide.modeId}.`);
     }
+    if (guide.availability === "implemented" && guide.status !== "current") {
+      errors.push(`implemented guide ${guide.id} cannot have ${guide.status} status.`);
+    }
 
     const requiredFields = guide.type === "task" ? TASK_FIELDS
       : guide.type === "role" ? ROLE_FIELDS
@@ -981,6 +1212,9 @@ export function validateHandbookGuides({
     }
 
     if (guide.type === "task") {
+      for (const roleId of duplicateValues(guide.participatingRoles ?? [])) {
+        errors.push(`task ${guide.id} has duplicate participating role ${roleId}.`);
+      }
       for (const roleId of guide.participatingRoles ?? []) {
         const roleGuide = guideById.get(roleId);
         if (!roleGuide) {
@@ -997,6 +1231,43 @@ export function validateHandbookGuides({
           errors.push(`task ${guide.id} links to non-task guide ${taskId}.`);
         }
       }
+      for (const [index, stage] of (guide.steps ?? []).entries()) {
+        const stageId = stage.id ?? `step-${index + 1}`;
+        for (const field of TASK_STAGE_FIELDS) {
+          if (!isPopulated(stage[field])) {
+            errors.push(`task ${guide.id} stage ${stageId} is missing required field ${field}.`);
+          }
+        }
+        const performingGuide = guideById.get(stage.performingRole);
+        if (stage.performingRole && performingGuide?.type !== "role") {
+          errors.push(`task ${guide.id} stage ${stageId} references invalid performing role ${stage.performingRole}.`);
+        }
+        if (stage.route && !stage.route.startsWith("/")) {
+          errors.push(`task ${guide.id} stage ${stageId} has invalid route ${stage.route}.`);
+        }
+        if (stage.screenshot) {
+          for (const field of ["bindingId", "status", "path", "target"]) {
+            if (!Object.hasOwn(stage.screenshot, field)) {
+              errors.push(`task ${guide.id} stage ${stageId} screenshot is missing required field ${field}.`);
+            }
+          }
+          if (isPopulated(stage.screenshot.bindingId)) {
+            screenshotBindingCounts.set(
+              stage.screenshot.bindingId,
+              (screenshotBindingCounts.get(stage.screenshot.bindingId) ?? 0) + 1,
+            );
+          }
+          if (!["pending", "certified"].includes(stage.screenshot.status)) {
+            errors.push(`task ${guide.id} stage ${stageId} has invalid screenshot status ${stage.screenshot.status}.`);
+          }
+          if (
+            stage.screenshot.status === "certified" &&
+            (!isPopulated(stage.screenshot.path) || !isPopulated(stage.screenshot.target))
+          ) {
+            errors.push(`task ${guide.id} stage ${stageId} has incomplete certified screenshot evidence.`);
+          }
+        }
+      }
     }
     if (guide.type === "role") {
       for (const taskId of guide.linkedTasks ?? []) {
@@ -1007,11 +1278,41 @@ export function validateHandbookGuides({
           errors.push(`role ${guide.id} links to non-task guide ${taskId}.`);
         }
       }
+      for (const [index, workspace] of (guide.workspaceMap ?? []).entries()) {
+        const workspaceId = workspace.id ?? `workspace-${index + 1}`;
+        for (const field of ROLE_WORKSPACE_FIELDS) {
+          if (!isPopulated(workspace[field])) {
+            errors.push(`role ${guide.id} workspace ${workspaceId} is missing required field ${field}.`);
+          }
+        }
+        if (workspace.landingRoute && !workspace.landingRoute.startsWith("/")) {
+          errors.push(`role ${guide.id} workspace ${workspaceId} has invalid landing route ${workspace.landingRoute}.`);
+        }
+      }
+      const simulation = guide.guidedSimulation ?? {};
+      for (const field of ROLE_SIMULATION_FIELDS) {
+        if (!isPopulated(simulation[field])) {
+          errors.push(`role ${guide.id} guided simulation is missing required field ${field}.`);
+        }
+      }
+      if (simulation.linkedTaskId && guideById.get(simulation.linkedTaskId)?.type !== "task") {
+        errors.push(`role ${guide.id} guided simulation links to invalid task ${simulation.linkedTaskId}.`);
+      }
+      if (simulation.actorRole && simulation.actorRole !== guide.id) {
+        errors.push(`role ${guide.id} guided simulation uses invalid actor ${simulation.actorRole}.`);
+      }
+      const workspaceRoutes = new Set((guide.workspaceMap ?? []).map(({ landingRoute }) => landingRoute));
+      if (simulation.startRoute && !workspaceRoutes.has(simulation.startRoute)) {
+        errors.push(`role ${guide.id} guided simulation starts outside its workspace map at ${simulation.startRoute}.`);
+      }
     }
 
     if (!Array.isArray(guide.relatedGuides)) {
       errors.push(`${guide.id} must declare relatedGuides.`);
     } else {
+      for (const relatedId of duplicateValues(guide.relatedGuides)) {
+        errors.push(`${guide.id} has duplicate related guide ${relatedId}.`);
+      }
       for (const relatedId of guide.relatedGuides) {
         if (!guideById.has(relatedId)) {
           errors.push(`${guide.id} references missing related guide ${relatedId}.`);
@@ -1023,9 +1324,12 @@ export function validateHandbookGuides({
       errors.push(`${guide.id} must declare sourceSections.`);
     } else {
       const sectionCounts = new Map();
+      const selectorCounts = new Map();
       for (const sourceSection of guide.sourceSections) {
         sectionCounts.set(sourceSection.id, (sectionCounts.get(sourceSection.id) ?? 0) + 1);
         const source = sourceSection.source;
+        const selector = `${source}#${sourceSection.heading ?? ""}`;
+        selectorCounts.set(selector, (selectorCounts.get(selector) ?? 0) + 1);
         if (!documentSources.has(source)) {
           errors.push(`${guide.id} references unclassified source ${source}.`);
           continue;
@@ -1050,14 +1354,18 @@ export function validateHandbookGuides({
         }
         if (!isPopulated(sourceSection.purpose)) {
           errors.push(`${guide.id} source section ${sourceSection.id} is missing its presentation purpose.`);
+        } else if (!PRESENTATION_PURPOSES.has(sourceSection.purpose)) {
+          errors.push(`${guide.id} source section ${sourceSection.id} has invalid presentation purpose ${sourceSection.purpose}.`);
         }
-        const selector = `${source}#${sourceSection.heading ?? ""}`;
         const purposes = selectorPurposes.get(selector) ?? new Set();
         purposes.add(sourceSection.purpose);
         selectorPurposes.set(selector, purposes);
       }
       for (const [id, count] of sectionCounts) {
         if (count > 1) errors.push(`${guide.id} has duplicate source section ID ${id}.`);
+      }
+      for (const [selector, count] of selectorCounts) {
+        if (count > 1) errors.push(`${guide.id} has duplicate source selector ${selector}.`);
       }
     }
 
@@ -1072,6 +1380,9 @@ export function validateHandbookGuides({
     if (!Array.isArray(guide.screenshotReferences)) {
       errors.push(`${guide.id} must declare screenshotReferences.`);
     } else {
+      for (const screenshot of duplicateValues(guide.screenshotReferences)) {
+        errors.push(`${guide.id} has duplicate screenshot reference ${screenshot}.`);
+      }
       for (const screenshot of guide.screenshotReferences) {
         const absolute = path.resolve(rootDirectory, screenshot);
         const relative = path.relative(rootDirectory, absolute);
@@ -1090,6 +1401,41 @@ export function validateHandbookGuides({
     for (const [id, count] of canonicalSectionCounts) {
       if (count > 1) errors.push(`${guide.id} has duplicate canonical section ID ${id}.`);
     }
+
+    const invariant = invariants[guide.id];
+    if (invariant) {
+      if (!sameContract(guide.relatedGuides, invariant.relatedGuides)) {
+        errors.push(`${guide.id} violates its related guide contract.`);
+      }
+      if (!sameContract(guide.participatingRoles ?? [], invariant.participatingRoles)) {
+        errors.push(`${guide.id} violates its participating role contract.`);
+      }
+      if (!sameContract(guide.linkedTasks ?? [], invariant.linkedTasks)) {
+        errors.push(`${guide.id} violates its linked task contract.`);
+      }
+      const sourceContract = (guide.sourceSections ?? []).map(
+        ({ id, source, heading, purpose }) => ({ id, source, heading, purpose }),
+      );
+      if (!sameContract(sourceContract, invariant.sourceSections)) {
+        errors.push(`${guide.id} violates its source section contract.`);
+      }
+      if (!sameContract(guide.screenshotReferences, invariant.screenshotReferences)) {
+        errors.push(`${guide.id} violates its screenshot reference contract.`);
+      }
+      if (!sameContract(guide.workspaceMap ?? [], invariant.workspaceMap)) {
+        errors.push(`${guide.id} violates its workspace map contract.`);
+      }
+      if (!sameContract(guide.guidedSimulation ?? null, invariant.guidedSimulation)) {
+        errors.push(`${guide.id} violates its guided simulation contract.`);
+      }
+      if (guide.status !== invariant.status || guide.availability !== invariant.availability) {
+        errors.push(`${guide.id} violates its implementation status contract.`);
+      }
+    }
+  }
+
+  for (const [bindingId, count] of screenshotBindingCounts) {
+    if (count > 1) errors.push(`duplicate screenshot binding ${bindingId}.`);
   }
 
   for (const [selector, purposes] of selectorPurposes) {
@@ -1151,6 +1497,36 @@ export function validateHandbookGuides({
       errors.push(
         `legacy route ${key} must target ${expected.modeId}/${expected.guideId}#${expected.headingId}.`,
       );
+    }
+  }
+
+  return { warnings, errors };
+}
+
+export function validateHandbookEvidenceCoverage({
+  guides = HANDBOOK_GUIDES,
+  rootDirectory = root,
+} = {}) {
+  const errors = [];
+  const warnings = [];
+
+  for (const guide of guides.filter(({ type }) => type === "task")) {
+    const references = new Set(guide.screenshotReferences ?? []);
+    for (const stage of guide.steps ?? []) {
+      const screenshot = stage.screenshot ?? {};
+      const target = screenshot.target ?? {};
+      const certified =
+        screenshot.status === "certified" &&
+        isPopulated(screenshot.path) &&
+        isPopulated(target.label) &&
+        isPopulated(target.landmark) &&
+        references.has(screenshot.path) &&
+        existsSync(path.join(rootDirectory, screenshot.path));
+      if (!certified) {
+        errors.push(
+          `task ${guide.id} stage ${stage.id} has pending certified screenshot evidence.`,
+        );
+      }
     }
   }
 

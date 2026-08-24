@@ -3,14 +3,17 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import ts from "typescript";
 
 import { HANDBOOK_DOCUMENTS } from "./handbook-catalog.mjs";
-import {
+import * as handbookGuideModel from "./handbook-guides.mjs";
+
+const {
   HANDBOOK_GUIDES,
   HANDBOOK_MODES,
   LEGACY_ROUTES,
   validateHandbookGuides,
-} from "./handbook-guides.mjs";
+} = handbookGuideModel;
 
 const root = path.resolve(fileURLToPath(new URL("../../", import.meta.url)));
 
@@ -68,6 +71,7 @@ const TASK_FIELDS = [
   "lastReviewedDate",
   "applicableBuild",
   "status",
+  "availability",
 ];
 
 const ROLE_FIELDS = [
@@ -94,6 +98,36 @@ const ROLE_FIELDS = [
   "lastReviewedDate",
   "applicableBuild",
   "status",
+  "availability",
+  "workspaceMap",
+  "guidedSimulation",
+];
+
+const STAGE_FIELDS = [
+  "id",
+  "label",
+  "performingRole",
+  "module",
+  "route",
+  "instruction",
+  "screenshot",
+  "expectedResult",
+  "dataRead",
+  "dataWritten",
+  "evidenceRetained",
+  "nextHandoff",
+];
+
+const SIMULATION_FIELDS = [
+  "id",
+  "title",
+  "linkedTaskId",
+  "startRoute",
+  "actorRole",
+  "scenario",
+  "successCriteria",
+  "negativeScenario",
+  "recovery",
 ];
 
 function slug(value) {
@@ -135,6 +169,95 @@ function cloneGuides() {
   return structuredClone(HANDBOOK_GUIDES);
 }
 
+function propertyName(node) {
+  return ts.isIdentifier(node) || ts.isStringLiteral(node)
+    ? node.text
+    : null;
+}
+
+function objectProperty(object, name) {
+  return object.properties.find(
+    (property) => ts.isPropertyAssignment(property) && propertyName(property.name) === name,
+  )?.initializer;
+}
+
+function variableInitializer(sourceFile, name) {
+  let result = null;
+  function visit(node) {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.name.text === name
+    ) {
+      result = node.initializer;
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(sourceFile);
+  return result;
+}
+
+function operatingPersonaContract() {
+  const guideFile = path.join(root, "apps/shell/lib/knowledge/operatingPersonas.ts");
+  const guideSource = ts.createSourceFile(
+    guideFile,
+    readFileSync(guideFile, "utf8"),
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const guideObject = variableInitializer(guideSource, "OPERATING_PERSONA_GUIDES");
+  assert.equal(ts.isObjectLiteralExpression(guideObject), true);
+
+  const workspaces = new Map();
+  for (const property of guideObject.properties) {
+    if (!ts.isPropertyAssignment(property) || !ts.isObjectLiteralExpression(property.initializer)) continue;
+    const tasks = objectProperty(property.initializer, "tasks");
+    assert.equal(ts.isArrayLiteralExpression(tasks), true);
+    const routes = tasks.elements.map((element) => {
+      assert.equal(ts.isCallExpression(element), true);
+      const route = element.arguments[3];
+      assert.equal(ts.isStringLiteral(route), true);
+      return route.text;
+    });
+    workspaces.set(propertyName(property.name), [...new Set(routes)]);
+  }
+
+  const personaFile = path.join(root, "modules/learning/src/personas.ts");
+  const personaSource = ts.createSourceFile(
+    personaFile,
+    readFileSync(personaFile, "utf8"),
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const personaArray = variableInitializer(personaSource, "OPERATING_PERSONAS");
+  assert.equal(ts.isArrayLiteralExpression(personaArray), true);
+  const personas = personaArray.elements.map((element) => {
+    assert.equal(ts.isObjectLiteralExpression(element), true);
+    const id = objectProperty(element, "id");
+    const label = objectProperty(element, "label");
+    assert.equal(ts.isStringLiteral(id), true);
+    assert.equal(ts.isStringLiteral(label), true);
+    return [id.text, label.text];
+  });
+
+  return { personas, workspaces };
+}
+
+function legacyRouteFor(source, heading) {
+  const document = HANDBOOK_DOCUMENTS.find((item) => item.source === source);
+  assert.ok(document, source);
+  const articleId = legacyArticleId(source);
+  const headingId = `${articleId}-${slug(heading)}`;
+  return LEGACY_ROUTES.find(
+    (route) =>
+      route.legacyTabId === document.primaryTab &&
+      route.legacyArticleId === articleId &&
+      route.legacyHeadingId === headingId,
+  );
+}
+
 test("publishes exactly four ordered public modes independent of legacy tabs", () => {
   assert.deepEqual(
     HANDBOOK_MODES.map(({ id, order }) => [id, order]),
@@ -153,7 +276,7 @@ test("publishes exactly four ordered public modes independent of legacy tabs", (
   ]);
 });
 
-test("publishes the 13 canonical task guides and six required system groups", () => {
+test("publishes the 13 canonical task guides and eight required system groups", () => {
   assert.deepEqual(
     HANDBOOK_GUIDES.filter(({ type }) => type === "task").map(({ id }) => id),
     EXPECTED_TASK_IDS,
@@ -161,6 +284,8 @@ test("publishes the 13 canonical task guides and six required system groups", ()
   assert.deepEqual(
     HANDBOOK_GUIDES.filter(({ type }) => type === "system").map(({ id }) => id),
     [
+      "administration-configuration",
+      "training-operational-readiness",
       "architecture-data",
       "infrastructure-continuity",
       "security-governance",
@@ -169,15 +294,50 @@ test("publishes the 13 canonical task guides and six required system groups", ()
       "source-references",
     ],
   );
+
+  const systemById = new Map(
+    HANDBOOK_GUIDES.filter(({ type }) => type === "system").map((guide) => [guide.id, guide]),
+  );
+  assert.ok(
+    systemById.get("administration-configuration").sourceSections.some(
+      ({ source, heading }) =>
+        source === "docs/manual/MWELL_INTRA_USER_MANUAL.md" &&
+        heading === "DOA Administration",
+    ),
+  );
+  assert.ok(
+    systemById.get("training-operational-readiness").sourceSections.some(
+      ({ source, heading }) =>
+        source === "docs/TRAINING_AND_HANDOVER_CONTENT.md" &&
+        heading === "Training outcomes",
+    ),
+  );
 });
 
 test("publishes the exact current 11-persona role catalog", () => {
+  const operatingContract = operatingPersonaContract();
   assert.deepEqual(
     HANDBOOK_GUIDES.filter(({ type }) => type === "role").map(
       ({ id, canonicalName }) => [id, canonicalName],
     ),
-    EXPECTED_ROLES,
+    operatingContract.personas,
   );
+  assert.deepEqual(operatingContract.personas, EXPECTED_ROLES);
+
+  for (const guide of HANDBOOK_GUIDES.filter(({ type }) => type === "role")) {
+    assert.ok(Array.isArray(guide.workspaceMap), `${guide.id}.workspaceMap`);
+    assert.deepEqual(
+      guide.workspaceMap.map(({ landingRoute }) => landingRoute),
+      operatingContract.workspaces.get(guide.id),
+      guide.id,
+    );
+    assert.equal(
+      guide.workspaceMap.every(({ module, landingRoute }) =>
+        isPopulated(module) && /^\//.test(landingRoute)),
+      true,
+      guide.id,
+    );
+  }
 });
 
 test("guide metadata is deeply immutable and guide IDs are globally unique", () => {
@@ -194,12 +354,88 @@ test("task and role guides contain every required structured field", () => {
     for (const field of TASK_FIELDS) {
       assert.equal(isPopulated(guide[field]), true, `${guide.id}.${field}`);
     }
+    assert.equal(guide.status, "current", `${guide.id}.status`);
+    assert.equal(guide.availability, "implemented", `${guide.id}.availability`);
+    for (const stage of guide.steps) {
+      for (const field of STAGE_FIELDS) {
+        assert.equal(isPopulated(stage[field]), true, `${guide.id}.${stage.id}.${field}`);
+      }
+      assert.equal(stage.route.startsWith("/"), true, `${guide.id}.${stage.id}.route`);
+      assert.equal(stage.screenshot.status, "pending");
+      assert.equal(stage.screenshot.path, null);
+      assert.equal(stage.screenshot.target, null);
+    }
   }
 
   for (const guide of HANDBOOK_GUIDES.filter(({ type }) => type === "role")) {
     for (const field of ROLE_FIELDS) {
       assert.equal(isPopulated(guide[field]), true, `${guide.id}.${field}`);
     }
+    for (const field of SIMULATION_FIELDS) {
+      assert.equal(
+        isPopulated(guide.guidedSimulation[field]),
+        true,
+        `${guide.id}.guidedSimulation.${field}`,
+      );
+    }
+  }
+});
+
+test("strict task evidence coverage remains mechanically incomplete until Task 7", () => {
+  assert.equal(typeof handbookGuideModel.validateHandbookEvidenceCoverage, "function");
+  const result = handbookGuideModel.validateHandbookEvidenceCoverage();
+  const taskSteps = HANDBOOK_GUIDES.filter(({ type }) => type === "task")
+    .flatMap(({ steps }) => steps);
+
+  assert.equal(result.warnings.length, 0);
+  assert.equal(result.errors.length, taskSteps.length);
+  assert.match(result.errors[0], /pending certified screenshot evidence/);
+});
+
+test("validation reports every missing required task stage field", () => {
+  for (const field of STAGE_FIELDS) {
+    const guides = cloneGuides();
+    const stage = guides.find(({ type }) => type === "task").steps[0];
+    delete stage[field];
+    assert.match(
+      validateHandbookGuides({ guides }).errors.join("\n"),
+      new RegExp(`task procurement-request-approval stage step-1 is missing required field ${field}`),
+      field,
+    );
+  }
+});
+
+test("validation reports every missing screenshot binding field", () => {
+  for (const field of ["bindingId", "status", "path", "target"]) {
+    const guides = cloneGuides();
+    const screenshot = guides.find(({ type }) => type === "task").steps[0].screenshot;
+    delete screenshot[field];
+    assert.match(
+      validateHandbookGuides({ guides }).errors.join("\n"),
+      new RegExp(`task procurement-request-approval stage step-1 screenshot is missing required field ${field}`),
+      field,
+    );
+  }
+});
+
+test("validation reports incomplete role workspace and guided simulation records", () => {
+  for (const field of ["id", "module", "landingRoute"]) {
+    const guides = cloneGuides();
+    delete guides.find(({ type }) => type === "role").workspaceMap[0][field];
+    assert.match(
+      validateHandbookGuides({ guides }).errors.join("\n"),
+      new RegExp(`role platform_administrator workspace .* is missing required field ${field}`),
+      field,
+    );
+  }
+  for (const field of SIMULATION_FIELDS) {
+    const guides = cloneGuides();
+    delete guides.find(({ type }) => type === "role").guidedSimulation[field];
+    assert.match(
+      validateHandbookGuides({ guides }).errors.join("\n"),
+      new RegExp(`role platform_administrator guided simulation is missing required field ${field}`),
+      field,
+    );
   }
 });
 
@@ -263,6 +499,32 @@ test("legacy routes exhaustively translate every maintained article and Markdown
 
   assert.deepEqual(new Set(LEGACY_ROUTES.map(legacyKey)), new Set(expected));
   assert.equal(LEGACY_ROUTES.length, expected.length);
+});
+
+test("legacy workflow, role, and System headings resolve to their nearest canonical section", () => {
+  const cases = [
+    ["docs/manual/MWELL_INTRA_USER_MANUAL.md", "Procurement to Payment", "tasks", "procurement-request-approval", "procure-to-payment"],
+    ["docs/manual/MWELL_INTRA_USER_MANUAL.md", "Vendor Accreditation", "tasks", "vendor-accreditation-renewal", "vendor-accreditation"],
+    ["docs/manual/MWELL_INTRA_USER_MANUAL.md", "Receiving and Putaway", "tasks", "stock-receiving-putaway", "receiving-putaway"],
+    ["docs/manual/MWELL_INTRA_USER_MANUAL.md", "Ecommerce Fulfillment", "tasks", "ecommerce-fulfillment-delivery", "steps"],
+    ["docs/manual/MWELL_INTRA_USER_MANUAL.md", "Returns and Replacements", "tasks", "returns-replacements-refunds-rma", "returns-replacements"],
+    ["docs/manual/MWELL_INTRA_USER_MANUAL.md", "Inventory Release", "tasks", "department-inventory-release", "inventory-release"],
+    ["docs/manual/MWELL_INTRA_USER_MANUAL.md", "Event Custody", "tasks", "event-stock-custody", "event-custody"],
+    ["docs/manual/MWELL_INTRA_USER_MANUAL.md", "Inventory Integrity", "tasks", "inventory-count-variance", "inventory-integrity"],
+    ["docs/USER_TRAINING_AND_OPERATIONS_MANUAL.md", "Role Modules", "roles", "general_employee", "your-workspace"],
+    ["docs/TECHNICAL_AND_FUNCTIONAL_SPECIFICATION.md", "Runtime architecture", "system", "architecture-data", "runtime-architecture"],
+    ["docs/TRAINING_AND_HANDOVER_CONTENT.md", "Training outcomes", "system", "training-operational-readiness", "training-outcomes"],
+  ];
+
+  for (const [source, heading, modeId, guideId, headingId] of cases) {
+    const route = legacyRouteFor(source, heading);
+    assert.ok(route, `${source}#${heading}`);
+    assert.deepEqual(
+      { modeId: route.modeId, guideId: route.guideId, headingId: route.headingId },
+      { modeId, guideId, headingId },
+      `${source}#${heading}`,
+    );
+  }
 });
 
 test("the canonical model validates without warnings or errors", () => {
@@ -379,4 +641,50 @@ test("validation rejects a legacy route retargeted to a different valid guide", 
     validateHandbookGuides({ legacyRoutes: retargetedRoutes }).errors.join("\n"),
     /legacy route .* must target home\/home#document-controls/,
   );
+});
+
+test("semantic invariants reject wrong-but-existing canonical metadata", () => {
+  const cases = [
+    ["unrelated related guide", (guides) => {
+      guides.find(({ id }) => id === "procurement-request-approval").relatedGuides[0] = "ecommerce-order-intake";
+    }, /related guide contract/],
+    ["wrong existing heading", (guides) => {
+      guides.find(({ id }) => id === "procurement-request-approval").sourceSections[0].heading = "Navigation";
+    }, /source section contract/],
+    ["arbitrary purpose", (guides) => {
+      guides.find(({ id }) => id === "procurement-request-approval").sourceSections[0].purpose = "marketing-copy";
+    }, /invalid presentation purpose marketing-copy/],
+    ["removed screenshot reference", (guides) => {
+      guides.find(({ id }) => id === "procurement-request-approval").screenshotReferences.pop();
+    }, /screenshot reference contract/],
+    ["duplicate screenshot reference", (guides) => {
+      const guide = guides.find(({ id }) => id === "procurement-request-approval");
+      guide.screenshotReferences.push(guide.screenshotReferences[0]);
+    }, /duplicate screenshot reference/],
+    ["future implemented task", (guides) => {
+      guides.find(({ id }) => id === "procurement-request-approval").status = "future";
+    }, /implemented guide procurement-request-approval cannot have future status/],
+    ["duplicate source selector", (guides) => {
+      const guide = guides.find(({ id }) => id === "procurement-request-approval");
+      guide.sourceSections.push({ ...guide.sourceSections[0], id: "duplicate-selector" });
+    }, /duplicate source selector/],
+    ["duplicate participant", (guides) => {
+      const guide = guides.find(({ id }) => id === "procurement-request-approval");
+      guide.participatingRoles.push(guide.participatingRoles[0]);
+    }, /duplicate participating role/],
+    ["duplicate related guide", (guides) => {
+      const guide = guides.find(({ id }) => id === "procurement-request-approval");
+      guide.relatedGuides.push(guide.relatedGuides[0]);
+    }, /duplicate related guide/],
+    ["duplicate stage screenshot binding", (guides) => {
+      const guide = guides.find(({ id }) => id === "procurement-request-approval");
+      guide.steps[1].screenshot.bindingId = guide.steps[0].screenshot.bindingId;
+    }, /duplicate screenshot binding/],
+  ];
+
+  for (const [label, mutate, expected] of cases) {
+    const guides = cloneGuides();
+    mutate(guides);
+    assert.match(validateHandbookGuides({ guides }).errors.join("\n"), expected, label);
+  }
 });
