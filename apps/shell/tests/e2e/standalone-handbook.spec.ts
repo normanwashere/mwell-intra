@@ -341,11 +341,11 @@ test('every legacy deep link migrates to an existing canonical destination', asy
   await expect(page.locator('#route-notice')).toContainText(/link has moved/i);
 });
 
-test('all exact first-time prompts reach their correct first-ranked guide within three interactions', async ({ page }, testInfo) => {
-  test.setTimeout(180_000);
-  if (!['desktop-1440', 'mobile-320'].includes(testInfo.project.name)) test.skip();
+for (const searchCase of firstTimeUsabilityCases) {
+  test(`exact first-time prompt reaches its correct first-ranked guide: ${searchCase.prompt}`, async ({ page }, testInfo) => {
+    test.setTimeout(60_000);
+    if (!['desktop-1440', 'mobile-320'].includes(testInfo.project.name)) test.skip();
 
-  for (const searchCase of firstTimeUsabilityCases) {
     await page.goto('/#mode=home&guide=home');
     await page.evaluate(() => localStorage.clear());
     await page.reload();
@@ -383,8 +383,8 @@ test('all exact first-time prompts reach their correct first-ranked guide within
       accessibility.violations.filter(({ impact }) => impact === 'critical' || impact === 'serious'),
       `${testInfo.project.name}: ${searchCase.prompt} must have no serious or critical Axe violations`,
     ).toEqual([]);
-  }
-});
+  });
+}
 
 test('search certifies operational answers and canonical destinations', async ({ page }) => {
   test.setTimeout(120_000);
