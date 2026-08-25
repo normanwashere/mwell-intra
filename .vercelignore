@@ -45,6 +45,9 @@ output/
 .tmp/
 .codex-tmp/
 outputs/
+deliverables/
+**/artifacts/
+supabase/.temp/
 
 # Editor / OS noise
 .DS_Store

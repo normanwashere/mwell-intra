@@ -38,9 +38,14 @@ pnpm-debug.log*
 
 # scratch
 .tmp/
+.codex-tmp/
+supabase/.temp/
 .playwright-cli/
 .pwcli/
 .review-shots/
 .superpowers/
 .vercel/
 /.env.local
+outputs/
+deliverables/
+**/artifacts/

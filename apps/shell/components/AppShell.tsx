@@ -199,12 +199,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl text-ink transition hover:bg-inset lg:mx-3 lg:w-auto lg:justify-start lg:px-2"
           aria-label="Mwell Intra home"
         >
-          <span
-            aria-hidden
-            className="brand-gradient font-display text-2xl font-extrabold lg:hidden"
-          >
-            M
-          </span>
+          <MwellIntraLogo
+            className="lg:hidden"
+            logoClassName="h-3.5 max-w-[2.75rem]"
+            showLabel={false}
+          />
           <MwellIntraLogo
             className="hidden lg:inline-flex"
             logoClassName="h-7"

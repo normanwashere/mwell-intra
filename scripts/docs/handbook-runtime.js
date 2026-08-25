@@ -2,6 +2,7 @@
     const panels = [...document.querySelectorAll('[data-tab-panel]')];
     const articles = [...document.querySelectorAll('[data-document]')];
     const guides = [...document.querySelectorAll('[data-guide]')];
+    const modeLandings = [...document.querySelectorAll('[data-mode-landing]')];
     const articleLinks = [...document.querySelectorAll('[data-article-link]')];
     const search = document.querySelector('#search');
     const searchResults = document.querySelector('#search-results');
@@ -162,6 +163,7 @@
     }
 
     function isDrawerViewport() { return window.matchMedia('(max-width: 1180px)').matches; }
+    function isPersistentTocViewport() { return window.matchMedia('(min-width: 1536px)').matches; }
     function setHeaderOffset() { document.documentElement.style.setProperty('--handbook-header-height', `${topbar.offsetHeight}px`); }
 
     function compactSurfaceElement(name) {
@@ -304,7 +306,7 @@
       Object.entries(drawers).forEach(([name, drawer]) => {
         if (!drawer) return;
         drawer.removeAttribute('data-search-surface');
-        drawer.hidden = name === 'toc' || isDrawerViewport();
+        drawer.hidden = name === 'toc' ? !isPersistentTocViewport() : isDrawerViewport();
         if (!drawer.hidden) { drawer.removeAttribute('role'); drawer.removeAttribute('aria-modal'); }
       });
       activeDrawer = null; document.body.classList.remove('drawer-open');
@@ -443,9 +445,11 @@
     function renderSearchResults() {
       const results = rankSearchResults();
       const searching = Boolean(normalizeSearchText(activeRoute.query));
+      document.documentElement.dataset.searching = String(searching);
       searchResults.replaceChildren();
       searchResults.hidden = !searching;
       panels.forEach((panel) => { panel.hidden = searching || panel.dataset.mode !== activeRoute.modeId; });
+      modeLandings.forEach((landing) => { landing.hidden = searching || landing.dataset.mode !== activeRoute.modeId || Boolean(activeRoute.guideId); });
       empty.hidden = !searching || results.length !== 0;
       count.textContent = searching ? `${results.length} ${results.length === 1 ? 'result' : 'results'} in ${activeRoute.scope === 'all' ? 'all guides' : 'this mode'}` : 'Choose a guide to read';
       if (noResultSystemLink) noResultSystemLink.href = routeHash({ modeId: 'system', guideId: 'source-references', headingId: null, query: activeRoute.query, scope: 'mode' });
@@ -500,7 +504,7 @@
     function updatePageToc(article, headingId) {
       pageToc.replaceChildren();
       if (!article) { pageToc.parentElement.hidden = true; return; }
-      const headings = [...article.querySelectorAll('.article-body [data-guide-section] > h2, .article-body details[data-section-id] > summary, .article-body h3')];
+      const headings = [...article.querySelectorAll('.article-body [data-guide-section] > h2, .article-body details[data-section-id] > summary')];
       headings.forEach((heading) => {
         const domId = heading.id || heading.parentElement.id;
         const localHeadingId = domId.startsWith(`${article.dataset.guideId}-`) ? domId.slice(article.dataset.guideId.length + 1) : domId;
@@ -511,7 +515,7 @@
         pageToc.append(link);
       });
       const pageTocDrawer = pageToc.parentElement;
-      pageTocDrawer.hidden = headings.length === 0 || activeDrawer !== 'toc';
+      pageTocDrawer.hidden = headings.length === 0 || (!isPersistentTocViewport() && activeDrawer !== 'toc');
     }
 
     function routeAnchor({ guideId, headingId }) {
@@ -537,15 +541,18 @@
 
     function focusRouteTarget(route) {
       const guide = guides.find((candidate) => candidate.dataset.guideId === route.guideId);
+      const modeLanding = !guide ? modeLandings.find((candidate) => candidate.dataset.mode === route.modeId) : null;
       const anchor = route.headingId ? routeAnchor(route) : guide;
       openContainingDisclosure(anchor);
       if (anchor?.matches('details')) anchor.open = true;
       const target = route.headingId
         ? (anchor?.matches('summary, h1, h2, h3, h4, h5, h6') ? anchor : anchor?.querySelector(':scope > summary, :scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > header > h3'))
-        : guide?.querySelector('h1');
+        : (guide?.querySelector('h1') || modeLanding?.querySelector('h1'));
       if (!target) return;
       target.tabIndex = -1;
-      const scrollTarget = route.headingId ? target : (guide?.querySelector('.article-header') || guide);
+      const scrollTarget = route.headingId
+        ? (anchor?.matches('[data-task-stage]') ? anchor : target)
+        : (guide?.querySelector('.article-header') || guide || modeLanding);
       withoutSmoothScroll(() => {
         scrollTarget.scrollIntoView({ block: 'start', behavior: 'auto' });
         target.focus({ preventScroll: true });
@@ -620,6 +627,7 @@
       tabs.forEach((tab) => { const active = tab.dataset.mode === modeId; tab.setAttribute('aria-selected', String(active)); tab.tabIndex = active ? 0 : -1; });
       articles.forEach((candidate) => { candidate.hidden = candidate !== article; });
       hero.hidden = guide !== hero; empty.hidden = true;
+      modeLandings.forEach((landing) => { landing.hidden = Boolean(activeRoute.query) || landing.dataset.mode !== modeId || Boolean(guide); });
       articleLinks.forEach((link) => link.setAttribute('aria-current', link.dataset.guideId === guide?.dataset.guideId ? 'page' : 'false'));
       updatePageToc(article, headingId); openContainingDisclosure(routeAnchor(activeRoute)); renderSearchResults(); updateRecentGuides(activeRoute.guideId);
       if (showSearchSurface && activeRoute.query) setSearchSurfaceVisible(true, { restoreFocus: false });
@@ -724,7 +732,7 @@
       document.querySelectorAll('.diagram-shell[data-diagram-id]').forEach((shell) => {
         if (shell.closest('[hidden]')) return;
         const id = shell.dataset.diagramId;
-        const scale = diagramZoom[id] || 'fit';
+        const scale = diagramZoom[id] || (shell.closest('.full-decision-map') ? 1 : 'fit');
         if (!applyDiagramZoom(shell, scale)) return;
         const view = diagramViews[id];
         const viewport = shell.querySelector('[data-diagram-viewport]');
@@ -750,14 +758,14 @@
     resetDrawers();
     applyPrintScope(printScope);
     tabs.forEach((tab, index) => {
-      tab.addEventListener('click', () => activateRoute({ ...activeRoute, modeId: tab.dataset.mode, guideId: tab.dataset.mode === 'home' ? 'home' : null, headingId: null, historyMode: 'push', restoreScroll: false, focusTarget: false }));
+      tab.addEventListener('click', () => activateRoute({ ...activeRoute, modeId: tab.dataset.mode, guideId: tab.dataset.mode === 'home' ? 'home' : null, headingId: null, historyMode: 'push', restoreScroll: false, focusTarget: true }));
       tab.addEventListener('keydown', (event) => {
         const keyToOffset = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 };
         if (event.key === 'Home' || event.key === 'End' || keyToOffset[event.key]) {
           event.preventDefault();
           const targetIndex = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (index + keyToOffset[event.key] + tabs.length) % tabs.length;
           const target = tabs[targetIndex];
-          activateRoute({ ...activeRoute, modeId: target.dataset.mode, guideId: target.dataset.mode === 'home' ? 'home' : null, headingId: null, historyMode: 'push', restoreScroll: false, focusTarget: false });
+          activateRoute({ ...activeRoute, modeId: target.dataset.mode, guideId: target.dataset.mode === 'home' ? 'home' : null, headingId: null, historyMode: 'push', restoreScroll: false, focusTarget: true });
           target.focus();
         }
       });
@@ -769,7 +777,7 @@
       const link = event.target.closest('a[data-search-result], a[data-guide-link], a[data-article-link], a[data-heading-link], a[data-route-link]');
       if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       event.preventDefault();
-      activateLinkedRoute(link, true);
+      activateLinkedRoute(link, false);
     });
     document.querySelectorAll('details[data-section-id]').forEach((details) => details.addEventListener('toggle', syncDisclosureState));
     search.addEventListener('input', () => setSearchState({ ...activeRoute, query: search.value }, { writeHash: true }));
@@ -821,6 +829,7 @@
       }
       if (event.key === 'Escape' && drawers.contents?.hasAttribute('data-search-surface')) { event.preventDefault(); setSearchSurfaceVisible(false); return; }
       if (event.key === 'Escape' && printMenu && !printMenu.hidden) { event.preventDefault(); setPrintMenuVisible(false); printTrigger?.focus(); return; }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); search.focus(); search.select(); return; }
       if (event.key === '/' && !/input|textarea|select/i.test(document.activeElement.tagName)) { event.preventDefault(); search.focus(); }
     });
     document.querySelectorAll('.process-ribbon-viewport').forEach((ribbon) => ribbon.addEventListener('keydown', (event) => {
@@ -842,7 +851,7 @@
       }));
     });
     document.querySelectorAll('.diagram-shell[data-diagram-id]').forEach((shell) => {
-      const id = shell.dataset.diagramId; const viewport = shell.querySelector('[data-diagram-viewport]'); let scale = diagramZoom[id] || 'fit';
+      const id = shell.dataset.diagramId; const viewport = shell.querySelector('[data-diagram-viewport]'); let scale = diagramZoom[id] || (shell.closest('.full-decision-map') ? 1 : 'fit');
       viewport.addEventListener('scroll', () => { diagramViews = { ...diagramViews, [id]: { left: viewport.scrollLeft, top: viewport.scrollTop } }; schedulePersistence(); });
       shell.querySelector('[data-diagram-fit]')?.addEventListener('click', () => { scale = 'fit'; diagramZoom = { ...diagramZoom, [id]: scale }; applyDiagramZoom(shell, scale); schedulePersistence(); });
       shell.querySelectorAll('[data-diagram-zoom]').forEach((button) => button.addEventListener('click', () => { const action = button.dataset.diagramZoom; const current = typeof scale === 'number' ? scale : 1; scale = action === 'reset' ? 1 : Math.min(1.8, Math.max(.25, current + (action === 'in' ? .1 : -.1))); diagramZoom = { ...diagramZoom, [id]: scale }; applyDiagramZoom(shell, scale); schedulePersistence(); }));

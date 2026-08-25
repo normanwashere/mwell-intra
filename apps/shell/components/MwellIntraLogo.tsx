@@ -31,7 +31,13 @@ export function MwellIntraLogo({
         width={500}
         height={154}
         alt=""
-        className={cx("h-7 w-auto max-w-none object-contain", logoClassName)}
+        className={cx(
+          "w-auto object-contain",
+          variant === "light"
+            ? "brightness-0 invert"
+            : "dark:brightness-0 dark:invert",
+          logoClassName ?? "h-7 max-w-none",
+        )}
       />
       {showLabel && (
         <span

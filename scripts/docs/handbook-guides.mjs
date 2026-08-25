@@ -18,8 +18,8 @@ export { EVIDENCE_APPROVAL_CONTRACT };
 
 const root = path.resolve(fileURLToPath(new URL("../../", import.meta.url)));
 const OWNER = "Mwell Intra Product and Operations";
-const EFFECTIVE_DATE = "2026-08-24";
-const APPLICABLE_BUILD = "2026-08-23 UAT baseline";
+const EFFECTIVE_DATE = "2026-08-25";
+const APPLICABLE_BUILD = "2026-08-25 UAT baseline";
 const EVIDENCE_MANIFEST_PATH = path.join(
   root,
   "docs/manual/assets/knowledge-base/task-stage-evidence.json",
@@ -272,7 +272,7 @@ const TASK_DEFINITIONS = [
     completion: ["Receipt and ledger movement are posted", "Putaway location is visible", "Exceptions have an owner and disposition"],
     evidence: ["Receipt identifier", "Inspection result", "Movement ledger entry", "Putaway destination"],
     related: ["warehouse-location-bin-setup", "returns-replacements-refunds-rma", "inventory-count-variance"],
-    keywords: ["warehouse", "receive", "inspect", "putaway", "quality"],
+    keywords: ["warehouse", "receive", "inspect", "putaway", "quality", "UAT-AUG24-PO-0001", "UAT-AUG24-PO-0002", "UAT-AUG24-PO-0003", "Zhenzen", "Company BBB", "Company AAA", "Q-01-01"],
     searchSynonyms: ["Receive and inspect a delivery."],
     sources: [
       section("receiving-putaway", "docs/manual/MWELL_INTRA_USER_MANUAL.md", "Receiving and Putaway"),
@@ -329,7 +329,7 @@ const TASK_DEFINITIONS = [
     completion: ["Delivery status is terminal", "Stock movement is reconciled", "Evidence is retained"],
     evidence: ["Pick and pack records", "Dispatch record", "Delivery confirmation or failure reason"],
     related: ["ecommerce-order-intake", "returns-replacements-refunds-rma"],
-    keywords: ["pick", "pack", "dispatch", "delivery", "ecommerce"],
+    keywords: ["pick", "pack", "dispatch", "delivery", "ecommerce", "UAT-AUG24-ESHOP-RECEIVED", "UAT-AUG24-SHOPIFY-BUNDLE", "UAT-AUG24-PICKING", "UAT-AUG24-PACKING", "UAT-AUG24-READY-FOR-RELEASE", "UAT-AUG24-DELIVERY-FAILED", "UAT-AUG24-SPLIT-BACKORDER", "OTG Set A"],
     searchSynonyms: ["Pick and pack an ecommerce order."],
     sources: [
       section("pick-pack-dispatch", "docs/TECHNICAL_AND_FUNCTIONAL_SPECIFICATION.md", "Pick, pack, and dispatch"),
@@ -355,7 +355,7 @@ const TASK_DEFINITIONS = [
     completion: ["Original and reverse movements reconcile", "Disposition is terminal", "Commercial evidence is retained"],
     evidence: ["Return identifier", "Original release link", "Inspection", "Disposition and financial evidence"],
     related: ["ecommerce-fulfillment-delivery", "stock-receiving-putaway"],
-    keywords: ["return", "replacement", "refund", "RMA", "reconcile"],
+    keywords: ["return", "replacement", "refund", "RMA", "reconcile", "Defective Power Watch", "decision required", "supplier evidence"],
     searchSynonyms: ["Process an unknown returned serial."],
     sources: [
       section("returns-replacements", "docs/manual/MWELL_INTRA_USER_MANUAL.md", "Returns and Replacements"),
@@ -382,7 +382,7 @@ const TASK_DEFINITIONS = [
     completion: ["Release is posted", "Recipient and department are visible", "No stale allocation remains"],
     evidence: ["Request and release identifiers", "Approval where required", "Recipient confirmation"],
     related: ["event-stock-custody", "inventory-count-variance"],
-    keywords: ["department", "inventory", "request", "release", "allocation"],
+    keywords: ["department", "inventory", "request", "release", "allocation", "Marketing stock request", "multi-line demand"],
     sources: [
       section("inventory-release", "docs/manual/MWELL_INTRA_USER_MANUAL.md", "Inventory Release"),
       section("allocation-events-returns", "docs/manual/MWELL_INTRA_USER_MANUAL.md", "Allocation, Events, and Returns"),
@@ -407,7 +407,7 @@ const TASK_DEFINITIONS = [
     completion: ["All issued quantities have a terminal disposition", "Custody handoffs are visible", "Variance has an owner"],
     evidence: ["Event and allocation identifiers", "Custody handoffs", "Use, return, and variance evidence"],
     related: ["department-inventory-release", "inventory-count-variance"],
-    keywords: ["event", "stock", "custody", "transfer", "return"],
+    keywords: ["event", "stock", "custody", "transfer", "return", "Event A", "PHP 16,970", "reconciliation pending"],
     sources: [
       section("event-custody", "docs/manual/MWELL_INTRA_USER_MANUAL.md", "Event Custody"),
       section("event-role-procedures", "docs/manual/MWELL_INTRA_USER_MANUAL.md", "Allocation, Events, and Returns"),

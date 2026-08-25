@@ -18,7 +18,9 @@ test.describe("dashboard access and brand truthfulness", () => {
     page,
   }, testInfo) => {
     await page.goto("/");
-    await expect(page.getByRole("heading", { name: "Alex" })).toBeVisible();
+    await expect(
+      page.getByText("Welcome back, Alex", { exact: true }),
+    ).toBeVisible();
 
     const hero = page
       .getByText("Areas available", { exact: true })
@@ -49,18 +51,10 @@ test.describe("dashboard access and brand truthfulness", () => {
 
     const isTablet = testInfo.project.name.startsWith("tablet");
     const logo = page.locator('img[src*="mwell-wordmark"]:visible').first();
-    const logoBox = isTablet ? null : await logo.boundingBox();
-    if (isTablet) {
-      await expect(
-        page
-          .getByRole("complementary", { name: "Primary" })
-          .getByText("M", { exact: true }),
-      ).toBeVisible();
-    } else {
-      await expect(logo).toBeVisible();
-      expect(logoBox?.width ?? 0).toBeGreaterThan(55);
-      expect(logoBox?.height ?? 0).toBeGreaterThan(18);
-    }
+    await expect(logo).toBeVisible();
+    const logoBox = await logo.boundingBox();
+    expect(logoBox?.width ?? 0).toBeGreaterThan(isTablet ? 35 : 55);
+    expect(logoBox?.height ?? 0).toBeGreaterThan(isTablet ? 10 : 18);
 
     const viewport = page.viewportSize();
     expect(viewport).not.toBeNull();
@@ -90,7 +84,10 @@ test.describe("dashboard access and brand truthfulness", () => {
       expect(clippedMobileLabels).toEqual([]);
     }
 
-    if (testInfo.project.name.startsWith("desktop")) {
+    if (
+      testInfo.project.name.startsWith("desktop") ||
+      testInfo.project.name.startsWith("tablet")
+    ) {
       const sidebar = page.getByRole("complementary", { name: "Primary" });
       const sidebarBox = await sidebar.boundingBox();
       expect(sidebarBox).not.toBeNull();
@@ -98,11 +95,34 @@ test.describe("dashboard access and brand truthfulness", () => {
       expect(logoBox!.x + logoBox!.width).toBeLessThanOrEqual(
         sidebarBox!.x + sidebarBox!.width,
       );
-      await expect(sidebar.getByText("Intra", { exact: true })).toBeVisible();
+      if (testInfo.project.name.startsWith("desktop")) {
+        await expect(sidebar.getByText("Intra", { exact: true })).toBeVisible();
+      }
     }
 
     await page.screenshot({
       path: testInfo.outputPath(`dashboard-${testInfo.project.name}.png`),
+      fullPage: true,
+    });
+  });
+
+  test("the approved wordmark remains legible in dark mode", async ({
+    page,
+  }, testInfo) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem("intra-theme", "dark");
+    });
+    await page.goto("/");
+
+    const logo = page.locator('img[src*="mwell-wordmark"]:visible').first();
+    await expect(logo).toBeVisible();
+    await expect(page.locator("html")).toHaveClass(/dark/);
+    expect(
+      await logo.evaluate((element) => getComputedStyle(element).filter),
+    ).not.toBe("none");
+
+    await page.screenshot({
+      path: testInfo.outputPath(`dashboard-dark-${testInfo.project.name}.png`),
       fullPage: true,
     });
   });

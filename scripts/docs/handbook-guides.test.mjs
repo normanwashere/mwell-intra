@@ -64,7 +64,7 @@ function canonicalPersonaNames(source) {
   assert.notEqual(endIndex, -1, `missing ${end}`);
   return [...source.slice(startIndex + start.length, endIndex).matchAll(/^\| ([^|]+) \|/gm)]
     .map(([, name]) => name.trim())
-    .filter((name) => name !== "Current persona" && name !== "---");
+    .filter((name) => name !== "Current persona" && !/^-+$/.test(name));
 }
 
 const TASK_FIELDS = [

@@ -4,7 +4,9 @@
 
 **Live app:** https://mwell-intra.vercel.app
 
-**Reviewed:** August 23, 2026
+**Reviewed:** August 25, 2026
+
+**Current UAT operating baseline:** August 25, 2026; includes the August 24 WMS feedback scenarios and corrected Operations Associate visibility of receivable Procurement purchase orders
 
 **Procurement application behavior baseline:** `32170e425e125c63597ea8e05c6287a7cd256f5b`; schema boundary verified on UAT and commit-bound browser certification pending
 
@@ -37,19 +39,21 @@ Never share passwords, tokens, private keys, or confidential documents in suppor
 Mwell Intra currently uses exactly 11 operating personas. Module role codes such as `warehouse:finance`, `procurement:requester`, or `events:coordinator` are scoped capabilities inside these personas; they are not additional user types and do not create approval authority. A title never replaces the active department DOA or an independently assigned control role.
 
 <!-- canonical-personas:start -->
-| Current persona | Primary responsibility | Explicit authority boundary and main handoff |
-| --- | --- | --- |
-| Platform Administrator | Identities, minimum-role assignments, governed configuration, and authorized DOA administration | Administers approved configuration only; business decisions remain with the assigned owner |
-| General Employee | Creates and corrects own Procurement, department inventory, Events, and Product contributions | Cannot approve own work, release stock, or make owner/Finance decisions |
-| Operations Associate | Performs floor receiving, scanning, putaway, fulfillment, returns, event transfer, and counts | Cannot approve controlled exceptions or use Operations Lead authority |
-| Operations Lead | Reviews assigned Procurement approvals and governs Warehouse setup, exceptions, releases, and variances | Cannot replace Legal, Finance, Product Owner, or active DOA authority |
-| Procurement Lead | Confirms sourcing routes, vendor readiness, competition, PO evidence, and Procurement closure | Does not post physical receipt, Legal eligibility, or Finance readiness |
-| Finance Controller | Reviews cross-module valuation, matching, event settlement, and payment-readiness evidence | Does not manufacture operational acceptance or replace source-module decisions |
-| Legal & Compliance Lead | Manages vendor invitations, accreditation, instruments, compliance decisions, and authorized DOA checks | Does not award Procurement work or substitute a title for active authority |
-| Marketing & Events Lead | Coordinates event planning, demand, custody outcomes, returns, and settlement submission | Warehouse controls physical issue/return; Finance independently approves submitted settlement |
-| Product Owner | Owns Product readiness, pricing, and go-live decisions | Operations acknowledges approved handoff; Product does not perform Warehouse or Finance work |
-| Leadership / Insights | Reads governed cross-module metrics and drill-down context | Read-only analysis; cannot mutate source transactions |
-| Vendor Representative | Submits only their organization’s application, evidence, acknowledgements, and corrections | Cannot see another vendor or claim Mwell approval, award, or payment status |
+
+| Current persona         | Primary responsibility                                                                                  | Explicit authority boundary and main handoff                                                  |
+| ----------------------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Platform Administrator  | Identities, minimum-role assignments, governed configuration, and authorized DOA administration         | Administers approved configuration only; business decisions remain with the assigned owner    |
+| General Employee        | Creates and corrects own Procurement, department inventory, Events, and Product contributions           | Cannot approve own work, release stock, or make owner/Finance decisions                       |
+| Operations Associate    | Performs floor receiving, scanning, putaway, fulfillment, returns, event transfer, and counts           | Cannot approve controlled exceptions or use Operations Lead authority                         |
+| Operations Lead         | Reviews assigned Procurement approvals and governs Warehouse setup, exceptions, releases, and variances | Cannot replace Legal, Finance, Product Owner, or active DOA authority                         |
+| Procurement Lead        | Confirms sourcing routes, vendor readiness, competition, PO evidence, and Procurement closure           | Does not post physical receipt, Legal eligibility, or Finance readiness                       |
+| Finance Controller      | Reviews cross-module valuation, matching, event settlement, and payment-readiness evidence              | Does not manufacture operational acceptance or replace source-module decisions                |
+| Legal & Compliance Lead | Manages vendor invitations, accreditation, instruments, compliance decisions, and authorized DOA checks | Does not award Procurement work or substitute a title for active authority                    |
+| Marketing & Events Lead | Coordinates event planning, demand, custody outcomes, returns, and settlement submission                | Warehouse controls physical issue/return; Finance independently approves submitted settlement |
+| Product Owner           | Owns Product readiness, pricing, and go-live decisions                                                  | Operations acknowledges approved handoff; Product does not perform Warehouse or Finance work  |
+| Leadership / Insights   | Reads governed cross-module metrics and drill-down context                                              | Read-only analysis; cannot mutate source transactions                                         |
+| Vendor Representative   | Submits only their organization’s application, evidence, acknowledgements, and corrections              | Cannot see another vendor or claim Mwell approval, award, or payment status                   |
+
 <!-- canonical-personas:end -->
 
 ## Comprehensive Launch Flow
@@ -643,6 +647,44 @@ flowchart TD
 ```
 
 **Completion criteria:** the physical count, variance evidence, approval, stock adjustment, serialized reconciliation and any expiry/recall/damage disposition are all recorded; staff never edit quantity directly.
+
+## August 24 WMS UAT Validation Pack
+
+Use these records only in the UAT environment. They provide known starting points for role training, transaction testing and evidence capture. They are not production transactions and should not be copied into production.
+
+### Receiving and Putaway Scenarios
+
+| UAT purchase order  | Vendor      | Expected receipt                                                                        | Planned destination                                        |
+| ------------------- | ----------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `UAT-AUG24-PO-0001` | Zhenzen     | 100 Prodigy Watch, 100 Power Watch, 100 Prestige Watch and 100 Sports Watch; serialized | `A-01-03`, `A-01-01`, `A-01-02` and `A-01-04` respectively |
+| `UAT-AUG24-PO-0002` | Company BBB | 100 OTG Bag Large                                                                       | `F-01-02`                                                  |
+| `UAT-AUG24-PO-0003` | Company AAA | 100 Generic Paperbag White                                                              | `F-04-01`                                                  |
+
+The Operations Associate can see these receivable goods purchase orders and their lines without receiving broad access to Procurement request records. Use `Q-01-01` for evidence-backed quarantine when an inspection outcome prevents normal putaway.
+
+### Fulfillment, Delivery and Backorder Scenarios
+
+| UAT order                     | Starting state      | What to validate                                                                             |
+| ----------------------------- | ------------------- | -------------------------------------------------------------------------------------------- |
+| `UAT-AUG24-ESHOP-RECEIVED`    | Received            | Complete allocation, rack/bin scans, serialized picking, packing, waybill and release        |
+| `UAT-AUG24-SHOPIFY-BUNDLE`    | Allocated           | Build each OTG Set A separately and retain the serials assigned to each set                  |
+| `UAT-AUG24-PICKING`           | Picking             | Resume an in-progress pick without duplicating a serial or skipping the source bin           |
+| `UAT-AUG24-PACKING`           | Packing             | Record packaging supplies and prevent release until waybill and courier details are complete |
+| `UAT-AUG24-READY-FOR-RELEASE` | Ready               | Perform attributable courier handover and release                                            |
+| `UAT-AUG24-DELIVERY-FAILED`   | Released            | Record failed delivery, preserve custody and select the approved next action                 |
+| `UAT-AUG24-SPLIT-BACKORDER`   | Partially allocated | Release only available lines and retain the unfulfilled quantity as an explicit backorder    |
+
+### Return, Event and Internal Demand Scenarios
+
+| Scenario                | Starting state         | What to validate                                                                                     |
+| ----------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------- |
+| Defective Power Watch   | Submitted return       | Serial lookup, original release trace, defect evidence, quarantine and decision handoff              |
+| Replacement return      | Decision required      | Replacement authorization, replacement issue, supplier evidence and customer closure                 |
+| Refund return           | Resolved               | Finance evidence, refund closure and retained custody history                                        |
+| Event A                 | Reconciliation pending | Sold, giveaway, returned, lost or damaged quantities and final settlement of PHP 16,970              |
+| Marketing stock request | Pending                | Multi-line department demand, approval, reservation, physical issue and expense/cost-center evidence |
+
+For every scenario, confirm both the visible status and the saved record after the next role takes over. A successful screen message alone is not completion evidence.
 
 ## Application Screen Reference
 
