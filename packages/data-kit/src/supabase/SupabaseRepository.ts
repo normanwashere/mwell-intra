@@ -46,6 +46,7 @@ import {
 import { primaryStockLocation, validateTransfer } from "../domain/transfers";
 import { poStatusAfterReceipt } from "../domain/purchaseOrders";
 import { applyProductPatch, buildNewProduct } from "../domain/products";
+import { normalizeSafeHttpsUrl } from "../domain/urlSafety";
 import {
   toStockState,
   type CancelAllocationInput,
@@ -1630,6 +1631,10 @@ export class SupabaseRepository implements WarehouseControlRepository {
   }
 
   async createFulfillmentOrder(input: CreateFulfillmentOrderInput) {
+    const deliveryLink = input.deliveryLink?.trim();
+    if (deliveryLink && !normalizeSafeHttpsUrl(deliveryLink)) {
+      throw new Error("Delivery tracking link must use a secure HTTPS URL.");
+    }
     const id = crypto.randomUUID();
     const row = await this.callRpc("create_fulfillment_order", {
       idempotency_key: `create_fulfillment_order-${id}`,
@@ -1659,7 +1664,7 @@ export class SupabaseRepository implements WarehouseControlRepository {
       reported_total_amount: input.reportedTotalAmount ?? null,
       order_notes: input.orderNotes?.trim() || null,
       courier: input.courier?.trim() || null,
-      delivery_link: input.deliveryLink?.trim() || null,
+      delivery_link: deliveryLink || null,
       waybill_number: input.waybillNumber?.trim() || null,
       event_id: input.eventId ?? null,
       third_party_location_id: input.thirdPartyLocationId ?? null,
@@ -1687,6 +1692,10 @@ export class SupabaseRepository implements WarehouseControlRepository {
   }
 
   async advanceFulfillmentOrder(input: AdvanceFulfillmentOrderInput) {
+    const deliveryLink = input.deliveryLink?.trim();
+    if (deliveryLink && !normalizeSafeHttpsUrl(deliveryLink)) {
+      throw new Error("Delivery tracking link must use a secure HTTPS URL.");
+    }
     const shipmentActions = new Set([
       "mark_in_transit",
       "record_delivery_failed",
@@ -1725,7 +1734,7 @@ export class SupabaseRepository implements WarehouseControlRepository {
       fulfilled_lines: input.fulfilledLines ?? [],
       packaging: input.packaging ?? [],
       courier: input.courier?.trim() || null,
-      delivery_link: input.deliveryLink?.trim() || null,
+      delivery_link: deliveryLink || null,
       waybill_number: input.waybillNumber?.trim() || null,
       handover_recipient_name: input.handoverRecipientName?.trim() || null,
       handover_recipient_department:

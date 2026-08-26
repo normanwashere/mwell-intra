@@ -30,6 +30,19 @@ beforeEach(() => {
 });
 
 describe("cross-department WMS repository", () => {
+  it("rejects insecure tracking links at creation", async () => {
+    await expect(
+      repo.createFulfillmentOrder({
+        source: "ecommerce",
+        externalReference: "SHOP-HTTP-1001",
+        deliveryLink: "http://deliverylink.com/WB-1001",
+        sourceLocationId: "loc-wh",
+        lines: [{ productId: "smart-watch", quantity: 1 }],
+        actor: "sales@mwell",
+      }),
+    ).rejects.toThrow(/secure HTTPS/i);
+  });
+
   it("preserves validated ecommerce intake metadata and shipment events", async () => {
     const created = await repo.createFulfillmentOrder({
       source: "ecommerce",

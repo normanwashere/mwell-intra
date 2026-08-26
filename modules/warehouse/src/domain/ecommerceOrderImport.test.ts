@@ -107,4 +107,17 @@ describe("ecommerce order import", () => {
     );
     expect(rows[1]?.error).toMatch(/inconsistent order details/i);
   });
+
+  it("rejects insecure ecommerce tracking links", () => {
+    const [row] = parseEcommerceOrderCsv(
+      [
+        "order_reference,channel,customer_name,customer_contact,delivery_address,city,province,postal_code,payment_status,product_sku,quantity,delivery_link",
+        "SHOP-HTTP,Shopee,Ana,0917,12 Main,Pasig,NCR,1600,paid,SMART-WATCH,1,http://deliverylink.com/WB-001",
+      ].join("\n"),
+      products,
+      [],
+    );
+
+    expect(row?.error).toMatch(/secure https/i);
+  });
 });

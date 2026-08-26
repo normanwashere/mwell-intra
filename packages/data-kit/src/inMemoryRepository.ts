@@ -70,6 +70,7 @@ import {
   type ReKitWorkOrder,
 } from "./domain/wms";
 import type { Product, Profile } from "./domain/types";
+import { normalizeSafeHttpsUrl } from "./domain/urlSafety";
 import { buildProfiles, buildSeed } from "./seed";
 import {
   availableAfterControls,
@@ -2367,6 +2368,10 @@ export class InMemoryRepository implements WarehouseControlRepository {
   async createFulfillmentOrder(
     input: CreateFulfillmentOrderInput,
   ): Promise<FulfillmentOrder> {
+    const deliveryLink = input.deliveryLink?.trim();
+    if (deliveryLink && !normalizeSafeHttpsUrl(deliveryLink)) {
+      throw new Error("Delivery tracking link must use a secure HTTPS URL.");
+    }
     if (!input.externalReference.trim())
       throw new Error("Order reference is required.");
     if (input.lines.length === 0)
@@ -2553,7 +2558,7 @@ export class InMemoryRepository implements WarehouseControlRepository {
       sourceLocationId: input.sourceLocationId,
       sourceBinId: input.sourceBinId,
       courier: input.courier?.trim() || undefined,
-      deliveryLink: input.deliveryLink?.trim() || undefined,
+      deliveryLink: deliveryLink || undefined,
       waybillNumber: input.waybillNumber?.trim() || undefined,
       status: "received",
       lines: input.lines.map((line) => ({
@@ -2763,6 +2768,9 @@ export class InMemoryRepository implements WarehouseControlRepository {
           throw new Error("Courier is required at packing.");
         if (!input.deliveryLink?.trim() && !order.deliveryLink?.trim())
           throw new Error("Delivery tracking link is required at packing.");
+        const deliveryLink = input.deliveryLink?.trim() || order.deliveryLink;
+        if (!normalizeSafeHttpsUrl(deliveryLink))
+          throw new Error("Delivery tracking link must use a secure HTTPS URL.");
         if (!input.waybillNumber?.trim() && !order.waybillNumber?.trim())
           throw new Error("Waybill number is required at packing.");
       } else if (

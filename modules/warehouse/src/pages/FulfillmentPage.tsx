@@ -14,6 +14,7 @@ import type {
   StockLevel,
   StorageArea,
 } from "@intra/data-kit";
+import { normalizeSafeHttpsUrl } from "@intra/data-kit";
 import { useWarehouse } from "@/app/store";
 import {
   Badge,
@@ -887,6 +888,7 @@ function OrderDetailsSheet({
   onClose: () => void;
 }) {
   if (!order) return null;
+  const safeDeliveryLink = normalizeSafeHttpsUrl(order.deliveryLink);
   const address = order.deliveryAddress;
   const subtotal = order.lines.reduce(
     (sum, line) => sum + (line.unitPrice ?? 0) * line.quantity,
@@ -1161,15 +1163,22 @@ function OrderDetailsSheet({
               <div className="col-span-2">
                 <dt className="text-xs text-faint">Delivery link</dt>
                 <dd className="mt-1 break-all font-semibold text-ink">
-                  {order.deliveryLink ? (
+                  {safeDeliveryLink ? (
                     <a
                       className="text-brand-600 underline"
-                      href={order.deliveryLink}
+                      href={safeDeliveryLink}
                       target="_blank"
                       rel="noreferrer"
                     >
-                      {order.deliveryLink}
+                      {safeDeliveryLink}
                     </a>
+                  ) : order.deliveryLink ? (
+                    <span
+                      role="alert"
+                      className="text-amber-700 dark:text-amber-300"
+                    >
+                      Invalid tracking link. Update packing details.
+                    </span>
                   ) : (
                     "Pending packing"
                   )}
@@ -1588,6 +1597,10 @@ function PackSheet({
   const shipment = order.deliveryMethod === "shipment";
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (shipment && !normalizeSafeHttpsUrl(deliveryLink)) {
+      toast.error("Delivery tracking link must use a secure HTTPS URL.");
+      return;
+    }
     setSaving(true);
     const ok = await advanceFulfillmentOrder({
       orderId: order.id,
@@ -1672,6 +1685,7 @@ function PackSheet({
                 id="pack-delivery-link"
                 className="input"
                 type="url"
+                pattern="https://.*"
                 value={deliveryLink}
                 onChange={(event) => setDeliveryLink(event.target.value)}
                 required

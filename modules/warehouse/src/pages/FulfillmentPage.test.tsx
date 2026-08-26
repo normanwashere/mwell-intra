@@ -704,6 +704,43 @@ describe("FulfillmentPage", () => {
     expect(within(dialog).getByText("Awaiting Dispatch")).toBeInTheDocument();
   });
 
+  it("never exposes a historical insecure tracking link", async () => {
+    const initialRepo = makeRepo();
+    await initialRepo.createFulfillmentOrder({
+      source: "ecommerce",
+      externalReference: "SHOP-UNSAFE-LINK",
+      sourceLocationId: "loc-wh",
+      lines: [{ productId: "smart-watch", quantity: 1 }],
+      actor: "sales@mwell.com.ph",
+    });
+    const legacyData = await initialRepo.getData();
+    legacyData.fulfillmentOrders[0]!.deliveryLink =
+      "http://deliverylink.com/WB-UNSAFE";
+    const repo = makeRepo(legacyData);
+    const user = userEvent.setup();
+    renderWithProviders(<FulfillmentPage />, {
+      role: "warehouse_operator",
+      repo,
+    });
+
+    const order = await screen.findByRole("listitem", {
+      name: /SHOP-UNSAFE-LINK/i,
+    });
+    await user.click(
+      within(order).getByRole("button", { name: "View order details" }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: /Order details.*SHOP-UNSAFE-LINK/i,
+    });
+
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(
+      /invalid tracking link/i,
+    );
+    expect(
+      within(dialog).queryByRole("link", { name: /deliverylink/i }),
+    ).not.toBeInTheDocument();
+  });
+
   it("lets Marketing submit a governed department stock request", async () => {
     const repo = makeRepo();
     const user = userEvent.setup();

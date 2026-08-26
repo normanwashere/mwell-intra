@@ -44,11 +44,14 @@ export function EvidenceGallery({
 
   if (size === 'thumb' && list.length > 0) {
     const first = list[0]!;
-    const src = resolved[first] ?? undefined;
+    const src = resolved[first];
+    if (src === null) {
+      return <UnavailableEvidence className={className} />;
+    }
     return (
       <button
         type="button"
-        onClick={() => setLightbox(src ?? first)}
+        onClick={() => src && setLightbox(src)}
         className={`relative inline-block ${className ?? ''}`}
         aria-label={`View ${list.length} evidence photo(s)`}
       >
@@ -57,6 +60,9 @@ export function EvidenceGallery({
             src={src}
             alt="Evidence"
             className="h-12 w-12 rounded-lg object-cover ring-1 ring-line"
+            onError={() =>
+              setResolved((current) => ({ ...current, [first]: null }))
+            }
           />
         ) : (
           <span className="grid h-12 w-12 place-items-center rounded-lg bg-inset text-faint ring-1 ring-line">
@@ -82,30 +88,49 @@ export function EvidenceGallery({
           const src = resolved[u] ?? undefined;
           return (
             <li key={`${u}-${index}`}>
-              <button
-                type="button"
-                onClick={() => setLightbox(src ?? u)}
-                className="block w-full"
-                aria-label="View evidence photo"
-              >
-                {src ? (
-                  <img
-                    src={src}
-                    alt="Evidence"
-                    className="aspect-square w-full rounded-xl object-cover ring-1 ring-line"
-                  />
-                ) : (
-                  <span className="grid aspect-square w-full place-items-center rounded-xl bg-inset text-faint ring-1 ring-line">
-                    <Icon name="camera" className="h-5 w-5" />
-                  </span>
-                )}
-              </button>
+              {resolved[u] === null ? (
+                <UnavailableEvidence />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => src && setLightbox(src)}
+                  className="block w-full"
+                  aria-label="View evidence photo"
+                >
+                  {src ? (
+                    <img
+                      src={src}
+                      alt="Evidence"
+                      className="aspect-square w-full rounded-xl object-cover ring-1 ring-line"
+                      onError={() =>
+                        setResolved((current) => ({ ...current, [u]: null }))
+                      }
+                    />
+                  ) : (
+                    <span className="grid aspect-square w-full place-items-center rounded-xl bg-inset text-faint ring-1 ring-line">
+                      <Icon name="camera" className="h-5 w-5" />
+                    </span>
+                  )}
+                </button>
+              )}
             </li>
           );
         })}
       </ul>
       {lightbox && <Lightbox src={lightbox} onClose={() => setLightbox(null)} />}
     </div>
+  );
+}
+
+function UnavailableEvidence({ className }: { className?: string }) {
+  return (
+    <span
+      role="alert"
+      className={`inline-flex min-h-12 items-center gap-2 rounded-lg bg-amber-50 px-3 text-xs font-semibold text-amber-800 ring-1 ring-amber-200 dark:bg-amber-950/30 dark:text-amber-200 dark:ring-amber-800 ${className ?? ''}`}
+    >
+      <Icon name="alert" className="h-4 w-4 shrink-0" />
+      Evidence unavailable
+    </span>
   );
 }
 

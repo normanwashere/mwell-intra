@@ -38,6 +38,7 @@
     "verify:warehouse-w1-schema": "node scripts/verify-warehouse-w1-schema.mjs",
     "verify:warehouse-w1-contract": "node scripts/verify-warehouse-w1-contract.mjs",
     "verify:cross-department-wms": "node --test scripts/verify-cross-department-wms.test.mjs scripts/verify-third-party-custody-location.pglite.test.mjs",
+    "verify:uat-operations-evidence": "node --test scripts/verify-uat-operations-evidence-links.pglite.test.mjs",
     "verify:operational-flows": "node --test scripts/verify-operational-flow-completion.test.mjs",
     "verify:finance-event-authority": "node --test scripts/verify-finance-event-authority-remediation.test.mjs scripts/verify-event-reconciliation-handoff.pglite.test.mjs",
     "verify:insights-read-only": "node --test scripts/verify-insights-read-only.test.mjs",

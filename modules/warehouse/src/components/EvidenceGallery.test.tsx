@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { EvidenceGallery } from './EvidenceGallery';
 
 // The evidence module reads Supabase config from import.meta.env. In the test
@@ -33,5 +33,31 @@ describe('EvidenceGallery', () => {
     const b = 'data:image/png;base64,eQ==';
     render(<EvidenceGallery urls={[a, b]} size="thumb" />);
     expect(await screen.findByText('2')).toBeInTheDocument();
+  });
+
+  it('renders bundled UAT evidence from the trusted app path', async () => {
+    const appEvidence = '/uat-evidence/aug24-qc-pending.svg';
+    render(<EvidenceGallery urls={[appEvidence]} size="thumb" />);
+
+    expect(await screen.findByRole('img', { name: 'Evidence' })).toHaveAttribute(
+      'src',
+      appEvidence,
+    );
+  });
+
+  it('does not issue image requests for unsafe evidence values', async () => {
+    render(<EvidenceGallery urls={['http://deliverylink.com/not-evidence']} size="thumb" />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/evidence unavailable/i);
+    expect(screen.queryByRole('img', { name: 'Evidence' })).not.toBeInTheDocument();
+  });
+
+  it('shows a visible failure when safe external evidence cannot load', async () => {
+    render(<EvidenceGallery urls={['https://evidence.example/missing.jpg']} size="thumb" />);
+
+    const image = await screen.findByRole('img', { name: 'Evidence' });
+    fireEvent.error(image);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/evidence unavailable/i);
   });
 });

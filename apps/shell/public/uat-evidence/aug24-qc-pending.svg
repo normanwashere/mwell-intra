@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800" role="img" aria-labelledby="title description">
+  <title id="title">UAT delivery receipt evidence</title>
+  <desc id="description">Synthetic evidence card for the August 24 quality-control receiving scenario.</desc>
+  <rect width="1200" height="800" fill="#f4f8fc"/>
+  <rect x="72" y="72" width="1056" height="656" rx="24" fill="#ffffff" stroke="#bfd3e6" stroke-width="4"/>
+  <rect x="72" y="72" width="20" height="656" rx="10" fill="#0879c9"/>
+  <text x="140" y="160" fill="#0879c9" font-family="Arial, sans-serif" font-size="30" font-weight="700">mWell Intra / UAT EVIDENCE</text>
+  <text x="140" y="260" fill="#10213a" font-family="Arial, sans-serif" font-size="54" font-weight="700">Delivery receipt recorded</text>
+  <text x="140" y="335" fill="#425a78" font-family="Arial, sans-serif" font-size="30">Reference: UAT-AUG24-QC-PENDING</text>
+  <text x="140" y="390" fill="#425a78" font-family="Arial, sans-serif" font-size="30">Delivery date: 24 August 2026</text>
+  <text x="140" y="445" fill="#425a78" font-family="Arial, sans-serif" font-size="30">Quantity: 2 serialized Power Watches</text>
+  <rect x="140" y="520" width="420" height="72" rx="12" fill="#fff4d6" stroke="#efc75e" stroke-width="2"/>
+  <text x="174" y="567" fill="#795500" font-family="Arial, sans-serif" font-size="28" font-weight="700">AWAITING QUALITY REVIEW</text>
+  <text x="140" y="660" fill="#667a91" font-family="Arial, sans-serif" font-size="24">Synthetic UAT evidence. Not a production delivery document.</text>
+</svg>

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { normalizeSafeHttpsUrl } from '../domain/urlSafety';
 
 /**
  * Durable evidence storage helpers.
@@ -29,8 +30,24 @@ function isDataUrl(s: string): boolean {
   return s.startsWith('data:');
 }
 
-function isStoragePath(s: string): boolean {
-  return s.startsWith('evidence/') || s.includes('/storage/v1/object/');
+function isSafeRasterDataUrl(value: string): boolean {
+  return /^data:image\/(?:png|jpe?g|gif|webp);base64,[a-z0-9+/=\s]+$/i.test(value);
+}
+
+function isTrustedAppEvidencePath(value: string): boolean {
+  return /^\/uat-evidence\/[a-z0-9][a-z0-9._-]*\.(?:png|jpe?g|webp|svg)$/i.test(value);
+}
+
+function storageObjectPath(value: string): string | null {
+  if (/^[a-z][a-z0-9+.-]*:/i.test(value) || value.startsWith('/') || value.includes('\\')) {
+    return null;
+  }
+  const path = value.startsWith('evidence/') ? value.slice('evidence/'.length) : value;
+  const parts = path.split('/');
+  if (parts.length < 2 || parts.some((part) => !part || part === '.' || part === '..')) {
+    return null;
+  }
+  return path;
 }
 
 /**
@@ -80,18 +97,14 @@ export async function resolveEvidenceUrl(
   client: SupabaseClient | null | undefined,
   value: string,
 ): Promise<string | null> {
-  if (isDataUrl(value)) return value;
-  if (!isStoragePath(value) || !client) {
-    // Unknown shape — best effort: treat as a direct URL.
-    return value;
-  }
+  if (isSafeRasterDataUrl(value) || isTrustedAppEvidencePath(value)) return value;
+  const storagePath = storageObjectPath(value);
+  if (!storagePath) return normalizeSafeHttpsUrl(value);
+  if (!client) return null;
   try {
-    const path = value.startsWith('evidence/')
-      ? value.slice('evidence/'.length)
-      : value;
     const { data, error } = await client.storage
       .from(BUCKET)
-      .createSignedUrl(path, SIGNED_URL_TTL_SECONDS);
+      .createSignedUrl(storagePath, SIGNED_URL_TTL_SECONDS);
     if (error) return null;
     return data.signedUrl;
   } catch {

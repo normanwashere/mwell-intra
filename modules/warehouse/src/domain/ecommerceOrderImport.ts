@@ -4,6 +4,7 @@ import type {
   EcommercePaymentStatus,
   Product,
 } from "@intra/data-kit";
+import { normalizeSafeHttpsUrl } from "@intra/data-kit";
 
 interface CsvOrderRow {
   order_reference?: string;
@@ -286,8 +287,8 @@ export function parseEcommerceOrderCsv(
         ? "Total amount must be zero or more"
         : "",
       record.delivery_link?.trim() &&
-      !/^https?:\/\//i.test(record.delivery_link.trim())
-        ? "Delivery link must start with http:// or https://"
+      !normalizeSafeHttpsUrl(record.delivery_link)
+        ? "Delivery link must use a secure HTTPS URL"
         : "",
     ].filter(Boolean);
     return {

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800" role="img" aria-labelledby="title description">
+  <title id="title">UAT functional test evidence</title>
+  <desc id="description">Synthetic inspection card for Power Watch serial UAT-A24-QC-POWER-0001.</desc>
+  <rect width="1200" height="800" fill="#f4f8fc"/>
+  <rect x="72" y="72" width="1056" height="656" rx="24" fill="#ffffff" stroke="#bfd3e6" stroke-width="4"/>
+  <rect x="72" y="72" width="20" height="656" rx="10" fill="#0879c9"/>
+  <text x="140" y="160" fill="#0879c9" font-family="Arial, sans-serif" font-size="30" font-weight="700">mWell Intra / UAT QUALITY EVIDENCE</text>
+  <text x="140" y="260" fill="#10213a" font-family="Arial, sans-serif" font-size="54" font-weight="700">Functional test queued</text>
+  <text x="140" y="335" fill="#425a78" font-family="Arial, sans-serif" font-size="30">Serial: UAT-A24-QC-POWER-0001</text>
+  <text x="140" y="390" fill="#425a78" font-family="Arial, sans-serif" font-size="30">Inspection: Power-on and connectivity test</text>
+  <rect x="140" y="490" width="300" height="72" rx="12" fill="#e7f3ff" stroke="#73b8e8" stroke-width="2"/>
+  <text x="178" y="537" fill="#075c99" font-family="Arial, sans-serif" font-size="28" font-weight="700">PENDING TEST</text>
+  <text x="140" y="660" fill="#667a91" font-family="Arial, sans-serif" font-size="24">Synthetic UAT evidence. Replace with captured evidence during testing.</text>
+</svg>
