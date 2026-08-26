@@ -7,10 +7,10 @@ describe("Event remediation contract", () => {
     const submitted = applyMemoryEventReconciliation(EVENTS_DEMO_DATA, {
       eventId: "evt-demo-lgu",
       action: "submit",
-      soldUnits: 10,
+      soldUnits: 275,
       giveawayUnits: 4,
-      returnedUnits: 3,
-      lostUnits: 1,
+      returnedUnits: 1,
+      lostUnits: 0,
       damagedUnits: 0,
       rekitUnits: 0,
       grossSalesAmount: 5_000,

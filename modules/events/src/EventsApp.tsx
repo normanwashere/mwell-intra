@@ -27,10 +27,12 @@ import {
   canRequestEventFulfillment,
 } from "./access";
 import {
+  eventReconciliationHandoff,
   useEventsData,
   validateEventDraftFields,
   validateEventFulfillmentFields,
   validateEventManagementFields,
+  validateEventReconciliationTransition,
 } from "./data";
 import type {
   EventDraft,
@@ -91,6 +93,7 @@ export function EventsApp({
     manageEvent,
     requestFulfillment,
     saveReconciliation,
+    openReconciliationEvidence,
     isDemo,
   } = useEventsData();
   const toast = useToast();
@@ -115,6 +118,10 @@ export function EventsApp({
   const [ownerEmail, setOwnerEmail] = useState("");
   const [fulfillmentOpen, setFulfillmentOpen] = useState(false);
   const [reconciliationOpen, setReconciliationOpen] = useState(false);
+  const [openingEvidence, setOpeningEvidence] = useState(false);
+  const [reconciliationErrors, setReconciliationErrors] = useState<
+    Record<string, string>
+  >({});
   const [reconciliationAction, setReconciliationAction] = useState<
     "save" | "submit" | "approve"
   >("save");
@@ -203,6 +210,14 @@ export function EventsApp({
   const reconciliation = data.reconciliations?.find(
     (record) => record.eventId === selectedEvent?.id,
   );
+  const reconciliationHandoff =
+    reconciliation && selectedEvent
+      ? eventReconciliationHandoff(
+          reconciliation,
+          selectedEvent.issuedUnits,
+          { mayManage, mayApprove: mayApproveReconciliation },
+        )
+      : undefined;
 
   const openManagement = (action: EventManagementAction) => {
     if (!selectedEvent) return;
@@ -327,6 +342,7 @@ export function EventsApp({
 
   const openReconciliation = (action: "save" | "submit" | "approve") => {
     setReconciliationAction(action);
+    setReconciliationErrors({});
     setReconciliationDraft({
       soldUnits: reconciliation?.soldUnits ?? 0,
       giveawayUnits: reconciliation?.giveawayUnits ?? 0,
@@ -344,6 +360,19 @@ export function EventsApp({
 
   const submitReconciliation = async () => {
     if (!selectedEvent) return;
+    const validation = validateEventReconciliationTransition(
+      { action: reconciliationAction, ...reconciliationDraft },
+      selectedEvent.issuedUnits,
+    );
+    setReconciliationErrors(validation);
+    if (Object.keys(validation).length > 0) {
+      focusFirstInvalidField(validation, [
+        ["outcomes", "reconciliation-soldUnits"],
+        ["evidenceUrl", "reconciliation-evidence"],
+        ["financeReference", "reconciliation-finance"],
+      ]);
+      return;
+    }
     setSaving(true);
     try {
       await saveReconciliation({
@@ -370,6 +399,22 @@ export function EventsApp({
       );
     } finally {
       setSaving(false);
+    }
+  };
+  const openEvidence = async () => {
+    if (!selectedEvent || !reconciliation?.evidenceUrl) return;
+    setOpeningEvidence(true);
+    try {
+      const evidenceUrl = await openReconciliationEvidence(selectedEvent.id);
+      window.open(evidenceUrl, "_blank", "noopener,noreferrer");
+    } catch (cause) {
+      toast.error(
+        cause instanceof Error
+          ? cause.message
+          : "Event reconciliation evidence could not be opened.",
+      );
+    } finally {
+      setOpeningEvidence(false);
     }
   };
   if (eventId) {
@@ -492,31 +537,90 @@ export function EventsApp({
             </Badge>
           </div>
           {reconciliation && (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {[
-                ["Sold", reconciliation.soldUnits],
-                ["Giveaway", reconciliation.giveawayUnits],
-                ["Returned", reconciliation.returnedUnits],
-                [
-                  "Lost / damaged",
-                  reconciliation.lostUnits + reconciliation.damagedUnits,
-                ],
-                ["Re-kitted", reconciliation.rekitUnits],
-                ["Sales PHP", reconciliation.grossSalesAmount],
-              ].map(([label, value]) => (
-                <div
-                  key={String(label)}
-                  className="rounded-lg bg-surface-2 p-3"
-                >
-                  <p className="text-xs text-muted">{label}</p>
-                  <p className="font-display text-lg font-bold text-ink">
-                    {value}
-                  </p>
+            <>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {[
+                  ["Sold", reconciliation.soldUnits],
+                  ["Giveaway", reconciliation.giveawayUnits],
+                  ["Returned", reconciliation.returnedUnits],
+                  [
+                    "Lost / damaged",
+                    reconciliation.lostUnits + reconciliation.damagedUnits,
+                  ],
+                  ["Re-kitted", reconciliation.rekitUnits],
+                  ["Sales PHP", reconciliation.grossSalesAmount],
+                ].map(([label, value]) => (
+                  <div
+                    key={String(label)}
+                    className="rounded-lg bg-surface-2 p-3"
+                  >
+                    <p className="text-xs text-muted">{label}</p>
+                    <p className="font-display text-lg font-bold text-ink">
+                      {value}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              {reconciliationHandoff && (
+                <div className="space-y-3 border-t border-line pt-4">
+                  <dl className="grid gap-3 text-sm sm:grid-cols-2">
+                    <div>
+                      <dt className="text-xs font-semibold text-faint">Current stage</dt>
+                      <dd className="mt-1 font-semibold text-ink">
+                        {reconciliationHandoff.stage}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs font-semibold text-faint">Current owner</dt>
+                      <dd className="mt-1 font-semibold text-ink">
+                        {reconciliationHandoff.owner}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs font-semibold text-faint">Required evidence</dt>
+                      <dd className="mt-1 text-ink">
+                        {reconciliation.evidenceUrl ? "Evidence attached" : "Evidence missing"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs font-semibold text-faint">Finance reference</dt>
+                      <dd className="mt-1 text-ink">
+                        {reconciliation.financeReference ?? "Pending Finance review"}
+                      </dd>
+                    </div>
+                  </dl>
+                  {reconciliationHandoff.blockers.length > 0 && (
+                    <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+                      <p className="font-semibold">Blockers</p>
+                      <ul className="mt-1 list-disc space-y-1 pl-5">
+                        {reconciliationHandoff.blockers.map((blocker) => (
+                          <li key={blocker}>{blocker}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-xs font-semibold text-faint">Next action</p>
+                    <p className="mt-1 text-sm text-ink">
+                      {reconciliationHandoff.nextAction}
+                    </p>
+                  </div>
                 </div>
-              ))}
-            </div>
+              )}
+            </>
           )}
           <div className="flex flex-wrap gap-2">
+            {reconciliation?.evidenceUrl && (
+              <button
+                type="button"
+                className="btn-outline"
+                disabled={openingEvidence}
+                onClick={() => void openEvidence()}
+              >
+                <Icon name="clipboard" className="h-4 w-4" />
+                {openingEvidence ? "Opening..." : "Open evidence"}
+              </button>
+            )}
             {mayManage && reconciliation?.status !== "approved" && (
               <>
                 <button
@@ -526,13 +630,15 @@ export function EventsApp({
                 >
                   {reconciliation ? "Edit outcomes" : "Start reconciliation"}
                 </button>
-                <button
-                  type="button"
-                  className="btn-primary"
-                  onClick={() => openReconciliation("submit")}
-                >
-                  Submit to Finance
-                </button>
+                {reconciliation?.status !== "submitted" && (
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={() => openReconciliation("submit")}
+                  >
+                    Submit to Finance
+                  </button>
+                )}
               </>
             )}
             {mayApproveReconciliation &&
@@ -542,7 +648,7 @@ export function EventsApp({
                   className="btn-primary"
                   onClick={() => openReconciliation("approve")}
                 >
-                  Approve settlement
+                  Review settlement
                 </button>
               )}
           </div>
@@ -648,6 +754,14 @@ export function EventsApp({
           }
         >
           <div className="space-y-4">
+            {reconciliationErrors.outcomes && (
+              <p
+                role="alert"
+                className="text-sm font-semibold text-rose-600 dark:text-rose-300"
+              >
+                {reconciliationErrors.outcomes}
+              </p>
+            )}
             <div className="grid grid-cols-2 gap-3">
               {(
                 [
@@ -671,12 +785,16 @@ export function EventsApp({
                     min="0"
                     value={reconciliationDraft[key]}
                     disabled={reconciliationAction === "approve"}
-                    onChange={(event) =>
+                    onChange={(event) => {
                       setReconciliationDraft((current) => ({
                         ...current,
                         [key]: Number(event.target.value),
-                      }))
-                    }
+                      }));
+                      setReconciliationErrors((current) => ({
+                        ...current,
+                        outcomes: "",
+                      }));
+                    }}
                   />
                 </Field>
               ))}
@@ -698,34 +816,57 @@ export function EventsApp({
                 }
               />
             </Field>
-            <Field label="Finance reference" htmlFor="reconciliation-finance">
+            <Field
+              label="Finance reference"
+              htmlFor="reconciliation-finance"
+              hint={
+                reconciliationAction === "approve"
+                  ? "Required from the independent Finance review."
+                  : "Assigned by Finance during review."
+              }
+              error={reconciliationErrors.financeReference}
+            >
               <input
                 id="reconciliation-finance"
                 className="input"
                 value={reconciliationDraft.financeReference}
-                disabled={reconciliationAction === "approve"}
-                onChange={(event) =>
+                disabled={reconciliationAction !== "approve"}
+                aria-invalid={Boolean(reconciliationErrors.financeReference)}
+                onChange={(event) => {
                   setReconciliationDraft((current) => ({
                     ...current,
                     financeReference: event.target.value,
-                  }))
-                }
-                required={reconciliationAction !== "save"}
+                  }));
+                  setReconciliationErrors((current) => ({
+                    ...current,
+                    financeReference: "",
+                  }));
+                }}
+                required={reconciliationAction === "approve"}
               />
             </Field>
-            <Field label="Evidence URL" htmlFor="reconciliation-evidence">
+            <Field
+              label="Evidence URL"
+              htmlFor="reconciliation-evidence"
+              error={reconciliationErrors.evidenceUrl}
+            >
               <input
                 id="reconciliation-evidence"
                 className="input"
                 type="url"
                 value={reconciliationDraft.evidenceUrl}
                 disabled={reconciliationAction === "approve"}
-                onChange={(event) =>
+                aria-invalid={Boolean(reconciliationErrors.evidenceUrl)}
+                onChange={(event) => {
                   setReconciliationDraft((current) => ({
                     ...current,
                     evidenceUrl: event.target.value,
-                  }))
-                }
+                  }));
+                  setReconciliationErrors((current) => ({
+                    ...current,
+                    evidenceUrl: "",
+                  }));
+                }}
                 required={reconciliationAction !== "save"}
               />
             </Field>

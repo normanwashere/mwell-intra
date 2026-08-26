@@ -62,6 +62,8 @@ export interface Location {
   id: Id;
   name: string;
   type: LocationType;
+  /** Undefined on legacy fixtures; only an explicit false makes a location inactive. */
+  active?: boolean;
 }
 
 /**

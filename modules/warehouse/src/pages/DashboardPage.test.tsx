@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { screen, fireEvent } from "@testing-library/react";
 import { axe } from "jest-axe";
+import { useLocation } from "react-router-dom";
 import { DashboardPage } from "./DashboardPage";
 import { renderWithProviders } from "@/test/renderWithProviders";
 import type { Role } from "@/domain/types";
@@ -18,6 +19,16 @@ const ALL_ROLES: Role[] = [
 ];
 
 const FIRST_RENDER_TIMEOUT = 10_000;
+
+function LocationProbe() {
+  const location = useLocation();
+  return (
+    <output aria-label="Current route">
+      {location.pathname}
+      {location.search}
+    </output>
+  );
+}
 
 describe("DashboardPage", () => {
   it("does not render dead-end dashboard navigation for a minimal live bundle", async () => {
@@ -155,7 +166,13 @@ describe("DashboardPage", () => {
   });
 
   it("tailors the dashboard to marketing", async () => {
-    renderWithProviders(<DashboardPage />, { role: "marketing" });
+    renderWithProviders(
+      <>
+        <DashboardPage />
+        <LocationProbe />
+      </>,
+      { role: "marketing" },
+    );
     expect(
       await screen.findByRole("heading", {
         name: /consumption by event type/i,
@@ -170,10 +187,22 @@ describe("DashboardPage", () => {
     expect(
       screen.queryByRole("link", { name: /receive and inspect/i }),
     ).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: /request campaign stock/i }),
+    );
+    expect(screen.getByLabelText("Current route")).toHaveTextContent(
+      "/fulfillment?tab=requests",
+    );
   });
 
   it("tailors the dashboard to business unit", async () => {
-    renderWithProviders(<DashboardPage />, { role: "business_unit" });
+    renderWithProviders(
+      <>
+        <DashboardPage />
+        <LocationProbe />
+      </>,
+      { role: "business_unit" },
+    );
     expect(await screen.findByText(/low-stock alerts/i)).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /request stock/i }),
@@ -181,6 +210,10 @@ describe("DashboardPage", () => {
     expect(
       screen.getByRole("heading", { name: /pending reservations/i }),
     ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /request stock/i }));
+    expect(screen.getByLabelText("Current route")).toHaveTextContent(
+      "/fulfillment?tab=requests",
+    );
   });
 
   it("gives the Warehouse Administrator an operational control overview", async () => {

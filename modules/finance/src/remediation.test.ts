@@ -22,6 +22,7 @@ describe("Finance remediation contract", () => {
       "Amount must be greater than zero.",
       "Select a canonical source record.",
       "Select registered evidence.",
+      "Use a valid HTTPS evidence URL or governed evidence reference.",
     ]);
     expect(validateFinanceCloseEntry({ action: "exception", id: "close-1" })).toEqual([
       "Provide a correction reason before flagging a close entry.",

@@ -127,8 +127,8 @@ export const OPERATING_PERSONA_GUIDES: Record<string, OperatingPersonaGuide> = {
       ),
       task(
         "capture-receipt",
-        "Capture the physical receipt",
-        "Open Receive and inspect, select the approved purchase order, and record quantity, serial or batch traceability, delivery details, and receipt evidence before Quality inspection.",
+        "Record an exceptional direct receipt",
+        "Use Receive and inspect only when the approved PO path cannot represent the delivery and the documented exception authority applies. Record quantity, serial or batch traceability, delivery details, reason, and evidence before Quality inspection.",
         "/warehouse/receiving",
         "warehouse-receiving",
       ),

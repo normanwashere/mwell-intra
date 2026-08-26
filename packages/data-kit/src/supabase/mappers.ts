@@ -97,7 +97,12 @@ export function productToRow(p: Product): Row {
 }
 
 export function rowToLocation(r: Row): Location {
-  return { id: r.id, name: r.name, type: r.type };
+  return {
+    id: r.id,
+    name: r.name,
+    type: r.type,
+    active: r.active ?? undefined,
+  };
 }
 
 export function rowToProfile(r: Row): Profile {
@@ -576,6 +581,7 @@ export function rowToQualityInspection(r: Row): QualityInspection {
     sourceType: r.source_type,
     sourceId: r.source_id,
     productId: r.product_id,
+    procurementPoLineId: r.procurement_po_line_id ?? undefined,
     binId: r.bin_id ?? undefined,
     lotId: r.lot_id ?? undefined,
     serialNumber: r.serial_number ?? undefined,

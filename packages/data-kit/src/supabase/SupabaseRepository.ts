@@ -137,7 +137,7 @@ type Row = Record<string, unknown>;
 const TABLE_PROJECTIONS: Record<string, string> = {
   products:
     "id,sku,name,category,item_class,serialization_policy,uom,device_type,merchandise_type,serialized,attributes,unit_cost,price,reorder_point,promotional,barcode,expiry_tracked,shelf_life_warning_days",
-  locations: "id,name,type",
+  locations: "id,name,type,active",
   storage_areas: "id,location_id,code,label,zone,active",
   suppliers: "id,name,lead_time_days",
   lots: "id,product_id,lot_code,supplier_id,unit_cost,received_at,expiry_date",
@@ -159,7 +159,7 @@ const TABLE_PROJECTIONS: Record<string, string> = {
   operation_routes:
     "id,operation_type_id,source_location_types,destination_location_types,requires_evidence,requires_approval,requires_online,active",
   quality_inspections:
-    "id,source_type,source_id,product_id,bin_id,lot_id,serial_number,quantity,disposition,reason,evidence_urls,inspected_by,inspected_at",
+    "id,source_type,source_id,product_id,procurement_po_line_id,bin_id,lot_id,serial_number,quantity,disposition,reason,evidence_urls,inspected_by,inspected_at",
   inventory_holds:
     "id,inspection_id,product_id,location_id,bin_id,lot_id,serial_number,quantity,status,reason,created_by,created_at,released_by,released_at",
   vendor_returns:
@@ -449,6 +449,7 @@ export class SupabaseRepository implements WarehouseControlRepository {
       source_type: input.sourceType,
       source_id: input.sourceId,
       product_id: input.productId,
+      procurement_po_line_id: input.procurementPoLineId ?? null,
       bin_id: input.binId ?? null,
       lot_id: input.lotId ?? null,
       serial_number: input.serialNumber ?? null,
@@ -619,10 +620,41 @@ export class SupabaseRepository implements WarehouseControlRepository {
       po_id: input.poId,
       location_id: input.locationId,
       bin_id: input.binId ?? null,
+      ...(input.mode === "breakdown"
+        ? { exception_reason: input.exceptionReason ?? null }
+        : {}),
       lines: input.lines.map((line) => ({
         line_id: line.lineId,
         product_id: line.productId,
-        quantity: line.quantity,
+        ...(line.mode === "breakdown"
+          ? {
+              expected_quantity: line.expectedQuantity,
+              outcomes: {
+                clean: {
+                  quantity: line.outcomes.clean.quantity,
+                  serial_numbers: line.outcomes.clean.serialNumbers ?? [],
+                },
+                damaged: {
+                  quantity: line.outcomes.damaged.quantity,
+                  serial_numbers: line.outcomes.damaged.serialNumbers ?? [],
+                },
+                unidentified: {
+                  quantity: line.outcomes.unidentified.quantity,
+                  serial_numbers:
+                    line.outcomes.unidentified.serialNumbers ?? [],
+                  observed_description:
+                    line.outcomes.unidentified.observedDescription ?? null,
+                  observed_identifiers:
+                    line.outcomes.unidentified.observedIdentifiers ?? null,
+                },
+                short: { quantity: line.outcomes.short.quantity },
+                excess: {
+                  quantity: line.outcomes.excess.quantity,
+                  serial_numbers: line.outcomes.excess.serialNumbers ?? [],
+                },
+              },
+            }
+          : { quantity: line.quantity }),
         lot_code: line.lotCode ?? null,
         expiry_date: line.expiryDate ?? null,
         serial_numbers: line.serialNumbers ?? [],
@@ -1517,9 +1549,14 @@ export class SupabaseRepository implements WarehouseControlRepository {
 
   async updateLocation(input: UpdateLocationInput): Promise<Location> {
     if (!input.name.trim()) throw new Error("Location name is required.");
+    const changes = {
+      name: input.name.trim(),
+      type: input.type,
+      ...(input.active === undefined ? {} : { active: input.active }),
+    };
     const { data, error } = await this.db
       .from("locations")
-      .update({ name: input.name.trim(), type: input.type })
+      .update(changes)
       .eq("id", input.locationId)
       .select(TABLE_PROJECTIONS.locations)
       .single();

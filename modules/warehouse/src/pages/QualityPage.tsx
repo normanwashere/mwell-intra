@@ -18,6 +18,7 @@ interface PendingInspection {
   binId?: string;
   recordedAt: string;
   procurementPoLineId?: string;
+  serialNumber?: string;
 }
 
 export function QualityPage() {
@@ -71,6 +72,26 @@ export function QualityPage() {
       .reduce((sum, inspection) => sum + inspection.quantity, 0);
     const receipts = data.receipts.flatMap((receipt) => receipt.lines.flatMap((line, lineIndex) => {
       const procurementPoLineId = (line as typeof line & { procurementLineId?: string }).procurementLineId;
+      const staged = inspections.filter((inspection) => inspection.sourceType === 'receipt'
+        && inspection.sourceId === receipt.id
+        && inspection.productId === line.productId
+        && inspection.disposition === 'pending'
+        && (!procurementPoLineId || inspection.procurementPoLineId === procurementPoLineId));
+      if (staged.length > 0) {
+        return staged.map((inspection) => ({
+          id: inspection.id,
+          sourceType: 'receipt' as const,
+          sourceId: receipt.id,
+          productId: inspection.productId,
+          quantity: inspection.quantity,
+          ...(inspection.binId ? { binId: inspection.binId } : {}),
+          ...(inspection.serialNumber ? { serialNumber: inspection.serialNumber } : {}),
+          recordedAt: inspection.inspectedAt,
+          ...(inspection.procurementPoLineId
+            ? { procurementPoLineId: inspection.procurementPoLineId }
+            : {}),
+        }));
+      }
       const inspected = inspections
         .filter((inspection) => inspection.sourceType === 'receipt'
           && inspection.sourceId === receipt.id
@@ -122,22 +143,12 @@ export function QualityPage() {
     holdMode(hold) === 'vendor_return' ? mayCreateVendorReturn : mayRelease;
 
   const inspect = async (input: Parameters<typeof inspectQuality>[0]) => {
-    if (mode === 'supabase' && supabaseClient && selectedPending?.procurementPoLineId) {
-      const { error } = await supabaseClient.schema('warehouse').rpc('inspect_quality', {
-        payload: {
-          idempotency_key: input.idempotencyKey, source_type: input.sourceType,
-          source_id: input.sourceId, product_id: input.productId,
-          procurement_po_line_id: selectedPending.procurementPoLineId,
-          bin_id: input.binId ?? null, lot_id: input.lotId ?? null,
-          serial_number: input.serialNumber ?? null, quantity: input.quantity,
-          disposition: input.disposition, reason: input.reason ?? null,
-          evidence_urls: input.evidenceUrls ?? [],
-        },
-      });
-      if (!error) await reloadControls();
-      return !error;
-    }
-    const ok = await inspectQuality(input);
+    const ok = await inspectQuality({
+      ...input,
+      ...(selectedPending?.procurementPoLineId
+        ? { procurementPoLineId: selectedPending.procurementPoLineId }
+        : {}),
+    });
     if (ok) await reloadControls();
     return ok;
   };
@@ -204,7 +215,7 @@ export function QualityPage() {
               <li key={item.id} className="grid gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-ink">{productName(item.productId)}</p>
-                  <p className="text-xs text-faint">{item.sourceType === 'receipt' ? 'Receipt' : 'Return'} {item.sourceId} · {item.quantity} unit(s) · {item.recordedAt.slice(0, 10)}</p>
+                  <p className="text-xs text-faint">{item.sourceType === 'receipt' ? 'Receipt' : 'Return'} {item.sourceId} · {item.quantity} unit(s){item.serialNumber ? ` · Serial ${item.serialNumber}` : ''} · {item.recordedAt.slice(0, 10)}</p>
                 </div>
                 {mayInspect && <button type="button" className="btn-primary btn-sm justify-center" onClick={() => setSelectedPending(item)}>Inspect</button>}
               </li>
@@ -257,6 +268,7 @@ export function QualityPage() {
           productName: productName(selectedPending.productId),
           quantity: selectedPending.quantity,
           ...(selectedPending.binId ? { binId: selectedPending.binId } : {}),
+          ...(selectedPending.serialNumber ? { serialNumber: selectedPending.serialNumber } : {}),
         } : null}
         requiresEvidence={requiresEvidence}
         onOpenChange={(open) => { if (!open) setSelectedPending(null); }}

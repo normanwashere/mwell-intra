@@ -274,6 +274,7 @@ describe("warehouse control row mapping", () => {
         source_type: "receipt",
         source_id: "rcpt-1",
         product_id: "shirt",
+        procurement_po_line_id: "po-line-1",
         bin_id: null,
         lot_id: null,
         serial_number: null,
@@ -287,6 +288,7 @@ describe("warehouse control row mapping", () => {
     ).toMatchObject({
       binId: undefined,
       evidenceUrls: [],
+      procurementPoLineId: "po-line-1",
       inspectedBy: "user-1",
       inspectedAt: "2026-07-10T00:00:00Z",
     });

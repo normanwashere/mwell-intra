@@ -9,7 +9,7 @@ import type {
   FinanceCloseEntryType,
   ManageFinanceCloseEntryInput,
 } from '../types';
-import { validateFinanceCloseEntry } from '../data';
+import { isSupportedFinanceEvidenceReference, validateFinanceCloseEntry } from '../data';
 
 const ENTRY_LABEL: Record<FinanceCloseEntryType, string> = {
   inventory_valuation: 'Inventory valuation',
@@ -35,21 +35,27 @@ const EVIDENCE_LABEL: Record<FinanceCloseEvidenceRecordType, string> = {
   payment_release: 'Payment release',
   core_document: 'Registered document',
   warehouse_receipt: 'Warehouse receipt',
+  event_reconciliation: 'Event reconciliation evidence',
 };
 
 export function FinanceClosePanel({
   entries,
   manage,
+  openEvidence,
   canManage,
+  currentActorId,
 }: {
   entries: FinanceCloseEntry[];
   manage: (input: ManageFinanceCloseEntryInput) => Promise<FinanceCloseEntry>;
+  openEvidence: (entry: FinanceCloseEntry) => Promise<string>;
   canManage: boolean;
+  currentActorId?: string;
 }) {
   const toast = useToast();
   const [open, setOpen] = useState(false);
   const [workingId, setWorkingId] = useState<string>();
   const [saving, setSaving] = useState(false);
+  const [openingEvidenceId, setOpeningEvidenceId] = useState<string>();
   const today = new Date().toISOString().slice(0, 10);
   const monthStart = today.slice(0, 8) + '01';
   const [draft, setDraft] = useState({
@@ -97,6 +103,20 @@ export function FinanceClosePanel({
       );
     } finally {
       setWorkingId(undefined);
+    }
+  };
+
+  const retrieveEvidence = async (entry: FinanceCloseEntry) => {
+    setOpeningEvidenceId(entry.id);
+    try {
+      const evidenceUrl = await openEvidence(entry);
+      window.open(evidenceUrl, '_blank', 'noopener,noreferrer');
+    } catch (cause) {
+      toast.error(
+        cause instanceof Error ? cause.message : 'Event reconciliation evidence could not be opened.',
+      );
+    } finally {
+      setOpeningEvidenceId(undefined);
     }
   };
 
@@ -199,11 +219,34 @@ export function FinanceClosePanel({
                 </div>
                 {canManage && (
                   <div className="flex flex-wrap justify-end gap-2">
+                    {entry.sourceRecordType === 'event_reconciliation' && (
+                      <button
+                        type="button"
+                        className="btn-ghost btn-sm"
+                        disabled={openingEvidenceId === entry.id}
+                        onClick={() => void retrieveEvidence(entry)}
+                      >
+                        <Icon name="clipboard" className="h-4 w-4" />
+                        {openingEvidenceId === entry.id ? 'Opening...' : 'Open evidence'}
+                      </button>
+                    )}
                     {entry.status === 'ready' && (
                       <button
                         type="button"
                         className="btn-outline btn-sm"
-                        disabled={workingId === entry.id}
+                        disabled={
+                          workingId === entry.id ||
+                          Boolean(
+                            currentActorId && entry.settlementApprovedBy === currentActorId,
+                          ) ||
+                          (entry.sourceRecordType === 'event_reconciliation' &&
+                            !isSupportedFinanceEvidenceReference(entry.evidenceUrl))
+                        }
+                        title={
+                          currentActorId && entry.settlementApprovedBy === currentActorId
+                            ? 'A different Finance user must post this settlement.'
+                            : undefined
+                        }
                         onClick={() => void transition(entry, 'post')}
                       >
                         Post
@@ -213,7 +256,17 @@ export function FinanceClosePanel({
                       <button
                         type="button"
                         className="btn-primary btn-sm"
-                        disabled={workingId === entry.id}
+                        disabled={
+                          workingId === entry.id ||
+                          Boolean(
+                            currentActorId && entry.settlementApprovedBy === currentActorId,
+                          )
+                        }
+                        title={
+                          currentActorId && entry.settlementApprovedBy === currentActorId
+                            ? 'A different Finance user must reconcile this settlement.'
+                            : undefined
+                        }
                         onClick={() => void transition(entry, 'reconcile')}
                       >
                         Reconcile

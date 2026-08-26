@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 import type {
   CustomerReturnCase,
   DepartmentRequestOption,
@@ -220,9 +221,7 @@ function SummaryStrip({
 export function FulfillmentPage() {
   const warehouse = useWarehouse();
   const { data, role, roleLabel, can, actor, identityId } = warehouse;
-  const [tab, setTab] = useState<WorkspaceTab>("orders");
-
-  if (!data) return null;
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const canCreateOrder = can("request_fulfillment");
   const canRequestStock = can("request_stock");
@@ -250,6 +249,34 @@ export function FulfillmentPage() {
             (canIntakeReturn || canManageReturns || canReviewFinanceReturn)),
       )
     : TABS;
+  const preferredTab: WorkspaceTab =
+    role === "business_unit" || role === "marketing"
+      ? "requests"
+      : role === "finance"
+        ? "returns"
+        : "orders";
+  const fallbackTab = visibleTabs.some((item) => item.id === preferredTab)
+    ? preferredTab
+    : (visibleTabs[0]?.id ?? "orders");
+  const requestedTab = searchParams.get("tab");
+  const tab = visibleTabs.some((item) => item.id === requestedTab)
+    ? (requestedTab as WorkspaceTab)
+    : fallbackTab;
+
+  useEffect(() => {
+    if (searchParams.get("tab") === tab) return;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("tab", tab);
+    setSearchParams(nextParams, { replace: true });
+  }, [searchParams, setSearchParams, tab]);
+
+  if (!data) return null;
+
+  const selectTab = (nextTab: WorkspaceTab) => {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("tab", nextTab);
+    setSearchParams(nextParams);
+  };
 
   return (
     <div className="space-y-5">
@@ -288,7 +315,7 @@ export function FulfillmentPage() {
               role="tab"
               aria-label={item.label}
               aria-selected={tab === item.id}
-              onClick={() => setTab(item.id)}
+              onClick={() => selectTab(item.id)}
               className={`min-h-11 rounded-lg px-2 py-2 text-sm font-semibold transition ${
                 tab === item.id
                   ? "bg-surface text-brand-700 shadow-e1 dark:text-brand-300"

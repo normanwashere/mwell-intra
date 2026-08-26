@@ -21,7 +21,7 @@ import { FinanceClosePanel } from "./components/FinanceClosePanel";
 
 export function FinanceApp() {
   const { profile, userRoles, loading: sessionLoading } = useSession();
-  const { data, loading, error, refresh, manageCloseEntry, isDemo } =
+  const { data, loading, error, refresh, manageCloseEntry, openCloseEvidence, isDemo } =
     useFinanceData();
 
   if (sessionLoading || (profile && loading)) {
@@ -178,7 +178,9 @@ export function FinanceApp() {
       <FinanceClosePanel
         entries={data.closeEntries}
         manage={manageCloseEntry}
+        openEvidence={openCloseEvidence}
         canManage={mayManageClose}
+        currentActorId={profile.id}
       />
 
       <FinanceActivityTable activity={data.activity} />

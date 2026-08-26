@@ -472,15 +472,19 @@ flowchart LR
 ```mermaid
 %% handbook-flow: workflow=receiving-putaway; view=decision; stages=PO|Delivery|Receive|Inspect|Putaway|Available
 flowchart TD
-  R[Received line] --> M{PO, quantity and serial or batch match?}
-  M -->|No| V[Record variance and hold]
-  M -->|Yes| I{Inspection accepted?}
+  R[Received PO line] --> O[Record clean, damaged, unidentified, short and excess quantities]
+  O --> M{Outcomes reconcile and physical serials match?}
+  M -->|No| V[Correct the breakdown before submission]
+  M -->|Yes, with exception| H[Create one governed receipt and Supervisor hold]
+  M -->|Yes, clean| I{Inspection accepted?}
   I -->|Yes| B[Scan valid bin and put away]
-  I -->|Hold or damaged| H[Evidence-backed quarantine]
+  I -->|Hold or damaged| H
   I -->|Vendor return| X[Vendor-return custody]
 ```
 
-**Completion criteria:** each receipt line has PO and delivery references, delivery date, required serial/batch evidence, a recorded disposition and a valid destination before it becomes available stock.
+Use Receiving staging for the physical delivery and Quality decision. Staging is not the final SKU location. After acceptance, Put away each SKU into its directed rack/bin, such as `A-01-01` through `A-01-04`. For a mixed line, enter every outcome quantity and scan one unique serial for every physically present serialized unit. Short quantity represents units not delivered and therefore has no serial. The entire breakdown is committed as one governed transaction; exception quantities remain held for a different Supervisor.
+
+**Completion criteria:** each receipt line has PO and delivery references, delivery date, an outcome breakdown that reconciles to the remaining ordered quantity, required serial/batch evidence, a staging destination and a recorded Quality decision before accepted stock is put away and made available.
 
 ### Ecommerce Fulfillment
 
@@ -575,6 +579,8 @@ flowchart TD
   O -->|Lost or damaged| X[Exception approval]
 ```
 
+Marketing and Business Unit dashboard actions open the **Department requests** workspace directly. The requester sees their own requests; Warehouse and Procurement decision owners see only the operational records permitted by their role.
+
 **Completion criteria:** all department requests have one or more line items, authority, issued custody evidence, a recorded outcome and reconciliation. Merchandise is treated as expense under the applicable cost center.
 
 ### Event Custody
@@ -605,13 +611,17 @@ flowchart TD
   R --> K{Re-kit eligible?}
   K -->|Yes| Q[Open-box re-kitting]
   K -->|No| C[Controlled disposition]
-  S --> F{Finance evidence complete?}
-  G --> F
-  Q --> F
-  C --> F
+  S --> E[Marketing submits outcomes and event evidence]
+  G --> E
+  Q --> E
+  C --> E
+  E --> F{Finance reference and evidence complete?}
   F -->|No| M[Return to Marketing and Events for correction]
-  F -->|Yes| Z[Approve settlement]
+  F -->|Yes| Z[Finance independently approves settlement]
+  Z --> P[Finance Close posts and reconciles the bound entry]
 ```
+
+For a third-party event sale, Marketing owns and approves the event, a Warehouse or Operations administrator controls the external custody location, Operations records the sale and gross sales, and Finance closes settlement. If no external location exists, the intake form blocks submission and links to Location management instead of leaving the operator at an empty selector.
 
 **Completion criteria:** event demand, approval, transfer scans, sales/giveaway quantities, returned/lost/damaged evidence, re-kitting decision and Finance settlement reconcile to the final event balance.
 
@@ -661,6 +671,8 @@ Use these records only in the UAT environment. They provide known starting point
 | `UAT-AUG24-PO-0003` | Company AAA | 100 Generic Paperbag White                                                              | `F-04-01`                                                  |
 
 The Operations Associate can see these receivable goods purchase orders and their lines without receiving broad access to Procurement request records. Use `Q-01-01` for evidence-backed quarantine when an inspection outcome prevents normal putaway.
+
+For the August 25 mixed-receipt check on one serialized PO 0001 line, record: 50 clean, 20 damaged, 10 unidentified and 20 short. Scan 80 unique serials across the three physically present outcomes, attach delivery evidence and an exception reason, then confirm that one receipt and one Supervisor decision are created atomically. After Quality acceptance, put away each SKU to its planned final bin; do not treat `Q-01-01` staging as the permanent location.
 
 ### Fulfillment, Delivery and Backorder Scenarios
 

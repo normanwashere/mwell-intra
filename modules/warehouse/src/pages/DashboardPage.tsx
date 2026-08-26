@@ -732,12 +732,12 @@ export function DashboardPage() {
       business_unit: {
         label: "Request stock",
         icon: "list",
-        to: "/fulfillment",
+        to: "/fulfillment?tab=requests",
       },
       marketing: {
         label: "Request campaign stock",
         icon: "list",
-        to: "/fulfillment",
+        to: "/fulfillment?tab=requests",
       },
       procurement: {
         label: "Reorders & POs",

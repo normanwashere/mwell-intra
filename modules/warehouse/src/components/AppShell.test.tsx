@@ -82,11 +82,11 @@ describe("AppShell navigation", () => {
     const home = await screen.findByRole("link", { name: "Mwell Intra home" });
     expect(home).toHaveTextContent(/Intra/);
     expect(home).toHaveTextContent(/Warehouse/);
-    expect(screen.getByLabelText("Mwell Intra Warehouse")).toHaveTextContent(
-      /Intra · Warehouse/,
-    );
-    expect(screen.getByLabelText("Mwell Intra Warehouse")).toHaveTextContent(
-      /^mwellIntra · WarehouseAdministrator$/,
+    const mobileBrand = screen.getByLabelText("Mwell Intra Warehouse");
+    expect(within(mobileBrand).getByRole("img", { name: "mWell" }))
+      .toBeInTheDocument();
+    expect(mobileBrand).toHaveTextContent(
+      /^Intra · WarehouseAdministrator$/,
     );
   });
   it("shows logistics modules including Receiving", async () => {

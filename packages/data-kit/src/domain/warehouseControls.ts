@@ -36,6 +36,7 @@ export interface QualityInspection {
   sourceType: 'receipt' | 'return';
   sourceId: string;
   productId: string;
+  procurementPoLineId?: string;
   binId?: string;
   lotId?: string;
   serialNumber?: string;
@@ -162,6 +163,7 @@ export interface InspectQualityInput {
   sourceType: QualityInspection['sourceType'];
   sourceId: string;
   productId: string;
+  procurementPoLineId?: string;
   binId?: string;
   lotId?: string;
   serialNumber?: string;
@@ -265,21 +267,60 @@ export interface ProcurementPOHandoff {
   }>;
 }
 
-export interface ReceiveProcurementPOInput {
+interface ReceiveProcurementPOBaseInput {
   idempotencyKey: string;
   poId: string;
   locationId: string;
   binId?: string;
-  lines: Array<{
-    lineId: string;
-    productId: string;
-    quantity: number;
-    lotCode?: string;
-    expiryDate?: string;
-    serialNumbers?: string[];
-  }>;
   evidenceUrls?: string[];
 }
+
+export interface ReceiveProcurementPOLegacyLine {
+  mode: 'legacy';
+  lineId: string;
+  productId: string;
+  quantity: number;
+  expectedQuantity?: never;
+  outcomes?: never;
+  lotCode?: string;
+  expiryDate?: string;
+  serialNumbers?: string[];
+}
+
+export interface ReceiveProcurementPOBreakdownLine {
+  mode: 'breakdown';
+  lineId: string;
+  productId: string;
+  quantity?: never;
+  expectedQuantity: number;
+  outcomes: {
+    clean: { quantity: number; serialNumbers?: string[] };
+    damaged: { quantity: number; serialNumbers?: string[] };
+    unidentified: {
+      quantity: number;
+      serialNumbers?: string[];
+      observedDescription?: string;
+      observedIdentifiers?: string;
+    };
+    short: { quantity: number };
+    excess: { quantity: number; serialNumbers?: string[] };
+  };
+  lotCode?: string;
+  expiryDate?: string;
+  serialNumbers?: never;
+}
+
+export type ReceiveProcurementPOInput =
+  | (ReceiveProcurementPOBaseInput & {
+      mode: 'legacy';
+      exceptionReason?: never;
+      lines: ReceiveProcurementPOLegacyLine[];
+    })
+  | (ReceiveProcurementPOBaseInput & {
+      mode: 'breakdown';
+      exceptionReason?: string;
+      lines: ReceiveProcurementPOBreakdownLine[];
+    });
 
 export type ExpiryRisk = 'not_tracked' | 'expired' | 'warning' | 'ok';
 export type StockChangeApprovalTier = 'logistics_supervisor' | 'finance';

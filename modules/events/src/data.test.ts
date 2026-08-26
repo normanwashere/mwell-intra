@@ -16,6 +16,51 @@ import {
   validateEventManagementFields,
 } from './data';
 import { EVENTS_DEMO_DATA } from './seed';
+import * as eventData from './data';
+
+type ReconciliationWorkflowModule = {
+  validateEventReconciliationTransition?: (
+    input: {
+      action: 'save' | 'submit' | 'approve';
+      soldUnits: number;
+      giveawayUnits: number;
+      returnedUnits: number;
+      lostUnits: number;
+      damagedUnits: number;
+      rekitUnits: number;
+      grossSalesAmount: number;
+      financeReference?: string;
+      evidenceUrl?: string;
+    },
+    issuedUnits: number,
+  ) => Record<string, string>;
+  eventReconciliationHandoff?: (
+    reconciliation: {
+      status: 'draft' | 'submitted' | 'approved';
+      soldUnits: number;
+      giveawayUnits: number;
+      returnedUnits: number;
+      lostUnits: number;
+      damagedUnits: number;
+      rekitUnits: number;
+      grossSalesAmount: number;
+      financeReference?: string;
+      evidenceUrl?: string;
+      updatedAt: string;
+      eventId: string;
+    },
+    issuedUnits: number,
+    access: { mayManage: boolean; mayApprove: boolean },
+  ) => {
+    stage: string;
+    owner: string;
+    blockers: string[];
+    nextAction: string;
+    availableAction?: 'save' | 'submit' | 'approve';
+  };
+};
+
+const reconciliationWorkflow = eventData as ReconciliationWorkflowModule;
 
 describe('event lifecycle rules', () => {
   it('loads fulfillment products without filtering on a non-existent active column', async () => {
@@ -321,6 +366,141 @@ describe('event lifecycle rules', () => {
         }),
       },
     ]);
+  });
+
+  it('allows Event operations to submit the August 24 draft with evidence but no Finance reference', () => {
+    const validate = reconciliationWorkflow.validateEventReconciliationTransition;
+    expect(validate).toBeTypeOf('function');
+    if (!validate) return;
+
+    expect(
+      validate(
+        {
+          action: 'submit',
+          soldUnits: 3,
+          giveawayUnits: 0,
+          returnedUnits: 0,
+          lostUnits: 0,
+          damagedUnits: 0,
+          rekitUnits: 0,
+          grossSalesAmount: 16_970,
+          evidenceUrl: 'https://example.com/uat/events/UAT-AUG24-EVENT-A',
+        },
+        3,
+      ),
+    ).toEqual({});
+  });
+
+  it('blocks submission without complete outcome accounting and Event evidence', () => {
+    const validate = reconciliationWorkflow.validateEventReconciliationTransition;
+    expect(validate).toBeTypeOf('function');
+    if (!validate) return;
+
+    expect(
+      validate(
+        {
+          action: 'submit',
+          soldUnits: 2,
+          giveawayUnits: 0,
+          returnedUnits: 0,
+          lostUnits: 0,
+          damagedUnits: 0,
+          rekitUnits: 0,
+          grossSalesAmount: 16_970,
+        },
+        3,
+      ),
+    ).toEqual({
+      outcomes: 'Event outcomes must account for all 3 issued units.',
+      evidenceUrl: 'Attach event settlement evidence before submitting to Finance.',
+    });
+  });
+
+  it('rejects malformed or unsupported Event evidence references', () => {
+    const validate = reconciliationWorkflow.validateEventReconciliationTransition;
+    expect(validate).toBeTypeOf('function');
+    if (!validate) return;
+
+    for (const evidenceUrl of [
+      'javascript:alert(1)',
+      'http://example.com/insecure-evidence',
+      'not-a-reference',
+    ]) {
+      expect(
+        validate(
+          {
+            action: 'submit',
+            soldUnits: 3,
+            giveawayUnits: 0,
+            returnedUnits: 0,
+            lostUnits: 0,
+            damagedUnits: 0,
+            rekitUnits: 0,
+            grossSalesAmount: 16_970,
+            evidenceUrl,
+          },
+          3,
+        ),
+      ).toEqual({
+        evidenceUrl: 'Use a valid HTTPS evidence URL or governed evidence reference.',
+      });
+    }
+  });
+
+  it('requires Finance to add its reference before approving a submitted settlement', () => {
+    const validate = reconciliationWorkflow.validateEventReconciliationTransition;
+    expect(validate).toBeTypeOf('function');
+    if (!validate) return;
+
+    const submitted = {
+      action: 'approve' as const,
+      soldUnits: 3,
+      giveawayUnits: 0,
+      returnedUnits: 0,
+      lostUnits: 0,
+      damagedUnits: 0,
+      rekitUnits: 0,
+      grossSalesAmount: 16_970,
+      evidenceUrl: 'https://example.com/uat/events/UAT-AUG24-EVENT-A',
+    };
+    expect(validate(submitted, 3)).toEqual({
+      financeReference: 'Enter the Finance settlement reference before approval.',
+    });
+    expect(
+      validate({ ...submitted, financeReference: 'FIN-EVT-AUG24-001' }, 3),
+    ).toEqual({});
+  });
+
+  it('shows role-correct ownership and keeps read-only roles out of mutations', () => {
+    const handoff = reconciliationWorkflow.eventReconciliationHandoff;
+    expect(handoff).toBeTypeOf('function');
+    if (!handoff) return;
+
+    const reconciliation = {
+      eventId: 'uat-event-a',
+      status: 'submitted' as const,
+      soldUnits: 3,
+      giveawayUnits: 0,
+      returnedUnits: 0,
+      lostUnits: 0,
+      damagedUnits: 0,
+      rekitUnits: 0,
+      grossSalesAmount: 16_970,
+      evidenceUrl: 'https://example.com/uat/events/UAT-AUG24-EVENT-A',
+      updatedAt: '2026-08-24T12:00:00Z',
+    };
+
+    expect(handoff(reconciliation, 3, { mayManage: false, mayApprove: true })).toMatchObject({
+      stage: 'Finance review',
+      owner: 'Finance settlement reviewer',
+      blockers: ['Finance settlement reference is missing.'],
+      availableAction: 'approve',
+    });
+    expect(handoff(reconciliation, 3, { mayManage: false, mayApprove: false })).toMatchObject({
+      stage: 'Finance review',
+      owner: 'Finance settlement reviewer',
+      availableAction: undefined,
+    });
   });
 
   it('defines audited lifecycle and event-linked handoff database controls', () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyMemoryFinanceCloseEntry,
   filterFinanceActivity,
   manageLiveFinanceCloseEntry,
   scopeFinanceData,
@@ -7,6 +8,7 @@ import {
   validateFinanceCloseEntry,
 } from './data';
 import { FINANCE_DEMO_DATA } from './seed';
+import type { FinanceData } from './types';
 
 describe('summarizeFinanceData', () => {
   it('summarizes commitments, receipts, returns, and review states', () => {
@@ -121,6 +123,7 @@ describe('Finance close source binding', () => {
       sourceRecordId: 'po-1',
       evidenceRecordType: 'request_attachment',
       evidenceRecordId: 'att-1',
+      evidenceUrl: 'https://example.com/evidence/att-1',
     });
 
     expect(calls).toEqual([
@@ -138,6 +141,131 @@ describe('Finance close source binding', () => {
       name: 'Finance A',
       email: 'finance-a@mwell.com.ph',
     });
+  });
+});
+
+describe('event settlement close', () => {
+  const eventSettlementData = (): FinanceData => ({
+    activity: [],
+    payments: [],
+    closeEntries: [
+      {
+        id: 'close-event-a',
+        periodStart: '2026-08-24',
+        periodEnd: '2026-08-24',
+        entryType: 'event_settlement',
+        sourceModule: 'events',
+        sourceReference: 'uat-event-a',
+        sourceRecordType: 'event_reconciliation',
+        sourceRecordId: 'uat-event-a',
+        evidenceRecordType: 'event_reconciliation',
+        evidenceRecordId: 'uat-event-a',
+        amount: 16_970,
+        status: 'ready',
+        evidenceUrl: 'https://example.com/uat/events/UAT-AUG24-EVENT-A',
+        preparedBy: 'marketing-user',
+        settlementApprovedBy: 'finance-approver',
+        preparedAt: '2026-08-24T12:00:00Z',
+        updatedAt: '2026-08-24T12:00:00Z',
+      },
+    ],
+    inventoryValue: 0,
+    warnings: [],
+  });
+
+  it('moves an approved event settlement through independent Finance posting and closure', () => {
+    const posted = applyMemoryFinanceCloseEntry(
+      eventSettlementData(),
+      { action: 'post', id: 'close-event-a' },
+      'finance-poster',
+    );
+    expect(posted.closeEntries[0]).toMatchObject({
+      status: 'posted',
+      postedBy: 'finance-poster',
+    });
+
+    const reconciled = applyMemoryFinanceCloseEntry(
+      posted,
+      { action: 'reconcile', id: 'close-event-a' },
+      'finance-closer',
+    );
+    expect(reconciled.closeEntries[0]).toMatchObject({
+      status: 'reconciled',
+      postedBy: 'finance-poster',
+      reconciledBy: 'finance-closer',
+    });
+  });
+
+  it('prevents the posting Finance actor from closing their own event settlement', () => {
+    const posted = applyMemoryFinanceCloseEntry(
+      eventSettlementData(),
+      { action: 'post', id: 'close-event-a' },
+      'finance-poster',
+    );
+    expect(() =>
+      applyMemoryFinanceCloseEntry(
+        posted,
+        { action: 'reconcile', id: 'close-event-a' },
+        'finance-poster',
+      ),
+    ).toThrow('A different Finance user must reconcile a posted close entry.');
+  });
+
+  it('prevents the settlement approver from posting the generated close entry', () => {
+    expect(() =>
+      applyMemoryFinanceCloseEntry(
+        eventSettlementData(),
+        { action: 'post', id: 'close-event-a' },
+        'finance-approver',
+      ),
+    ).toThrow('The Event settlement approver cannot post its generated close entry.');
+  });
+
+  it('prevents the settlement approver from reconciling after independent posting', () => {
+    const posted = applyMemoryFinanceCloseEntry(
+      eventSettlementData(),
+      { action: 'post', id: 'close-event-a' },
+      'finance-poster',
+    );
+
+    expect(() =>
+      applyMemoryFinanceCloseEntry(
+        posted,
+        { action: 'reconcile', id: 'close-event-a' },
+        'finance-approver',
+      ),
+    ).toThrow('The Event settlement approver cannot reconcile its generated close entry.');
+  });
+
+  it('reconciles only posted entries', () => {
+    expect(() =>
+      applyMemoryFinanceCloseEntry(
+        eventSettlementData(),
+        { action: 'reconcile', id: 'close-event-a' },
+        'finance-closer',
+      ),
+    ).toThrow('Post the entry before reconciliation.');
+  });
+
+  it('prevents the preparer from reconciling even after another Finance actor posts', () => {
+    const prepared = eventSettlementData();
+    prepared.closeEntries[0] = {
+      ...prepared.closeEntries[0]!,
+      preparedBy: 'finance-preparer',
+    };
+    const posted = applyMemoryFinanceCloseEntry(
+      prepared,
+      { action: 'post', id: 'close-event-a' },
+      'finance-poster',
+    );
+
+    expect(() =>
+      applyMemoryFinanceCloseEntry(
+        posted,
+        { action: 'reconcile', id: 'close-event-a' },
+        'finance-preparer',
+      ),
+    ).toThrow('The preparer cannot reconcile their own entry.');
   });
 });
 

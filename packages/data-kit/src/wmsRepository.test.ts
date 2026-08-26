@@ -442,6 +442,132 @@ describe("cross-department WMS repository", () => {
     });
   });
 
+  it.each([
+    ["a missing location", undefined],
+    ["a warehouse", "loc-wh"],
+    ["an unknown location", "loc-unknown"],
+    ["an inactive external location", "loc-event-inactive"],
+  ])(
+    "rejects third-party demand assigned to %s",
+    async (_label, locationId) => {
+      const data = await repo.getData();
+      data.locations.push({
+        id: "loc-event-inactive",
+        name: "Closed event site",
+        type: "event_site",
+        active: false,
+      });
+      const repository = new InMemoryRepository(data);
+
+      await expect(
+        repository.createFulfillmentOrder({
+          source: "third_party",
+          externalReference: `EVENT-SALE-${locationId ?? "MISSING"}`,
+          requestingDepartment: "sales",
+          eventId: "evt-makati",
+          thirdPartyLocationId: locationId,
+          grossSalesAmount: 8640,
+          lines: [{ productId: "smart-watch", quantity: 2 }],
+          actor: "sales@mwell",
+        }),
+      ).rejects.toThrow(
+        /active event site or vendor custody location|required/i,
+      );
+    },
+  );
+
+  it.each(["loc-event-makati", "loc-vendor"])(
+    "accepts active external custody location %s for third-party demand",
+    async (locationId) => {
+      await expect(
+        repo.createFulfillmentOrder({
+          source: "third_party",
+          externalReference: `EVENT-SALE-${locationId}`,
+          requestingDepartment: "sales",
+          eventId: "evt-makati",
+          thirdPartyLocationId: locationId,
+          grossSalesAmount: 8640,
+          lines: [{ productId: "smart-watch", quantity: 2 }],
+          actor: "sales@mwell",
+        }),
+      ).resolves.toMatchObject({ thirdPartyLocationId: locationId });
+    },
+  );
+
+  it("blocks reclassifying an external location with active third-party custody", async () => {
+    await repo.createFulfillmentOrder({
+      source: "third_party",
+      externalReference: "EVENT-SALE-LOCATION-GUARD",
+      requestingDepartment: "sales",
+      eventId: "evt-makati",
+      thirdPartyLocationId: "loc-event-makati",
+      grossSalesAmount: 8640,
+      lines: [{ productId: "smart-watch", quantity: 2 }],
+      actor: "sales@mwell",
+    });
+
+    await expect(
+      repo.updateLocation({
+        locationId: "loc-event-makati",
+        name: "Makati Corporate Activation",
+        type: "warehouse",
+      }),
+    ).rejects.toThrow(
+      /cannot deactivate or reclassify.*nonterminal third-party fulfillment custody/i,
+    );
+
+    await expect(
+      repo.updateLocation({
+        locationId: "loc-event-makati",
+        name: "Makati Corporate Activation",
+        type: "event_site",
+        active: false,
+      }),
+    ).rejects.toThrow(
+      /cannot deactivate or reclassify.*nonterminal third-party fulfillment custody/i,
+    );
+  });
+
+  it("allows reclassification after all third-party custody is terminal", async () => {
+    const order = await repo.createFulfillmentOrder({
+      source: "third_party",
+      externalReference: "EVENT-SALE-LOCATION-TERMINAL",
+      requestingDepartment: "sales",
+      eventId: "evt-makati",
+      thirdPartyLocationId: "loc-event-makati",
+      grossSalesAmount: 8640,
+      lines: [{ productId: "smart-watch", quantity: 2 }],
+      actor: "sales@mwell",
+    });
+    await repo.advanceFulfillmentOrder({
+      orderId: order.id,
+      action: "cancel",
+      actor: "sales@mwell",
+      cancellationReason: "Event cancelled before allocation",
+    });
+
+    await expect(
+      repo.updateLocation({
+        locationId: "loc-event-makati",
+        name: "Former Makati Corporate Activation",
+        type: "warehouse",
+        active: false,
+      }),
+    ).resolves.toMatchObject({ type: "warehouse", active: false });
+  });
+
+  it("does not apply third-party custody validation to other order sources", async () => {
+    await expect(
+      repo.createFulfillmentOrder({
+        source: "ecommerce",
+        externalReference: "SHOP-CUSTODY-COMPAT-1",
+        thirdPartyLocationId: "loc-unknown",
+        lines: [{ productId: "smart-watch", quantity: 1 }],
+        actor: "sales@mwell",
+      }),
+    ).resolves.toMatchObject({ source: "ecommerce" });
+  });
+
   it("keeps fulfillment supplies and warehouse tools out of customer demand", async () => {
     await expect(
       repo.createFulfillmentOrder({

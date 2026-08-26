@@ -147,6 +147,48 @@ describe("QualityPage", () => {
     expect(await screen.findByText("No active holds")).toBeInTheDocument();
   });
 
+  it("presents serialized provisional custody as an exact serial inspection task", async () => {
+    const user = userEvent.setup();
+    const { repo, receipt } = await repositoryWithPendingReceipt();
+    const inspect = vi.spyOn(repo, "inspectQuality");
+    vi.spyOn(repo, "listQualityInspections").mockResolvedValue({
+      rows: [{
+        id: "pending-serialized-inspection",
+        sourceType: "receipt",
+        sourceId: receipt.id,
+        productId: "shirt-l",
+        procurementPoLineId: "po-line-serialized",
+        serialNumber: "RING-0001",
+        quantity: 1,
+        disposition: "pending",
+        reason: "Awaiting independent quality inspection",
+        evidenceUrls: [],
+        inspectedBy: "receiver@mwell.com.ph",
+        inspectedAt: "2026-08-26T00:00:00Z",
+      }],
+      total: 1,
+    });
+
+    renderWithProviders(<QualityPage />, { repo, role: "warehouse_operator" });
+    const queue = await screen.findByLabelText("Pending inspections");
+    const serialText = within(queue).getByText(/serial RING-0001/i);
+    expect(serialText).toBeInTheDocument();
+    await user.click(within(serialText.closest("li")!).getByRole("button", { name: "Inspect" }));
+    const dialog = await screen.findByRole("dialog", { name: "Inspect stock" });
+    expect(within(dialog).getByText(/serial RING-0001/i)).toBeInTheDocument();
+    await user.upload(
+      within(dialog).getByLabelText("Attach inspection evidence"),
+      new File(["proof"], "proof.png", { type: "image/png" }),
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Submit inspection" }));
+
+    await waitFor(() => expect(inspect).toHaveBeenCalledWith(expect.objectContaining({
+      procurementPoLineId: "po-line-serialized",
+      serialNumber: "RING-0001",
+      quantity: 1,
+    })));
+  });
+
   it("holds a pending receipt only after reason and evidence are supplied", async () => {
     const user = userEvent.setup();
     const { repo, receipt } = await repositoryWithPendingReceipt();

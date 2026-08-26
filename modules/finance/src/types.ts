@@ -58,7 +58,8 @@ export type FinanceCloseEvidenceRecordType =
   | 'payment_readiness_pack'
   | 'payment_release'
   | 'core_document'
-  | 'warehouse_receipt';
+  | 'warehouse_receipt'
+  | 'event_reconciliation';
 
 export interface FinanceActorLineage {
   id: string;
@@ -88,6 +89,7 @@ export interface FinanceCloseEntry {
   postedAt?: string;
   reconciledBy?: string;
   reconciledAt?: string;
+  settlementApprovedBy?: string;
   preparedActor?: FinanceActorLineage;
   postedActor?: FinanceActorLineage;
   reconciledActor?: FinanceActorLineage;

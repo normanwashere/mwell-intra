@@ -255,6 +255,7 @@ export interface UpdateLocationInput {
   locationId: string;
   name: string;
   type: Location["type"];
+  active?: boolean;
 }
 
 export interface CreateStorageAreaInput {

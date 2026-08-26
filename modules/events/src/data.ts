@@ -123,6 +123,126 @@ export function validateEventFulfillmentFields(
   return errors;
 }
 
+type EventReconciliationTransitionInput = Pick<
+  SaveEventReconciliationInput,
+  | "action"
+  | "soldUnits"
+  | "giveawayUnits"
+  | "returnedUnits"
+  | "lostUnits"
+  | "damagedUnits"
+  | "rekitUnits"
+  | "grossSalesAmount"
+  | "financeReference"
+  | "evidenceUrl"
+>;
+
+export function isSupportedEventEvidenceReference(value?: string): boolean {
+  const reference = value?.trim();
+  if (!reference) return false;
+  if (/^memory:\/\/event-settlement\/[A-Za-z0-9._/-]+$/.test(reference)) {
+    return true;
+  }
+  try {
+    const url = new URL(reference);
+    return url.protocol === "https:" && Boolean(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+export function validateEventReconciliationTransition(
+  input: EventReconciliationTransitionInput,
+  issuedUnits: number,
+): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (input.action === "save") return errors;
+
+  const accountedUnits =
+    input.soldUnits +
+    input.giveawayUnits +
+    input.returnedUnits +
+    input.lostUnits +
+    input.damagedUnits +
+    input.rekitUnits;
+  if (accountedUnits !== issuedUnits) {
+    errors.outcomes = `Event outcomes must account for all ${issuedUnits} issued units.`;
+  }
+  if (!input.evidenceUrl?.trim()) {
+    errors.evidenceUrl =
+      "Attach event settlement evidence before submitting to Finance.";
+  } else if (!isSupportedEventEvidenceReference(input.evidenceUrl)) {
+    errors.evidenceUrl =
+      "Use a valid HTTPS evidence URL or governed evidence reference.";
+  }
+  if (input.action === "approve" && !input.financeReference?.trim()) {
+    errors.financeReference =
+      "Enter the Finance settlement reference before approval.";
+  }
+  return errors;
+}
+
+export function eventReconciliationHandoff(
+  reconciliation: EventReconciliation,
+  issuedUnits: number,
+  access: { mayManage: boolean; mayApprove: boolean },
+): {
+  stage: string;
+  owner: string;
+  blockers: string[];
+  nextAction: string;
+  availableAction?: "save" | "submit" | "approve";
+} {
+  if (reconciliation.status === "approved") {
+    return {
+      stage: "Finance close",
+      owner: "Finance close manager",
+      blockers: [],
+      nextAction:
+        "Post the generated close entry, then have a different Finance actor reconcile it.",
+    };
+  }
+
+  const action = reconciliation.status === "submitted" ? "approve" : "submit";
+  const validation = validateEventReconciliationTransition(
+    { ...reconciliation, action },
+    issuedUnits,
+  );
+  const blockers = [
+    validation.outcomes,
+    validation.evidenceUrl
+      ? "Event settlement evidence is missing."
+      : undefined,
+    validation.financeReference
+      ? "Finance settlement reference is missing."
+      : undefined,
+  ].filter((blocker): blocker is string => Boolean(blocker));
+
+  if (reconciliation.status === "submitted") {
+    return {
+      stage: "Finance review",
+      owner: "Finance settlement reviewer",
+      blockers,
+      nextAction: access.mayApprove
+        ? "Verify the evidence, add the Finance reference, and approve settlement."
+        : "Finance must verify the evidence, add its reference, and approve settlement.",
+      availableAction: access.mayApprove ? "approve" : undefined,
+    };
+  }
+
+  return {
+    stage: "Draft reconciliation",
+    owner: "Event operations",
+    blockers,
+    nextAction: access.mayManage
+      ? blockers.length
+        ? "Resolve the blockers, then submit to Finance."
+        : "Submit the reconciliation to Finance."
+      : "Event operations must complete and submit the reconciliation.",
+    availableAction: access.mayManage ? "submit" : undefined,
+  };
+}
+
 function lifecycleForRow(row: UnknownRow): EventLifecycle {
   const status = text(row.status);
   if (status === "cancelled" || status === "closed") return status;
@@ -265,6 +385,23 @@ export async function saveLiveEventReconciliation(
     });
   if (error) throw error;
   return mapReconciliationRow((data ?? {}) as UnknownRow);
+}
+
+export async function openLiveEventReconciliationEvidence(
+  client: EventsClient,
+  eventId: string,
+): Promise<string> {
+  const { data, error } = await client
+    .schema("warehouse")
+    .rpc("open_event_reconciliation_evidence", {
+      payload: { event_id: eventId },
+    });
+  if (error) throw error;
+  const evidenceUrl = text((data as UnknownRow | null)?.evidence_url);
+  if (!isSupportedEventEvidenceReference(evidenceUrl)) {
+    throw new Error("Event reconciliation evidence could not be retrieved.");
+  }
+  return evidenceUrl;
 }
 export async function loadLiveEvents(
   client: EventsClient,
@@ -462,6 +599,17 @@ export function applyMemoryEventReconciliation(
   data: EventsData,
   input: SaveEventReconciliationInput,
 ): EventsData {
+  const event = data.events.find((item) => item.id === input.eventId);
+  if (!event) throw new Error("Event was not found. Refresh before retrying.");
+  const errors = validateEventReconciliationTransition(input, event.issuedUnits);
+  const firstError = Object.values(errors)[0];
+  if (firstError) throw new Error(firstError);
+  const current = data.reconciliations?.find(
+    (item) => item.eventId === input.eventId,
+  );
+  if (input.action === "approve" && current?.status !== "submitted") {
+    throw new Error("Submit the event reconciliation before Finance approval.");
+  }
   const now = new Date().toISOString();
   const status = input.action === "save" ? "draft" : input.action === "submit" ? "submitted" : "approved";
   const next: EventReconciliation = {
@@ -474,10 +622,13 @@ export function applyMemoryEventReconciliation(
     damagedUnits: input.damagedUnits,
     rekitUnits: input.rekitUnits,
     grossSalesAmount: input.grossSalesAmount,
-    financeReference: input.financeReference?.trim() || undefined,
+    financeReference:
+      input.action === "approve"
+        ? input.financeReference?.trim() || undefined
+        : undefined,
     evidenceUrl: input.evidenceUrl?.trim() || undefined,
     note: input.note?.trim() || undefined,
-    preparedBy: "events@mwell.demo",
+    preparedBy: current?.preparedBy ?? "events@mwell.demo",
     approvedAt: input.action === "approve" ? now : undefined,
     updatedAt: now,
   };
@@ -608,6 +759,19 @@ export function useEventsData() {
     },
     [live, refresh],
   );
+  const openReconciliationEvidence = useCallback(
+    async (eventId: string) => {
+      if (live) return openLiveEventReconciliationEvidence(live, eventId);
+      const evidenceUrl = data.reconciliations?.find(
+        (item) => item.eventId === eventId,
+      )?.evidenceUrl;
+      if (!isSupportedEventEvidenceReference(evidenceUrl)) {
+        throw new Error("Event reconciliation evidence could not be retrieved.");
+      }
+      return evidenceUrl!.trim();
+    },
+    [data.reconciliations, live],
+  );
   useEffect(() => {
     void refresh();
   }, [refresh]);
@@ -620,6 +784,7 @@ export function useEventsData() {
     manageEvent,
     requestFulfillment,
     saveReconciliation,
+    openReconciliationEvidence,
     isDemo: !live,
   };
 }

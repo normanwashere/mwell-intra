@@ -8,7 +8,52 @@ import {
   expiryRisk,
   normalizePageQuery,
   stockChangeStatusAfterDecision,
+  type ReceiveProcurementPOInput,
 } from './warehouseControls';
+
+describe('procurement PO receipt command types', () => {
+  it('requires one explicit line mode for the whole command', () => {
+    const legacy = {
+      mode: 'legacy',
+      idempotencyKey: 'legacy-command-0001',
+      poId: 'po-1',
+      locationId: 'loc-wh',
+      lines: [
+        {
+          mode: 'legacy',
+          lineId: 'line-1',
+          productId: 'shirt',
+          quantity: 1,
+        },
+      ],
+    } satisfies ReceiveProcurementPOInput;
+    expect(legacy.mode).toBe('legacy');
+
+    // @ts-expect-error A legacy command cannot contain breakdown lines.
+    const mixed: ReceiveProcurementPOInput = {
+      mode: 'legacy',
+      idempotencyKey: 'mixed-command-0001',
+      poId: 'po-1',
+      locationId: 'loc-wh',
+      lines: [
+        {
+          mode: 'breakdown',
+          lineId: 'line-1',
+          productId: 'shirt',
+          expectedQuantity: 1,
+          outcomes: {
+            clean: { quantity: 1 },
+            damaged: { quantity: 0 },
+            unidentified: { quantity: 0 },
+            short: { quantity: 0 },
+            excess: { quantity: 0 },
+          },
+        },
+      ],
+    };
+    expect(mixed.mode).toBe('legacy');
+  });
+});
 
 describe('warehouse control calculations', () => {
   it('removes commitments and unavailable stock from availability', () => {

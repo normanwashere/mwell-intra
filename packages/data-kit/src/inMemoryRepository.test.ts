@@ -1415,6 +1415,121 @@ describe("receiveAgainstPO", () => {
   });
 });
 
+describe("receiveProcurementPO", () => {
+  it("posts only clean stock, retains outcome custody, and replays idempotently", async () => {
+    const data = miniData();
+    data.purchaseOrders.push({
+      id: "po-0001",
+      supplierId: "sup-1",
+      status: "ordered",
+      lines: [
+        { productId: "ring", quantityOrdered: 3, quantityReceived: 0 },
+      ],
+      actor: "procurement@mwell.test",
+      createdAt: "2026-08-25T00:00:00.000Z",
+    });
+    data.purchaseOrders.push({
+      id: "po-0002",
+      supplierId: "sup-1",
+      status: "ordered",
+      lines: [
+        { productId: "ring", quantityOrdered: 1, quantityReceived: 0 },
+      ],
+      actor: "procurement@mwell.test",
+      createdAt: "2026-08-25T01:00:00.000Z",
+    });
+    const repository = new InMemoryRepository(data, {
+      now: () => "2026-08-26T01:00:00.000Z",
+      id: (prefix) => `${prefix}-stable`,
+    });
+    const input = {
+      mode: "breakdown" as const,
+      idempotencyKey: "memory-po-breakdown-0001",
+      poId: "po-0001",
+      locationId: "loc-wh",
+      binId: "bin-a",
+      exceptionReason: "One damaged and one short",
+      evidenceUrls: ["evidence/po-0001.jpg"],
+      lines: [
+        {
+          mode: "breakdown" as const,
+          lineId: "po-0001-0",
+          productId: "ring",
+          expectedQuantity: 3,
+          outcomes: {
+            clean: { quantity: 1, serialNumbers: ["CLEAN-001"] },
+            damaged: { quantity: 1, serialNumbers: ["DAMAGED-001"] },
+            unidentified: {
+              quantity: 1,
+              serialNumbers: ["UNKNOWN-001"],
+              observedDescription: "Unmarked ring",
+              observedIdentifiers: "Carton A",
+            },
+            short: { quantity: 0 },
+            excess: { quantity: 1, serialNumbers: ["EXCESS-001"] },
+          },
+        },
+      ],
+    };
+
+    const first = await repository.receiveProcurementPO(input);
+    const replay = await repository.receiveProcurementPO(input);
+    expect(replay).toEqual(first);
+    expect(first.lines).toEqual([
+      expect.objectContaining({
+        productId: "ring",
+        quantity: 1,
+        serialNumbers: ["CLEAN-001"],
+      }),
+    ]);
+    const current = await repository.getData();
+    expect(
+      current.units.filter((unit) =>
+        ["CLEAN-001", "DAMAGED-001", "UNKNOWN-001", "EXCESS-001"].includes(
+          unit.serialNumber,
+        ),
+      ),
+    ).toEqual([
+      expect.objectContaining({ serialNumber: "CLEAN-001" }),
+    ]);
+    const exceptions = await repository.listExceptions({ limit: 10 });
+    expect(exceptions.rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "po_receipt", sourceId: first.id }),
+        expect.objectContaining({ type: "po_receipt", sourceId: first.id }),
+        expect.objectContaining({ type: "po_receipt", sourceId: first.id }),
+      ]),
+    );
+    expect(current.receipts).toHaveLength(1);
+    await expect(
+      repository.receiveProcurementPO({
+        mode: "breakdown",
+        idempotencyKey: "memory-po-breakdown-0002",
+        poId: "po-0002",
+        locationId: "loc-wh",
+        binId: "bin-a",
+        exceptionReason: "Duplicate pending damage serial",
+        evidenceUrls: ["evidence/po-0002.jpg"],
+        lines: [
+          {
+            mode: "breakdown",
+            lineId: "po-0002-0",
+            productId: "ring",
+            expectedQuantity: 1,
+            outcomes: {
+              clean: { quantity: 0, serialNumbers: [] },
+              damaged: { quantity: 1, serialNumbers: [" damaged-001 "] },
+              unidentified: { quantity: 0, serialNumbers: [] },
+              short: { quantity: 0 },
+              excess: { quantity: 0, serialNumbers: [] },
+            },
+          },
+        ],
+      }),
+    ).rejects.toThrow(/already claimed/i);
+  });
+});
+
 describe("deleteLocation", () => {
   it("blocks deleting a location that still holds stock", async () => {
     // loc-wh holds seeded shirt stock and a ring unit.

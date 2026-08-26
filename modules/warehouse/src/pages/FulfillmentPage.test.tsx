@@ -1,11 +1,128 @@
 import { describe, expect, it } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useLocation, useNavigate } from "react-router-dom";
 import { buildSeed } from "@intra/data-kit";
 import { FulfillmentPage } from "./FulfillmentPage";
 import { makeRepo, renderWithProviders } from "@/test/renderWithProviders";
 
+function LocationProbe() {
+  const location = useLocation();
+  return (
+    <output aria-label="Current route">
+      {location.pathname}
+      {location.search}
+    </output>
+  );
+}
+
+function HistoryControls() {
+  const navigate = useNavigate();
+  return (
+    <>
+      <button type="button" onClick={() => navigate(-1)}>
+        Back
+      </button>
+      <button type="button" onClick={() => navigate(1)}>
+        Forward
+      </button>
+    </>
+  );
+}
+
 describe("FulfillmentPage", () => {
+  it("opens the requests workspace from a Marketing deep link", async () => {
+    renderWithProviders(
+      <>
+        <FulfillmentPage />
+        <LocationProbe />
+      </>,
+      { role: "marketing", route: "/fulfillment?tab=requests" },
+    );
+
+    expect(
+      await screen.findByRole("tab", { name: "Department requests" }),
+    ).toHaveAttribute("aria-selected", "true");
+    expect(
+      screen.getByRole("button", { name: "New stock request" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Current route")).toHaveTextContent(
+      "/fulfillment?tab=requests",
+    );
+  });
+
+  it("initializes the active tab from the URL on refresh", async () => {
+    renderWithProviders(<FulfillmentPage />, {
+      role: "operations",
+      route: "/fulfillment?tab=returns",
+    });
+
+    expect(
+      await screen.findByRole("tab", { name: "Return cases" }),
+    ).toHaveAttribute("aria-selected", "true");
+    expect(
+      screen.getByRole("button", { name: "New return case" }),
+    ).toBeInTheDocument();
+  });
+
+  it("replaces a role-inaccessible tab with an allowed fallback", async () => {
+    renderWithProviders(
+      <>
+        <FulfillmentPage />
+        <LocationProbe />
+      </>,
+      {
+        role: "warehouse_operator",
+        route: "/fulfillment?tab=requests",
+      },
+    );
+
+    expect(
+      await screen.findByRole("tab", { name: "Orders and events" }),
+    ).toHaveAttribute("aria-selected", "true");
+    expect(
+      screen.queryByRole("tab", { name: "Department requests" }),
+    ).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByLabelText("Current route")).toHaveTextContent(
+        "/fulfillment?tab=orders",
+      );
+    });
+  });
+
+  it("restores tab state through browser back and forward navigation", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <>
+        <FulfillmentPage />
+        <HistoryControls />
+        <LocationProbe />
+      </>,
+      { role: "operations", route: "/fulfillment?tab=orders" },
+    );
+
+    await user.click(
+      await screen.findByRole("tab", { name: "Department requests" }),
+    );
+    expect(screen.getByLabelText("Current route")).toHaveTextContent(
+      "/fulfillment?tab=requests",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    await waitFor(() => {
+      expect(
+        screen.getByRole("tab", { name: "Orders and events" }),
+      ).toHaveAttribute("aria-selected", "true");
+    });
+
+    await user.click(screen.getByRole("button", { name: "Forward" }));
+    await waitFor(() => {
+      expect(
+        screen.getByRole("tab", { name: "Department requests" }),
+      ).toHaveAttribute("aria-selected", "true");
+    });
+  });
+
   it("presents the four cross-department queues and their handoffs", async () => {
     renderWithProviders(<FulfillmentPage />, { role: "operations" });
 

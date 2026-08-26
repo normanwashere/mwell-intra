@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { SupabaseRepository } from "./SupabaseRepository";
 import type { WarehouseData } from "../repository";
+import type { ReceiveProcurementPOInput } from "../domain/warehouseControls";
 import { buildSeed } from "../seed";
 import {
   productToRow,
@@ -560,7 +561,8 @@ function makeMockClient(
             ? hold
             : fn === "update_operation_route"
               ? route
-              : fn === "submit_cycle_count" || fn === "create_and_submit_cycle_count"
+              : fn === "submit_cycle_count" ||
+                  fn === "create_and_submit_cycle_count"
                 ? { cycle_count: row, requests: [request] }
                 : fn === "list_stock_change_requests"
                   ? { rows: [request], next_cursor: null, total: 1 }
@@ -779,6 +781,7 @@ describe("SupabaseRepository W1 control boundary", () => {
       sourceType: "receipt",
       sourceId: "rcpt-1",
       productId: "shirt",
+      procurementPoLineId: "po-line-1",
       quantity: 1,
       disposition: "accepted",
     });
@@ -832,6 +835,9 @@ describe("SupabaseRepository W1 control boundary", () => {
       expect(call.payload).not.toHaveProperty("role");
       expect(call.payload).not.toHaveProperty("approval_tier");
     }
+    expect(calls.at(-7)?.payload).toMatchObject({
+      procurement_po_line_id: "po-line-1",
+    });
     expect(calls.slice(-7).map((call) => call.fn)).toEqual([
       "inspect_quality",
       "release_quality_hold",
@@ -847,11 +853,19 @@ describe("SupabaseRepository W1 control boundary", () => {
     const { client, calls } = makeMockClient(buildSeed());
     const repo = new SupabaseRepository(client);
     await repo.receiveProcurementPO({
+      mode: "legacy",
       idempotencyKey: "procurement-receipt-01",
       poId: "po-live-1",
       locationId: "loc-wh",
       binId: "bin-a",
-      lines: [{ lineId: "line-1", productId: "shirt", quantity: 2 }],
+      lines: [
+        {
+          mode: "legacy",
+          lineId: "line-1",
+          productId: "shirt",
+          quantity: 2,
+        },
+      ],
       evidenceUrls: ["evidence/delivery.jpg"],
     });
     const call = calls.find((item) => item.fn === "receive_procurement_po")!;
@@ -863,6 +877,73 @@ describe("SupabaseRepository W1 control boundary", () => {
     });
     expect(call.payload).not.toHaveProperty("actor");
     expect(call.payload).not.toHaveProperty("role");
+    expect(call.payload).not.toHaveProperty("exception_reason");
+  });
+
+  it("sends a mixed serialized receipt breakdown through one governed RPC", async () => {
+    const { client, calls } = makeMockClient(buildSeed());
+    const repo = new SupabaseRepository(client);
+    await repo.receiveProcurementPO({
+      mode: "breakdown",
+      idempotencyKey: "procurement-mixed-0001",
+      poId: "po-0001",
+      locationId: "loc-wh",
+      binId: "bin-receiving",
+      exceptionReason: "Mixed physical outcomes at receiving",
+      lines: [
+        {
+          mode: "breakdown",
+          lineId: "line-0001",
+          productId: "smart-watch",
+          expectedQuantity: 100,
+          outcomes: {
+            clean: { quantity: 50, serialNumbers: ["CLEAN-001"] },
+            damaged: { quantity: 20, serialNumbers: ["DAMAGED-001"] },
+            unidentified: {
+              quantity: 10,
+              serialNumbers: ["UNKNOWN-001"],
+              observedDescription: "Unmarked smart watch",
+              observedIdentifiers: "Carton A",
+            },
+            short: { quantity: 20 },
+            excess: { quantity: 0, serialNumbers: [] },
+          },
+        },
+      ],
+      evidenceUrls: ["evidence/po-0001.jpg"],
+    } satisfies ReceiveProcurementPOInput);
+
+    const matchingCalls = calls.filter(
+      (item) => item.fn === "receive_procurement_po",
+    );
+    expect(matchingCalls).toHaveLength(1);
+    expect(matchingCalls[0]!.payload).toMatchObject({
+      idempotency_key: "procurement-mixed-0001",
+      po_id: "po-0001",
+      location_id: "loc-wh",
+      bin_id: "bin-receiving",
+      exception_reason: "Mixed physical outcomes at receiving",
+      lines: [
+        {
+          line_id: "line-0001",
+          product_id: "smart-watch",
+          expected_quantity: 100,
+          outcomes: {
+            clean: { quantity: 50, serial_numbers: ["CLEAN-001"] },
+            damaged: { quantity: 20, serial_numbers: ["DAMAGED-001"] },
+            unidentified: {
+              quantity: 10,
+              serial_numbers: ["UNKNOWN-001"],
+              observed_description: "Unmarked smart watch",
+              observed_identifiers: "Carton A",
+            },
+            short: { quantity: 20 },
+            excess: { quantity: 0, serial_numbers: [] },
+          },
+        },
+      ],
+      evidence_urls: ["evidence/po-0001.jpg"],
+    });
   });
 
   it("persists delivery, batch, and device-test provenance in live receiving", async () => {
@@ -1248,8 +1329,12 @@ describe("SupabaseRepository concurrency-safe payloads (warehouse.* v8 RPCs)", (
       requesterId: "counter-profile-id",
     });
 
-    expect(calls.filter((call) => call.fn.includes("cycle_count"))).toHaveLength(1);
-    const call = calls.find((entry) => entry.fn === "create_and_submit_cycle_count")!;
+    expect(
+      calls.filter((call) => call.fn.includes("cycle_count")),
+    ).toHaveLength(1);
+    const call = calls.find(
+      (entry) => entry.fn === "create_and_submit_cycle_count",
+    )!;
     expect(call.payload).toMatchObject({
       idempotency_key: "atomic-count-001",
       reason: "Scheduled control count",

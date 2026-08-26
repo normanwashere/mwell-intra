@@ -85,7 +85,7 @@ export function InspectionSheet({
       open={Boolean(target)}
       onOpenChange={onOpenChange}
       title="Inspect stock"
-      description={target ? `${target.productName} · ${target.quantity} unit(s)` : undefined}
+      description={target ? `${target.productName} · ${target.quantity} unit(s)${target.serialNumber ? ` · Serial ${target.serialNumber}` : ''}` : undefined}
       footer={
         <button
           type="button"

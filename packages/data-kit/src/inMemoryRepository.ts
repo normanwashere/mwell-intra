@@ -116,6 +116,10 @@ function uid(prefix: string): string {
   return `${prefix}-${rand}`;
 }
 
+function normalizeSerialIdentity(serialNumber: string): string {
+  return serialNumber.trim().toUpperCase();
+}
+
 export interface InMemoryOptions {
   storage?: Pick<Storage, "getItem" | "setItem"> | null;
   now?: () => string;
@@ -132,6 +136,10 @@ export class InMemoryRepository implements WarehouseControlRepository {
   private vendorReturns: VendorReturn[] = [];
   private exceptions: WarehouseException[] = [];
   private stockChanges: StockChangeRequest[] = [];
+  private procurementReceiptSerialClaims = new Map<
+    string,
+    { receiptId: string; outcome: "damaged" | "unidentified" | "excess" }
+  >();
   private operationRoutes: OperationRoute[] = [
     {
       id: "route-receipt-default",
@@ -1000,8 +1008,26 @@ export class InMemoryRepository implements WarehouseControlRepository {
     const location = this.data.locations.find((l) => l.id === input.locationId);
     if (!location) throw new Error("Location not found.");
     if (!input.name.trim()) throw new Error("Location name is required.");
+    const nextActive = input.active ?? location.active ?? true;
+    const invalidatesExternalCustody =
+      input.type !== location.type ||
+      ((location.active ?? true) && !nextActive);
+    const hasNonterminalThirdPartyCustody =
+      invalidatesExternalCustody &&
+      this.data.fulfillmentOrders.some(
+        (order) =>
+          order.source === "third_party" &&
+          order.thirdPartyLocationId === location.id &&
+          !["completed", "cancelled"].includes(order.status),
+      );
+    if (hasNonterminalThirdPartyCustody) {
+      throw new Error(
+        "Cannot deactivate or reclassify a location with nonterminal third-party fulfillment custody.",
+      );
+    }
     location.name = input.name.trim();
     location.type = input.type;
+    if (input.active !== undefined) location.active = input.active;
     this.persist();
     return clone(location);
   }
@@ -2446,8 +2472,20 @@ export class InMemoryRepository implements WarehouseControlRepository {
       }
     }
     if (input.source === "third_party") {
-      if (!input.thirdPartyLocationId)
+      if (!input.thirdPartyLocationId?.trim())
         throw new Error("A third-party location is required.");
+      const custodyLocation = this.data.locations.find(
+        (location) => location.id === input.thirdPartyLocationId,
+      );
+      if (
+        !custodyLocation ||
+        custodyLocation.active === false ||
+        !["event_site", "vendor"].includes(custodyLocation.type)
+      ) {
+        throw new Error(
+          "Third-party location must be an active event site or vendor custody location.",
+        );
+      }
       if (!input.eventId)
         throw new Error("An event is required for third-party sales.");
       if (input.grossSalesAmount === undefined || input.grossSalesAmount < 0) {
@@ -3514,23 +3552,143 @@ export class InMemoryRepository implements WarehouseControlRepository {
   async receiveProcurementPO(
     input: ReceiveProcurementPOInput,
   ): Promise<Receipt> {
-    const receipt = this.receiveStockOnce({
-      locationId: input.locationId,
-      lines: input.lines.map((line) => ({
-        productId: line.productId,
-        quantity: line.quantity,
-        lotCode: line.lotCode,
-        serialNumbers: line.serialNumbers,
-        binId: input.binId,
-      })),
-      evidenceUrls: input.evidenceUrls,
-      actor: "demo-procurement-receiver",
-    });
-    const storedReceipt = this.data.receipts.find(
-      (row) => row.id === receipt.id,
-    )!;
-    storedReceipt.procurementPoId = input.poId;
-    this.persist();
-    return clone(storedReceipt);
+    return this.idempotent(
+      "receive_procurement_po",
+      input.idempotencyKey,
+      input,
+      () => {
+        const purchaseOrder = this.data.purchaseOrders.find(
+          (row) => row.id === input.poId,
+        );
+        if (!purchaseOrder) throw new Error("Procurement purchase order not found.");
+        const cleanLines = input.lines
+          .map((line, lineIndex) => {
+            const quantity =
+              line.mode === "breakdown"
+                ? line.outcomes.clean.quantity
+                : line.quantity;
+            const serialNumbers =
+              line.mode === "breakdown"
+                ? (line.outcomes.clean.serialNumbers ?? []).map(normalizeSerialIdentity)
+                : line.serialNumbers?.map(normalizeSerialIdentity);
+            if (line.mode === "breakdown") {
+              const reconciled =
+                line.outcomes.clean.quantity +
+                line.outcomes.damaged.quantity +
+                line.outcomes.unidentified.quantity +
+                line.outcomes.short.quantity;
+              if (reconciled !== line.expectedQuantity) {
+                throw new Error("Receipt outcomes must reconcile to expected quantity.");
+              }
+              const product = this.data.products.find(
+                (row) => row.id === line.productId,
+              );
+              const physicalSerials = [
+                ...(line.outcomes.clean.serialNumbers ?? []),
+                ...(line.outcomes.damaged.serialNumbers ?? []),
+                ...(line.outcomes.unidentified.serialNumbers ?? []),
+                ...(line.outcomes.excess.serialNumbers ?? []),
+              ].map(normalizeSerialIdentity);
+              if (physicalSerials.some((serialNumber) => !serialNumber)) {
+                throw new Error("Receipt serial identity cannot be blank.");
+              }
+              if (new Set(physicalSerials).size !== physicalSerials.length) {
+                throw new Error("Receipt serial identities must be unique.");
+              }
+              if (
+                physicalSerials.some((serialNumber) =>
+                  this.data.units.some(
+                    (unit) => normalizeSerialIdentity(unit.serialNumber) === serialNumber,
+                  ),
+                )
+                || physicalSerials.some((serialNumber) =>
+                  this.procurementReceiptSerialClaims.has(serialNumber),
+                )
+              ) {
+                throw new Error("Receipt serial identity is already claimed.");
+              }
+              if (
+                product?.serialized &&
+                ["clean", "damaged", "unidentified", "excess"].some(
+                  (outcome) => {
+                    const physical = line.outcomes[
+                      outcome as keyof typeof line.outcomes
+                    ];
+                    return (
+                      "serialNumbers" in physical &&
+                      (physical.serialNumbers?.length ?? 0) !== physical.quantity
+                    );
+                  },
+                )
+              ) {
+                throw new Error(
+                  "Each serialized physical outcome requires exact serial identities.",
+                );
+              }
+              const poLine = purchaseOrder.lines[lineIndex];
+              if (!poLine || `${purchaseOrder.id}-${lineIndex}` !== line.lineId) {
+                throw new Error("Procurement PO line binding is invalid.");
+              }
+            }
+            return {
+              productId: line.productId,
+              quantity,
+              lotCode: line.lotCode,
+              serialNumbers,
+              binId: input.binId,
+            };
+          })
+          .filter((line) => line.quantity > 0);
+        const receipt = this.receiveStockOnce(
+          {
+            locationId: input.locationId,
+            lines: cleanLines,
+            evidenceUrls: input.evidenceUrls,
+            actor: "demo-procurement-receiver",
+          },
+          input.idempotencyKey,
+        );
+        const storedReceipt = this.data.receipts.find(
+          (row) => row.id === receipt.id,
+        )!;
+        storedReceipt.procurementPoId = input.poId;
+        if (input.mode === "breakdown") {
+          input.lines.forEach((line, lineIndex) => {
+            const poLine = purchaseOrder.lines[lineIndex]!;
+            poLine.quantityReceived += line.outcomes.clean.quantity;
+            for (const outcome of [
+              "damaged",
+              "unidentified",
+              "short",
+              "excess",
+            ] as const) {
+              if (line.outcomes[outcome].quantity <= 0) continue;
+              if (outcome !== "short") {
+                for (const serialNumber of
+                  line.outcomes[outcome].serialNumbers ?? []) {
+                  this.procurementReceiptSerialClaims.set(normalizeSerialIdentity(serialNumber), {
+                    receiptId: storedReceipt.id,
+                    outcome,
+                  });
+                }
+              }
+              this.exceptions.push({
+                id: `ex-${input.idempotencyKey}-${lineIndex}-${outcome}`,
+                type: "po_receipt",
+                severity: ["unidentified", "excess"].includes(outcome)
+                  ? "P1"
+                  : "P2",
+                sourceType: outcome,
+                sourceId: storedReceipt.id,
+                status: "open",
+                createdAt: storedReceipt.createdAt,
+              });
+            }
+          });
+        }
+        this.persist();
+        return clone(storedReceipt);
+      },
+    );
   }
 }

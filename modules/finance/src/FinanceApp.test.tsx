@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionValue } from "@intra/auth";
 import { ToastProvider } from "@intra/ui";
@@ -13,6 +13,7 @@ const state = vi.hoisted(() => ({
     error: string | null;
     refresh: () => Promise<void>;
     manageCloseEntry: ReturnType<typeof vi.fn>;
+    openCloseEvidence: ReturnType<typeof vi.fn>;
   },
 }));
 
@@ -73,6 +74,7 @@ describe("FinanceApp", () => {
       error: null,
       refresh: vi.fn(async () => undefined),
       manageCloseEntry: vi.fn(async () => undefined),
+      openCloseEvidence: vi.fn(async () => "https://example.com/events/event-a"),
     };
   });
 
@@ -168,6 +170,92 @@ describe("FinanceApp", () => {
     expect(
       screen.queryByRole("link", { name: /open purchase orders/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it("retrieves Event evidence through the audited action before posting", async () => {
+    state.data = {
+      ...state.data,
+      data: {
+        ...FINANCE_DEMO_DATA,
+        closeEntries: [
+          {
+            ...FINANCE_DEMO_DATA.closeEntries[0]!,
+            sourceRecordType: "event_reconciliation",
+            sourceRecordId: "event-a",
+            evidenceRecordType: "event_reconciliation",
+            evidenceRecordId: "event-a",
+            evidenceUrl: "https://example.com/events/event-a",
+          },
+        ],
+      },
+    };
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    renderFinanceApp();
+
+    const openEvidence = screen.getByRole("button", { name: "Open evidence" });
+    await act(async () => {
+      fireEvent.click(openEvidence);
+      await vi.waitFor(() =>
+        expect(state.data.openCloseEvidence).toHaveBeenCalledWith(
+          expect.objectContaining({ id: "close-demo-event-settlement" }),
+        ),
+      );
+    });
+    expect(open).toHaveBeenCalledWith(
+      "https://example.com/events/event-a",
+      "_blank",
+      "noopener,noreferrer",
+    );
+    await vi.waitFor(() => expect(openEvidence).toBeEnabled());
+    open.mockRestore();
+  });
+
+  it("prevents the settlement approver from posting the generated close entry", () => {
+    state.data = {
+      ...state.data,
+      data: {
+        ...FINANCE_DEMO_DATA,
+        closeEntries: [
+          {
+            ...FINANCE_DEMO_DATA.closeEntries[0]!,
+            sourceRecordType: "event_reconciliation",
+            sourceRecordId: "event-a",
+            evidenceRecordType: "event_reconciliation",
+            evidenceRecordId: "event-a",
+            settlementApprovedBy: "finance-user",
+          },
+        ],
+      },
+    };
+    renderFinanceApp();
+
+    expect(screen.getByRole("button", { name: "Post" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Post" })).toHaveAttribute(
+      "title",
+      "A different Finance user must post this settlement.",
+    );
+  });
+
+  it("keeps posting available to an independent Finance actor", () => {
+    state.data = {
+      ...state.data,
+      data: {
+        ...FINANCE_DEMO_DATA,
+        closeEntries: [
+          {
+            ...FINANCE_DEMO_DATA.closeEntries[0]!,
+            sourceRecordType: "event_reconciliation",
+            sourceRecordId: "event-a",
+            evidenceRecordType: "event_reconciliation",
+            evidenceRecordId: "event-a",
+            settlementApprovedBy: "finance-approver",
+          },
+        ],
+      },
+    };
+    renderFinanceApp();
+
+    expect(screen.getByRole("button", { name: "Post" })).toBeEnabled();
   });
 
   it("shows an explicit denial for unrelated roles", () => {

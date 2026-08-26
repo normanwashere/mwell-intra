@@ -1,6 +1,7 @@
 import { useMemo, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import type { Product } from "@intra/data-kit";
-import type { useWarehouse } from "@/app/store";
+import { useWarehouse } from "@/app/store";
 import { Icon } from "@/components/Icon";
 import { Field, Sheet, useToast } from "@/components/ui";
 import {
@@ -100,6 +101,7 @@ export function OrderIntakeSheet({
   create: ReturnType<typeof useWarehouse>["createFulfillmentOrder"];
 }) {
   const toast = useToast();
+  const { can } = useWarehouse();
   const [source, setSource] = useState<Source>("ecommerce");
   const [reference, setReference] = useState("");
   const [orderDate, setOrderDate] = useState("");
@@ -141,6 +143,13 @@ export function OrderIntakeSheet({
   const availableProducts = products.filter((product) =>
     eligible(product, source),
   );
+  const externalLocations = useMemo(
+    () => locations.filter((location) => location.type !== "warehouse"),
+    [locations],
+  );
+  const thirdPartyLocationMissing =
+    source === "third_party" && externalLocations.length === 0;
+  const canManageLocations = can("manage_locations");
   const totals = useMemo(() => {
     const subtotal = lines.reduce(
       (sum, line) => sum + Number(line.unitPrice || 0) * line.quantity,
@@ -190,6 +199,12 @@ export function OrderIntakeSheet({
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (thirdPartyLocationMissing) {
+      toast.error(
+        "Create demand is disabled because no external custody location exists.",
+      );
+      return;
+    }
     if (ecommerce && paymentStatus === "blocked") {
       toast.error(
         "This online payment is not cleared in the Maya report. Keep it out of Warehouse allocation until it is paid or authorized.",
@@ -281,18 +296,34 @@ export function OrderIntakeSheet({
           : "Record the source and ownership before demand becomes Warehouse work."
       }
       footer={
-        <button
-          type="submit"
-          form="order-intake-form"
-          className="btn-primary w-full"
-          disabled={saving}
-        >
-          {saving
-            ? "Creating..."
-            : ecommerce
-              ? "Create order"
-              : "Create demand"}
-        </button>
+        <div className="w-full space-y-2 md:flex md:items-center md:justify-between md:gap-4 md:space-y-0">
+          {thirdPartyLocationMissing && (
+            <p
+              id="third-party-location-submit-reason"
+              className="text-xs font-semibold leading-5 text-amber-700 dark:text-amber-300"
+            >
+              Create demand is disabled because no external custody location
+              exists.
+            </p>
+          )}
+          <button
+            type="submit"
+            form="order-intake-form"
+            className="btn-primary w-full md:ml-auto md:w-auto md:min-w-36 md:shrink-0"
+            disabled={saving || thirdPartyLocationMissing}
+            aria-describedby={
+              thirdPartyLocationMissing
+                ? "third-party-location-submit-reason"
+                : undefined
+            }
+          >
+            {saving
+              ? "Creating..."
+              : ecommerce
+                ? "Create order"
+                : "Create demand"}
+          </button>
+        </div>
       }
     >
       <form
@@ -343,6 +374,28 @@ export function OrderIntakeSheet({
                 approval before Warehouse work begins.
               </p>
             </div>
+          )}
+          {source === "third_party" && (
+            <section
+              aria-labelledby="third-party-ownership-heading"
+              className="rounded-lg border border-line bg-inset p-4"
+            >
+              <h4
+                id="third-party-ownership-heading"
+                className="text-sm font-bold text-ink"
+              >
+                Third-party event ownership
+              </h4>
+              <ul className="mt-2 grid gap-2 text-xs leading-5 text-muted sm:grid-cols-2">
+                <li>Marketing owns and approves the event.</li>
+                <li>
+                  A Warehouse or Operations administrator controls external
+                  custody locations.
+                </li>
+                <li>Operations records the sale and gross sales here.</li>
+                <li>Finance closes settlement after the sale is recorded.</li>
+              </ul>
+            </section>
           )}
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Order reference" htmlFor="order-reference">
@@ -424,43 +477,89 @@ export function OrderIntakeSheet({
             </Field>
           )}
           {source === "third_party" && (
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field
-                label="Third-party inventory location"
-                htmlFor="third-party-location"
-              >
-                <select
-                  id="third-party-location"
-                  className="input"
-                  value={thirdPartyLocationId}
-                  onChange={(event) =>
-                    setThirdPartyLocationId(event.target.value)
-                  }
-                  required
+            <>
+              {thirdPartyLocationMissing ? (
+                <section
+                  aria-labelledby="external-location-empty-heading"
+                  className="rounded-lg border-2 border-amber-300 bg-amber-50 p-4 text-amber-950 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-100"
                 >
-                  <option value="">Select external location</option>
-                  {locations
-                    .filter((location) => location.type !== "warehouse")
-                    .map((location) => (
-                      <option key={location.id} value={location.id}>
-                        {location.name}
-                      </option>
-                    ))}
-                </select>
-              </Field>
-              <Field label="Gross sales (PHP)" htmlFor="gross-sales">
-                <input
-                  id="gross-sales"
-                  className="input"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={grossSalesAmount}
-                  onChange={(event) => setGrossSalesAmount(event.target.value)}
-                  required
-                />
-              </Field>
-            </div>
+                  <div className="flex items-start gap-3">
+                    <Icon
+                      name="building"
+                      className="mt-0.5 h-5 w-5 shrink-0"
+                    />
+                    <div className="min-w-0">
+                      <h4
+                        id="external-location-empty-heading"
+                        className="text-sm font-bold"
+                      >
+                        No external custody location exists
+                      </h4>
+                      <p className="mt-1 text-xs leading-5">
+                        {canManageLocations
+                          ? "Add the event site as an external custody location before Operations records the sale."
+                          : "Operations cannot create external custody locations. Ask a Warehouse or Operations administrator to add the event site; Marketing owns the event and coordinates the setup request."}
+                      </p>
+                      {canManageLocations ? (
+                        <Link
+                          to="/locations"
+                          className="btn-outline mt-3 w-full justify-center bg-surface sm:w-auto"
+                        >
+                          <Icon name="building" className="h-4 w-4" /> Open
+                          location management
+                        </Link>
+                      ) : (
+                        <Link
+                          to="/events"
+                          className="btn-outline mt-3 w-full justify-center bg-surface sm:w-auto"
+                        >
+                          <Icon name="calendar" className="h-4 w-4" /> Open
+                          Events to escalate setup
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                </section>
+              ) : (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field
+                    label="Third-party inventory location"
+                    htmlFor="third-party-location"
+                  >
+                    <select
+                      id="third-party-location"
+                      className="input"
+                      value={thirdPartyLocationId}
+                      onChange={(event) =>
+                        setThirdPartyLocationId(event.target.value)
+                      }
+                      required
+                    >
+                      <option value="">Select external location</option>
+                      {externalLocations.map((location) => (
+                        <option key={location.id} value={location.id}>
+                          {location.name}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Gross sales (PHP)" htmlFor="gross-sales">
+                    <input
+                      id="gross-sales"
+                      className="input"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={grossSalesAmount}
+                      onChange={(event) =>
+                        setGrossSalesAmount(event.target.value)
+                      }
+                      required
+                    />
+                  </Field>
+                </div>
+              )}
+            </>
           )}
           <Field label="Source warehouse" htmlFor="order-location">
             <select
