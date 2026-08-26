@@ -39,6 +39,8 @@ pnpm-debug.log*
 # scratch
 .tmp/
 .codex-tmp/
+__pycache__/
+*.py[cod]
 supabase/.temp/
 .playwright-cli/
 .pwcli/
