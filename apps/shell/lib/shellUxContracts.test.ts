@@ -57,6 +57,17 @@ describe("shared shell interaction geometry", () => {
     expect(appShell).not.toContain("leading-tight break-words");
   });
 
+  it("moves one direct destination into More on narrow mobile screens", () => {
+    const appShell = source("components/AppShell.tsx");
+
+    expect(appShell).toContain("data-mobile-nav-narrow-overflow=");
+    expect(appShell).toContain('"max-[359px]:hidden"');
+    expect(appShell).toContain("w-full min-w-0 max-w-full overflow-x-clip");
+    expect(appShell).toContain(
+      "relative flex w-full min-w-0 max-w-full items-end",
+    );
+  });
+
   it("turns prolonged session restoration into a bounded recovery state", () => {
     const appShell = source("components/AppShell.tsx");
     const recovery = source("components/BoundedLoadingState.tsx");

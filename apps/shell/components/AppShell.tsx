@@ -401,10 +401,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         {/* Mobile bottom navigation */}
         <nav
           data-shell-mobile-nav="true"
-          className="safe-bottom fixed inset-x-0 bottom-0 z-20 border-t border-line bg-surface/95 backdrop-blur-md md:hidden"
+          className="safe-bottom fixed inset-x-0 bottom-0 z-20 w-full min-w-0 max-w-full overflow-x-clip border-t border-line bg-surface/95 backdrop-blur-md md:hidden"
           aria-label="Primary mobile"
         >
-          <ul className="relative flex items-end px-2 pb-1 pt-2">
+          <ul className="relative flex w-full min-w-0 max-w-full items-end px-2 pb-1 pt-2">
             {mobileLeft.map((e) => (
               <li key={e.href} className="min-w-0 flex-1">
                 <MobileTab
@@ -426,8 +426,21 @@ export function AppShell({ children }: { children: ReactNode }) {
               </li>
             )}
 
-            {mobileRight.map((e) => (
-              <li key={e.href} className="min-w-0 flex-1">
+            {mobileRight.map((e, index) => (
+              <li
+                key={e.href}
+                className={cx(
+                  "min-w-0 flex-1",
+                  hasMobileOverflow &&
+                    index === mobileRight.length - 1 &&
+                    "max-[359px]:hidden",
+                )}
+                data-mobile-nav-narrow-overflow={
+                  hasMobileOverflow && index === mobileRight.length - 1
+                    ? "true"
+                    : undefined
+                }
+              >
                 <MobileTab
                   entry={e}
                   href={destinationFor(e.href)}

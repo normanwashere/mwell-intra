@@ -76,11 +76,14 @@ The REST seed command validates `APP_ENV=uat`, confirms the exact Supabase proje
 ## Verification
 
 - Fixture, production-target guard, SQL-renderer, and migration contract tests: 6 passed.
-- Warehouse package: 397 tests passed, including the long ecommerce scenario, exact serialized Quality custody, and the August 24/25 receipt, request, custody, and role-routing regressions.
-- Shell package: 390 tests passed, including the updated role guidance and Operations Associate task model.
-- Data-kit package: 217 tests passed across in-memory and Supabase repository behavior.
+- Warehouse package: 402 tests passed, including the long ecommerce scenario, exact serialized Quality custody, secure evidence resolution, and the August 24/25 receipt, request, custody, and role-routing regressions.
+- Shell package: 391 tests passed, including the updated role guidance, Operations Associate task model, and narrow-screen navigation contract.
+- Data-kit package: 228 tests passed across in-memory and Supabase repository behavior, including HTTPS and governed storage evidence handling.
+- Procurement package: 193 tests passed; operational request visibility and direct-record recovery contracts passed 2/2.
 - Events and Finance packages: 56 tests passed across settlement preparation, Finance approval, evidence access, and three-actor separation-of-duties controls.
 - PGlite database contracts: 64 passed across governed PO receipt and Quality convergence, third-party custody locations and lifecycle, and event settlement. Coverage includes mixed outcomes, atomic rollback, normalized duplicate-serial rejection, shared serial locking, held-stock enforcement, live-certification enforcement, provisional-hold transition, conflicting location locks, legacy-data preflights, duplicate settlement prevention, invalid evidence, and audited evidence access.
 - Live UAT schema preflight: zero exposed held serials, zero invalid nonterminal third-party custody records, and zero Event settlement actor-lineage violations.
-- Live UAT role/RLS readback: passed for Operations Associate.
+- Live UAT evidence preflight: zero insecure tracking links and zero insecure Operations evidence values.
+- Live UAT role/RLS readback: Procurement Lead and Finance Controller opened all four governed test requests; Operations Associate retained requester-scoped privacy.
+- Live responsive crawl: 66 role/viewport combinations covered 1440px, 1280px, 768px, 390px, 360px, and 320px. The initial crawl found insecure Operations evidence, missing Procurement deep-link visibility, and a 320px bottom-navigation overflow; each was corrected and added to regression coverage.
 - Supabase security and performance advisors were rerun. No new warning was introduced by the handoff repair; existing informational RLS-without-policy and broader index/policy optimization notices remain backlog work.

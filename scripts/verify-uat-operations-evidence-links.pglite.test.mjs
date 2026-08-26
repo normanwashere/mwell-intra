@@ -4,7 +4,7 @@ import test from "node:test";
 import { PGlite } from "@electric-sql/pglite";
 
 const migrationUrl = new URL(
-  "../supabase/migrations/20260826170000_repair_uat_operations_evidence_links.sql",
+  "../supabase/migrations/20260826171000_repair_uat_operations_evidence_links.sql",
   import.meta.url,
 );
 const cleanupMigrationUrl = new URL(

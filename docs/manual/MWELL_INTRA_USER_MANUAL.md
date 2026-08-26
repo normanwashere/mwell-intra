@@ -6,7 +6,7 @@
 
 **Reviewed:** August 25, 2026
 
-**Current UAT operating baseline:** August 25, 2026; includes the August 24 WMS feedback scenarios and corrected Operations Associate visibility of receivable Procurement purchase orders
+**Current UAT operating baseline:** August 26, 2026; includes the August 24/25 WMS feedback scenarios, governed mixed PO receiving, exact serialized Quality custody, and corrected cross-role operational visibility
 
 **Procurement application behavior baseline:** `32170e425e125c63597ea8e05c6287a7cd256f5b`; schema boundary verified on UAT and commit-bound browser certification pending
 
@@ -145,6 +145,8 @@ Each procedure is standalone. Stop when its denial check fails; never use anothe
 - **Recovery:** Correct the package, source additional eligible vendors, use a current independently approved pre-issue invitation-target exception, run equal-notice extension/requote only under an authorized extension unit, obtain a controlled insufficient-bids decision, refresh evaluations, or close/return with reason.
 - **Completion evidence:** Route decision with all three axes, policy/DOA snapshot, sourcing communications and responses, evaluations, recommendation/variance evidence, approved commitment, monitoring trail, payment pack, and closure event.
 
+In live mode, Procurement Lead and Finance Controller can read the governed operational request register required for sourcing, commitment, matching, and payment work. General Employee and other requester-scoped users remain limited to requests they own or were explicitly granted. A direct request URL keeps its record identity: an authorized user sees the request, while a missing or unauthorized record displays an explicit recovery state instead of silently returning to the request list.
+
 ### Legal/Compliance
 
 **Current persona mapping:** Legal & Compliance Lead.
@@ -267,7 +269,7 @@ Warehouse Admin creates the site, storage areas, scannable bins, and allowed ope
 
 ### Receiving and Inspection
 
-Select the PO and destination, record each line, scan serial/lot details, and attach evidence. Inspection supports accepted, hold, damaged, unavailable, and vendor-return outcomes. Non-accepted outcomes require a reason and evidence.
+Select the PO and destination, record each line, scan serial/lot details, and attach evidence. Inspection supports accepted, hold, damaged, unavailable, and vendor-return outcomes. Non-accepted outcomes require a reason and evidence. Evidence must be an approved HTTPS resource, a governed private-storage object resolved through a signed URL, or a bundled UAT evidence asset. Intra does not request insecure or malformed links; it shows an explicit unavailable state so the operator can replace the evidence without generating a hidden browser failure.
 
 ### Allocation, Events, and Returns
 
@@ -312,6 +314,8 @@ Routine UAT regression verifies invitation persistence, case linkage, expiry, re
 | Mobile control is obscured | Scroll into the reserved safe area; report viewport and screenshot if still unreachable |
 
 Support evidence should contain route, time, role, safe record ID, expected outcome, visible error, and a redacted screenshot. Never include credentials or private document contents.
+
+On screens narrower than 360px, Intra keeps four primary bottom-navigation destinations visible and moves lower-priority destinations into **More**. All destinations remain reachable, labels remain unclipped, and tap targets remain at least 44px. Do not zoom out to compensate for a layout issue; report any horizontal scrolling as a UI defect.
 
 ## Security and Data Handling
 
