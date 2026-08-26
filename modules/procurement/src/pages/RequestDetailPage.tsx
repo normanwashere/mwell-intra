@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Badge,
   Card,
   DataTable,
+  EmptyState,
   Field,
   HeroChipButton,
   HeroStat,
@@ -258,7 +259,22 @@ export function RequestDetailPage() {
       </div>
     );
   }
-  if (!req) return <Navigate to="/" replace />;
+  if (!req) {
+    return (
+      <div className="mx-auto max-w-3xl py-8">
+        <EmptyState
+          icon="clipboard"
+          title="Request not available"
+          message="The request may not exist, or your account may not be authorized to view it."
+          action={
+            <Link to="/requests" className="btn-primary">
+              Back to requests
+            </Link>
+          }
+        />
+      </div>
+    );
+  }
 
   const isRequester = Boolean(
     profile && (req.requesterId === profile.id || req.requesterEmail === profile.email),

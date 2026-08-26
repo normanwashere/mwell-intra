@@ -20,3 +20,12 @@ it('renders the authoritative exception workspace for non-competitive routes', (
   expect(source).toContain('expectedRouteVersion={displayedRoute.routeVersion ?? req.route?.routeVersion ?? 0}');
   expect(source).not.toContain('evaluateProcurementException');
 });
+
+it('keeps an unavailable request deep link in place and gives the user a recovery path', () => {
+  const source = readFileSync(resolve(process.cwd(), 'src/pages/RequestDetailPage.tsx'), 'utf8');
+
+  expect(source).not.toContain('if (!req) return <Navigate to="/" replace />');
+  expect(source).toContain('title="Request not available"');
+  expect(source).toContain('The request may not exist, or your account may not be authorized to view it.');
+  expect(source).toContain('to="/requests"');
+});
