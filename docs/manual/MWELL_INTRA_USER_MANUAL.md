@@ -317,6 +317,8 @@ Support evidence should contain route, time, role, safe record ID, expected outc
 
 On screens narrower than 360px, Intra keeps four primary bottom-navigation destinations visible and moves lower-priority destinations into **More**. All destinations remain reachable, labels remain unclipped, and tap targets remain at least 44px. Do not zoom out to compensate for a layout issue; report any horizontal scrolling as a UI defect.
 
+My Work may display long receipt, request, case, or transaction identifiers. These identifiers wrap inside their task card without widening the page; use **Open source** to inspect the authoritative record rather than trying to interpret an identifier from a truncated mobile view.
+
 ## Security and Data Handling
 
 - Use individual accounts; never share QA or production passwords.

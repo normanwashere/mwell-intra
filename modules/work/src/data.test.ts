@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   availableWorkFilters,
   createWorkRequestAuthority,
@@ -11,6 +13,17 @@ import {
 import { WORK_DEMO_DATA } from "./seed";
 
 describe("My Work queue", () => {
+  it("wraps long source identifiers without widening the mobile page", () => {
+    const source = readFileSync(resolve(process.cwd(), "src/WorkApp.tsx"), "utf8");
+
+    expect(source).toContain(
+      'break-words font-display text-base font-bold text-ink [overflow-wrap:anywhere]',
+    );
+    expect(source).toContain(
+      'break-words text-sm text-muted [overflow-wrap:anywhere]',
+    );
+  });
+
   it("filters without changing source ownership", () => {
     const items = filterWorkItems(WORK_DEMO_DATA.items, "warehouse");
     expect(items).toHaveLength(1);

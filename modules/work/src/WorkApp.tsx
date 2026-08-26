@@ -153,10 +153,12 @@ function EmployeeWorkApp({
                     {item.status}
                   </span>
                 </div>
-                <h2 className="mt-2 font-display text-base font-bold text-ink">
+                <h2 className="mt-2 break-words font-display text-base font-bold text-ink [overflow-wrap:anywhere]">
                   {item.title}
                 </h2>
-                <p className="mt-1 text-sm text-muted">{item.description}</p>
+                <p className="mt-1 break-words text-sm text-muted [overflow-wrap:anywhere]">
+                  {item.description}
+                </p>
                 {item.dueAt && (
                   <p className="mt-2 text-xs font-semibold text-faint">
                     Due {relativeTime(item.dueAt)}
