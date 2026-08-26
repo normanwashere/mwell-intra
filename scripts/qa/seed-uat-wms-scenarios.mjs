@@ -135,6 +135,26 @@ async function repairMissingPurchaseOrderRequestLinks({
   }
 }
 
+async function repairDepartmentRequestOwners({
+  url,
+  serviceKey,
+  departmentRequests,
+  fetchImpl,
+}) {
+  for (const request of departmentRequests) {
+    const endpoint = new URL("/rest/v1/department_stock_requests", url);
+    endpoint.searchParams.set("id", `eq.${request.id}`);
+    await readJson(
+      await fetchImpl(endpoint, {
+        method: "PATCH",
+        headers: schemaHeaders(serviceKey, "warehouse", "return=minimal"),
+        body: JSON.stringify({ requested_by: request.requested_by }),
+      }),
+      `warehouse.department_stock_requests ${request.id} owner repair`,
+    );
+  }
+}
+
 async function verifySeed({ url, serviceKey, fetchImpl }) {
   const checks = [
     {
@@ -215,6 +235,17 @@ export async function seedUatWmsScenarios({
     url,
     serviceKey,
     purchaseOrders: purchaseOrders ?? [],
+    fetchImpl,
+  });
+  const departmentRequests = fixtures.find(
+    (fixture) =>
+      fixture.schema === "warehouse" &&
+      fixture.table === "department_stock_requests",
+  )?.rows;
+  await repairDepartmentRequestOwners({
+    url,
+    serviceKey,
+    departmentRequests: departmentRequests ?? [],
     fetchImpl,
   });
   await verifySeed({ url, serviceKey, fetchImpl });

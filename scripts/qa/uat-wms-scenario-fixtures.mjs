@@ -869,7 +869,7 @@ export function buildUatWmsScenarioFixtures(actors) {
         { productId: "uat-prod-lanyard", quantity: 20 },
         { productId: "uat-aug24-generic-paperbag-white", quantity: 20 },
       ],
-      requested_by: actors.employee,
+      requested_by: actors.marketing,
       requested_at: CREATED_AT,
       created_at: CREATED_AT,
       event_id: UAT_WMS_IDS.event,

@@ -74,12 +74,30 @@ on conflict (${conflictColumns}) do nothing;`;
     (purchaseOrder) =>
       `update procurement.purchase_orders set request_id = ${quoteLiteral(purchaseOrder.request_id)} where id = ${quoteLiteral(purchaseOrder.id)} and request_id is null;`,
   );
+  const departmentRequests = fixtures.find(
+    (fixture) =>
+      fixture.schema === "warehouse" &&
+      fixture.table === "department_stock_requests",
+  )?.rows;
+  const departmentRequestOwnerRepairs = (departmentRequests ?? []).map(
+    (request) => {
+      const actorKey = Object.entries(ACTOR_TOKENS).find(
+        ([, token]) => token === request.requested_by,
+      )?.[0];
+      const email = actorKey ? UAT_WMS_ACTOR_EMAILS[actorKey] : null;
+      if (!email) {
+        throw new Error(`Unknown department-request actor ${request.requested_by}`);
+      }
+      return `update warehouse.department_stock_requests set requested_by = (select id from core.profiles where lower(email) = ${quoteLiteral(email.toLowerCase())}) where id = ${quoteLiteral(request.id)};`;
+    },
+  );
 
   return [
     "begin;",
     actorGuard(),
     ...statements,
     ...requestLinkRepairs,
+    ...departmentRequestOwnerRepairs,
     "commit;",
     "select 'UAT WMS scenarios seeded' as result;",
   ].join("\n\n");

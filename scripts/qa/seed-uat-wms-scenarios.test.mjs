@@ -113,6 +113,19 @@ test("includes open, decision, replacement, and closed return references", () =>
   assert.ok(returns.some((record) => record.customer_closure_evidence_url));
 });
 
+test("attributes the Marketing Event A stock request to the Marketing actor", () => {
+  const fixtures = buildUatWmsScenarioFixtures(actors);
+  const requests = rowsFor(
+    fixtures,
+    "warehouse",
+    "department_stock_requests",
+  );
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].requesting_department, "marketing");
+  assert.equal(requests[0].requested_by, actors.marketing);
+  assert.equal(requests[0].event_id, UAT_WMS_IDS.event);
+});
+
 test("refuses production and mismatched Supabase targets", () => {
   assert.throws(
     () =>
@@ -155,6 +168,10 @@ test("renders one transactional, conflict-safe SQL seed", () => {
   assert.match(
     sql,
     /select id::text from core\.profiles where lower\(email\) = 'intra\.test\.operations\.associate@mwell\.com\.ph'/,
+  );
+  assert.match(
+    sql,
+    /update warehouse\.department_stock_requests set requested_by = \(select id from core\.profiles where lower\(email\) = 'intra\.test\.marketing\.events@mwell\.com\.ph'\) where id = 'a8245000-0000-4000-8000-000000000001';/,
   );
 });
 
