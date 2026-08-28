@@ -223,7 +223,7 @@ describe("FulfillmentPage", () => {
     expect(screen.queryByText("Counter approved")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "View request" }));
     const dialog = await screen.findByRole("dialog", {
-      name: "View request / Counter pending",
+      name: "Review request",
     });
     await user.click(within(dialog).getByRole("button", { name: "Approve" }));
     await waitFor(() =>
@@ -273,7 +273,7 @@ describe("FulfillmentPage", () => {
     ).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "View request" }));
     const dialog = await screen.findByRole("dialog", {
-      name: "View request / Review all lines",
+      name: "Review request",
     });
     const items = within(dialog).getByRole("table", {
       name: "Requested items",
@@ -294,7 +294,7 @@ describe("FulfillmentPage", () => {
     expect(within(dialog).getByText("CC-4100")).toBeInTheDocument();
     expect(
       within(dialog).getByText("marketing@mwell.com.ph"),
-    ).toBeInTheDocument();
+    ).not.toBeVisible();
     await user.click(within(dialog).getByRole("button", { name: "Approve" }));
     await waitFor(async () =>
       expect((await repo.getData()).departmentStockRequests[0]?.status).toBe(
@@ -324,7 +324,7 @@ describe("FulfillmentPage", () => {
       await screen.findByRole("button", { name: "View request" }),
     );
     const dialog = await screen.findByRole("dialog", {
-      name: "View request / Read only review",
+      name: "Review request",
     });
     expect(
       within(dialog).getByRole("table", { name: "Requested items" }),

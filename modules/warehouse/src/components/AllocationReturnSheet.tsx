@@ -48,6 +48,7 @@ function AllocationReturnForm({
   const [binId, setBinId] = useState("");
   const [selectedSerials, setSelectedSerials] = useState<string[]>([]);
   const [evidenceUrls, setEvidenceUrls] = useState<string[]>([]);
+  const [evidenceBusy, setEvidenceBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [locked, setLocked] = useState(false);
   const saving = useRef(false);
@@ -104,6 +105,7 @@ function AllocationReturnForm({
     );
 
   const submit = async () => {
+    if (evidenceBusy) return;
     if (!ready || saving.current || locked) return;
     saving.current = true;
     setBusy(true);
@@ -184,7 +186,7 @@ function AllocationReturnForm({
         <button
           type="button"
           className="btn-primary w-full justify-center"
-          disabled={busy || locked || !ready}
+          disabled={busy || locked || evidenceBusy || !ready}
           onClick={() => void submit()}
         >
           {busy ? "Saving..." : "Log return"}
@@ -328,6 +330,9 @@ function AllocationReturnForm({
           />
         </Field>
         <EvidenceCapture
+          reference={`allocation-return/${allocation.id}`}
+          value={evidenceUrls}
+          onBusyChange={setEvidenceBusy}
           onChange={setEvidenceUrls}
           label="Attach return evidence"
         />

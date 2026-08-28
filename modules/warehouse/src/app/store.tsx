@@ -36,6 +36,7 @@ import {
   pendingCount as outboxPendingCount,
   removeEntry as outboxRemove,
   DATA_STORAGE_KEY,
+  ReturnRejectedError,
 } from "@intra/data-kit";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
@@ -77,7 +78,10 @@ import type {
   ResolveCustomerReturnCaseInput,
   RelocateInput,
   ReserveInput,
+  ReserveBatchInput,
+  ReserveBatchResult,
   ReturnInput,
+  ReturnCommandOutcome,
   Role,
   SetProductPriceInput,
   TransferInput,
@@ -138,8 +142,10 @@ interface WarehouseContextValue {
    */
   receiveStock: (input: Omit<ReceiveStockInput, "actor">) => Promise<boolean>;
   reserve: (input: Omit<ReserveInput, "actor">) => Promise<boolean>;
+  reserveBatch: (input: Omit<ReserveBatchInput, "actor">) => Promise<ReserveBatchResult>;
   issue: (input: Omit<IssueInput, "actor">) => Promise<boolean>;
   recordReturn: (input: Omit<ReturnInput, "actor">) => Promise<boolean>;
+  recordReturnOutcome: (input: Omit<ReturnInput, "actor">) => Promise<ReturnCommandOutcome>;
   recordCycleCount: (
     input: Omit<CycleCountInput, "actor" | "requesterId">,
   ) => Promise<boolean>;
@@ -550,6 +556,12 @@ export function WarehouseProvider({
       runAuthorizedAction("reserve_allocate", "other", () =>
         repo.reserve({ ...input, actor }),
       ),
+    reserveBatch: async (input) => {
+      if (!can("reserve_allocate")) throw new Error("Not authorized: warehouse.reserve_allocate");
+      const result = await repo.reserveBatch({ ...input, actor: identityId });
+      await refresh();
+      return result;
+    },
     issue: (input) =>
       runAuthorizedAction(
         "issue_items",
@@ -570,6 +582,24 @@ export function WarehouseProvider({
         input.allocationId ? returnOverlay(command, actor, data) : undefined,
         input.allocationId ? (command as Record<string, unknown>) : undefined,
       );
+    },
+    recordReturnOutcome: async (input) => {
+      if (source === "supabase" && !can("manage_returns")) {
+        const message = "Not authorized: warehouse.manage_returns";
+        toast.error(message);
+        return { status: "rejected", code: "RETURN_FORBIDDEN", message };
+      }
+      try {
+        const record = await repo.recordReturn({ ...input, actor });
+        await refresh();
+        return { status: "success", record };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Return result could not be confirmed.";
+        toast.error(message);
+        return error instanceof ReturnRejectedError
+          ? { status: "rejected", code: error.code, message }
+          : { status: "unknown", message };
+      }
     },
     recordCycleCount: (input) =>
       runAuthorizedAction("cycle_count", "other", () =>

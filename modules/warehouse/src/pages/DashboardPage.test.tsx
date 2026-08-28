@@ -182,8 +182,8 @@ describe("DashboardPage", () => {
       screen.getByRole("button", { name: /request campaign stock/i }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /^events:/i }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: /^events:/i }),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: /receive and inspect/i }),
     ).not.toBeInTheDocument();

@@ -1,4 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { EvidenceAttachment, useEvidenceAttachment } from '@intra/ui';
+import { resolveEvidenceDocument, uploadEvidenceDocument } from '@intra/data-kit/supabase';
+import { getSupabaseClient, hasSupabaseConfig } from '../data/supabase/client';
 import { Badge, Field, Sheet } from '@/components/ui';
 
 export interface ExcessCustodyWorkItem {
@@ -38,23 +41,27 @@ export function ExcessCustodyDecisionPanel({
   const [outcome, setOutcome] = useState<ExcessCustodyDecisionInput['outcome']>('vendor_return');
   const [approvedAmendmentId, setApprovedAmendmentId] = useState('');
   const [reason, setReason] = useState('');
-  const [evidenceUrl, setEvidenceUrl] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
+  const [submitError, setSubmitError] = useState('');
+  const attachment = useEvidenceAttachment(`${selected?.custodyId ?? 'closed'}:${outcome}`);
 
   useEffect(() => {
     if (!selected) return;
     setOutcome('vendor_return');
     setApprovedAmendmentId('');
     setReason('');
-    setEvidenceUrl('');
-  }, [selected]);
+    setSubmitError('');
+  }, [selected?.custodyId]);
 
   if (items.length === 0) return null;
-  const invalid = !selected || !reason.trim() || !evidenceUrl.trim()
+  const invalid = !selected || !reason.trim() || !attachment.canSubmit(true)
     || (outcome === 'accepted_amendment' && !approvedAmendmentId.trim());
 
   const submit = async () => {
-    if (!selected || invalid) return;
+    if (!selected || invalid || submittingRef.current || !attachment.canSubmit(true)) return;
+    submittingRef.current = true;
+    setSubmitError('');
     setSubmitting(true);
     try {
       const ok = await onDecision({
@@ -62,10 +69,13 @@ export function ExcessCustodyDecisionPanel({
         outcome,
         ...(outcome === 'accepted_amendment' ? { approvedAmendmentId: approvedAmendmentId.trim() } : {}),
         reason: reason.trim(),
-        evidenceUrls: [evidenceUrl.trim()],
+        evidenceUrls: [attachment.reference.trim()],
       });
       if (ok) setSelected(null);
+    } catch (cause) {
+      setSubmitError(cause instanceof Error ? cause.message : 'The disposition could not be recorded. Try again.');
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };
@@ -86,11 +96,11 @@ export function ExcessCustodyDecisionPanel({
               </div>
               <p className="text-sm text-muted">{item.productName ?? 'Unidentified item'} · {item.excessQuantity} excess unit(s)</p>
             </div>
-            <button type="button" className="btn-ghost btn-sm" onClick={() => setSelected(item)}>Review excess custody</button>
+            <button type="button" className="btn-ghost btn-sm" disabled={submitting} onClick={() => setSelected(item)}>Review excess custody</button>
           </li>
         ))}
       </ul>
-      <Sheet open={Boolean(selected)} onOpenChange={(open) => { if (!open) setSelected(null); }}
+      <Sheet open={Boolean(selected)} onOpenChange={(open) => { if (!open && !submittingRef.current) setSelected(null); }}
         title="Final excess custody disposition" description={selected ? `${selected.poNumber} · line ${selected.poLineId}` : undefined}
         footer={<button type="button" className="btn-primary w-full justify-center" disabled={invalid || submitting}
           onClick={() => void submit()}>{submitting ? 'Recording...' : 'Record final disposition'}</button>}>
@@ -122,10 +132,18 @@ export function ExcessCustodyDecisionPanel({
             <textarea id="excess-decision-reason" className="input min-h-24 resize-y" value={reason}
               onChange={(event) => setReason(event.target.value)} />
           </Field>
-          <Field label="Evidence URL" htmlFor="excess-evidence-url">
-            <input id="excess-evidence-url" className="input" value={evidenceUrl}
-              onChange={(event) => setEvidenceUrl(event.target.value)} />
-          </Field>
+          <EvidenceAttachment id="excess-evidence-url" attachment={attachment} disabled={submitting}
+            recordLabel={`${selected.poNumber} / ${selected.productName ?? selected.poLineId}`}
+            upload={async (file) => {
+              const client = hasSupabaseConfig() ? getSupabaseClient() : null;
+              const reference = await uploadEvidenceDocument(client, file, `excess-custody/${selected.custodyId}`);
+              return { reference, filename: file.name, preview: async () => {
+                const url = await resolveEvidenceDocument(client, reference);
+                if (!url) throw new Error('Evidence access was denied or expired. Try opening it again.');
+                return url;
+              } };
+            }} />
+          {submitError && <p role="alert" className="text-sm text-rose-700">{submitError}</p>}
         </div>}
       </Sheet>
     </section>

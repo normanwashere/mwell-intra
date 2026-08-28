@@ -20,16 +20,6 @@ This handbook is the complete standalone operating reference for Mwell Intra. Us
 
 ## Start Here
 
-### August 27 Warehouse Feedback Update
-
-- **Receive a PO:** Open Purchase Orders, choose Receive and inspect, and select only the item lines assigned to you. Other staff use their own accounts for the remaining items. Reconcile clean, damaged, unidentified, short and excess quantities for each selected line.
-- **Scan and pause:** Open the serial scanner for the correct item and condition. A camera, scanner keyboard input, or manual entry can add serials. Save progress accepts unfinished scans; it does not receive stock. Reopen the same PO with the same account to resume. If the PO changed, review deselected items before continuing.
-- **Delivery evidence:** Upload or photograph the delivery note. A secure HTTPS document link is optional; an insecure HTTP address cannot be submitted. Confirm governed receipt only after the selected items and evidence are complete. Quality inspection still precedes putaway and availability.
-- **Reserve an event:** Add multiple product lines and choose Selling or Giveaway per line. Marketing may reserve after the applicable training requirement, but cannot use that permission to issue stock or approve its own transactions. If a response is uncertain, close the locked form, check recorded allocations, and reserve only confirmed missing quantities.
-- **Marketing training:** Complete the five-question Marketing event reservation controls assessment in Onboarding. Existing event training alone does not unlock the new reservation permission. The new assessment requires all answers correct and permits three attempts; failed attempts do not grant stock authority.
-- **Return stock:** Add multiple return items, identify their source event where applicable, and scan the returned identities. Intake always goes into quarantine. Quality, not the intake operator, authorizes restocking.
-- **Review requests:** In Pick & Pack, check the tab counters and use View request to inspect item quantities before approval. Split backorder permits zero fulfill-now for an individual line, but the split still needs both a fulfill-now quantity and a deferred quantity overall.
-
 1. Use the handbook search to find an outcome such as `receive stock`, `PR`, `vendor renewal`, `bins`, or `DOA`.
 2. Read the complete process diagram first, including every decision and exception branch.
 3. Confirm your role, authority, required evidence, and handoff before opening the application.
@@ -37,6 +27,25 @@ This handbook is the complete standalone operating reference for Mwell Intra. Us
 5. Sign in with your assigned Mwell identity and execute only the procedure permitted by your role.
 
 Never share passwords, tokens, private keys, or confidential documents in support messages or screenshots.
+
+### August 27 Warehouse Feedback Update
+
+- **Receive a PO:** Open Purchase Orders, choose Receive and inspect, and select only the item lines assigned to you. Other staff use their own accounts for the remaining items. Reconcile clean, damaged, unidentified, short and excess quantities for each selected line.
+- **Scan and pause:** Open the serial scanner for the correct item and condition. A camera, scanner keyboard input, or manual entry can add serials. Save progress accepts unfinished scans; it does not receive stock. Reopen the same PO with the same account to resume. If the PO changed, review deselected items before continuing.
+- **Delivery evidence:** Upload or photograph the delivery note. A secure HTTPS document link is optional; an insecure HTTP address cannot be submitted. Confirm governed receipt only after the selected items and evidence are complete. Quality inspection still precedes putaway and availability.
+- **Reserve an event:** Use Allocations or Reserve for this event. Both open the same multi-product form, with Selling or Giveaway per line. The complete reservation is one atomic operation: a confirmed rejection reserves nothing. If a response is uncertain, use **Recover reservation**. The original event, lines and command are locked until recovery confirms the result. Reopening the form in the same browser restores that pending command; do not create replacement reservations in another browser. Marketing's earned reservation permission does not grant issue or approval authority.
+- **Marketing training:** Complete the five-question Marketing event reservation controls assessment in Onboarding. Existing event training alone does not unlock the new reservation permission. The new assessment requires all answers correct and permits three attempts; failed attempts do not grant stock authority.
+- **Return stock:** Add multiple return items, identify their source event where applicable, and scan the returned identities. Intake always goes into quarantine. Quality, not the intake operator, authorizes restocking. If the submitted result is unknown, keep the original payload unchanged and use **Recover original result**. A confirmed validation rejection allows correction; a timeout is not confirmation that nothing saved.
+- **Review requests:** In Pick & Pack, check the tab counters and use View request to inspect item quantities before approval. Split backorder permits zero fulfill-now for an individual line, but the split still needs both a fulfill-now quantity and a deferred quantity overall.
+
+### Safe Attachments and Interrupted Work
+
+1. Open the intended record before attaching evidence. An upload started for one record cannot satisfy another record's evidence requirement.
+2. Wait for uploads to finish before confirming the business action. Removed attachments remain removed even when another upload completes later. If some files fail, keep successful files and retry the failed files.
+3. In a supported document control, upload a JPEG, PNG, WebP or PDF up to 4 MB, or choose a registered document; an HTTPS link remains an alternative. Private files require authorized preview access. A successful upload alone does not mean the business action has been submitted.
+4. Returns and order intake retain drafts for the current operator in the same browser. Resume or discard an editable draft deliberately. Recover a pending transaction before creating another intake; never discard an unknown result and submit again with a new reference.
+5. Drafts are not stock movements, assignments, approvals, shared team records, or cross-device backups. Review current stock, permissions and source records before submitting a restored draft. Do not use shared browser profiles for individual operators.
+6. If access says onboarding is incomplete, follow the onboarding action shown. If the role itself lacks permission, ask the administrator for the appropriate assignment. Completing training does not grant an unassigned permission.
 
 ## Navigation
 

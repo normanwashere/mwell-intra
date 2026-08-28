@@ -1,6 +1,6 @@
 # Mwell Intra Technical and Functional Specification
 
-**Reviewed:** August 25, 2026
+**Reviewed:** August 28, 2026 for the recovery and evidence addendum; other sections retain their documented evidence boundaries
 **Procurement application behavior baseline:** `32170e425e125c63597ea8e05c6287a7cd256f5b`
 **Evidence status:** schema boundary verified on UAT; standalone handbook Task 8 certification is recorded in `docs/releases/2026-08-24-OUTCOME-FIRST-HANDBOOK.md`
 
@@ -10,20 +10,33 @@ Mwell Intra is the shared operating platform for cross-department workflows. War
 
 ## Runtime architecture
 
-### August 27 Receiving and Intake Controls
-
-Procurement receiving supports a selected subset of PO lines. The existing governed receipt transaction locks the PO and validates remaining quantities; the UI does not grant new receiving authority. Per-operator receiving drafts are separate from stock records, scoped by authenticated actor and PO, and protected by optimistic revision checks. Saved scans are not evidence of receipt or inspection. Draft reads never fall back to browser storage in live mode, and changed PO balances require review.
-
-Serial scanning reuses the camera/manual-entry component and rejects duplicates and over-capacity scans. Delivery-note image capture stores private evidence references; external delivery evidence must use HTTPS. Multi-line reservation entry uses acknowledged per-line commands and removes successful lines from pending entry. Multi-line returns submit one validated batch with a stable intake idempotency key; a failed batch keeps the complete form for review. Intake cannot authorize restocking. Marketing reservation permission does not confer stock issue or approval authority.
-
-The versioned `warehouse.record_return_v2` command owns inventory, movement, return and provisional Quality writes. Physical serialized units use the database's `in_stock` counting model with exact active quarantine holds in the same transaction. Consequently, pending intake does not increase available-to-promise stock, and releasing one accepted serial increases availability by one. Legacy intake remains compatible with already-open clients during rollout. Marketing curriculum v2 adds a dedicated reservation assessment; publishing it does not manufacture learner completion or bypass `has_live_cap`.
-
 - Next.js shell deployed on Vercel.
 - Modular React workspaces under `modules/`.
 - Supabase Auth for identity and session management.
 - PostgreSQL schemas, row-level security, guarded functions, and immutable activity records for live authority.
 - Role and capability resolution controls routes, commands, records, and onboarding curricula.
 - The standalone operating handbook is packaged with each certified release and maps guidance to current routes, roles, process diagrams and governing references.
+
+### August 27 Receiving and Intake Controls
+
+Procurement receiving supports a selected subset of PO lines. The existing governed receipt transaction locks the PO and validates remaining quantities; the UI does not grant new receiving authority. Per-operator receiving drafts are separate from stock records, scoped by authenticated actor and PO, and protected by optimistic revision checks. Saved scans are not evidence of receipt or inspection. Draft reads never fall back to browser storage in live mode, and changed PO balances require review.
+
+Serial scanning reuses the camera/manual-entry component and rejects duplicates and over-capacity scans. Delivery-note image capture stores private evidence references; external delivery evidence must use HTTPS. The August 28 corrective build replaces per-line event reservation writes with one atomic batch and a persisted command identity shared by both entry points. Multi-line returns submit one validated batch with a stable intake idempotency key. An unknown result locks the original payload for recovery; only a confirmed rejection allows correction. Intake cannot authorize restocking. Marketing reservation permission does not confer stock issue or approval authority.
+
+The versioned `warehouse.record_return_v2` command owns inventory, movement, return and provisional Quality writes. Physical serialized units use the database's `in_stock` counting model with exact active quarantine holds in the same transaction. Consequently, pending intake does not increase available-to-promise stock, and releasing one accepted serial increases availability by one. Legacy intake remains compatible with already-open clients during rollout. Marketing curriculum v2 adds a dedicated reservation assessment; publishing it does not manufacture learner completion or bypass `has_live_cap`.
+
+### August 28 Recovery Contracts
+
+Deployment and test status for these contracts is tracked in `docs/releases/2026-08-28-CROSS-ROLE-RECOVERY.md`; this specification alone is not evidence that a migration is installed.
+
+- `warehouse.reserve_batch(jsonb)` accepts one event and product/purpose/quantity lines under an actor-bound idempotency key. It checks earned reservation capability, aggregate available stock and all lines before committing. Product locks protect shared stock. A stored rejected result means no allocation lines committed; a replay returns the original outcome.
+- Return command outcomes distinguish success, confirmed rejection and unknown transport outcome. Recovery retains the submitted payload and command identity. A new rejection on an uncertain replay does not prove an earlier attempt failed; the recovery path remains conservative.
+- `EvidenceCapture` reconciles upload completions against the latest controlled list and a semantic record/session generation. Removed files stay removed, partial successes survive other upload failures, stale callbacks cannot reach another record, and parents receive upload-pending state to gate commits.
+- Long-form drafts are scoped to the authenticated operator and workflow. The new Returns/order-intake drafts are browser-local, unlike governed PO receiving snapshots. They require explicit resume, guard conflicting tab revisions, and never grant business authority or automatically resubmit. Do not describe these drafts as shared or cross-device storage.
+- Shared document controls distinguish private uploaded references, authorized registered documents and secure external links. Business evidence and preview authorization must be enforced server-side; a client file picker is not sufficient. The scoped Finance/Event evidence service retains durable registration IDs rather than expiring preview URLs.
+- `POST /api/evidence` verifies the session and same-origin request, limits file bodies to 4 MiB plus bounded multipart overhead, checks MIME signatures, and asks actor-scoped RPCs to authorize and register private objects. The `documents/business-evidence/` prefix denies direct authenticated Storage access. Preview links expire after five minutes and are never persisted as business evidence. The limit stays below the [Vercel Functions request-body limit](https://vercel.com/docs/functions/limitations).
+- Warehouse access recovery separates missing assignment, missing certification and unavailable/stale access state. It routes the user to the exact onboarding requirement when known without changing permissions.
+- Finance reconciliation writes its status, reconciler identity and timestamp atomically before the existing Event lineage trigger runs. The existing wrapper chain still validates separate actors, current row versions, canonical source/evidence bindings and an attributable audit record.
 
 ## Standalone handbook architecture
 
@@ -78,7 +91,7 @@ The strict model rejects wrong hosts, routes, roles, targets, contexts, paths, h
 
 ### Task 8 certification result
 
-The current model contains 30 maintained sources, four public modes, 13 task guides with 52 stages, 11 role guides, 48 decisions, 96 branches, 27 terminal outcomes, and 321 legacy-route migrations. Eight routes and one release source were added on August 28. The original August 24 unit trio passed 81 of 81 tests; strict evidence coverage and provenance returned zero warnings and zero errors, and the independent CI attestation verified. That original eight-project browser suite passed 116 tests with 100 project-conditional skips and zero failures in 19.6 minutes. Its 24 captures cover light, dark, and print at 1440, 1280, 1024, 768, 430, 390, 360, and 320 CSS pixels; those historical results are not a fresh certification of later changes.
+The current model contains 31 maintained sources, four public modes, 13 task guides with 52 stages, 11 role guides, 48 decisions, 96 branches, 27 terminal outcomes, and 331 legacy-route migrations. Eighteen routes and two release sources were added on August 28. The original August 24 unit trio passed 81 of 81 tests; strict evidence coverage and provenance returned zero warnings and zero errors, and the independent CI attestation verified. That original eight-project browser suite passed 116 tests with 100 project-conditional skips and zero failures in 19.6 minutes. Its 24 captures cover light, dark, and print at 1440, 1280, 1024, 768, 430, 390, 360, and 320 CSS pixels; those historical results are not a fresh certification of later changes.
 
 Repository verification passed: documentation build/check from all 29 sources, lint with 15 of 15 Turbo tasks and no errors, typecheck with 15 of 15 Turbo tasks, and release-documentation verification with no operational source changed. The three existing lint warnings are recorded by exact file and line in the release record. Local pnpm commands emitted the declared-engine warning because certification ran on Node `v20.18.1` and pnpm `9.15.9` while the repository requires Node 22 or newer and pnpm 10.
 

@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
 } from "react";
@@ -12,12 +13,15 @@ import {
   Badge,
   Card,
   EmptyState,
+  EvidenceAttachment,
+  useEvidenceAttachment,
   Field,
   Icon,
   Sheet,
   useToast,
 } from "@intra/ui";
 import { lifecyclePresentation } from "../vendorCaseWorkflow";
+import { useAccreditationCases, useAccreditationDocs } from '../localStore';
 
 interface VendorOption {
   id: string;
@@ -52,6 +56,28 @@ interface LifecycleReview {
 interface LifecycleDecisionDraft {
   rationale: string;
   expiresAt: string;
+}
+
+export function LifecycleReviewEvidence({ vendorId, reference, actorId, docs }: {
+  vendorId: string;
+  reference: string;
+  actorId: string;
+  docs: ReturnType<typeof useAccreditationDocs>;
+}) {
+  const currentDocs = useRef(docs);
+  currentDocs.current = docs;
+  const attachment = useEvidenceAttachment(`${actorId}:${vendorId}:${reference}`, reference, {
+    reference, filename: reference.split('/').pop() || 'Review evidence',
+    preview: async () => {
+      if (/^https:/i.test(reference)) return reference;
+      const current = currentDocs.current;
+      if (current.loading) throw new Error('Vendor documents are still loading. Try again.');
+      const document = current.rows.find((row) => row.vendorId === vendorId && row.storagePath === reference);
+      if (!document) throw new Error('This evidence is not registered for the review vendor or is no longer accessible.');
+      return current.prepareAccess(document);
+    },
+  });
+  return <EvidenceAttachment attachment={attachment} recordLabel="Saved lifecycle review" readOnly />;
 }
 
 export interface VendorEligibilityProjectionRecord {
@@ -228,7 +254,7 @@ export function VendorEligibilityAuthorityWorkspace({
 }
 
 export function VendorLifecyclePanel({ vendors }: { vendors: VendorOption[] }) {
-  const { mode, supabaseClient } = useSession();
+  const { mode, supabaseClient, profile } = useSession();
   const live = mode === "supabase" ? supabaseClient : null;
   const toast = useToast();
   const [reviews, setReviews] = useState<LifecycleReview[]>([]);
@@ -247,8 +273,13 @@ export function VendorLifecyclePanel({ vendors }: { vendors: VendorOption[] }) {
     riskRating: "medium",
     score: "",
     reason: "",
-    evidenceUrl: "",
   });
+  const savingRef = useRef(false);
+  const docs = useAccreditationDocs();
+  const accreditation = useAccreditationCases();
+  const [evidenceCase, setEvidenceCase] = useState('');
+  const selectedCase = accreditation.rows.find((record) => record.id === evidenceCase && record.vendorId === draft.vendorId);
+  const attachment = useEvidenceAttachment(`${profile?.id ?? 'signed-out'}:${open}:${draft.vendorId}:${draft.reviewType}:${selectedCase?.id ?? ''}`);
 
   const vendorName = useMemo(
     () => new Map(vendors.map((vendor) => [vendor.id, vendor.name])),
@@ -328,8 +359,10 @@ export function VendorLifecyclePanel({ vendors }: { vendors: VendorOption[] }) {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!live) return;
+    if (!live || savingRef.current || !attachment.canSubmit()) return;
+    savingRef.current = true;
     setSaving(true);
+    try {
     const { error } = await live
       .schema("legal")
       .rpc("manage_vendor_lifecycle_review", {
@@ -341,7 +374,7 @@ export function VendorLifecyclePanel({ vendors }: { vendors: VendorOption[] }) {
           risk_rating: draft.riskRating,
           score: draft.score || null,
           reason: draft.reason,
-          evidence_url: draft.evidenceUrl || null,
+          evidence_url: attachment.reference || null,
         },
       });
     setSaving(false);
@@ -354,10 +387,15 @@ export function VendorLifecyclePanel({ vendors }: { vendors: VendorOption[] }) {
     setDraft((current) => ({
       ...current,
       reason: "",
-      evidenceUrl: "",
       score: "",
     }));
     await refresh();
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'The lifecycle review could not be opened.');
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
   };
 
   const recordAuthority = useCallback(async (rpc: string, payload: Record<string, unknown>) => {
@@ -434,6 +472,8 @@ export function VendorLifecyclePanel({ vendors }: { vendors: VendorOption[] }) {
                 </Badge>
               </div>
               <p className="text-sm text-ink">{review.reason}</p>
+              {review.evidenceUrl && <LifecycleReviewEvidence vendorId={review.vendorId} reference={review.evidenceUrl}
+                actorId={profile?.id ?? 'signed-out'} docs={docs} />}
               <p className="text-xs text-muted">
                 {lifecyclePresentation(review.reviewType, review.status).detail}
               </p>
@@ -560,7 +600,7 @@ export function VendorLifecyclePanel({ vendors }: { vendors: VendorOption[] }) {
       />
       <Sheet
         open={open}
-        onOpenChange={setOpen}
+        onOpenChange={(next) => { if (!savingRef.current) setOpen(next); }}
         title="Open vendor lifecycle review"
         description="Use the smallest review type that matches the control event."
         footer={
@@ -568,7 +608,7 @@ export function VendorLifecyclePanel({ vendors }: { vendors: VendorOption[] }) {
             type="submit"
             form="vendor-lifecycle-form"
             className="btn-primary w-full"
-            disabled={saving}
+            disabled={saving || !attachment.canSubmit()}
           >
             {saving ? "Opening..." : "Open review"}
           </button>
@@ -686,20 +726,34 @@ export function VendorLifecyclePanel({ vendors }: { vendors: VendorOption[] }) {
               required
             />
           </Field>
-          <Field label="Evidence URL" htmlFor="lifecycle-evidence">
-            <input
-              id="lifecycle-evidence"
-              className="input"
-              type="url"
-              value={draft.evidenceUrl}
-              onChange={(event) =>
-                setDraft((current) => ({
-                  ...current,
-                  evidenceUrl: event.target.value,
-                }))
-              }
-            />
+          <Field label="Accreditation case for evidence" htmlFor="lifecycle-evidence-case">
+            <select id="lifecycle-evidence-case" className="input" value={selectedCase?.id ?? ''} disabled={saving}
+              onChange={(event) => setEvidenceCase(event.target.value)}>
+              <option value="">Select an existing case</option>
+              {accreditation.rows.filter((record) => record.vendorId === draft.vendorId).map((record) => <option key={record.id} value={record.id}>{record.id} / {record.status}</option>)}
+            </select>
           </Field>
+          <EvidenceAttachment id="lifecycle-evidence" attachment={attachment} disabled={saving}
+            recordLabel={vendorName.get(draft.vendorId) ?? 'Selected vendor'}
+            loadDocuments={async () => {
+              if (docs.loading) throw new Error('Vendor documents are still loading. Try again.');
+              return docs.rows.filter((doc) => doc.vendorId === draft.vendorId && doc.storagePath && (!selectedCase || doc.caseId === selectedCase.id))
+                .map((doc) => ({ reference: doc.storagePath!, filename: doc.filename, preview: () => docs.prepareAccess(doc) }));
+            }}
+            upload={selectedCase ? async (file) => {
+              const dataUrl = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(String(reader.result));
+                reader.onerror = () => reject(new Error('The selected document could not be read.'));
+                reader.readAsDataURL(file);
+              });
+              const doc = await docs.upload({ caseId: selectedCase.id, vendorId: draft.vendorId,
+                docType: `lifecycle_${draft.reviewType}`, filename: file.name, mimeType: file.type,
+                sizeBytes: file.size, dataUrl, uploadedByEmail: profile?.email });
+              if (!doc.storagePath) throw new Error('The document was not registered in private storage. Try again.');
+              return { reference: doc.storagePath, filename: doc.filename, preview: () => docs.prepareAccess(doc) };
+            } : undefined}
+            unavailableReason={!selectedCase ? 'Local uploads require an existing accreditation case for this vendor.' : undefined} />
         </form>
       </Sheet>
     </section>

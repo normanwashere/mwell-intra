@@ -5,7 +5,8 @@ import {
   useLocation,
   useNavigate,
 } from "react-router-dom";
-import { Suspense, lazy, useEffect, useRef } from "react";
+import { Suspense, lazy } from "react";
+import { LockedCapabilityRecovery, useOptionalLearning } from "@intra/learning";
 import { AppShell } from "@/components/AppShell";
 import { useWarehouse } from "./store";
 import type { Capability } from "@/auth/roles";
@@ -14,7 +15,6 @@ import {
   Skeleton,
   SkeletonList,
   SkeletonStats,
-  useToast,
 } from "@/components/ui";
 // Dashboard is the landing route — keep it eager so first paint has no chunk
 // wait. Every other page is code-split so the initial bundle stays lean on the
@@ -117,22 +117,40 @@ const OperationRoutesPage = lazy(() =>
   })),
 );
 
-function AccessDenied() {
+function AccessDenied({
+  capability,
+  reason = "role",
+  requirementIds,
+}: {
+  capability: Capability;
+  reason?: "role" | "training" | "unavailable";
+  requirementIds?: readonly string[];
+}) {
   const navigate = useNavigate();
+  const backButton = (
+    <button type="button" className="btn-primary" onClick={() => navigate("/")}>
+      Back to dashboard
+    </button>
+  );
+  if (reason !== "role") {
+    return (
+      <div className="space-y-4">
+        <LockedCapabilityRecovery
+          module="warehouse"
+          capability={capability}
+          reason={reason}
+          requirementIds={requirementIds}
+        />
+        {backButton}
+      </div>
+    );
+  }
   return (
     <EmptyState
       icon="lock"
       title="You don't have access to this page"
-      message="This tool isn't part of your role. Head back to your dashboard to keep working."
-      action={
-        <button
-          type="button"
-          className="btn-primary"
-          onClick={() => navigate("/")}
-        >
-          Back to dashboard
-        </button>
-      }
+      message="This tool is not assigned to your current roles. Ask your department owner to review your access."
+      action={backButton}
     />
   );
 }
@@ -147,29 +165,53 @@ function Guard({
   training?: { capability: Capability; simulationId: string };
 }) {
   const { can } = useWarehouse();
-  const { roleCapabilities = {} } = useSession();
+  const { roleCapabilities, loading: sessionLoading, authError } = useSession();
+  const learning = useOptionalLearning();
   const location = useLocation();
-  const toast = useToast();
-  const toasted = useRef(false);
   const trainingAllowed = training
     ? canEnterCapabilityTraining({
         capability: training.capability,
         requiredSimulationId: training.simulationId,
-        roleCapabilities,
+        roleCapabilities: roleCapabilities ?? {},
         trainingId: new URLSearchParams(location.search).get("training"),
       })
     : false;
   const allowed =
     anyOf.some((capability) => can(capability)) || trainingAllowed;
-  useEffect(() => {
-    if (!allowed && !toasted.current) {
-      toasted.current = true;
-      toast.toast("That tool is not available for your role.", "info");
-    }
-  }, [allowed, toast]);
   // Render an explicit, friendly access-denied page rather than silently
   // redirecting (a blank flash) — the user always gets clear feedback.
-  if (!allowed) return <AccessDenied />;
+  if (!allowed) {
+    const assigned = anyOf.filter((capability) =>
+      roleCapabilities?.warehouse?.includes(capability),
+    );
+    const accessUnavailable =
+      sessionLoading || Boolean(authError) || !roleCapabilities;
+    const trainingLock =
+      !accessUnavailable &&
+      !learning?.stale &&
+      !learning?.loading &&
+      !learning?.error
+        ? assigned
+            .map((capability) => ({
+              capability,
+              lock: learning?.lockedReason("warehouse", capability),
+            }))
+            .find(({ lock }) => lock && lock.requirementIds.length > 0)
+        : undefined;
+    return (
+      <AccessDenied
+        capability={trainingLock?.capability ?? assigned[0] ?? anyOf[0]!}
+        reason={
+          trainingLock
+            ? "training"
+            : accessUnavailable || assigned.length > 0
+              ? "unavailable"
+              : "role"
+        }
+        requirementIds={trainingLock?.lock?.requirementIds}
+      />
+    );
+  }
   return <>{children}</>;
 }
 

@@ -23,6 +23,7 @@ export * from "./domain/urlSafety";
 
 // --- Repository PORT + input DTOs + WarehouseData read model + toStockState ---
 export * from "./repository";
+export * from "./returnOutcome";
 
 // --- Adapters + factory ---
 export * from "./inMemoryRepository";

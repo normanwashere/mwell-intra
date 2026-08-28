@@ -197,6 +197,7 @@ export function PurchaseOrdersPage() {
   const [bridgeBin, setBridgeBin] = useState("");
   const [bridgeEvidence, setBridgeEvidence] = useState("");
   const [bridgePhotos, setBridgePhotos] = useState<string[]>([]);
+  const [evidenceBusy, setEvidenceBusy] = useState(false);
   const [bridgeSelected, setBridgeSelected] = useState<Record<string, boolean>>(
     {},
   );
@@ -889,6 +890,7 @@ export function PurchaseOrdersPage() {
   };
 
   const saveProgress = async () => {
+    if (evidenceBusy) return;
     if (bridgeSubmitting.current || draftLoading || draftError) return;
     bridgeSubmitting.current = true;
     setBridgeBusy(true);
@@ -913,6 +915,7 @@ export function PurchaseOrdersPage() {
   };
 
   const submitBridgeReceive = async () => {
+    if (evidenceBusy) return;
     if (
       !bridgeReceivePO ||
       !bridgeLocation ||
@@ -1473,7 +1476,7 @@ export function PurchaseOrdersPage() {
               type="button"
               className="btn-ghost"
               disabled={
-                bridgeBusy || draftLoading || !!draftError || draftConflict
+                bridgeBusy || evidenceBusy || draftLoading || !!draftError || draftConflict
               }
               onClick={() => void saveProgress()}
             >
@@ -1486,6 +1489,7 @@ export function PurchaseOrdersPage() {
               className="btn-primary w-full"
               disabled={
                 !bridgeLocation ||
+                evidenceBusy ||
                 !bridgeEvidenceUrls.length ||
                 !!bridgeEvidenceError ||
                 bridgeBusy ||
@@ -1617,6 +1621,7 @@ export function PurchaseOrdersPage() {
                 </select>
               </Field>
               <EvidenceCapture
+                onBusyChange={setEvidenceBusy}
                 key={receivingRequest?.session}
                 reference={`procurement-receiving/${bridgeReceivePO.id}`}
                 label="Upload or photograph delivery note"

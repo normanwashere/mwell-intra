@@ -1,9 +1,10 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useRef, useState, type FormEvent, type SetStateAction } from "react";
 import { Link } from "react-router-dom";
 import type { Product } from "@intra/data-kit";
 import { useWarehouse } from "@/app/store";
 import { Icon } from "@/components/Icon";
 import { Field, Sheet, useToast } from "@/components/ui";
+import { IntakeDraftActions, matchesDraftShape, useIntakeDraft, useIntakeScope } from "./intakeDraft";
 import {
   ECOMMERCE_CHANNELS,
   MAYA_REPORT_STATUSES,
@@ -85,59 +86,94 @@ function money(value: number) {
   }).format(value);
 }
 
-export function OrderIntakeSheet({
-  open,
-  onOpenChange,
-  products,
-  locations,
-  events,
-  create,
-}: {
+const TEXT_FIELDS = [
+  "reference", "orderDate", "channel", "customerReference", "customerName", "customerContact",
+  "customerEmail", "deliveryArea", "addressLine", "city", "province", "postalCode",
+  "paymentMethod", "paymentReference", "paymentDate", "paymentProviderStatus", "campaignName",
+  "salesInvoiceNumber", "shippingFee", "otherFees", "reportedTotal", "courier", "deliveryLink",
+  "waybillNumber", "notes", "locationId", "eventId", "thirdPartyLocationId", "grossSalesAmount",
+] as const;
+type OrderDraft = Record<(typeof TEXT_FIELDS)[number], string> & { source: Source; lines: OrderLineDraft[] };
+
+interface OrderIntakeProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   products: Product[];
   locations: Array<{ id: string; name: string; type?: string }>;
   events: Array<{ id: string; name: string }>;
   create: ReturnType<typeof useWarehouse>["createFulfillmentOrder"];
-}) {
+}
+
+export function OrderIntakeSheet(props: OrderIntakeProps) {
+  const scope = useIntakeScope("order:new");
+  return scope ? <ScopedOrderIntake key={scope} {...props} scope={scope} /> : null;
+}
+
+function ScopedOrderIntake({
+  open,
+  onOpenChange,
+  products,
+  locations,
+  events,
+  create,
+  scope,
+}: OrderIntakeProps & { scope: string }) {
   const toast = useToast();
   const { can } = useWarehouse();
-  const [source, setSource] = useState<Source>("ecommerce");
-  const [reference, setReference] = useState("");
-  const [orderDate, setOrderDate] = useState("");
-  const [channel, setChannel] = useState("");
-  const [customerReference, setCustomerReference] = useState("");
-  const [customerName, setCustomerName] = useState("");
-  const [customerContact, setCustomerContact] = useState("");
-  const [customerEmail, setCustomerEmail] = useState("");
-  const [deliveryArea, setDeliveryArea] = useState("");
-  const [addressLine, setAddressLine] = useState("");
-  const [city, setCity] = useState("");
-  const [province, setProvince] = useState("");
-  const [postalCode, setPostalCode] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("cash");
-  const [paymentReference, setPaymentReference] = useState("");
-  const [paymentDate, setPaymentDate] = useState("");
-  const [paymentProviderStatus, setPaymentProviderStatus] = useState("paid");
-  const [campaignName, setCampaignName] = useState("");
-  const [salesInvoiceNumber, setSalesInvoiceNumber] = useState("");
-  const [shippingFee, setShippingFee] = useState("");
-  const [otherFees, setOtherFees] = useState("");
-  const [reportedTotal, setReportedTotal] = useState("");
-  const [courier, setCourier] = useState("");
-  const [deliveryLink, setDeliveryLink] = useState("");
-  const [waybillNumber, setWaybillNumber] = useState("");
-  const [notes, setNotes] = useState("");
-  const [locationId, setLocationId] = useState(
-    locations.find((location) => location.type === "warehouse")?.id ?? "",
-  );
-  const [eventId, setEventId] = useState("");
-  const [thirdPartyLocationId, setThirdPartyLocationId] = useState("");
-  const [grossSalesAmount, setGrossSalesAmount] = useState("");
-  const [lines, setLines] = useState<OrderLineDraft[]>([
-    newLine(products, "ecommerce"),
-  ]);
   const [saving, setSaving] = useState(false);
+  const [initial] = useState(() => ({
+    ...Object.fromEntries(TEXT_FIELDS.map((field) => [field, ""])),
+    source: "ecommerce", paymentMethod: "cash", paymentProviderStatus: "paid",
+    locationId: locations.find((location) => location.type === "warehouse")?.id ?? "",
+    lines: [newLine(products, "ecommerce")],
+  } as OrderDraft));
+  const draft = useIntakeDraft(scope, initial, (value): value is OrderDraft =>
+    matchesDraftShape(value, initial) &&
+    ["ecommerce", "event", "third_party"].includes((value as OrderDraft).source) &&
+    (value as OrderDraft).lines.length > 0,
+    undefined,
+    saving,
+  );
+  const inFlight = useRef(false);
+  const [confirmed, setConfirmed] = useState(false);
+  const field = <K extends keyof OrderDraft>(key: K): [OrderDraft[K], (value: SetStateAction<OrderDraft[K]>) => void] => [
+    draft.value[key], (value) => {
+      if (inFlight.current || confirmed) return;
+      draft.update((current) => ({ ...current, [key]: typeof value === "function" ? (value as (previous: OrderDraft[K]) => OrderDraft[K])(current[key]) : value }));
+    },
+  ];
+  const [source, setSource] = field("source");
+  const [reference, setReference] = field("reference");
+  const [orderDate, setOrderDate] = field("orderDate");
+  const [channel, setChannel] = field("channel");
+  const [customerReference, setCustomerReference] = field("customerReference");
+  const [customerName, setCustomerName] = field("customerName");
+  const [customerContact, setCustomerContact] = field("customerContact");
+  const [customerEmail, setCustomerEmail] = field("customerEmail");
+  const [deliveryArea, setDeliveryArea] = field("deliveryArea");
+  const [addressLine, setAddressLine] = field("addressLine");
+  const [city, setCity] = field("city");
+  const [province, setProvince] = field("province");
+  const [postalCode, setPostalCode] = field("postalCode");
+  const [paymentMethod, setPaymentMethod] = field("paymentMethod");
+  const [paymentReference, setPaymentReference] = field("paymentReference");
+  const [paymentDate, setPaymentDate] = field("paymentDate");
+  const [paymentProviderStatus, setPaymentProviderStatus] = field("paymentProviderStatus");
+  const [campaignName, setCampaignName] = field("campaignName");
+  const [salesInvoiceNumber, setSalesInvoiceNumber] = field("salesInvoiceNumber");
+  const [shippingFee, setShippingFee] = field("shippingFee");
+  const [otherFees, setOtherFees] = field("otherFees");
+  const [reportedTotal, setReportedTotal] = field("reportedTotal");
+  const [courier, setCourier] = field("courier");
+  const [deliveryLink, setDeliveryLink] = field("deliveryLink");
+  const [waybillNumber, setWaybillNumber] = field("waybillNumber");
+  const [notes, setNotes] = field("notes");
+  const [locationId, setLocationId] = field("locationId");
+  const [eventId, setEventId] = field("eventId");
+  const [thirdPartyLocationId, setThirdPartyLocationId] = field("thirdPartyLocationId");
+  const [grossSalesAmount, setGrossSalesAmount] = field("grossSalesAmount");
+  const [lines, setLines] = field("lines");
+  const locked = saving || confirmed || draft.needsResume || draft.conflict;
   const ecommerce = source === "ecommerce";
   const paymentStatus = paymentStatusFor(paymentMethod, paymentProviderStatus);
   const availableProducts = products.filter((product) =>
@@ -165,40 +201,14 @@ export function OrderIntakeSheet({
     return { subtotal, discount, total, netOfVat, vat: total - netOfVat };
   }, [lines, otherFees, shippingFee]);
 
-  const reset = () => {
-    setReference("");
-    setOrderDate("");
-    setChannel("");
-    setCustomerReference("");
-    setCustomerName("");
-    setCustomerContact("");
-    setCustomerEmail("");
-    setDeliveryArea("");
-    setAddressLine("");
-    setCity("");
-    setProvince("");
-    setPostalCode("");
-    setPaymentMethod("cash");
-    setPaymentReference("");
-    setPaymentDate("");
-    setPaymentProviderStatus("paid");
-    setCampaignName("");
-    setSalesInvoiceNumber("");
-    setShippingFee("");
-    setOtherFees("");
-    setReportedTotal("");
-    setCourier("");
-    setDeliveryLink("");
-    setWaybillNumber("");
-    setNotes("");
-    setEventId("");
-    setThirdPartyLocationId("");
-    setGrossSalesAmount("");
-    setLines([newLine(products, source)]);
-  };
+  const staleReferences = lines.some((line) => !availableProducts.some((product) => product.id === line.productId)) ||
+    (!!locationId && !locations.some((location) => location.id === locationId)) ||
+    (!ecommerce && !events.some((event) => event.id === eventId)) ||
+    (source === "third_party" && !externalLocations.some((location) => location.id === thirdPartyLocationId));
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (inFlight.current || locked || staleReferences) return;
     if (thirdPartyLocationMissing) {
       toast.error(
         "Create demand is disabled because no external custody location exists.",
@@ -213,8 +223,11 @@ export function OrderIntakeSheet({
     }
     const acceptedPaymentStatus =
       paymentStatus === "blocked" ? undefined : paymentStatus;
+    if (!draft.replace(draft.value, true)) return;
+    inFlight.current = true;
     setSaving(true);
-    const ok = await create({
+    try {
+      const ok = await create({
       source,
       externalReference: reference.trim(),
       orderDate: ecommerce ? orderDate || undefined : undefined,
@@ -271,15 +284,22 @@ export function OrderIntakeSheet({
           : [],
       })),
     });
-    setSaving(false);
     if (ok) {
+      const cleaned = draft.clear();
+      if (!draft.mounted.current) return;
+      setConfirmed(!cleaned);
       toast.success(
         ecommerce
           ? "Order added. The app now owns its fulfillment record."
           : "Demand added to the fulfillment queue.",
       );
-      reset();
-      onOpenChange(false);
+      if (cleaned) onOpenChange(false);
+    }
+    } catch (error) {
+      if (draft.mounted.current) toast.error(error instanceof Error ? error.message : "Order could not be confirmed. Draft retained.");
+    } finally {
+      inFlight.current = false;
+      if (draft.mounted.current) setSaving(false);
     }
   };
 
@@ -288,7 +308,7 @@ export function OrderIntakeSheet({
   return (
     <Sheet
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={(next) => { if (!inFlight.current) onOpenChange(next); }}
       title="Create order or fulfillment demand"
       description={
         ecommerce
@@ -310,7 +330,7 @@ export function OrderIntakeSheet({
             type="submit"
             form="order-intake-form"
             className="btn-primary w-full md:ml-auto md:w-auto md:min-w-36 md:shrink-0"
-            disabled={saving || thirdPartyLocationMissing}
+            disabled={locked || thirdPartyLocationMissing || staleReferences}
             aria-describedby={
               thirdPartyLocationMissing
                 ? "third-party-location-submit-reason"
@@ -326,11 +346,21 @@ export function OrderIntakeSheet({
         </div>
       }
     >
+      <IntakeDraftActions draft={{ ...draft, resume: () => {
+        const resumed = draft.resume();
+        if (resumed) setConfirmed(false);
+        return resumed;
+      } }} busy={saving} locked={confirmed} />
+      {confirmed && <button type="button" className="btn-ghost" disabled={draft.conflict} onClick={() => {
+        if (draft.clear()) { setConfirmed(false); onOpenChange(false); }
+      }}>Retry draft cleanup</button>}
+      {staleReferences && !draft.needsResume && <p role="alert" className="text-sm text-amber-700">Select a current product, event, and location before creating demand.</p>}
       <form
         id="order-intake-form"
         className="space-y-6"
         onSubmit={(event) => void submit(event)}
       >
+        <fieldset disabled={locked} className="min-w-0 space-y-6" aria-label="Order intake">
         <section
           className={sectionClass}
           aria-labelledby="intake-order-heading"
@@ -1229,6 +1259,7 @@ export function OrderIntakeSheet({
             />
           </Field>
         </section>
+        </fieldset>
       </form>
     </Sheet>
   );

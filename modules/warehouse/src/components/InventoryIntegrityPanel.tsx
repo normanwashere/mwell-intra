@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { EvidenceAttachment, useEvidenceAttachment } from '@intra/ui';
+import { resolveEvidenceDocument, uploadEvidenceDocument } from '@intra/data-kit/supabase';
 import { useSession } from "@intra/auth";
 import {
   Badge,
@@ -43,8 +45,10 @@ export function InventoryIntegrityPanel({
     productId: products[0]?.id ?? "",
     severity: "high",
     reason: "",
-    evidenceUrl: "",
   });
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const attachment = useEvidenceAttachment(`${open}:${draft.caseType}:${draft.productId}`);
 
   const refresh = useCallback(async () => {
     if (!live) return;
@@ -103,7 +107,10 @@ export function InventoryIntegrityPanel({
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!live) return;
+    if (!live || savingRef.current || !attachment.canSubmit() || !draft.reason.trim()) return;
+    savingRef.current = true;
+    setSaving(true);
+    try {
     const { error } = await live
       .schema("warehouse")
       .rpc("manage_inventory_integrity_case", {
@@ -113,7 +120,7 @@ export function InventoryIntegrityPanel({
           product_id: draft.productId || null,
           severity: draft.severity,
           reason: draft.reason,
-          evidence_url: draft.evidenceUrl || null,
+          evidence_url: attachment.reference || null,
         },
       });
     if (error) {
@@ -122,8 +129,14 @@ export function InventoryIntegrityPanel({
     }
     toast.success("Inventory integrity case opened.");
     setOpen(false);
-    setDraft((current) => ({ ...current, reason: "", evidenceUrl: "" }));
+    setDraft((current) => ({ ...current, reason: "" }));
     await refresh();
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'The integrity case could not be opened.');
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
   };
 
   if (!live || !canManage) return null;
@@ -228,7 +241,7 @@ export function InventoryIntegrityPanel({
       )}
       <Sheet
         open={open}
-        onOpenChange={setOpen}
+        onOpenChange={(next) => { if (!savingRef.current) setOpen(next); }}
         title="Open inventory integrity case"
         description="Start with containment when stock may be unsafe or inaccurate."
         footer={
@@ -236,6 +249,7 @@ export function InventoryIntegrityPanel({
             type="submit"
             form="integrity-form"
             className="btn-primary w-full"
+            disabled={saving || !attachment.canSubmit() || !draft.reason.trim()}
           >
             Open case
           </button>
@@ -318,20 +332,16 @@ export function InventoryIntegrityPanel({
               required
             />
           </Field>
-          <Field label="Evidence URL" htmlFor="integrity-evidence">
-            <input
-              id="integrity-evidence"
-              className="input"
-              type="url"
-              value={draft.evidenceUrl}
-              onChange={(event) =>
-                setDraft((current) => ({
-                  ...current,
-                  evidenceUrl: event.target.value,
-                }))
-              }
-            />
-          </Field>
+          <EvidenceAttachment id="integrity-evidence" attachment={attachment} disabled={saving}
+            recordLabel={products.find((product) => product.id === draft.productId)?.name ?? 'Multiple inventory records'}
+            upload={async (file) => {
+              const reference = await uploadEvidenceDocument(live, file, `inventory-integrity/${draft.caseType}/${draft.productId || 'multiple'}`);
+              return { reference, filename: file.name, preview: async () => {
+                const url = await resolveEvidenceDocument(live, reference);
+                if (!url) throw new Error('Evidence access was denied or expired. Try opening it again.');
+                return url;
+              } };
+            }} />
         </form>
       </Sheet>
     </section>

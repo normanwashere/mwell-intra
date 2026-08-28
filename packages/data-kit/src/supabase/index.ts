@@ -9,6 +9,7 @@ import type { WarehouseRepository } from '../repository';
 import { SupabaseRepository } from './SupabaseRepository';
 
 export { SupabaseRepository };
+export { uploadEvidenceDocument, resolveEvidenceDocument } from './documentEvidence';
 export * from './mappers';
 export {
   uploadEvidence,

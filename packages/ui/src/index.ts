@@ -4,6 +4,7 @@
 
 export { Icon, type IconName } from "./Icon";
 export { ContextualHelpLink } from "./ContextualHelpLink";
+export { EvidenceAttachment, useEvidenceAttachment, type EvidenceDocument } from './EvidenceAttachment';
 export { AccessDenied, type AccessDeniedProps } from "./AccessDenied";
 
 export {

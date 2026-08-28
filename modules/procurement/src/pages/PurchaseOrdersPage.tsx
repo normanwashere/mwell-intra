@@ -1,11 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Badge,
   DataTable,
   EmptyState,
+  EvidenceAttachment,
+  useEvidenceAttachment,
   HeroChipButton,
   Icon,
   InfoTip,
@@ -27,6 +29,7 @@ import { downloadCsv, purchaseOrdersToCsv } from '../export';
 import { formatDate, poStatusLabel } from '../labels';
 import { ProcurementAccessDenied } from '../components/ProcurementAccessDenied';
 import { makeTypedSignature } from '../signature';
+import { createGovernedAttachmentUrl, type GovernedAccessClient } from '../attachments';
 
 interface AmendmentWorkItem {
   amendment_id: string;
@@ -41,6 +44,30 @@ interface AmendmentWorkItem {
   can_decide: boolean;
   reason: string;
   evidence_urls: string[];
+}
+
+export function PurchaseOrderAmendmentEvidence({ purchaseOrderId, reference, actorId, client }: {
+  purchaseOrderId: string;
+  reference: string;
+  actorId: string;
+  client: NonNullable<ReturnType<typeof useSession>['supabaseClient']>;
+}) {
+  const attachment = useEvidenceAttachment(`${actorId}:${purchaseOrderId}:${reference}`, reference, {
+    reference, filename: reference.split('/').pop() || 'Amendment evidence',
+    preview: async () => {
+      if (/^https:/i.test(reference)) return reference;
+      const order = await client.schema('procurement').from('purchase_orders').select('request_id')
+        .eq('id', purchaseOrderId).maybeSingle();
+      if (order.error) throw new Error(order.error.message);
+      if (!order.data?.request_id) throw new Error('The purchase order linked request is not accessible.');
+      const document = await client.schema('procurement').from('request_attachments').select('id')
+        .eq('request_id', order.data.request_id).eq('storage_path', reference).maybeSingle();
+      if (document.error) throw new Error(document.error.message);
+      if (!document.data?.id) throw new Error('This evidence is not registered for the purchase order request or is no longer accessible.');
+      return (await createGovernedAttachmentUrl(client as unknown as GovernedAccessClient, document.data.id)).url;
+    },
+  });
+  return <EvidenceAttachment attachment={attachment} recordLabel="Submitted PO amendment" readOnly />;
 }
 
 const PO_TONE: Record<PurchaseOrderStatus, 'slate' | 'cyan' | 'amber' | 'emerald' | 'rose'> = {
@@ -127,7 +154,9 @@ export function PurchaseOrdersPage() {
   const [amendmentLineId, setAmendmentLineId] = useState('');
   const [amendedQuantity, setAmendedQuantity] = useState(1);
   const [amendmentReason, setAmendmentReason] = useState('');
-  const [amendmentEvidence, setAmendmentEvidence] = useState('');
+  const attachment = useEvidenceAttachment(`${profile?.id ?? 'signed-out'}:${amendmentLineId}`);
+  const [requestingAmendment, setRequestingAmendment] = useState(false);
+  const requestingRef = useRef(false);
   const [amendmentDecisionReasons, setAmendmentDecisionReasons] = useState<Record<string, string>>(
     {},
   );
@@ -163,12 +192,15 @@ export function PurchaseOrdersPage() {
   }, [refreshAmendmentQueue]);
 
   const requestAmendment = async () => {
-    if (!supabaseClient || !amendmentLineId || !amendmentReason.trim() || !amendmentEvidence.trim())
+    if (!supabaseClient || !amendmentLineId || !amendmentReason.trim() || !attachment.canSubmit(true) || requestingRef.current)
       return;
     const selected = rows
       .flatMap((po) => po.lines.map((line) => ({ po, line })))
       .find(({ line }) => line.id === amendmentLineId);
     if (!selected) return;
+    requestingRef.current = true;
+    setRequestingAmendment(true);
+    try {
     const { error: rpcError } = await supabaseClient
       .schema('procurement')
       .rpc('request_po_line_quantity_amendment', {
@@ -177,7 +209,7 @@ export function PurchaseOrdersPage() {
           po_line_id: selected.line.id,
           amended_quantity: amendedQuantity,
           reason: amendmentReason.trim(),
-          evidence_urls: [amendmentEvidence.trim()],
+          evidence_urls: [attachment.reference.trim()],
         },
       });
     if (rpcError) {
@@ -185,9 +217,15 @@ export function PurchaseOrdersPage() {
       return;
     }
     setAmendmentReason('');
-    setAmendmentEvidence('');
+    attachment.clear();
     if (!(await refreshAmendmentQueue())) return;
     success('PO quantity amendment entered the current DOA queue');
+    } catch (cause) {
+      error(cause instanceof Error ? cause.message : 'The amendment could not be requested.');
+    } finally {
+      requestingRef.current = false;
+      setRequestingAmendment(false);
+    }
   };
 
   const decideAmendment = async (item: AmendmentWorkItem, decision: 'approved' | 'rejected') => {
@@ -434,6 +472,7 @@ export function PurchaseOrdersPage() {
                 <select
                   className="input mt-1.5"
                   value={amendmentLineId}
+                  disabled={requestingAmendment}
                   onChange={(event) => setAmendmentLineId(event.target.value)}
                 >
                   <option value="">Select an open issued PO line</option>
@@ -467,23 +506,29 @@ export function PurchaseOrdersPage() {
                   onChange={(event) => setAmendmentReason(event.target.value)}
                 />
               </label>
-              <label className="text-sm font-semibold text-ink">
-                Evidence URL
-                <input
-                  className="input mt-1.5"
-                  value={amendmentEvidence}
-                  onChange={(event) => setAmendmentEvidence(event.target.value)}
-                />
-              </label>
+              <EvidenceAttachment attachment={attachment} recordLabel={rows.find((po) => po.lines.some((line) => line.id === amendmentLineId))?.poNumber ?? 'Selected PO line'}
+                disabled={requestingAmendment || !amendmentLineId}
+                unavailableReason="New amendment uploads require a document-registration service. Existing request documents remain available."
+                loadDocuments={async () => {
+                  const po = rows.find((candidate) => candidate.lines.some((line) => line.id === amendmentLineId));
+                  if (!supabaseClient || !po?.requestId) throw new Error('This PO has no linked request documents. Use a secure document link.');
+                  const { data, error: loadError } = await supabaseClient.schema('procurement').from('request_attachments')
+                    .select('id,filename,storage_path').eq('request_id', po.requestId);
+                  if (loadError) throw new Error(loadError.message);
+                  return (data ?? []).filter((doc) => doc.storage_path).map((doc) => ({
+                    reference: String(doc.storage_path), filename: String(doc.filename),
+                    preview: async () => (await createGovernedAttachmentUrl(supabaseClient as unknown as GovernedAccessClient, String(doc.id))).url,
+                  }));
+                }} />
               <button
                 type="button"
                 className="btn-primary md:col-span-2 md:justify-self-start"
                 disabled={
-                  !amendmentLineId ||
+                  requestingAmendment || !amendmentLineId ||
                   amendedQuantity <= 0 ||
                   !Number.isInteger(amendedQuantity) ||
                   !amendmentReason.trim() ||
-                  !amendmentEvidence.trim()
+                  !attachment.canSubmit(true)
                 }
                 onClick={() => void requestAmendment()}
               >
@@ -519,7 +564,8 @@ export function PurchaseOrdersPage() {
                         <ul className="mt-1 space-y-1">
                           {item.evidence_urls.map((evidence) => (
                             <li key={evidence} className="break-all">
-                              {evidence}
+                              {supabaseClient ? <PurchaseOrderAmendmentEvidence purchaseOrderId={item.purchase_order_id}
+                                reference={evidence} actorId={profile?.id ?? 'signed-out'} client={supabaseClient} /> : evidence}
                             </li>
                           ))}
                         </ul>

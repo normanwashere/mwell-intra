@@ -140,12 +140,15 @@ type EventReconciliationTransitionInput = Pick<
 export function isSupportedEventEvidenceReference(value?: string): boolean {
   const reference = value?.trim();
   if (!reference) return false;
+  if (/^evidence:\/\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(reference)) return true;
   if (/^memory:\/\/event-settlement\/[A-Za-z0-9._/-]+$/.test(reference)) {
     return true;
   }
   try {
     const url = new URL(reference);
-    return url.protocol === "https:" && Boolean(url.hostname);
+    return url.protocol === "https:" && Boolean(url.hostname) && !url.username && !url.password
+      && !/\/storage\/v1\/object\/(sign|public)\//i.test(decodeURIComponent(url.pathname))
+      && ![...url.searchParams.keys()].some((key) => /^(token|signature|sig|expires|x-amz-.+|x-goog-.+)$/i.test(key));
   } catch {
     return false;
   }
@@ -398,6 +401,15 @@ export async function openLiveEventReconciliationEvidence(
     });
   if (error) throw error;
   const evidenceUrl = text((data as UnknownRow | null)?.evidence_url);
+  if (evidenceUrl.startsWith('evidence://')) {
+    const response = await fetch('/api/evidence', { method: 'POST', credentials: 'same-origin', cache: 'no-store',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'open', reference: evidenceUrl }) });
+    const result = await response.json();
+    if (!response.ok || typeof result.url !== 'string') throw new Error(result.error || 'Evidence access denied.');
+    const url = new URL(result.url);
+    if (url.protocol !== 'https:' || url.username || url.password) throw new Error('Invalid evidence preview.');
+    return result.url;
+  }
   if (!isSupportedEventEvidenceReference(evidenceUrl)) {
     throw new Error("Event reconciliation evidence could not be retrieved.");
   }

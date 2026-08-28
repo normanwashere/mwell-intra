@@ -30,6 +30,28 @@ const input: ReturnInput = {
 };
 
 describe("return intake safety", () => {
+  it.each(["P0001", "23514", "42501"])("preserves confirmed return transaction rejection %s at the RPC boundary", async (code) => {
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: { code, message: "Quarantine bin is inactive" } });
+    const repo = new SupabaseRepository({ rpc } as unknown as SupabaseClient);
+    await expect(repo.recordReturn(input)).rejects.toMatchObject({
+      name: "ReturnRejectedError", outcome: "rejected", code, message: "Quarantine bin is inactive",
+    });
+  });
+
+  it.each(["", "08006", "40003", "PGRST000"])("does not mark ambiguous return failure %s as a safe rejection", async (code) => {
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: { code, message: "Quarantine bin is inactive" } });
+    const repo = new SupabaseRepository({ rpc } as unknown as SupabaseClient);
+    const error = await repo.recordReturn(input).catch((failure) => failure);
+    expect(error).not.toHaveProperty("outcome", "rejected");
+  });
+
+  it("does not classify a thrown transport failure by message or code", async () => {
+    const rpc = vi.fn().mockRejectedValue(Object.assign(new Error("Quarantine bin is inactive"), { code: "P0001" }));
+    const repo = new SupabaseRepository({ rpc } as unknown as SupabaseClient);
+    const error = await repo.recordReturn(input).catch((failure) => failure);
+    expect(error).not.toHaveProperty("outcome", "rejected");
+  });
+
   it("sends the same command on retry without reading mutable inventory or building client rows", async () => {
     const rpc = vi.fn(async (_name, args) => ({
       data: { id: "server-return", ...args.payload.return },
@@ -69,6 +91,45 @@ describe("return intake safety", () => {
     expect(await repo.getData()).toEqual(after);
   });
 
+  it.each([false, true])("replays returns across repository reloads (serialized=%s)", async (serialized) => {
+    const entries = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => entries.get(key) ?? null,
+      setItem: (key: string, value: string) => { entries.set(key, value); },
+    };
+    const command = { ...input, lines: serialized ? input.lines : [input.lines[0]!] };
+    const repo = new InMemoryRepository(buildSeed(), { storage });
+    const first = await repo.recordReturn(command);
+    const after = await repo.getData();
+    const reloaded = new InMemoryRepository(undefined, { storage });
+    expect(await reloaded.recordReturn(command)).toEqual(first);
+    expect(await reloaded.getData()).toEqual(after);
+  });
+
+  it("scopes return replay to its actor", async () => {
+    const repo = new InMemoryRepository(buildSeed());
+    const command = { ...input, lines: [input.lines[0]!] };
+    const first = await repo.recordReturn(command);
+    const second = await repo.recordReturn({ ...command, actor: "another-receiver" });
+    expect(second.id).not.toBe(first.id);
+    expect(second.actor).toBe("another-receiver");
+  });
+
+  it("keeps storage failure unknown and retries persistence without repeating a return", async () => {
+    const entries = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => entries.get(key) ?? null,
+      setItem: vi.fn((key: string, value: string) => { entries.set(key, value); }),
+    };
+    storage.setItem.mockImplementationOnce(() => { throw new Error("Storage full"); });
+    const repo = new InMemoryRepository(buildSeed(), { storage });
+    await expect(repo.recordReturn(input)).rejects.toThrow("Storage full");
+    const after = await repo.getData();
+    const result = await repo.recordReturn(input);
+    expect(await repo.getData()).toEqual(after);
+    expect(await new InMemoryRepository(undefined, { storage }).recordReturn(input)).toEqual(result);
+  });
+
   it.each([
     { productId: "missing" },
     { quantity: 0 },
@@ -92,7 +153,7 @@ describe("return intake safety", () => {
             { ...input.lines[1]!, ...patch } as ReturnInput["lines"][number],
           ],
         }),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({ name: "ReturnRejectedError", outcome: "rejected", code: "RETURN_INPUT_INVALID" });
       expect(await repo.getData()).toEqual(before);
       await expect(repo.recordReturn(input)).resolves.toBeDefined();
     },

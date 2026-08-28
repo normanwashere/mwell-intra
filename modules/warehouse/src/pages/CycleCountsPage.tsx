@@ -26,6 +26,7 @@ export function CycleCountsPage() {
   const [blind, setBlind] = useState(false);
   const [confirmUncounted, setConfirmUncounted] = useState(false);
   const [evidenceUrls, setEvidenceUrls] = useState<string[]>([]);
+  const [evidenceBusy, setEvidenceBusy] = useState(false);
   const [evidenceVersion, setEvidenceVersion] = useState(0);
   const [search, setSearch] = useState('');
   const [searchParams] = useSearchParams();
@@ -139,6 +140,7 @@ export function CycleCountsPage() {
   const families = groupProductsByFamily(items.map((i) => i.product));
 
   const submit = async () => {
+    if (evidenceBusy) return;
     const ok = await submitNewCycleCount({
       locationId: activeLocation,
       binId: scope,
@@ -194,6 +196,9 @@ export function CycleCountsPage() {
               setBinId('');
               setCounts({});
               setSerialInputs({});
+              setEvidenceUrls([]);
+              setEvidenceVersion((version) => version + 1);
+              setConfirmUncounted(false);
             }}
           >
             {warehouses.map((l) => (
@@ -212,6 +217,9 @@ export function CycleCountsPage() {
               setCategory(e.target.value as ItemCategory);
               setCounts({});
               setSerialInputs({});
+              setEvidenceUrls([]);
+              setEvidenceVersion((version) => version + 1);
+              setConfirmUncounted(false);
             }}
           >
             <option value="merchandise">Merchandise</option>
@@ -271,6 +279,9 @@ export function CycleCountsPage() {
                 value={activeBin}
                 onChange={(e) => {
                   setBinId(e.target.value);
+                  setEvidenceUrls([]);
+                  setEvidenceVersion((version) => version + 1);
+                  setConfirmUncounted(false);
                   setCounts({});
                   setSerialInputs({});
                 }}
@@ -542,9 +553,11 @@ export function CycleCountsPage() {
           Attach a clear photo of the count sheet, rack, or bin before submitting.
         </p>
         <EvidenceCapture
+          reference={`cycle-count/${activeLocation}/${scope ?? 'general'}/${evidenceVersion}`}
+          value={evidenceUrls}
+          onBusyChange={setEvidenceBusy}
           key={evidenceVersion}
           label="Attach cycle-count evidence"
-          reference={`cycle-count-${activeLocation}-${scope ?? 'general'}`}
           onChange={(urls) => {
             setEvidenceUrls(urls);
             if (urls.length === 0) setConfirmUncounted(false);
@@ -579,7 +592,7 @@ export function CycleCountsPage() {
               <button
                 type="button"
                 className="btn-primary btn-sm flex-1 justify-center"
-                disabled={evidenceUrls.length === 0}
+                disabled={evidenceBusy || evidenceUrls.length === 0}
                 onClick={() => void submit()}
               >
                 Submit anyway
@@ -592,7 +605,7 @@ export function CycleCountsPage() {
           className="btn-primary w-full shadow-pop"
           // An explicit entry is always required — no more one-tap "perfect
           // count" (WH-18).
-          disabled={enteredCount === 0 || serialIssues.length > 0 || evidenceUrls.length === 0}
+          disabled={evidenceBusy || enteredCount === 0 || serialIssues.length > 0 || evidenceUrls.length === 0}
           onClick={onSubmitClick}
         >
           Submit count ({enteredCount}/{items.length})

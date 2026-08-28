@@ -23,7 +23,7 @@ describe("AllocationsPage", () => {
   it("blocks fractional quantities before any reservation is saved", async () => {
     const user = userEvent.setup();
     const repo = makeRepo();
-    const reserve = vi.spyOn(repo, "reserve");
+    const reserve = vi.spyOn(repo, "reserveBatch");
     renderWithProviders(<AllocationsPage />, {
       role: "warehouse_operator",
       repo,
@@ -86,7 +86,7 @@ describe("AllocationsPage", () => {
   it("reserves multiple products with a purpose on each line", async () => {
     const user = userEvent.setup();
     const repo = makeRepo();
-    const reserve = vi.spyOn(repo, "reserve");
+    const reserve = vi.spyOn(repo, "reserveBatch");
     renderWithProviders(<AllocationsPage />, {
       role: "warehouse_operator",
       repo,
@@ -118,17 +118,14 @@ describe("AllocationsPage", () => {
     await waitFor(() =>
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
     );
-    expect(reserve).toHaveBeenCalledTimes(2);
-    expect(reserve).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({ productId: "shirt-l", promotional: false }),
-    );
-    expect(reserve).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ productId: "doctor-token", promotional: true }),
-    );
-    expect(reserve.mock.calls[0]![0].eventId).toBe(
-      reserve.mock.calls[1]![0].eventId,
+    expect(reserve).toHaveBeenCalledTimes(1);
+    expect(reserve).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lines: [
+          { productId: "shirt-l", quantity: 1, promotional: false },
+          { productId: "doctor-token", quantity: 1, promotional: true },
+        ],
+      }),
     );
     const list = screen.getByLabelText("Allocations");
     expect(within(list).getAllByText(/Selling/).length).toBeGreaterThan(0);
@@ -143,7 +140,7 @@ describe("AllocationsPage", () => {
       { productId: "shirt-l", locationId: "loc-wh", quantity: 3 },
     ];
     const repo = makeRepo(seed);
-    const reserve = vi.spyOn(repo, "reserve");
+    const reserve = vi.spyOn(repo, "reserveBatch");
     renderWithProviders(<AllocationsPage />, {
       role: "warehouse_operator",
       repo,
@@ -187,31 +184,23 @@ describe("AllocationsPage", () => {
     await waitFor(() =>
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
     );
-    expect(reserve).toHaveBeenNthCalledWith(
-      1,
+    expect(reserve).toHaveBeenCalledTimes(1);
+    expect(reserve).toHaveBeenCalledWith(
       expect.objectContaining({
-        productId: "shirt-l",
-        quantity: 2,
-        promotional: false,
-      }),
-    );
-    expect(reserve).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        productId: "shirt-l",
-        quantity: 1,
-        promotional: true,
+        lines: [
+          { productId: "shirt-l", quantity: 2, promotional: false },
+          { productId: "shirt-l", quantity: 1, promotional: true },
+        ],
       }),
     );
   });
 
-  it("locks unconfirmed lines after a lost response without resubmitting saved reservations", async () => {
+  it("locks the full intent after a lost response and recovers without duplicate reservations", async () => {
     const user = userEvent.setup();
     const repo = makeRepo();
-    const originalReserve = repo.reserve.bind(repo);
+    const originalReserve = repo.reserveBatch.bind(repo);
     const reserve = vi
-      .spyOn(repo, "reserve")
-      .mockImplementationOnce(originalReserve)
+      .spyOn(repo, "reserveBatch")
       .mockImplementationOnce(async (input) => {
         await originalReserve(input);
         throw new Error("Response lost after commit");
@@ -237,38 +226,37 @@ describe("AllocationsPage", () => {
       within(dialog).getByRole("button", { name: /^reserve$/i }),
     );
     expect(await within(dialog).findByRole("alert")).toHaveTextContent(
-      /1.*saved/i,
+      /not confirmed/i,
     );
-    expect(within(dialog).getAllByLabelText("Product")).toHaveLength(1);
-    expect(within(dialog).getByLabelText("Product")).toHaveValue(
+    expect(within(dialog).getAllByLabelText("Product")).toHaveLength(2);
+    expect(within(dialog).getAllByLabelText("Product")[1]).toHaveValue(
       "doctor-token",
     );
     expect(
-      within(dialog).getByRole("button", { name: /^reserve$/i }),
-    ).toBeDisabled();
-    expect(within(dialog).getByLabelText("Product")).toBeDisabled();
-    expect(within(dialog).getByRole("alert")).toHaveTextContent(/unconfirmed/i);
+      within(dialog).getByRole("button", { name: "Recover reservation" }),
+    ).toBeEnabled();
+    expect(within(dialog).getAllByLabelText("Product")[0]).toBeDisabled();
     expect(screen.queryByText(/^Reserved \d+ product/)).not.toBeInTheDocument();
     await user.click(
-      within(dialog).getByRole("button", { name: /^reserve$/i }),
+      within(dialog).getByRole("button", { name: "Recover reservation" }),
     );
     expect(reserve).toHaveBeenCalledTimes(2);
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(
-      reserve.mock.calls.filter(([input]) => input.productId === "shirt-l"),
-    ).toHaveLength(1);
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(reserve.mock.calls[1]).toEqual(reserve.mock.calls[0]);
   });
 
   it("submits each reservation only once while a save is pending", async () => {
     const user = userEvent.setup();
     const repo = makeRepo();
-    const originalReserve = repo.reserve.bind(repo);
+    const originalReserve = repo.reserveBatch.bind(repo);
     let release!: () => void;
     const pending = new Promise<void>((resolve) => {
       release = resolve;
     });
     const reserve = vi
-      .spyOn(repo, "reserve")
+      .spyOn(repo, "reserveBatch")
       .mockImplementation(async (input) => {
         await pending;
         return originalReserve(input);
@@ -317,7 +305,7 @@ describe("AllocationsPage", () => {
   it("lets a reservation-only Marketing capability reserve without issuing or returns", async () => {
     const user = userEvent.setup();
     const repo = makeRepo();
-    const reserve = vi.spyOn(repo, "reserve");
+    const reserve = vi.spyOn(repo, "reserveBatch");
     renderWithProviders(<AllocationsPage />, {
       role: "marketing",
       repo,

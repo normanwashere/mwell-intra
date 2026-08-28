@@ -4,6 +4,34 @@ Source: August 27 section, pages 1-5 of `wms comments (4).pdf`.
 
 Target: **Mwell Intra UAT**, https://mwell-intra-uat.vercel.app. This report does not certify or change the production site.
 
+## Follow-Up Assurance Status
+
+**28 August corrective implementation: automated regression passed and UAT database updated.** The targeted fixes and evidence below remain valid. The re-review found that equivalent entry points and interrupted interactions were not sufficiently covered in the original regression. Match the app's health-reported commit to its deployment receipt; automated checks are not full operational sign-off.
+
+Five isolated component diagnostics reproduced: the alternate Event detail reservation still lacks multiple products; repeated Reserve clicks can submit twice; a delayed upload can restore removed evidence; a delayed inspection upload can carry evidence into a different inspection; and changing a return after a lost response can produce a same-key/different-payload recovery dead end. These are local reproductions of the deployed application source, not newly committed UAT transactions.
+
+The corrective build adds record-scoped evidence, upload reconciliation, atomic event reservations, and immutable unknown-outcome return recovery. It also addresses scanner consistency, departmental attachments, training-lock explanations, draft recovery and request-review presentation. Current test results and deployment status are maintained in [Cross-Role Recovery and Evidence Remediation](../releases/2026-08-28-CROSS-ROLE-RECOVERY.md). These local checks are not a full authenticated UAT or physical-device sign-off.
+
+The complete review, affected roles, source references, and retest sequence are in [Cross-Role Assurance Review](2026-08-28-CROSS-ROLE-FOLLOW-UP.md). The response below describes the targeted implementation, not a full operational sign-off.
+
+## Cross-Role Recovery Improvements
+
+Reservations now use the same multi-product form from Allocations and Event detail. An uncertain response keeps its original payload locked for **Recover reservation** instead of allowing another intent. The server validates and saves the full batch atomically.
+
+![Desktop: shared reservation form with separate Selling and Giveaway choices](../evidence/2026-08-28-cross-role-fixes/desktop-reservation.jpg)
+
+![Mobile: reservation content scrolls while the commit action stays reachable](../evidence/2026-08-28-cross-role-fixes/mobile-reservation.jpg)
+
+Validation is also repeated at the action footer and receives keyboard focus, so a long list does not hide the reason a reservation was rejected.
+
+![Desktop: insufficient-stock feedback is adjacent to Reserve](../evidence/2026-08-28-cross-role-fixes/desktop-reservation-validation.jpg)
+
+Returns preserve unfinished work for the operator in the same browser. **Resume draft** restores editing. A pending transaction instead requires **Recover original result**, with its original items and quantities locked. A draft does not receive stock or replace Quality inspection.
+
+![Desktop: navigating away and back preserves the three-unit return draft for explicit resume](../evidence/2026-08-28-cross-role-fixes/desktop-return-resume.jpg)
+
+These new screenshots were captured from the actual local application in demo mode. They document interaction and layout, not live Supabase persistence. Earlier receiving screenshots below are from the original UAT verification.
+
 ## Receiving and Inspection
 
 **Reported:** Serial entry needed a scanner; different staff could not finish individual PO products independently; incomplete scans could not be saved.

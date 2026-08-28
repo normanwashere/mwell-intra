@@ -135,6 +135,17 @@ export interface ReserveInput {
   actor: string;
 }
 
+export interface ReserveBatchInput {
+  idempotencyKey: string;
+  eventId: string;
+  actor: string;
+  lines: Pick<ReserveInput, "productId" | "quantity" | "promotional">[];
+}
+
+export type ReserveBatchResult =
+  | { status: "committed"; allocations: Allocation[] }
+  | { status: "rejected"; error: string };
+
 export interface IssueInput {
   allocationId: string;
   actor: string;
@@ -482,6 +493,7 @@ export interface WarehouseRepository {
 
   receiveStock(input: ReceiveStockInput): Promise<Receipt>;
   reserve(input: ReserveInput): Promise<Allocation>;
+  reserveBatch(input: ReserveBatchInput): Promise<ReserveBatchResult>;
   issue(input: IssueInput): Promise<Allocation>;
   recordReturn(input: ReturnInput): Promise<ReturnRecord>;
   recordCycleCount(input: CycleCountInput): Promise<CycleCount>;

@@ -993,7 +993,7 @@ const definitions: FeatureDefinition[] = [
     statuses:
       "Receivable, partial, complete, pending inspection, held, rejected, or failed.",
     exception:
-      "Save progress preserves unfinished scans without receiving stock. Reopen the PO to resume. A changed PO balance deselects stale draft items for review. Use uploaded delivery evidence or a secure HTTPS link; HTTP links are rejected. Standard receiving remains PO-first, duplicate serials are blocked, and exceptions require evidence.",
+      "Save progress preserves unfinished scans without receiving stock. Reopen the PO to resume. A changed PO balance deselects stale draft items for review. Use uploaded delivery evidence or a secure HTTPS link; HTTP links are rejected. Standard receiving remains PO-first. A non-PO delivery or overage follows the evidenced exception route, not ordinary receiving. Duplicate serials are blocked.",
     completionEvidence:
       "Receipt number, received quantity, pending-inspection status, unavailable custody, traceability identity, destination, and Quality handoff are visible.",
   },
@@ -1011,7 +1011,7 @@ const definitions: FeatureDefinition[] = [
     statuses:
       "Requested, reserved, partially reserved, issued, cancelled, returned, or short.",
     exception:
-      "Resolve insufficient stock, overlapping reservations, missing recipient, or stale demand before retrying. If a multi-item reservation response is uncertain, close the locked form and check recorded allocations before reserving only confirmed missing quantities. Returns go to quarantine; independent Quality decides whether they can be restocked.",
+      "Both Allocations and Event detail use one atomic multi-item reservation. A confirmed rejection reserves nothing. If its response is uncertain, use Recover reservation to replay the original locked command, including after reopening in the same browser; do not create replacement reservations elsewhere. Resolve insufficient stock, missing recipient or stale demand before a new attempt. Returns go to quarantine; independent Quality decides whether they can be restocked.",
     completionEvidence:
       "Allocation status, quantity, source stock, recipient, and movement reference reconcile to the event demand.",
   },
@@ -1047,7 +1047,7 @@ const definitions: FeatureDefinition[] = [
     statuses:
       "Expected, received, inspected, restocked, held, damaged, lost, or returned to vendor.",
     exception:
-      "Quarantine unidentified or unsafe items and escalate quantity or serial mismatches instead of forcing a return.",
+      "Quarantine unidentified or unsafe items and escalate quantity or serial mismatches instead of forcing a return. Editable drafts resume for the current operator in the same browser. If a submitted result is unknown, use Recover original result with the original locked payload; do not change quantities or create another intake until recovery confirms the outcome. Confirmed validation rejection allows correction.",
     completionEvidence:
       "Every returned quantity shows source custody, quarantine intake, independent Quality disposition, evidence reference, and reconciled custody balance.",
   },

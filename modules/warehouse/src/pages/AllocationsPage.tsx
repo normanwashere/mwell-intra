@@ -47,6 +47,7 @@ export function AllocationsPage() {
   const [issueBin, setIssueBin] = useState('');
   const [selectedSerials, setSelectedSerials] = useState<string[]>([]);
   const [evidenceUrls, setEvidenceUrls] = useState<string[]>([]);
+  const [evidenceBusy, setEvidenceBusy] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
   const issueLocations = useMemo(() => {
@@ -152,7 +153,7 @@ export function AllocationsPage() {
   };
 
   const confirmIssue = async () => {
-    if (!issuing) return;
+    if (!issuing || evidenceBusy) return;
     const ok = await issue({
       allocationId: issuing.id,
       assignedTo: assignedTo.trim() || undefined,
@@ -318,7 +319,7 @@ export function AllocationsPage() {
           <button
             type="button"
             className="btn-primary w-full"
-            disabled={!serialsReady}
+            disabled={!serialsReady || evidenceBusy}
             onClick={() => void confirmIssue()}
           >
             Confirm issue
@@ -454,7 +455,7 @@ export function AllocationsPage() {
             />
           </Field>
           <Field label="Photo evidence" hint="Optional proof captured at issue">
-            <EvidenceCapture onChange={setEvidenceUrls} />
+            <EvidenceCapture reference={`allocation-issue/${issuing?.id ?? 'closed'}`} value={evidenceUrls} onChange={setEvidenceUrls} onBusyChange={setEvidenceBusy} />
           </Field>
         </div>
       </Sheet>

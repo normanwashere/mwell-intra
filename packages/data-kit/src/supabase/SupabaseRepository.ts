@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { ReturnRejectedError } from "../returnOutcome";
 import type {
   Allocation,
   CycleCount,
@@ -73,6 +74,8 @@ import {
   type ReceiveStockInput,
   type RelocateInput,
   type ReserveInput,
+  type ReserveBatchInput,
+  type ReserveBatchResult,
   type ReturnInput,
   type SetProductPriceInput,
   type TransferInput,
@@ -890,6 +893,33 @@ export class SupabaseRepository implements WarehouseControlRepository {
     }
   }
 
+  async reserveBatch(input: ReserveBatchInput): Promise<ReserveBatchResult> {
+    const response = await this.callRpc("reserve_batch", {
+      idempotency_key: input.idempotencyKey,
+      event_id: input.eventId,
+      lines: input.lines.map((line) => ({
+        product_id: line.productId,
+        quantity: line.quantity,
+        promotional: line.promotional ?? false,
+      })),
+    });
+    if (response.status === "rejected" && typeof response.error === "string") {
+      return { status: "rejected", error: response.error };
+    }
+    if (response.status !== "committed" || !Array.isArray(response.allocations) ||
+        response.allocations.length !== input.lines.length ||
+        response.allocations.some((row: Row, index: number) => {
+          const line = input.lines[index]!;
+          return !row || typeof row.id !== "string" || !row.id ||
+            row.event_id !== input.eventId || row.product_id !== line.productId ||
+            row.quantity !== line.quantity || row.promotional !== (line.promotional ?? false) ||
+            row.status !== "reserved";
+        }) || new Set(response.allocations.map((row: Row) => row.id)).size !== input.lines.length) {
+      throw new Error("Reservation response unavailable.");
+    }
+    return { status: "committed", allocations: response.allocations.map(rowToAllocation) };
+  }
+
   async reserve(input: ReserveInput): Promise<Allocation> {
     // Client-side pre-check keeps the UX error message friendly; the RPC
     // re-validates ATP inside its transaction so concurrent reservations can't
@@ -1106,27 +1136,29 @@ export class SupabaseRepository implements WarehouseControlRepository {
   async recordReturn(input: ReturnInput): Promise<ReturnRecord> {
     const idempotencyKey = input.idempotencyKey ?? uid("return");
     if (!/^[A-Za-z0-9_-]{12,128}$/.test(idempotencyKey)) {
-      throw new Error("A valid idempotency key is required.");
+      throw new ReturnRejectedError("A valid idempotency key is required.", "RETURN_INPUT_INVALID");
     }
     if (!input.lines.length)
-      throw new Error("At least one return line is required.");
+      throw new ReturnRejectedError("At least one return line is required.", "RETURN_INPUT_INVALID");
     if (
       input.lines.some(
         (line) => line.disposition && line.disposition !== "quarantine",
       )
     ) {
-      throw new Error(
+      throw new ReturnRejectedError(
         "Return intake is quarantine-first; Quality controls final disposition.",
+        "RETURN_INPUT_INVALID",
       );
     }
     if (input.lines.some((line) => !line.locationId)) {
-      throw new Error(
+      throw new ReturnRejectedError(
         "A quarantine location is required for every returned line.",
+        "RETURN_INPUT_INVALID",
       );
     }
     // Send intent only. The RPC validates locked inventory and owns every row.
     // No timestamps or mutable snapshot-derived fields may change on a retry.
-    const row = await this.callRpc("record_return_v2", {
+    const { data: row, error } = await this.db.rpc("record_return_v2", { payload: {
       idempotency_key: idempotencyKey,
       allocation_id: input.allocationId ?? null,
       return: {
@@ -1143,8 +1175,17 @@ export class SupabaseRepository implements WarehouseControlRepository {
         })),
         evidence_urls: input.evidenceUrls ?? [],
       },
-    });
-    return rowToReturn(row);
+    } });
+    if (error) {
+      // Only returned SQL rejection codes establish rollback of this attempt.
+      // Transport throws, connection errors and unknown completion stay ambiguous.
+      if (["P0001", "23502", "23503", "23505", "23514", "22003", "22P02", "22023", "42501", "40001", "40P01"].includes(error.code)) {
+        throw new ReturnRejectedError(error.message, error.code);
+      }
+      throw Object.assign(new Error(error.message), { code: error.code });
+    }
+    if (!row || typeof row.id !== "string") throw new Error("Return response unavailable.");
+    return rowToReturn(row as Row);
   }
 
   async recordCycleCount(input: CycleCountInput): Promise<CycleCount> {

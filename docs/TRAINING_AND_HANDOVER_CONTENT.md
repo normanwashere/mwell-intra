@@ -12,6 +12,14 @@ This is the maintained source for trainer, developer, and infrastructure handove
 
 Demonstrate PO line selection, serial scanning, incomplete Save progress and resume, delivery-note upload, and the subsequent Quality handoff. Explain that different staff may receive different PO items, but a draft does not reserve ownership of a line and concurrent submissions are checked against current server quantities. Demonstrate multi-item event reservation with Selling/Giveaway purpose, multi-item quarantine-first returns, request detail review, actionable tab counts, and a zero-per-line backorder split. Use only UAT records for training and preserve other testers' in-progress transactions.
 
+### August 28 Recovery Addendum
+
+Use `docs/releases/2026-08-28-CROSS-ROLE-RECOVERY.md` to confirm deployment and verification status before demonstrating this release. Train both reservation entry points as one atomic action: a rejected batch saves nothing; an uncertain response uses **Recover reservation**, not a replacement transaction. For Returns, demonstrate an editable saved draft, a confirmed rejection, and **Recover original result** for a locked unknown outcome. Show that switching users cannot resume another user's draft through the app.
+
+Teach evidence ownership explicitly: attach to the intended record, wait for uploads, remove incorrect attachments, retry only failed files, and verify the saved record. Closing an upload must never put its result on a different inspection. Document uploads remain private and require authorized preview. Request reviewers see items before purpose and open **Audit details** only when investigating identifiers or timestamps.
+
+Scanner practice must include an incorrect bin, wrong product, duplicate serial, and denied camera permission. Manual fallback is explicit input, not proof that a physical scan occurred. Browser-local drafts are not cross-device backups or shared staff assignments. Live command authority and independent approvals remain required after training.
+
 Learners must be able to:
 
 - Identify their role, module, authority, handoffs, and escalation path.
@@ -53,7 +61,7 @@ Use only screenshots from `docs/manual/assets/knowledge-base/` whose binding app
 
 ### Certified training baseline
 
-Training uses 13 task guides, 52 stage screenshots, 11 role simulations, 48 decisions, 96 branches, 27 terminal outcomes, and 321 migrated legacy links. The current registry includes eight source links added on August 28. The original Task 8 certification covered 313 links: its source-model unit trio passed 81 of 81 tests, strict evidence coverage and provenance produced zero warnings and zero errors, and CI attestation verified. That original browser acceptance passed 116 tests with 100 project-conditional skips and zero failures across all eight responsive projects in 19.6 minutes. Its 24 visual-review captures cover light, dark, and print at every certified width; later changes require their own evidence.
+Training uses 13 task guides, 52 stage screenshots, 11 role simulations, 48 decisions, 96 branches, 27 terminal outcomes, and 331 migrated legacy links. The current registry includes eighteen source links added on August 28. The original Task 8 certification covered 313 links: its source-model unit trio passed 81 of 81 tests, strict evidence coverage and provenance produced zero warnings and zero errors, and CI attestation verified. That original browser acceptance passed 116 tests with 100 project-conditional skips and zero failures across all eight responsive projects in 19.6 minutes. Its 24 visual-review captures cover light, dark, and print at every certified width; later changes require their own evidence.
 
 Trainers and handover reviewers must use `docs/manual/index.html` generated from the same 29-source set and may inspect `outputs/handbook-visual-review/` for the responsive evidence. Lint, typecheck, generated-documentation, and release-documentation gates passed. The release record retains the three unrelated existing Procurement lint warnings and the local Node/pnpm engine warning; neither warning changes the learner procedure or grants production approval.
 

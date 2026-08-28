@@ -22,7 +22,7 @@ it('requires an approved amendment identity for excess acceptance', async () => 
   const dialog = screen.getByRole('dialog', { name: /final excess custody disposition/i });
   await user.selectOptions(within(dialog).getByLabelText(/governed outcome/i), 'accepted_amendment');
   await user.type(within(dialog).getByLabelText(/decision reason/i), 'Approved PO line growth covers custody');
-  await user.type(within(dialog).getByLabelText(/evidence url/i), 'evidence/amendment.pdf');
+  await user.type(within(dialog).getByLabelText(/evidence url/i), 'https://example.com/amendment.pdf');
   expect(within(dialog).getByRole('button', { name: /record final disposition/i })).toBeDisabled();
   expect(within(dialog).queryByLabelText(/approved amendment id/i)).not.toBeInTheDocument();
   await user.selectOptions(within(dialog).getByLabelText(/approved quantity amendment/i), 'amendment-1');

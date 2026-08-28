@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
-import { Badge, Card, EmptyState, Field, Icon, Sheet, money, useToast } from '@intra/ui';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { Badge, Card, EmptyState, EvidenceAttachment, useEvidenceAttachment, Field, Icon, Sheet, money, useToast } from '@intra/ui';
 import type {
   FinanceCloseEntry,
   FinanceCloseEvidenceRecordType,
@@ -38,41 +38,144 @@ const EVIDENCE_LABEL: Record<FinanceCloseEvidenceRecordType, string> = {
   event_reconciliation: 'Event reconciliation evidence',
 };
 
-export function FinanceClosePanel({
-  entries,
-  manage,
-  openEvidence,
-  canManage,
-  currentActorId,
-}: {
+interface FinanceClosePanelProps {
   entries: FinanceCloseEntry[];
   manage: (input: ManageFinanceCloseEntryInput) => Promise<FinanceCloseEntry>;
   openEvidence: (entry: FinanceCloseEntry) => Promise<string>;
   canManage: boolean;
   currentActorId?: string;
-}) {
+}
+
+function emptyCloseDraft() {
+  const today = new Date().toISOString().slice(0, 10);
+  return {
+    periodStart: today.slice(0, 8) + '01', periodEnd: today,
+    entryType: 'inventory_valuation' as FinanceCloseEntryType,
+    sourceModule: 'warehouse', sourceReference: '',
+    sourceRecordType: 'purchase_order' as FinanceCloseSourceRecordType, sourceRecordId: '',
+    evidenceRecordType: 'payment_release' as FinanceCloseEvidenceRecordType, evidenceRecordId: '',
+    costCenter: '', amount: 0, reconciliationNote: '',
+  };
+}
+type CloseDraft = ReturnType<typeof emptyCloseDraft>;
+const DRAFT_TTL = 7 * 24 * 60 * 60 * 1000;
+function readCloseDraft(key: string | undefined): { draft: CloseDraft; raw: string } | undefined {
+  if (!key) return;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw || raw.length > 20_000) return;
+    const saved = JSON.parse(raw);
+    if (saved.version !== 1 || !Number.isFinite(saved.savedAt) || saved.savedAt > Date.now()
+      || Date.now() - saved.savedAt > DRAFT_TTL || !saved.draft || typeof saved.draft !== 'object') return;
+    const template = emptyCloseDraft();
+    for (const [field, value] of Object.entries(template)) {
+      const candidate = saved.draft[field];
+      if (typeof candidate !== typeof value || (typeof candidate === 'string' && candidate.length > 4000)) return;
+    }
+    if (!Number.isFinite(saved.draft.amount) || !(saved.draft.entryType in ENTRY_LABEL)
+      || !(saved.draft.sourceRecordType in SOURCE_LABEL) || !(saved.draft.evidenceRecordType in EVIDENCE_LABEL)) return;
+    // Whitelist fields: never recover stored URLs, files, tokens, or extra payload keys.
+    return { raw, draft: Object.fromEntries(Object.keys(template).map((field) => [field, saved.draft[field]])) as CloseDraft };
+  } catch { return; }
+}
+
+export function FinanceClosePanel(props: FinanceClosePanelProps) {
+  return <FinanceClosePanelSession key={`${props.currentActorId ?? 'anonymous'}:${props.canManage}`} {...props} />;
+}
+
+function FinanceClosePanelSession({
+  entries,
+  manage,
+  openEvidence,
+  canManage,
+  currentActorId,
+}: FinanceClosePanelProps) {
   const toast = useToast();
   const [open, setOpen] = useState(false);
   const [workingId, setWorkingId] = useState<string>();
   const [saving, setSaving] = useState(false);
   const [openingEvidenceId, setOpeningEvidenceId] = useState<string>();
-  const today = new Date().toISOString().slice(0, 10);
-  const monthStart = today.slice(0, 8) + '01';
-  const [draft, setDraft] = useState({
-    periodStart: monthStart,
-    periodEnd: today,
-    entryType: 'inventory_valuation' as FinanceCloseEntryType,
-    sourceModule: 'warehouse',
-    sourceReference: '',
-    sourceRecordType: 'purchase_order' as FinanceCloseSourceRecordType,
-    sourceRecordId: '',
-    evidenceRecordType: 'payment_release' as FinanceCloseEvidenceRecordType,
-    evidenceRecordId: '',
-    costCenter: '',
-    amount: 0,
-    evidenceUrl: '',
-    reconciliationNote: '',
-  });
+  const [evidenceLink, setEvidenceLink] = useState<{ id: string; url: string }>();
+  useEffect(() => {
+    if (!evidenceLink) return;
+    const timer = window.setTimeout(() => setEvidenceLink(undefined), 295_000);
+    return () => window.clearTimeout(timer);
+  }, [evidenceLink]);
+  const evidenceOperation = useRef<object | null>(null);
+  useEffect(() => () => { evidenceOperation.current = null; }, []);
+  const [draft, setDraft] = useState(emptyCloseDraft);
+  const savingRef = useRef(false);
+  const attachment = useEvidenceAttachment(`${open}:${draft.sourceRecordType}:${draft.sourceRecordId}:${draft.evidenceRecordType}:${draft.evidenceRecordId}`);
+  const evidenceIdentity = attachment.document?.documentId
+    ? { evidenceRecordType: 'core_document' as const, evidenceRecordId: attachment.document.documentId }
+    : { evidenceRecordType: draft.evidenceRecordType, evidenceRecordId: draft.evidenceRecordId };
+  const requiresAttachment = !evidenceIdentity.evidenceRecordId.trim();
+  const draftKey = currentActorId && canManage ? `intra.finance-close-draft.v1.${encodeURIComponent(currentActorId)}` : undefined;
+  const [recovery, setRecovery] = useState(() => readCloseDraft(draftKey));
+  const revision = useRef(recovery?.raw ?? null);
+  const [draftStatus, setDraftStatus] = useState('');
+  const [draftConflict, setDraftConflict] = useState(false);
+  const empty = useRef(emptyCloseDraft());
+  const dirty = JSON.stringify(draft) !== JSON.stringify(empty.current);
+
+  useEffect(() => {
+    if (!open || !dirty || !draftKey || draftConflict || saving) return;
+    setDraftStatus('Saving browser draft...');
+    const timer = window.setTimeout(() => {
+      try {
+        const existing = localStorage.getItem(draftKey);
+        if (existing !== revision.current && readCloseDraft(draftKey)) {
+          setDraftConflict(true);
+          setDraftStatus('This draft changed in another tab. Resume the saved draft before editing further.');
+          return;
+        }
+        const raw = JSON.stringify({ version: 1, savedAt: Date.now(), draft });
+        if (raw.length > 20_000 || Object.values(draft).some((value) => typeof value === 'string' && value.length > 4000)) {
+          setDraftStatus('Draft is too large to save on this browser. Keep this page open.');
+          return;
+        }
+        localStorage.setItem(draftKey, raw);
+        revision.current = raw;
+        setRecovery({ draft, raw });
+        setDraftStatus('Saved on this browser');
+      } catch { setDraftStatus('Browser draft could not be saved. Keep this page open.'); }
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [open, dirty, draft, draftKey, draftConflict, saving]);
+
+  useEffect(() => {
+    if (!open || (!dirty && !attachment.reference)) return;
+    const protect = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
+    window.addEventListener('beforeunload', protect);
+    return () => window.removeEventListener('beforeunload', protect);
+  }, [open, dirty, attachment.reference]);
+
+  const resumeDraft = () => {
+    const saved = readCloseDraft(draftKey);
+    if (!saved) { setRecovery(undefined); setDraftStatus('No valid browser draft remains.'); return; }
+    revision.current = saved.raw;
+    setDraft(saved.draft);
+    setDraftConflict(false);
+    attachment.clear();
+    setOpen(true);
+  };
+  const discardDraft = () => {
+    try {
+      if (draftKey && localStorage.getItem(draftKey) === revision.current) localStorage.removeItem(draftKey);
+      else if (draftKey && readCloseDraft(draftKey)) {
+        setDraftConflict(true);
+        setDraftStatus('This draft changed in another tab. Resume it before discarding.');
+        return;
+      }
+      revision.current = null;
+      setRecovery(undefined);
+      setDraft(emptyCloseDraft());
+      attachment.clear();
+      setDraftStatus('');
+      setDraftConflict(false);
+      setOpen(false);
+    } catch { setDraftStatus('Browser draft could not be discarded.'); }
+  };
 
   const transition = async (
     entry: FinanceCloseEntry,
@@ -107,42 +210,60 @@ export function FinanceClosePanel({
   };
 
   const retrieveEvidence = async (entry: FinanceCloseEntry) => {
+    const operation = {};
+    evidenceOperation.current = operation;
+    setEvidenceLink(undefined);
     setOpeningEvidenceId(entry.id);
     try {
       const evidenceUrl = await openEvidence(entry);
-      window.open(evidenceUrl, '_blank', 'noopener,noreferrer');
+      const parsed = new URL(evidenceUrl);
+      if (parsed.protocol !== 'https:' || parsed.username || parsed.password) throw new Error('Invalid evidence preview.');
+      if (evidenceOperation.current === operation) {
+        setEvidenceLink({ id: entry.id, url: evidenceUrl });
+        window.open(evidenceUrl, '_blank', 'noopener,noreferrer');
+      }
     } catch (cause) {
+      if (evidenceOperation.current !== operation) return;
       toast.error(
         cause instanceof Error ? cause.message : 'Event reconciliation evidence could not be opened.',
       );
     } finally {
-      setOpeningEvidenceId(undefined);
+      if (evidenceOperation.current === operation) setOpeningEvidenceId(undefined);
     }
   };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    const validation = validateFinanceCloseEntry({ action: 'save', ...draft });
+    if (savingRef.current || draftConflict || !attachment.canSubmit(requiresAttachment)) return;
+    const validation = validateFinanceCloseEntry({ action: 'save', ...draft, ...evidenceIdentity, evidenceUrl: attachment.reference });
     if (validation.length) {
       toast.error(validation[0] ?? 'Finance close entry is incomplete.');
       return;
     }
+    savingRef.current = true;
     setSaving(true);
     try {
       await manage({
         action: 'save',
         ...draft,
+        ...evidenceIdentity,
+        evidenceUrl: attachment.reference,
         costCenter: draft.costCenter || undefined,
       });
       toast.success('Finance close entry prepared for independent posting.');
       setOpen(false);
+      try {
+        if (draftKey && localStorage.getItem(draftKey) === revision.current) localStorage.removeItem(draftKey);
+        revision.current = null;
+        setRecovery(undefined);
+        setDraftStatus('');
+      } catch { setDraftStatus('Entry prepared, but its browser draft could not be removed.'); }
       setDraft((current) => ({
         ...current,
         sourceReference: '',
         sourceRecordId: '',
         evidenceRecordId: '',
         amount: 0,
-        evidenceUrl: '',
         reconciliationNote: '',
       }));
     } catch (cause) {
@@ -150,6 +271,7 @@ export function FinanceClosePanel({
         cause instanceof Error ? cause.message : 'Finance close entry could not be prepared.',
       );
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -171,12 +293,18 @@ export function FinanceClosePanel({
           <button
             type="button"
             className="btn-primary w-full sm:w-auto"
-            onClick={() => setOpen(true)}
+            onClick={() => { if (recovery) resumeDraft(); else setOpen(true); }}
           >
             <Icon name="plus" className="h-4 w-4" /> Prepare close entry
           </button>
         )}
       </div>
+
+      {canManage && recovery && !open && <div className="flex flex-wrap items-center gap-2 border-y border-line py-2">
+        <span className="text-sm text-muted">Finance close draft saved on this browser</span>
+        <button type="button" className="btn-outline btn-sm" onClick={resumeDraft}>Resume draft</button>
+        <button type="button" className="btn-ghost btn-sm" onClick={discardDraft}>Discard draft</button>
+      </div>}
 
       {entries.length === 0 ? (
         <EmptyState
@@ -219,7 +347,7 @@ export function FinanceClosePanel({
                 </div>
                 {canManage && (
                   <div className="flex flex-wrap justify-end gap-2">
-                    {entry.sourceRecordType === 'event_reconciliation' && (
+                    {(entry.sourceRecordType === 'event_reconciliation' || entry.evidenceUrl?.startsWith('evidence://')) && (
                       <button
                         type="button"
                         className="btn-ghost btn-sm"
@@ -230,6 +358,9 @@ export function FinanceClosePanel({
                         {openingEvidenceId === entry.id ? 'Opening...' : 'Open evidence'}
                       </button>
                     )}
+                    {evidenceLink?.id === entry.id && <a href={evidenceLink.url} target="_blank" rel="noopener noreferrer" className="btn-ghost btn-sm">
+                      <Icon name="download" className="h-4 w-4" /> Open document
+                    </a>}
                     {entry.status === 'ready' && (
                       <button
                         type="button"
@@ -326,7 +457,7 @@ export function FinanceClosePanel({
       {canManage && (
         <Sheet
           open={open}
-          onOpenChange={setOpen}
+          onOpenChange={(next) => { if (!savingRef.current) setOpen(next); }}
           title="Prepare Finance close entry"
           description="Attach source evidence now. Independent posting is enforced after preparation."
           footer={
@@ -335,7 +466,7 @@ export function FinanceClosePanel({
               form="finance-close-form"
               className="btn-primary w-full"
               disabled={
-                saving || validateFinanceCloseEntry({ action: 'save', ...draft }).length > 0
+                saving || draftConflict || !attachment.canSubmit(requiresAttachment) || validateFinanceCloseEntry({ action: 'save', ...draft, ...evidenceIdentity, evidenceUrl: attachment.reference }).length > 0
               }
             >
               {saving ? 'Preparing...' : 'Prepare for posting'}
@@ -347,6 +478,12 @@ export function FinanceClosePanel({
             className="space-y-4"
             onSubmit={(event) => void submit(event)}
           >
+            {draftKey && <div className="space-y-1 border-b border-line pb-3">
+              <p role="status" className="text-xs text-muted">{draftStatus || 'Browser-only draft recovery; expires after 7 days.'}</p>
+              <p className="text-xs text-muted">Evidence links are not saved in browser drafts.</p>
+              {draftConflict && <button type="button" className="btn-outline btn-sm" onClick={resumeDraft}>Resume saved draft</button>}
+              <button type="button" className="btn-ghost btn-sm" disabled={saving} onClick={discardDraft}>Discard draft</button>
+            </div>}
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Period start" htmlFor="close-period-start">
                 <input
@@ -420,7 +557,8 @@ export function FinanceClosePanel({
                 <select
                   id="close-evidence-record-type"
                   className="input"
-                  value={draft.evidenceRecordType}
+                  value={evidenceIdentity.evidenceRecordType}
+                  disabled={saving || Boolean(attachment.document?.documentId)}
                   onChange={(event) =>
                     setDraft((current) => ({
                       ...current,
@@ -439,7 +577,8 @@ export function FinanceClosePanel({
                 <input
                   id="close-evidence-record-id"
                   className="input"
-                  value={draft.evidenceRecordId}
+                  value={evidenceIdentity.evidenceRecordId}
+                  disabled={saving || Boolean(attachment.document?.documentId)}
                   onChange={(event) =>
                     setDraft((current) => ({
                       ...current,
@@ -530,21 +669,12 @@ export function FinanceClosePanel({
                 />
               </Field>
             </div>
-            <Field label="Evidence URL" htmlFor="close-evidence">
-              <input
-                id="close-evidence"
-                className="input"
-                type="url"
-                value={draft.evidenceUrl}
-                onChange={(event) =>
-                  setDraft((current) => ({
-                    ...current,
-                    evidenceUrl: event.target.value,
-                  }))
-                }
-                required
-              />
-            </Field>
+            <EvidenceAttachment id="close-evidence" attachment={attachment} disabled={saving || !draft.sourceRecordId.trim()}
+              recordLabel={draft.sourceReference || draft.sourceRecordId || 'Selected Finance source'}
+              uploadScope={draft.sourceRecordType !== 'event_reconciliation'
+                ? { sourceType: draft.sourceRecordType, sourceId: draft.sourceRecordId } : undefined}
+              unavailableReason={draft.sourceRecordType === 'event_reconciliation'
+                ? 'Event settlement evidence is attached through Event reconciliation.' : undefined} />
             <Field label="Reconciliation note" htmlFor="close-note">
               <textarea
                 id="close-note"

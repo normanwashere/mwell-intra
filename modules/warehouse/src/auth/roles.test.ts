@@ -36,10 +36,12 @@ describe("roles", () => {
     expect(can("marketing", "view_finance")).toBe(false);
   });
 
-  it("keeps allocation with warehouse custody roles", () => {
+  it("allows Marketing demand reservations without granting physical custody", () => {
     expect(can("warehouse_operator", "reserve_allocate")).toBe(true);
     expect(can("operations", "reserve_allocate")).toBe(false);
-    expect(can("marketing", "reserve_allocate")).toBe(false);
+    expect(can("marketing", "reserve_allocate")).toBe(true);
+    expect(can("marketing", "issue_items")).toBe(false);
+    expect(can("marketing", "receive_stock")).toBe(false);
     expect(can("business_unit", "reserve_allocate")).toBe(false);
     expect(can("logistics_supervisor", "reserve_allocate")).toBe(true);
   });

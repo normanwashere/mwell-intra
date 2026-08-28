@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useWarehouse } from "@/app/store";
 import { toStockState } from "@/data/repository";
 import {
@@ -14,6 +14,35 @@ import {
 } from "@/components/ui";
 import { Icon } from "@/components/Icon";
 import { expiryStatusForProduct } from "@/components/ExpiryStatus";
+import type { ReserveBatchInput } from "@intra/data-kit";
+
+type ReservationCommand = Omit<ReserveBatchInput, "actor">;
+
+function loadCommand(key: string): ReservationCommand | null {
+  const raw = window.localStorage.getItem(key);
+  if (!raw) return null;
+  const value = JSON.parse(raw) as ReservationCommand;
+  if (
+    !value ||
+    typeof value.eventId !== "string" ||
+    !/^[A-Za-z0-9_-]{12,128}$/.test(value.idempotencyKey) ||
+    !Array.isArray(value.lines) ||
+    !value.lines.length ||
+    value.lines.some(
+      (line) =>
+        !line ||
+        typeof line.productId !== "string" ||
+        !Number.isSafeInteger(line.quantity) ||
+        line.quantity < 1 ||
+        typeof line.promotional !== "boolean",
+    )
+  ) {
+    throw new Error(
+      "Saved reservation recovery data is invalid. Contact support before creating another reservation.",
+    );
+  }
+  return value;
+}
 
 type ReservationLine = {
   id: number;
@@ -31,18 +60,71 @@ const emptyLine = (id: number): ReservationLine => ({
 
 export function AllocationReservationSheet({
   onClose,
+  selectedEventId,
 }: {
   onClose: () => void;
+  selectedEventId?: string;
 }) {
-  const { data, reserve, can } = useWarehouse();
+  const { source, identityId, data } = useWarehouse();
+  const recoveryKey = `warehouse.reservation.v1:${source}:${identityId}`;
+  if (!data) return null;
+  return (
+    <ReservationEditor
+      key={`${recoveryKey}:${selectedEventId ?? ""}`}
+      {...{ onClose, selectedEventId, recoveryKey }}
+    />
+  );
+}
+
+function ReservationEditor({
+  onClose,
+  selectedEventId,
+  recoveryKey,
+}: {
+  onClose: () => void;
+  selectedEventId?: string;
+  recoveryKey: string;
+}) {
+  const { data, reserveBatch, can } = useWarehouse();
   const toast = useToast();
-  const [eventId, setEventId] = useState(data?.events[0]?.id ?? "");
-  const [lines, setLines] = useState<ReservationLine[]>([emptyLine(1)]);
-  const nextId = useRef(2);
+  const [recovery] = useState(() => {
+    try {
+      return { command: loadCommand(recoveryKey), error: null };
+    } catch (cause) {
+      return {
+        command: null,
+        error:
+          cause instanceof Error
+            ? cause.message
+            : "Reservation recovery storage is unavailable.",
+      };
+    }
+  });
+  const [pending, setPending] = useState<ReservationCommand | null>(
+    recovery.command,
+  );
+  const [eventId, setEventId] = useState(
+    recovery.command?.eventId ?? selectedEventId ?? data?.events[0]?.id ?? "",
+  );
+  const [lines, setLines] = useState<ReservationLine[]>(
+    () =>
+      recovery.command?.lines.map((line, index) => ({
+        id: index + 1,
+        productId: line.productId,
+        quantity: line.quantity,
+        purpose: line.promotional ? "giveaway" : "selling",
+      })) ?? [emptyLine(1)],
+  );
+  const nextId = useRef(lines.length + 1);
   const saving = useRef(false);
   const [busy, setBusy] = useState(false);
-  const [locked, setLocked] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(recovery.error);
+  const errorSummary = useRef<HTMLParagraphElement>(null);
+  const [submissionAttempt, setSubmissionAttempt] = useState(0);
+  useEffect(() => {
+    if (error) errorSummary.current?.focus();
+  }, [error, submissionAttempt]);
+  const locked = Boolean(pending || recovery.error);
   if (!data) return null;
 
   const updateLine = (id: number, patch: Partial<ReservationLine>) => {
@@ -53,72 +135,104 @@ export function AllocationReservationSheet({
   };
 
   const submit = async () => {
-    if (saving.current || locked || !can("reserve_allocate")) return;
+    if (saving.current || recovery.error || !can("reserve_allocate")) return;
+    setSubmissionAttempt((attempt) => attempt + 1);
     setError(null);
-    if (!data.events.some((event) => event.id === eventId)) {
-      setError("Select an event.");
-      return;
-    }
-    const totals = new Map<string, number>();
-    for (const [index, line] of lines.entries()) {
-      if (!data.products.some((product) => product.id === line.productId)) {
-        setError(`Line ${index + 1}: select a product.`);
+    if (!pending) {
+      if (!data.events.some((event) => event.id === eventId)) {
+        setError("Select an event.");
         return;
       }
-      if (!Number.isSafeInteger(line.quantity) || line.quantity < 1) {
-        setError(
-          `Line ${index + 1}: quantity must be a positive whole number.`,
+      const totals = new Map<string, number>();
+      for (const [index, line] of lines.entries()) {
+        if (!data.products.some((product) => product.id === line.productId)) {
+          setError(`Line ${index + 1}: select a product.`);
+          return;
+        }
+        if (!Number.isSafeInteger(line.quantity) || line.quantity < 1) {
+          setError(
+            `Line ${index + 1}: quantity must be a positive whole number.`,
+          );
+          return;
+        }
+        totals.set(
+          line.productId,
+          (totals.get(line.productId) ?? 0) + line.quantity,
         );
-        return;
       }
-      totals.set(
-        line.productId,
-        (totals.get(line.productId) ?? 0) + line.quantity,
-      );
-    }
-    for (const [productId, quantity] of totals) {
-      const result = validateReservation(
-        toStockState(data),
-        data.allocations,
-        productId,
-        quantity,
-      );
-      if (!result.ok) {
-        setError(
-          `${data.products.find((product) => product.id === productId)?.name}: ${result.error}`,
+      for (const [productId, quantity] of totals) {
+        const result = validateReservation(
+          toStockState(data),
+          data.allocations,
+          productId,
+          quantity,
         );
-        return;
+        if (!result.ok) {
+          setError(
+            `${data.products.find((product) => product.id === productId)?.name}: ${result.error}`,
+          );
+          return;
+        }
       }
     }
 
     saving.current = true;
     setBusy(true);
-    setLocked(true);
-    let saved = 0;
     try {
-      // This API has no stable retry key. Keep uncertain drafts locked until
-      // the user closes them and reconciles the recorded allocations.
-      for (const line of lines) {
-        const ok = await reserve({
+      if (
+        pending &&
+        window.localStorage.getItem(recoveryKey) !== JSON.stringify(pending)
+      ) {
+        throw new Error(
+          "Reservation recovery changed in another tab. Close and reopen this sheet to load the latest command.",
+        );
+      }
+      const command = pending ??
+        loadCommand(recoveryKey) ?? {
+          idempotencyKey: `reservation-${crypto.randomUUID()}`,
           eventId,
+          lines: lines.map((line) => ({
+            productId: line.productId,
+            quantity: line.quantity,
+            promotional: line.purpose === "giveaway",
+          })),
+        };
+      // Persist the immutable intent before dispatch. An uncertain response may
+      // only replay this payload, including after navigation or a reload.
+      const savedCommand = JSON.stringify(command);
+      window.localStorage.setItem(recoveryKey, savedCommand);
+      setPending(command);
+      setEventId(command.eventId);
+      setLines(
+        command.lines.map((line, index) => ({
+          id: index + 1,
           productId: line.productId,
           quantity: line.quantity,
-          promotional: line.purpose === "giveaway",
-        });
-        if (!ok) {
-          setError(
-            `${saved} line(s) confirmed saved. Remaining lines are unconfirmed. Close this draft and check allocations before creating another reservation.`,
-          );
-          return;
-        }
-        saved++;
-        setLines((current) => current.filter((item) => item.id !== line.id));
+          purpose: line.promotional ? "giveaway" : "selling",
+        })),
+      );
+      nextId.current = command.lines.length + 1;
+      const result = await reserveBatch(command);
+      // A late response belongs to this command, not a newer tab's intent.
+      if (window.localStorage.getItem(recoveryKey) === savedCommand) {
+        window.localStorage.removeItem(recoveryKey);
+      } else if (result.status === "rejected") {
+        throw new Error(
+          "Reservation recovery changed in another tab. Close and reopen this sheet to load the latest command.",
+        );
       }
-      toast.success(`Reserved ${saved} product line${saved === 1 ? "" : "s"}`);
+      if (result.status === "rejected") {
+        setPending(null);
+        setError(`Nothing was reserved. ${result.error}`);
+        return;
+      }
+      toast.success(
+        `Reserved ${result.allocations.length} product line${result.allocations.length === 1 ? "" : "s"}`,
+      );
       onClose();
     } catch (cause) {
       setError(
-        `${saved} line(s) confirmed saved. Remaining lines are unconfirmed. Close this draft and check allocations before creating another reservation. ${cause instanceof Error ? cause.message : "Reservation response unavailable."}`,
+        `Reservation not confirmed. Recover the original reservation before starting another. ${cause instanceof Error ? cause.message : "Reservation response unavailable."}`,
       );
     } finally {
       saving.current = false;
@@ -135,29 +249,55 @@ export function AllocationReservationSheet({
       title="New reservation"
       description="Event stock reservation"
       footer={
-        <button
-          type="button"
-          className="btn-primary w-full"
-          disabled={
-            busy ||
-            locked ||
-            !can("reserve_allocate") ||
-            !eventId ||
-            lines.length === 0 ||
-            lines.some((line) => !line.productId)
-          }
-          onClick={() => void submit()}
-        >
-          {busy ? "Reserving..." : "Reserve"}
-        </button>
+        <div className="min-w-0 w-full space-y-2">
+          {error && (
+            <p
+              ref={errorSummary}
+              tabIndex={-1}
+              role="alert"
+              className="break-words text-sm text-rose-600 dark:text-rose-300"
+            >
+              {error}
+            </p>
+          )}
+          <button
+            type="button"
+            className="btn-primary w-full"
+            disabled={
+              busy ||
+              Boolean(recovery.error) ||
+              !can("reserve_allocate") ||
+              !eventId ||
+              lines.length === 0 ||
+              lines.some((line) => !line.productId)
+            }
+            onClick={() => void submit()}
+          >
+            {busy
+              ? "Reserving..."
+              : pending
+                ? "Recover reservation"
+                : "Reserve"}
+          </button>
+        </div>
       }
     >
+      {pending && (
+        <p
+          role="status"
+          className="mb-3 text-sm text-amber-800 dark:text-amber-200"
+        >
+          An earlier reservation is awaiting confirmation. Its event and product
+          lines are locked until recovery completes.
+        </p>
+      )}
       <fieldset disabled={busy || locked} className="min-w-0 space-y-4">
         <Field label="Event" htmlFor="alloc-event">
           <select
             id="alloc-event"
             className="input"
             value={eventId}
+            disabled={Boolean(selectedEventId)}
             onChange={(event) => setEventId(event.target.value)}
           >
             <option value="">Select event</option>
@@ -279,11 +419,6 @@ export function AllocationReservationSheet({
         >
           <Icon name="plus" className="h-4 w-4" /> Add product
         </button>
-        {error && (
-          <p role="alert" className="text-sm text-rose-600 dark:text-rose-300">
-            {error}
-          </p>
-        )}
       </fieldset>
     </Sheet>
   );

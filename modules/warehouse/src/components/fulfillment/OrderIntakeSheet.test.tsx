@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Product } from "@intra/data-kit";
 import { describe, expect, it, vi } from "vitest";
@@ -59,6 +59,81 @@ async function selectThirdPartySource() {
 }
 
 describe("OrderIntakeSheet third-party event intake", () => {
+  function mountDraft(create = vi.fn().mockResolvedValue(false), role: Role = "operations") {
+    const view = renderWithProviders(<OrderIntakeSheet open onOpenChange={vi.fn()} products={[product]} locations={[warehouse, externalLocation]} events={events} create={create} />, { role });
+    return { ...view, create };
+  }
+
+  it("resumes a long order only for its owner and discards it durably", async () => {
+    const user = userEvent.setup();
+    const first = mountDraft();
+    await user.type(await screen.findByLabelText("Order reference"), "DRAFT-OWNER-A");
+    expect(screen.getByText(/drafts are stored only in this browser/i)).toHaveTextContent(/customer addresses/i);
+    await user.type(screen.getByLabelText("Order instructions"), "Keep both sets together");
+    await user.type(screen.getByLabelText("Shipping fee"), "120");
+    first.unmount();
+    const other = mountDraft(undefined, "warehouse_operator");
+    expect(await screen.findByLabelText("Order reference")).toHaveValue("");
+    expect(screen.queryByRole("button", { name: "Resume draft" })).not.toBeInTheDocument();
+    other.unmount();
+    const owner = mountDraft();
+    await user.click(await screen.findByRole("button", { name: "Resume draft" }));
+    expect(screen.getByLabelText("Order reference")).toHaveValue("DRAFT-OWNER-A");
+    expect(screen.getByLabelText("Order instructions")).toHaveValue("Keep both sets together");
+    expect(screen.getByLabelText("Shipping fee")).toHaveValue(120);
+    expect(owner.create).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Discard draft" }));
+    expect(screen.getByLabelText("Order reference")).toHaveValue("");
+    owner.unmount();
+    mountDraft();
+    expect(await screen.findByLabelText("Order reference")).toHaveValue("");
+    expect(screen.queryByRole("button", { name: "Resume draft" })).not.toBeInTheDocument();
+  });
+
+  it.each(["false", "throw"])("preserves a failed %s draft, then clears it only after confirmed success", async (failure) => {
+    const user = userEvent.setup();
+    const create = vi.fn().mockImplementationOnce(async () => {
+      if (failure === "throw") throw new Error("Connection lost");
+      return false;
+    }).mockResolvedValue(true);
+    const first = mountDraft(create);
+    await user.selectOptions(await screen.findByLabelText("Demand source"), "event");
+    await user.type(screen.getByLabelText("Order reference"), "PRESERVE-ME");
+    await user.selectOptions(screen.getByLabelText("Event"), "evt-makati");
+    await user.click(screen.getByRole("button", { name: "Create demand" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Create demand" })).toBeEnabled());
+    first.unmount();
+    const retry = mountDraft(create);
+    await user.click(await screen.findByRole("button", { name: "Resume draft" }));
+    expect(screen.getByLabelText("Order reference")).toHaveValue("PRESERVE-ME");
+    await user.click(screen.getByRole("button", { name: "Create demand" }));
+    await screen.findByText("Demand added to the fulfillment queue.");
+    retry.unmount();
+    mountDraft(create);
+    expect(await screen.findByLabelText("Order reference")).toHaveValue("");
+    expect(screen.queryByRole("button", { name: "Resume draft" })).not.toBeInTheDocument();
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+
+  it("freezes order edits and blocks duplicate submission while saving", async () => {
+    let finish!: (ok: boolean) => void;
+    const create = vi.fn(() => new Promise<boolean>((resolve) => { finish = resolve; }));
+    mountDraft(create);
+    const user = userEvent.setup();
+    await user.type(await screen.findByLabelText("Order reference"), "ONE-INTENT");
+    const form = screen.getByLabelText("Order reference").closest("form")!;
+    fireEvent.submit(form);
+    fireEvent.submit(form);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText("Order reference")).toBeDisabled();
+    const savingLeave = new Event("beforeunload", { cancelable: true });
+    fireEvent(window, savingLeave);
+    expect(savingLeave.defaultPrevented).toBe(true);
+    await act(async () => finish(false));
+    const savedLeave = new Event("beforeunload", { cancelable: true });
+    fireEvent(window, savedLeave);
+    expect(savedLeave.defaultPrevented).toBe(false);
+  });
   it("gives Operations a reachable event escalation instead of restricted location management", async () => {
     const create = renderSheet([warehouse]);
     const dialog = await selectThirdPartySource();

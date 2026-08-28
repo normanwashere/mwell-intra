@@ -37,6 +37,7 @@ export function HoldReleaseSheet({
   const [reason, setReason] = useState('');
   const [evidenceUrls, setEvidenceUrls] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [evidenceBusy, setEvidenceBusy] = useState(false);
   const [supplierId, setSupplierId] = useState('');
   const [reference, setReference] = useState('');
   const [vendorReason, setVendorReason] = useState('');
@@ -53,15 +54,15 @@ export function HoldReleaseSheet({
     setVendorEvidenceUrls([]);
     setVendorEvidenceUrl('');
     setReviewMode(mode === 'vendor_return' ? 'vendor_return' : 'release');
-  }, [defaultSupplierId, hold, mode]);
+  }, [defaultSupplierId, hold?.id, mode]);
 
   const selfRelease = Boolean(hold && hold.createdBy === actor);
-  const invalid = !hold || selfRelease || !reason.trim() || evidenceUrls.length === 0;
-  const vendorInvalid = !hold || selfRelease || !supplierId || !reference.trim()
+  const invalid = !hold || evidenceBusy || selfRelease || !reason.trim() || evidenceUrls.length === 0;
+  const vendorInvalid = !hold || evidenceBusy || selfRelease || !supplierId || !reference.trim()
     || !vendorReason.trim() || (vendorEvidenceUrls.length === 0 && !vendorEvidenceUrl.trim());
 
   const release = async () => {
-    if (!hold || invalid) return;
+    if (!hold || invalid || submitting) return;
     setSubmitting(true);
     try {
       const ok = await onRelease({
@@ -78,7 +79,7 @@ export function HoldReleaseSheet({
   };
 
   const createVendorReturn = async () => {
-    if (!hold || vendorInvalid) return;
+    if (!hold || vendorInvalid || submitting) return;
     setSubmitting(true);
     try {
       const ok = await (mode === 'vendor_return' || !onRejectToVendor ? onCreateVendorReturn : onRejectToVendor)({
@@ -98,7 +99,7 @@ export function HoldReleaseSheet({
   return (
     <Sheet
       open={Boolean(hold)}
-      onOpenChange={onOpenChange}
+      onOpenChange={(open) => { if (!submitting) onOpenChange(open); }}
       title="Review inventory hold"
       description={hold ? `${productName} · ${hold.quantity} unit(s)` : undefined}
       footer={
@@ -157,7 +158,7 @@ export function HoldReleaseSheet({
               <Field label="Vendor return reason" htmlFor="vendor-return-reason">
                 <textarea id="vendor-return-reason" className="input min-h-24 resize-y" value={vendorReason} onChange={(event) => setVendorReason(event.target.value)} />
               </Field>
-              <EvidenceCapture onChange={setVendorEvidenceUrls} label="Attach vendor return evidence" />
+              <EvidenceCapture reference={`hold/${hold.id}/vendor-return`} value={vendorEvidenceUrls} onChange={setVendorEvidenceUrls} onBusyChange={setEvidenceBusy} label="Attach vendor return evidence" />
               <Field label="Vendor return evidence URL" htmlFor="vendor-return-evidence-url">
                 <input id="vendor-return-evidence-url" className="input" value={vendorEvidenceUrl} onChange={(event) => setVendorEvidenceUrl(event.target.value)} />
               </Field>
@@ -172,7 +173,7 @@ export function HoldReleaseSheet({
                   onChange={(event) => setReason(event.target.value)}
                 />
               </Field>
-              <EvidenceCapture onChange={setEvidenceUrls} label="Attach release evidence" />
+              <EvidenceCapture reference={`hold/${hold.id}/release`} value={evidenceUrls} onChange={setEvidenceUrls} onBusyChange={setEvidenceBusy} label="Attach release evidence" />
             </>
           )}
         </div>

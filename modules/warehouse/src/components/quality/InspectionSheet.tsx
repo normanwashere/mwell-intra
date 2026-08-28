@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useLayoutEffect, useState } from 'react';
 import type { InspectQualityInput, QualityDisposition } from '@intra/data-kit';
 import { EvidenceCapture } from '@/components/camera/EvidenceCapture';
 import { Field, Sheet } from '@/components/ui';
@@ -43,22 +43,25 @@ export function InspectionSheet({
   const [reason, setReason] = useState('');
   const [evidenceUrls, setEvidenceUrls] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [evidenceBusy, setEvidenceBusy] = useState(false);
+  const targetKey = target ? JSON.stringify([target.sourceType, target.sourceId, target.productId, target.binId, target.lotId, target.serialNumber, target.quantity]) : 'closed';
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!target) return;
     setDisposition('accepted');
     setReason('');
     setEvidenceUrls([]);
-  }, [target]);
+    setEvidenceBusy(false);
+  }, [targetKey]);
 
   const reasonRequired = disposition !== 'accepted';
   const invalid =
-    !target ||
+    !target || evidenceBusy ||
     (reasonRequired && !reason.trim()) ||
     (requiresEvidence && evidenceUrls.length === 0);
 
   const submit = async () => {
-    if (!target || invalid) return;
+    if (!target || invalid || submitting) return;
     setSubmitting(true);
     try {
       const ok = await onSubmit({
@@ -83,7 +86,7 @@ export function InspectionSheet({
   return (
     <Sheet
       open={Boolean(target)}
-      onOpenChange={onOpenChange}
+      onOpenChange={(open) => { if (!submitting) onOpenChange(open); }}
       title="Inspect stock"
       description={target ? `${target.productName} · ${target.quantity} unit(s)${target.serialNumber ? ` · Serial ${target.serialNumber}` : ''}` : undefined}
       footer={
@@ -120,7 +123,7 @@ export function InspectionSheet({
             />
           </Field>
         )}
-        <EvidenceCapture onChange={setEvidenceUrls} label="Attach inspection evidence" />
+        <EvidenceCapture reference={`inspection/${encodeURIComponent(targetKey)}`} value={evidenceUrls} onChange={setEvidenceUrls} onBusyChange={setEvidenceBusy} label="Attach inspection evidence" />
         {requiresEvidence && evidenceUrls.length === 0 && (
           <p className="text-xs font-medium text-amber-700 dark:text-amber-300" role="status">
             This receiving route requires evidence before inspection can be submitted.

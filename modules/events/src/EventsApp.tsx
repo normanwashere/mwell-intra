@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSession } from "@intra/auth";
 import {
   Badge,
   Card,
   EmptyState,
+  EvidenceAttachment,
+  useEvidenceAttachment,
   Field,
   HeroChipButton,
   Icon,
@@ -119,6 +121,21 @@ export function EventsApp({
   const [fulfillmentOpen, setFulfillmentOpen] = useState(false);
   const [reconciliationOpen, setReconciliationOpen] = useState(false);
   const [openingEvidence, setOpeningEvidence] = useState(false);
+  const [evidenceLink, setEvidenceLink] = useState('');
+  useEffect(() => {
+    if (!evidenceLink) return;
+    const timer = window.setTimeout(() => setEvidenceLink(''), 295_000);
+    return () => window.clearTimeout(timer);
+  }, [evidenceLink]);
+  const evidenceOperation = useRef<object | null>(null);
+  const reconciliationSaving = useRef(false);
+  useEffect(() => {
+    setReconciliationOpen(false);
+    setOpeningEvidence(false);
+    setEvidenceLink('');
+    evidenceOperation.current = null;
+    return () => { evidenceOperation.current = null; };
+  }, [eventId, profile?.id]);
   const [reconciliationErrors, setReconciliationErrors] = useState<
     Record<string, string>
   >({});
@@ -166,6 +183,10 @@ export function EventsApp({
   const today = new Date().toISOString().slice(0, 10);
   const selectedDepartment = data.departments?.find(
     (department) => department.code === fulfillment.department,
+  );
+  const reconciliationAttachment = useEvidenceAttachment(
+    `${profile?.id ?? 'signed-out'}:${eventId}:${reconciliationOpen}:${reconciliationAction}`,
+    reconciliationOpen ? reconciliationDraft.evidenceUrl : '',
   );
 
   if (sessionLoading || (profile && loading)) {
@@ -359,9 +380,9 @@ export function EventsApp({
   };
 
   const submitReconciliation = async () => {
-    if (!selectedEvent) return;
+    if (!selectedEvent || saving || reconciliationSaving.current || !reconciliationAttachment.canSubmit(reconciliationAction !== 'save')) return;
     const validation = validateEventReconciliationTransition(
-      { action: reconciliationAction, ...reconciliationDraft },
+      { action: reconciliationAction, ...reconciliationDraft, evidenceUrl: reconciliationAttachment.reference },
       selectedEvent.issuedUnits,
     );
     setReconciliationErrors(validation);
@@ -373,6 +394,7 @@ export function EventsApp({
       ]);
       return;
     }
+    reconciliationSaving.current = true;
     setSaving(true);
     try {
       await saveReconciliation({
@@ -380,6 +402,7 @@ export function EventsApp({
         action: reconciliationAction,
         expectedUpdatedAt: reconciliation?.updatedAt,
         ...reconciliationDraft,
+        evidenceUrl: reconciliationAttachment.reference,
       });
       toast.success(
         reconciliationAction === "approve"
@@ -398,23 +421,33 @@ export function EventsApp({
           : "Event reconciliation could not be saved.",
       );
     } finally {
+      reconciliationSaving.current = false;
       setSaving(false);
     }
   };
   const openEvidence = async () => {
     if (!selectedEvent || !reconciliation?.evidenceUrl) return;
+    const operation = {};
+    evidenceOperation.current = operation;
+    setEvidenceLink('');
     setOpeningEvidence(true);
     try {
       const evidenceUrl = await openReconciliationEvidence(selectedEvent.id);
-      window.open(evidenceUrl, "_blank", "noopener,noreferrer");
+      const parsed = new URL(evidenceUrl);
+      if (parsed.protocol !== 'https:' || parsed.username || parsed.password) throw new Error('Invalid evidence preview.');
+      if (evidenceOperation.current === operation) {
+        setEvidenceLink(evidenceUrl);
+        window.open(evidenceUrl, "_blank", "noopener,noreferrer");
+      }
     } catch (cause) {
+      if (evidenceOperation.current !== operation) return;
       toast.error(
         cause instanceof Error
           ? cause.message
           : "Event reconciliation evidence could not be opened.",
       );
     } finally {
-      setOpeningEvidence(false);
+      if (evidenceOperation.current === operation) setOpeningEvidence(false);
     }
   };
   if (eventId) {
@@ -621,6 +654,9 @@ export function EventsApp({
                 {openingEvidence ? "Opening..." : "Open evidence"}
               </button>
             )}
+            {evidenceLink && <a href={evidenceLink} target="_blank" rel="noopener noreferrer" className="btn-outline">
+              <Icon name="download" className="h-4 w-4" /> Open document
+            </a>}
             {mayManage && reconciliation?.status !== "approved" && (
               <>
                 <button
@@ -740,7 +776,7 @@ export function EventsApp({
             <button
               type="button"
               className="btn-primary w-full"
-              disabled={saving}
+              disabled={saving || !reconciliationAttachment.canSubmit(reconciliationAction !== 'save')}
               onClick={() => void submitReconciliation()}
             >
               {saving
@@ -845,31 +881,9 @@ export function EventsApp({
                 required={reconciliationAction === "approve"}
               />
             </Field>
-            <Field
-              label="Evidence URL"
-              htmlFor="reconciliation-evidence"
-              error={reconciliationErrors.evidenceUrl}
-            >
-              <input
-                id="reconciliation-evidence"
-                className="input"
-                type="url"
-                value={reconciliationDraft.evidenceUrl}
-                disabled={reconciliationAction === "approve"}
-                aria-invalid={Boolean(reconciliationErrors.evidenceUrl)}
-                onChange={(event) => {
-                  setReconciliationDraft((current) => ({
-                    ...current,
-                    evidenceUrl: event.target.value,
-                  }));
-                  setReconciliationErrors((current) => ({
-                    ...current,
-                    evidenceUrl: "",
-                  }));
-                }}
-                required={reconciliationAction !== "save"}
-              />
-            </Field>
+            <EvidenceAttachment id="reconciliation-evidence" attachment={reconciliationAttachment}
+              recordLabel={selectedEvent.name} disabled={saving || reconciliationAction === 'approve'}
+              uploadScope={reconciliationAction !== 'approve' ? { sourceType: 'event_reconciliation', sourceId: selectedEvent.id } : undefined} />
             <Field label="Reconciliation note" htmlFor="reconciliation-note">
               <textarea
                 id="reconciliation-note"

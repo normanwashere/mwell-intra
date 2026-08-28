@@ -274,6 +274,7 @@ export function ReceivingPageSurface({
   );
   const [exceptionReason, setExceptionReason] = useState("");
   const [validationError, setValidationError] = useState("");
+  const [evidenceBusy, setEvidenceBusy] = useState(false);
   const [lastReceiptStaged, setLastReceiptStaged] = useState(false);
   const receiptCommand = useRef<PendingReceiptCommand | null>(
     readPendingReceiptCommand(),
@@ -449,6 +450,7 @@ export function ReceivingPageSurface({
     setLines((prev) => prev.filter((l) => l.productId !== productId));
 
   const submit = async () => {
+    if (evidenceBusy) return;
     if (training) {
       await training
         .dispatch({ type: "submit-receipt" })
@@ -1228,7 +1230,7 @@ export function ReceivingPageSurface({
                   </fieldset>
                 </div>
               ) : (
-                <EvidenceCapture onChange={setEvidence} />
+                <EvidenceCapture value={evidence} onChange={setEvidence} onBusyChange={setEvidenceBusy} />
               )}
             </div>
           </Card>
@@ -1265,7 +1267,7 @@ export function ReceivingPageSurface({
                   type="button"
                   className="btn-primary min-h-12 w-full shadow-pop"
                   onClick={() => void execute(submit)}
-                  disabled={pending}
+                  disabled={pending || evidenceBusy}
                 >
                   Receive {totalItems} item(s)
                 </button>

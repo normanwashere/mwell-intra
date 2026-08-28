@@ -22,10 +22,24 @@ describe("Finance remediation contract", () => {
       "Amount must be greater than zero.",
       "Select a canonical source record.",
       "Select registered evidence.",
-      "Use a valid HTTPS evidence URL or governed evidence reference.",
     ]);
     expect(validateFinanceCloseEntry({ action: "exception", id: "close-1" })).toEqual([
       "Provide a correction reason before flagging a close entry.",
+    ]);
+  });
+
+  it("allows server-resolved canonical evidence but rejects an invalid explicitly supplied URL", () => {
+    const input = {
+      action: "save" as const,
+      amount: 100,
+      sourceRecordType: "purchase_order" as const,
+      sourceRecordId: "PO-A",
+      evidenceRecordType: "payment_release" as const,
+      evidenceRecordId: "release-A",
+    };
+    expect(validateFinanceCloseEntry(input)).toEqual([]);
+    expect(validateFinanceCloseEntry({ ...input, evidenceUrl: "arbitrary/private.pdf" })).toEqual([
+      "Use a valid HTTPS evidence URL or governed evidence reference.",
     ]);
   });
 });

@@ -1,10 +1,12 @@
-import { useRef, useState } from 'react';
-import { Icon } from '../Icon';
-import { resolveDataSource } from '@/data/createRepository';
-import { uploadEvidence } from '@/data/supabase/evidence';
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Icon } from "../Icon";
+import { resolveDataSource } from "@/data/createRepository";
+import { uploadEvidence } from "@/data/supabase/evidence";
 
 interface EvidenceCaptureProps {
   onChange: (urls: string[]) => void;
+  onBusyChange?: (busy: boolean) => void;
+  value?: string[];
   label?: string;
   maxPhotos?: number;
   /** Used as the Storage path prefix when uploading to Supabase Storage
@@ -30,76 +32,131 @@ function readAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(reader.error ?? new Error('Read failed'));
+    reader.onerror = () => reject(reader.error ?? new Error("Read failed"));
     reader.readAsDataURL(file);
   });
 }
 
 export function EvidenceCapture({
   onChange,
-  label = 'Capture photo evidence',
+  onBusyChange,
+  value,
+  label = "Capture photo evidence",
   maxPhotos = MAX_PHOTOS,
   reference,
 }: EvidenceCaptureProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [urls, setUrls] = useState<string[]>([]);
+  const [urls, setUrls] = useState<string[]>(value ?? []);
+  const currentUrls = useRef(value ?? []);
+  const generation = useRef(0);
+  const inFlight = useRef(false);
+  const callbacks = useRef({ onChange, onBusyChange });
+  callbacks.current = { onChange, onBusyChange };
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const source = resolveDataSource();
 
-  const handleFiles = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
+  // A finished upload must never notify the next record or an unmounted form.
+  useLayoutEffect(() => {
+    generation.current++;
+    currentUrls.current = value ?? [];
+    setUrls(currentUrls.current);
     setError(null);
-    const next = [...urls];
+    setUploading(false);
+    inFlight.current = false;
+    return () => {
+      generation.current++;
+      inFlight.current = false;
+      callbacks.current.onBusyChange?.(false);
+    };
+  }, [reference]);
+
+  useLayoutEffect(() => {
+    if (value !== undefined) {
+      currentUrls.current = value;
+      setUrls(value);
+    }
+  }, [value]);
+
+  const publish = (next: string[]) => {
+    currentUrls.current = next;
+    setUrls(next);
+    callbacks.current.onChange(next);
+  };
+
+  const handleFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0 || inFlight.current) return;
+    const session = generation.current;
+    const active = () => session === generation.current;
+    inFlight.current = true;
+    setUploading(true);
+    callbacks.current.onBusyChange?.(true);
+    setError(null);
     let rejected = 0;
     const toUpload: string[] = [];
-    for (const file of Array.from(files)) {
-      if (next.length + toUpload.length >= maxPhotos) {
-        setError(`Up to ${maxPhotos} photo${maxPhotos === 1 ? '' : 's'}.`);
-        break;
+    const failures: string[] = [];
+    try {
+      for (const file of Array.from(files)) {
+        if (!active()) return;
+        if (currentUrls.current.length + toUpload.length >= maxPhotos) {
+          setError(`Up to ${maxPhotos} photo${maxPhotos === 1 ? "" : "s"}.`);
+          break;
+        }
+        if (!file.type.startsWith("image/")) {
+          rejected++;
+          continue;
+        }
+        if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+          rejected++;
+          continue;
+        }
+        try {
+          toUpload.push(await readAsDataUrl(file));
+        } catch {
+          rejected++;
+        }
       }
-      if (!file.type.startsWith('image/')) {
-        rejected++;
-        continue;
+      if (!active()) return;
+      if (rejected > 0) {
+        setError(
+          `Skipped ${rejected} file(s): images up to ${MAX_SIZE_MB}MB only.`,
+        );
       }
-      if (file.size > MAX_SIZE_MB * 1024 * 1024) {
-        rejected++;
-        continue;
-      }
-      try {
-        toUpload.push(await readAsDataUrl(file));
-      } catch {
-        rejected++;
-      }
-    }
-    if (rejected > 0) {
-      setError(`Skipped ${rejected} file(s): images up to ${MAX_SIZE_MB}MB only.`);
-    }
 
-    let persisted: string[] = toUpload;
-    if (source === 'supabase' && toUpload.length > 0) {
-      setUploading(true);
-      try {
+      let persisted: string[] = toUpload;
+      if (source === "supabase" && toUpload.length > 0) {
         const ref = reference ?? `capture-${Date.now()}`;
-        persisted = await Promise.all(
+        const results = await Promise.allSettled(
           toUpload.map((u, i) => uploadEvidence(u, `${ref}/${i}`)),
         );
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Could not upload evidence.');
-        return;
-      } finally {
+        if (!active()) return;
+        persisted = results.flatMap((result) => {
+          if (result.status === "fulfilled") return [result.value];
+          failures.push(
+            result.reason instanceof Error
+              ? result.reason.message
+              : "Could not upload evidence.",
+          );
+          return [];
+        });
+        if (failures.length)
+          setError(
+            `${failures.length} upload(s) failed. ${failures[0]} Select the failed files to retry.`,
+          );
+      }
+      if (active() && persisted.length)
+        publish([...currentUrls.current, ...persisted]);
+    } finally {
+      if (active()) {
+        inFlight.current = false;
         setUploading(false);
+        callbacks.current.onBusyChange?.(false);
       }
     }
-    const combined = [...next, ...persisted];
-    setUrls(combined);
-    onChange(combined);
   };
 
   const removeAt = (index: number) => {
-    const next = urls.filter((_, i) => i !== index);
-    setUrls(next);
-    onChange(next);
+    publish(currentUrls.current.filter((_, i) => i !== index));
   };
 
   return (
@@ -111,7 +168,7 @@ export function EvidenceCapture({
         disabled={uploading}
       >
         <Icon name="camera" />
-        {uploading ? 'Uploading…' : label}
+        {uploading ? "Uploading…" : label}
       </button>
       <input
         ref={inputRef}
@@ -119,9 +176,13 @@ export function EvidenceCapture({
         accept="image/*"
         capture="environment"
         multiple={maxPhotos > 1}
+        disabled={uploading}
         className="sr-only"
         aria-label={label}
-        onChange={(e) => void handleFiles(e.target.files)}
+        onChange={(e) => {
+          void handleFiles(e.target.files);
+          e.target.value = "";
+        }}
       />
       {error && (
         <p role="alert" className="text-xs text-amber-600 dark:text-amber-400">
@@ -154,11 +215,20 @@ export function EvidenceCapture({
 /** Renders a captured evidence value inline (data URL now; storage paths
  * resolve to a signed URL for the preview). */
 function CapturedThumb({ url }: { url: string }) {
-  const [src, setSrc] = useState<string | null>(url.startsWith('data:') ? url : null);
-  if (!src && !url.startsWith('data:')) {
-    // Storage path — resolve once for the preview. Errors fall back to a placeholder.
-    void resolveEvidenceUrlSafe(url).then((u) => setSrc(u));
-  }
+  const [src, setSrc] = useState<string | null>(
+    url.startsWith("data:") ? url : null,
+  );
+  useEffect(() => {
+    let active = true;
+    setSrc(url.startsWith("data:") ? url : null);
+    if (!url.startsWith("data:"))
+      void resolveEvidenceUrlSafe(url).then((u) => {
+        if (active) setSrc(u);
+      });
+    return () => {
+      active = false;
+    };
+  }, [url]);
   if (!src) {
     return (
       <span className="grid aspect-square w-full place-items-center rounded-xl bg-inset text-faint ring-1 ring-line">
@@ -177,7 +247,7 @@ function CapturedThumb({ url }: { url: string }) {
 
 async function resolveEvidenceUrlSafe(value: string): Promise<string | null> {
   try {
-    const { resolveEvidenceUrl } = await import('@/data/supabase/evidence');
+    const { resolveEvidenceUrl } = await import("@/data/supabase/evidence");
     return resolveEvidenceUrl(value);
   } catch {
     return null;

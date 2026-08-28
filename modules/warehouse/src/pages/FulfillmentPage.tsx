@@ -1,4 +1,10 @@
-import { useEffect, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { useSearchParams } from "react-router-dom";
 import type {
   CustomerReturnCase,
@@ -31,6 +37,27 @@ import { BulkOrderImportSheet } from "@/components/fulfillment/BulkOrderImportSh
 import { OrderIntakeSheet } from "@/components/fulfillment/OrderIntakeSheet";
 import { downloadText } from "@/app/download";
 import { fulfillmentOrdersToCsv } from "@/domain/orderIntakeOptions";
+import { useSession } from "@/auth/session";
+import { actorName } from "@/domain/format";
+
+function useEvidencePending() {
+  const pendingKeys = useRef(new Set<string>());
+  const [pending, setPending] = useState(false);
+  const onBusyChange = useCallback((key: string, busy: boolean) => {
+    if (busy) pendingKeys.current.add(key);
+    else pendingKeys.current.delete(key);
+    setPending(pendingKeys.current.size > 0);
+  }, []);
+  return { pending, pendingKeys, onBusyChange };
+}
+
+function requestDate(value: string, dateOnly = false) {
+  const date = new Date(dateOnly ? `${value}T00:00:00` : value);
+  if (Number.isNaN(date.getTime())) return "Not available";
+  return dateOnly
+    ? date.toLocaleDateString("en-PH", { dateStyle: "medium" })
+    : date.toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" });
+}
 
 type WorkspaceTab = "orders" | "requests" | "returns" | "kits";
 
@@ -919,6 +946,7 @@ function OrdersWorkspace({
         create={createFulfillmentOrder}
       />
       <PickSheet
+        key={pickOrder?.id}
         order={pickOrder}
         products={products}
         storageAreas={storageAreas}
@@ -927,6 +955,7 @@ function OrdersWorkspace({
         onClose={() => setPickOrder(undefined)}
       />
       <PackSheet
+        key={packOrder?.id}
         order={packOrder}
         products={products}
         onClose={() => setPackOrder(undefined)}
@@ -946,6 +975,7 @@ function OrdersWorkspace({
         onClose={() => setAcknowledgeOrder(undefined)}
       />
       <ShipmentTrackingSheet
+        key={trackingOrder?.id}
         order={trackingOrder}
         onClose={() => setTrackingOrder(undefined)}
       />
@@ -1381,6 +1411,7 @@ function PickSheet({
   const [pickEvidence, setPickEvidence] = useState<Record<string, string[]>>(
     {},
   );
+  const evidence = useEvidencePending();
   const [validationError, setValidationError] = useState("");
   const [saving, setSaving] = useState(false);
   if (!order) return null;
@@ -1404,6 +1435,7 @@ function PickSheet({
   };
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (saving || evidence.pendingKeys.current.size > 0) return;
     for (const line of order.lines) {
       const product = products.find((row) => row.id === line.productId);
       const suggestion = recommendedBin(line.productId);
@@ -1466,14 +1498,19 @@ function PickSheet({
           type="submit"
           form="pick-order-form"
           className="btn-primary w-full"
-          disabled={saving}
+          disabled={saving || evidence.pending}
         >
-          {saving ? "Confirming..." : "Confirm pick"}
+          {saving
+            ? "Confirming..."
+            : evidence.pending
+              ? "Uploading evidence..."
+              : "Confirm pick"}
         </button>
       }
     >
       <form
         id="pick-order-form"
+        aria-busy={saving || evidence.pending}
         className="space-y-4"
         onSubmit={(event) => void submit(event)}
       >
@@ -1617,6 +1654,10 @@ function PickSheet({
               <div className="mt-3 border-t border-line pt-3">
                 <EvidenceCapture
                   reference={`fulfillment/${order.id}/pick/${line.productId}`}
+                  value={pickEvidence[line.productId]}
+                  onBusyChange={(busy) =>
+                    evidence.onBusyChange(line.productId, busy)
+                  }
                   maxPhotos={1}
                   label={`Attach pick evidence for ${product?.name ?? line.productId}`}
                   onChange={(urls) =>
@@ -1660,6 +1701,7 @@ function PackSheet({
   const [recipientDepartment, setRecipientDepartment] = useState("");
   const [handoverReference, setHandoverReference] = useState("");
   const [handoverEvidence, setHandoverEvidence] = useState<string[]>([]);
+  const evidence = useEvidencePending();
   const [packaging, setPackaging] = useState([
     { key: crypto.randomUUID(), productId: "", quantity: 1 },
   ]);
@@ -1683,6 +1725,7 @@ function PackSheet({
   const shipment = order.deliveryMethod === "shipment";
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (saving || evidence.pendingKeys.current.size > 0) return;
     if (shipment && !normalizeSafeHttpsUrl(deliveryLink)) {
       toast.error("Delivery tracking link must use a secure HTTPS URL.");
       return;
@@ -1731,14 +1774,19 @@ function PackSheet({
           type="submit"
           form="pack-order-form"
           className="btn-primary w-full"
-          disabled={saving}
+          disabled={saving || evidence.pending}
         >
-          {saving ? "Saving..." : "Confirm packing"}
+          {saving
+            ? "Saving..."
+            : evidence.pending
+              ? "Uploading evidence..."
+              : "Confirm packing"}
         </button>
       }
     >
       <form
         id="pack-order-form"
+        aria-busy={saving || evidence.pending}
         className="space-y-4"
         onSubmit={(event) => void submit(event)}
       >
@@ -1814,6 +1862,8 @@ function PackSheet({
             <div className="rounded-xl border border-line p-3">
               <EvidenceCapture
                 reference={`fulfillment/${order.id}/handover`}
+                value={handoverEvidence}
+                onBusyChange={(busy) => evidence.onBusyChange("handover", busy)}
                 maxPhotos={1}
                 label="Attach handover photo (optional)"
                 onChange={setHandoverEvidence}
@@ -2241,11 +2291,14 @@ function ShipmentTrackingSheet({
   >("mark_in_transit");
   const [reference, setReference] = useState("");
   const [evidenceUrls, setEvidenceUrls] = useState<string[]>([]);
+  const evidence = useEvidencePending();
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
   if (!order) return null;
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (saving || evidence.pendingKeys.current.size > 0) return;
+    if (action === "confirm_delivery" && evidenceUrls.length === 0) return;
     setSaving(true);
     const ok = await advanceFulfillmentOrder({
       orderId: order.id,
@@ -2279,15 +2332,21 @@ function ShipmentTrackingSheet({
           className="btn-primary w-full"
           disabled={
             saving ||
+            evidence.pending ||
             (action === "confirm_delivery" && evidenceUrls.length === 0)
           }
         >
-          {saving ? "Saving..." : "Save delivery update"}
+          {saving
+            ? "Saving..."
+            : evidence.pending
+              ? "Uploading evidence..."
+              : "Save delivery update"}
         </button>
       }
     >
       <form
         id="shipment-tracking-form"
+        aria-busy={saving || evidence.pending}
         className="space-y-4"
         onSubmit={(event) => void submit(event)}
       >
@@ -2319,6 +2378,8 @@ function ShipmentTrackingSheet({
             </Field>
             <EvidenceCapture
               label="Upload proof-of-delivery image"
+              value={evidenceUrls}
+              onBusyChange={(busy) => evidence.onBusyChange("delivery", busy)}
               maxPhotos={1}
               reference={`delivery-${order.id}`}
               onChange={setEvidenceUrls}
@@ -2362,8 +2423,24 @@ function RequestsWorkspace({
   department: string;
   options: DepartmentRequestOption[];
 }) {
-  const { createDepartmentStockRequest, decideDepartmentStockRequest } =
-    useWarehouse();
+  const {
+    createDepartmentStockRequest,
+    decideDepartmentStockRequest,
+    actor,
+    identityId,
+    source,
+  } = useWarehouse();
+  const { profile } = useSession();
+  const requesterName = (id: string) => {
+    if (
+      profile?.name &&
+      [profile.id, profile.email, actor, identityId].includes(id)
+    ) {
+      return profile.name;
+    }
+    const knownName = source === "memory" ? actorName(id) : id;
+    return knownName !== id ? knownName : "Name unavailable";
+  };
   const toast = useToast();
   const [open, setOpen] = useState(false);
   const [workingId, setWorkingId] = useState<string>();
@@ -2502,7 +2579,7 @@ function RequestsWorkspace({
           onOpenChange={(nextOpen) => {
             if (!nextOpen && !workingId) setDetailId(undefined);
           }}
-          title={`View request / ${detailRequest.purpose}`}
+          title="Review request"
           footer={
             canApprove && detailRequest.status === "pending_approval" ? (
               <div className="grid grid-cols-2 gap-2">
@@ -2527,30 +2604,8 @@ function RequestsWorkspace({
           }
         >
           <StatusBadge status={detailRequest.status} />
-          <dl className="my-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-            {[
-              ["Department", titleCase(detailRequest.requestingDepartment)],
-              ["Cost center", detailRequest.costCenter],
-              ["Required date", detailRequest.requiredDate],
-              ["Expense treatment", titleCase(detailRequest.expenseTreatment)],
-              ["Requested by", detailRequest.requestedBy],
-              ["Requested at", detailRequest.requestedAt],
-              ["Request ID", detailRequest.id],
-              ...(detailRequest.approvedBy
-                ? [["Approved by", detailRequest.approvedBy]]
-                : []),
-              ...(detailRequest.fulfillmentOrderId
-                ? [["Fulfillment order", detailRequest.fulfillmentOrderId]]
-                : []),
-            ].map(([label, value]) => (
-              <div key={label} className="min-w-0">
-                <dt className="text-xs text-muted">{label}</dt>
-                <dd className="break-words font-medium text-ink">{value}</dd>
-              </div>
-            ))}
-          </dl>
           <table
-            className="w-full table-fixed text-left text-sm"
+            className="mt-4 w-full table-fixed text-left text-sm"
             aria-label="Requested items"
           >
             <thead>
@@ -2574,9 +2629,9 @@ function RequestsWorkspace({
                     className="border-b border-line"
                   >
                     <td className="break-words py-3 pr-3">
-                      {product?.name ?? line.productId}
+                      {product?.name ?? "Item unavailable"}
                       <span className="block text-xs text-muted">
-                        {product?.sku ?? line.productId}
+                        {product?.sku}
                       </span>
                     </td>
                     <td className="py-3 text-right tabular-nums">
@@ -2587,6 +2642,70 @@ function RequestsWorkspace({
               })}
             </tbody>
           </table>
+          <section className="my-4" aria-labelledby="request-purpose-title">
+            <h3
+              id="request-purpose-title"
+              className="text-sm font-semibold text-ink"
+            >
+              Purpose
+            </h3>
+            <p className="mt-1 whitespace-pre-wrap break-words text-sm text-ink">
+              {detailRequest.purpose}
+            </p>
+          </section>
+          <dl className="my-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+            {[
+              ["Department", titleCase(detailRequest.requestingDepartment)],
+              ["Cost center", detailRequest.costCenter],
+              ["Required date", requestDate(detailRequest.requiredDate, true)],
+              ["Expense treatment", titleCase(detailRequest.expenseTreatment)],
+              ["Requested by", requesterName(detailRequest.requestedBy)],
+              ["Requested at", requestDate(detailRequest.requestedAt)],
+              ...(detailRequest.approvedBy
+                ? [["Approved by", requesterName(detailRequest.approvedBy)]]
+                : []),
+              ...(detailRequest.approvedAt
+                ? [["Approved at", requestDate(detailRequest.approvedAt)]]
+                : []),
+            ].map(([label, value]) => (
+              <div key={label} className="min-w-0">
+                <dt className="text-xs text-muted">{label}</dt>
+                <dd className="break-words font-medium text-ink">{value}</dd>
+              </div>
+            ))}
+          </dl>
+          <details className="border-t border-line pt-3 text-sm">
+            <summary className="cursor-pointer font-medium text-muted">
+              Audit details
+            </summary>
+            <dl className="mt-3 space-y-3">
+              {[
+                ["Request ID", detailRequest.id],
+                ["Requester ID", detailRequest.requestedBy],
+                ["Requested timestamp", detailRequest.requestedAt],
+                ...(detailRequest.approvedBy
+                  ? [["Approver ID", detailRequest.approvedBy]]
+                  : []),
+                ...(detailRequest.approvedAt
+                  ? [["Approved timestamp", detailRequest.approvedAt]]
+                  : []),
+                ...(detailRequest.fulfillmentOrderId
+                  ? [["Fulfillment order ID", detailRequest.fulfillmentOrderId]]
+                  : []),
+                ...detailRequest.lines.map((line, index) => [
+                  `Item ${index + 1} ID`,
+                  line.productId,
+                ]),
+              ].map(([label, value]) => (
+                <div key={label} className="min-w-0">
+                  <dt className="text-xs text-muted">{label}</dt>
+                  <dd className="break-all font-mono text-xs text-ink">
+                    {value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </details>
         </Sheet>
       )}
       <CreateRequestSheet
@@ -3596,14 +3715,17 @@ function KitsWorkspace({
         products={products}
         create={createKitDefinition}
       />
-      <CreateReKitSheet
-        open={reKitOpen}
-        onOpenChange={setReKitOpen}
-        returnCases={eligibleReturns}
-        definitions={activeKits}
-        create={createReKitWorkOrder}
-      />
+      {reKitOpen && canReKit && (
+        <CreateReKitSheet
+          open={reKitOpen}
+          onOpenChange={setReKitOpen}
+          returnCases={eligibleReturns}
+          definitions={activeKits}
+          create={createReKitWorkOrder}
+        />
+      )}
       <CompleteReKitSheet
+        key={completionWork?.id}
         work={completionWork}
         locations={locations}
         bins={bins}
@@ -3632,9 +3754,17 @@ function CompleteReKitSheet({
   const eligibleBins = bins.filter((bin) => bin.locationId === locationId);
   const [binId, setBinId] = useState("");
   const [saving, setSaving] = useState(false);
+  const [validationError, setValidationError] = useState("");
   if (!work) return null;
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (saving) return;
+    if (!eligibleBins.some((bin) => bin.id === binId)) {
+      setValidationError(
+        "Scan an active destination bin in the selected warehouse.",
+      );
+      return;
+    }
     setSaving(true);
     const ok = await complete({ workOrderId: work.id, locationId, binId });
     setSaving(false);
@@ -3656,7 +3786,7 @@ function CompleteReKitSheet({
           type="submit"
           form="complete-rekit-form"
           className="btn-primary w-full"
-          disabled={saving}
+          disabled={saving || !binId}
         >
           {saving ? "Posting..." : "Post open-box stock"}
         </button>
@@ -3667,6 +3797,11 @@ function CompleteReKitSheet({
         className="space-y-4"
         onSubmit={(event) => void submit(event)}
       >
+        {validationError && (
+          <p role="alert" className="text-sm text-rose-700 dark:text-rose-300">
+            {validationError}
+          </p>
+        )}
         <Field label="Destination warehouse" htmlFor="rekit-location">
           <select
             id="rekit-location"
@@ -3685,22 +3820,30 @@ function CompleteReKitSheet({
             ))}
           </select>
         </Field>
-        <Field label="Destination rack or bin" htmlFor="rekit-bin">
-          <select
-            id="rekit-bin"
-            className="input"
-            value={binId}
-            onChange={(event) => setBinId(event.target.value)}
-            required
-          >
-            <option value="">Select a scanned destination</option>
-            {eligibleBins.map((bin) => (
-              <option key={bin.id} value={bin.id}>
-                {bin.code} / {bin.label ?? "Storage bin"}
-              </option>
-            ))}
-          </select>
-        </Field>
+        <BarcodeScanner
+          key={locationId}
+          label="Scan destination rack or bin"
+          manualLabel="Enter destination bin manually"
+          manualActionLabel="Use destination bin"
+          onDetected={(code) => {
+            const bin = eligibleBins.find(
+              (row) => row.code.toLowerCase() === code.trim().toLowerCase(),
+            );
+            setBinId(bin?.id ?? "");
+            setValidationError(
+              bin
+                ? ""
+                : "Scan an active destination bin in the selected warehouse.",
+            );
+          }}
+        />
+        <output
+          aria-label="Captured destination bin"
+          className="text-sm text-ink"
+        >
+          {eligibleBins.find((bin) => bin.id === binId)?.code ??
+            "No destination bin captured"}
+        </output>
       </form>
     </Sheet>
   );
@@ -3860,37 +4003,172 @@ function CreateReKitSheet({
   create: ReturnType<typeof useWarehouse>["createReKitWorkOrder"];
 }) {
   const toast = useToast();
+  const { data, can } = useWarehouse();
   const [returnId, setReturnId] = useState(returnCases[0]?.id ?? "");
   const [definitionId, setDefinitionId] = useState(definitions[0]?.id ?? "");
   const [outputSerial, setOutputSerial] = useState("");
-  const [componentSerials, setComponentSerials] = useState("");
+  const [componentSerials, setComponentSerials] = useState<string[]>([]);
+  const [componentBins, setComponentBins] = useState<Record<string, string>>(
+    {},
+  );
+  const sourceLocations =
+    data?.locations.filter(
+      (location) => location.type === "warehouse" && location.active !== false,
+    ) ?? [];
+  const [locationId, setLocationId] = useState(sourceLocations[0]?.id ?? "");
+  const [sourceBinId, setSourceBinId] = useState("");
+  const [validationError, setValidationError] = useState("");
   const [condition, setCondition] = useState<"open_box" | "reconditioned">(
     "open_box",
   );
   const [saving, setSaving] = useState(false);
+  const inFlight = useRef(false);
+  const definition = definitions.find(
+    (row) => row.id === definitionId && row.status === "active",
+  );
+  const sourceBin = data?.storageAreas.find(
+    (bin) =>
+      bin.id === sourceBinId &&
+      bin.locationId === locationId &&
+      bin.active !== false,
+  );
+  const requiredComponents =
+    definition?.components.filter((component) =>
+      ["required", "asset_tag"].includes(component.serializationPolicy),
+    ) ?? [];
+  const requiredCount = requiredComponents.reduce(
+    (sum, component) => sum + component.quantity,
+    0,
+  );
+  const resetScans = () => {
+    setOutputSerial("");
+    setComponentSerials([]);
+    setComponentBins({});
+    setSourceBinId("");
+    setValidationError("");
+  };
+  const outputError = (code: string) => {
+    if (!code || /[\r\n,]/.test(code))
+      return "Scan one output serial number at a time.";
+    if (
+      data?.products.some(
+        (product) => product.sku === code || product.barcode === code,
+      ) ||
+      data?.storageAreas.some((bin) => bin.code === code)
+    )
+      return "Scan the new output serial label, not a product or bin barcode.";
+    if (
+      data?.units.some((unit) => unit.serialNumber === code) ||
+      data?.reKitWorkOrders.some(
+        (work) =>
+          work.outputSerialNumber === code && work.status !== "cancelled",
+      )
+    )
+      return "This output serial already exists. Scan a new output label.";
+    return "";
+  };
+  const componentError = (
+    code: string,
+    captured: string[],
+    binId = sourceBinId,
+  ) => {
+    const bin = data?.storageAreas.find(
+      (row) =>
+        row.id === binId &&
+        row.locationId === locationId &&
+        row.active !== false,
+    );
+    if (!bin)
+      return "Scan an active source rack or bin in the selected warehouse first.";
+    if (captured.includes(code))
+      return "This component serial was already captured.";
+    const unit = data?.units.find((row) => row.serialNumber === code);
+    if (!unit)
+      return "Serial not found. Scan a registered component serial or check the label.";
+    const component = requiredComponents.find(
+      (row) => row.productId === unit.productId,
+    );
+    if (!component)
+      return "This product is not a serialized component in the selected kit recipe.";
+    if (!["in_stock", "returned"].includes(unit.status))
+      return "This component is not eligible for re-kitting. Check its stock and inspection status.";
+    if (unit.locationId !== locationId || unit.binId !== bin.id)
+      return "This component belongs to a different warehouse or bin. Check the source location.";
+    if (
+      data?.reKitWorkOrders.some(
+        (work) =>
+          !["cancelled", "completed"].includes(work.status) &&
+          work.componentSerialNumbers.includes(code),
+      )
+    )
+      return "This component is already assigned to another re-kit work order.";
+    const count = captured.filter((serial) =>
+      data?.units.some(
+        (row) =>
+          row.serialNumber === serial && row.productId === unit.productId,
+      ),
+    ).length;
+    if (count >= component.quantity)
+      return "The required quantity for this component is already captured.";
+    return "";
+  };
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (inFlight.current || !can("manage_returns")) return;
+    if (
+      !definition ||
+      !returnCases.some(
+        (row) => row.id === returnId && row.resolution === "re_kit",
+      )
+    ) {
+      setValidationError(
+        "Select an eligible return and an active kit definition.",
+      );
+      return;
+    }
+    const error =
+      outputError(outputSerial) ||
+      componentSerials
+        .map((serial, index) =>
+          componentError(
+            serial,
+            componentSerials.slice(0, index),
+            componentBins[serial],
+          ),
+        )
+        .find(Boolean);
+    if (error || !outputSerial || componentSerials.length !== requiredCount) {
+      setValidationError(
+        error ||
+          `Capture the output serial and exactly ${requiredCount} component serial(s).`,
+      );
+      return;
+    }
+    inFlight.current = true;
     setSaving(true);
-    const ok = await create({
-      sourceReturnCaseId: returnId,
-      kitDefinitionId: definitionId,
-      outputSerialNumber: outputSerial,
-      componentSerialNumbers: componentSerials
-        .split(/[\n,]/)
-        .map((value) => value.trim())
-        .filter(Boolean),
-      condition,
-    });
-    setSaving(false);
-    if (ok) {
-      toast.success("Re-kit work order created for inspection.");
-      onOpenChange(false);
+    try {
+      const ok = await create({
+        sourceReturnCaseId: returnId,
+        kitDefinitionId: definitionId,
+        outputSerialNumber: outputSerial,
+        componentSerialNumbers: componentSerials,
+        condition,
+      });
+      if (ok) {
+        toast.success("Re-kit work order created for inspection.");
+        onOpenChange(false);
+      }
+    } finally {
+      inFlight.current = false;
+      setSaving(false);
     }
   };
   return (
     <Sheet
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={(next) => {
+        if (!inFlight.current) onOpenChange(next);
+      }}
       title="Create re-kit work order"
       description="Reuse only inspected components and retain their serial lineage."
       footer={
@@ -3898,7 +4176,9 @@ function CreateReKitSheet({
           type="submit"
           form="rekit-form"
           className="btn-primary w-full"
-          disabled={saving}
+          disabled={
+            saving || !outputSerial || componentSerials.length !== requiredCount
+          }
         >
           {saving ? "Creating..." : "Create work order"}
         </button>
@@ -3909,69 +4189,185 @@ function CreateReKitSheet({
         className="space-y-4"
         onSubmit={(event) => void submit(event)}
       >
-        <Field label="Source return case" htmlFor="rekit-return">
-          <select
-            id="rekit-return"
-            className="input"
-            value={returnId}
-            onChange={(event) => setReturnId(event.target.value)}
-          >
-            {returnCases.map((record) => (
-              <option key={record.id} value={record.id}>
-                {record.serialNumber ?? record.id}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Active kit definition" htmlFor="rekit-definition">
-          <select
-            id="rekit-definition"
-            className="input"
-            value={definitionId}
-            onChange={(event) => setDefinitionId(event.target.value)}
-          >
-            {definitions.map((definition) => (
-              <option key={definition.id} value={definition.id}>
-                {definition.name} v{definition.version}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Output serial number" htmlFor="rekit-output">
-          <input
-            id="rekit-output"
-            className="input"
-            value={outputSerial}
-            onChange={(event) => setOutputSerial(event.target.value)}
-            required
+        {validationError && (
+          <p role="alert" className="text-sm text-rose-700 dark:text-rose-300">
+            {validationError}
+          </p>
+        )}
+        <fieldset disabled={saving} className="min-w-0 space-y-4">
+          <Field label="Source return case" htmlFor="rekit-return">
+            <select
+              id="rekit-return"
+              className="input"
+              value={returnId}
+              onChange={(event) => {
+                setReturnId(event.target.value);
+                resetScans();
+              }}
+            >
+              {returnCases.map((record) => (
+                <option key={record.id} value={record.id}>
+                  {record.serialNumber ?? record.id}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Active kit definition" htmlFor="rekit-definition">
+            <select
+              id="rekit-definition"
+              className="input"
+              value={definitionId}
+              onChange={(event) => {
+                setDefinitionId(event.target.value);
+                resetScans();
+              }}
+            >
+              {definitions.map((definition) => (
+                <option key={definition.id} value={definition.id}>
+                  {definition.name} v{definition.version}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <section className="space-y-3" aria-label="Output identity">
+            <h3 className="text-sm font-semibold text-ink">
+              Output:{" "}
+              {data?.products.find(
+                (product) => product.id === definition?.productId,
+              )?.name ?? "Select a kit"}
+            </h3>
+            <BarcodeScanner
+              key={`output-${returnId}-${definitionId}`}
+              label="Scan output serial"
+              manualLabel="Enter output serial manually"
+              manualActionLabel="Use output serial"
+              onDetected={(value) => {
+                const code = value.trim();
+                const error = outputError(code);
+                setValidationError(error);
+                if (!error) setOutputSerial(code);
+              }}
+            />
+            <output
+              aria-label="Captured output serial"
+              className="block break-all font-mono text-sm"
+            >
+              {outputSerial || "No output serial captured"}
+            </output>
+          </section>
+          <Field label="Source warehouse" htmlFor="rekit-source-location">
+            <select
+              id="rekit-source-location"
+              className="input"
+              value={locationId}
+              onChange={(event) => {
+                setLocationId(event.target.value);
+                setSourceBinId("");
+                setComponentSerials([]);
+                setValidationError("");
+              }}
+            >
+              {sourceLocations.map((location) => (
+                <option key={location.id} value={location.id}>
+                  {location.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <BarcodeScanner
+            key={`bin-${returnId}-${definitionId}-${locationId}`}
+            label="Scan source rack or bin"
+            manualLabel="Enter re-kit source bin manually"
+            manualActionLabel="Use source bin"
+            onDetected={(code) => {
+              const bin = data?.storageAreas.find(
+                (row) =>
+                  row.code.toLowerCase() === code.trim().toLowerCase() &&
+                  row.locationId === locationId &&
+                  row.active !== false,
+              );
+              setSourceBinId(bin?.id ?? "");
+              setValidationError(
+                bin
+                  ? ""
+                  : "Scan an active source rack or bin in the selected warehouse.",
+              );
+            }}
           />
-        </Field>
-        <Field
-          label="Component serial numbers"
-          htmlFor="rekit-components"
-          hint="Enter one serial per line or separate with commas."
-        >
-          <textarea
-            id="rekit-components"
-            className="input min-h-24"
-            value={componentSerials}
-            onChange={(event) => setComponentSerials(event.target.value)}
-            required
-          />
-        </Field>
-        <Field label="Condition" htmlFor="rekit-condition">
-          <select
-            id="rekit-condition"
-            className="input"
-            value={condition}
-            onChange={(event) =>
-              setCondition(event.target.value as typeof condition)
-            }
-          >
-            <option value="open_box">Open box</option>
-            <option value="reconditioned">Reconditioned</option>
-          </select>
-        </Field>
+          <p className="text-sm text-muted">
+            Source bin: {sourceBin?.code ?? "Not captured"}
+          </p>
+          <section className="space-y-3" aria-label="Component identities">
+            <h3 className="text-sm font-semibold text-ink">
+              Components: {componentSerials.length} / {requiredCount}
+            </h3>
+            <ul className="space-y-1 text-sm text-muted">
+              {requiredComponents.map((component) => (
+                <li key={component.productId}>
+                  {data?.products.find(
+                    (product) => product.id === component.productId,
+                  )?.name ?? "Component"}
+                  : {component.quantity}
+                </li>
+              ))}
+            </ul>
+            <BarcodeScanner
+              key={`components-${returnId}-${definitionId}-${locationId}-${sourceBinId}`}
+              label="Scan component serial"
+              manualLabel="Enter component serial manually"
+              manualActionLabel="Add component"
+              onDetected={(value) => {
+                const code = value.trim();
+                const error = componentError(code, componentSerials);
+                setValidationError(error);
+                if (!error) {
+                  setComponentSerials((current) => [...current, code]);
+                  setComponentBins((current) => ({
+                    ...current,
+                    [code]: sourceBinId,
+                  }));
+                }
+              }}
+            />
+            <ul className="space-y-2" aria-label="Captured component serials">
+              {componentSerials.map((serial) => (
+                <li
+                  key={serial}
+                  className="flex min-w-0 items-center justify-between gap-2 border-b border-line py-2"
+                >
+                  <span className="break-all font-mono text-sm">{serial}</span>
+                  <button
+                    type="button"
+                    className="btn-ghost shrink-0"
+                    aria-label={`Remove component ${serial}`}
+                    title="Remove component"
+                    onClick={() => {
+                      setComponentSerials((current) =>
+                        current.filter((value) => value !== serial),
+                      );
+                      setValidationError("");
+                    }}
+                  >
+                    <Icon name="trash" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+          <Field label="Condition" htmlFor="rekit-condition">
+            <select
+              id="rekit-condition"
+              className="input"
+              value={condition}
+              onChange={(event) =>
+                setCondition(event.target.value as typeof condition)
+              }
+            >
+              <option value="open_box">Open box</option>
+              <option value="reconditioned">Reconditioned</option>
+            </select>
+          </Field>
+        </fieldset>
       </form>
     </Sheet>
   );

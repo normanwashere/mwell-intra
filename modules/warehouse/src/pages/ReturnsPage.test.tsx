@@ -1,13 +1,169 @@
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { act, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ReturnsPage } from "./ReturnsPage";
 import { QualityPage } from "./QualityPage";
 import { prepareReturnLines } from "./returnIntake";
 import { makeRepo, renderWithProviders } from "@/test/renderWithProviders";
-import { allPending, availableForProduct, removeEntry } from "@intra/data-kit";
+import { allPending, availableForProduct, removeEntry, ReturnRejectedError, SupabaseRepository } from "@intra/data-kit";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import * as evidenceStorage from "@/data/supabase/evidence";
+import * as dataSource from "@/data/createRepository";
+
+afterEach(() => vi.restoreAllMocks());
 
 describe("ReturnsPage", () => {
+  it("keeps an earlier unknown return frozen after a typed recovery rejection", async () => {
+    const repo = makeRepo();
+    const original = repo.recordReturn.bind(repo);
+    const record = vi.spyOn(repo, "recordReturn")
+      .mockImplementationOnce(async (input) => { await original(input); throw new Error("Response lost"); })
+      .mockRejectedValueOnce(new ReturnRejectedError("Access revoked", "42501"));
+    const user = userEvent.setup();
+    renderWithProviders(<ReturnsPage />, { repo });
+    await screen.findByText("Recent returns");
+    await user.selectOptions(screen.getByLabelText("Product"), "shirt-l");
+    await user.selectOptions(screen.getByLabelText("Quarantine location"), "loc-wh");
+    await user.selectOptions(screen.getByLabelText("Quarantine bin"), "bin-pasig-a1");
+    await user.click(screen.getByRole("button", { name: "Record return" }));
+    await user.click(await screen.findByRole("button", { name: "Recover original result" }));
+    await screen.findByText(/earlier return outcome is still unknown/i);
+    expect(screen.getByLabelText("Quantity")).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Discard draft" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Recover original result" }));
+    await screen.findByText("Return logged in inspection staging");
+    expect(record.mock.calls[2]![0]).toEqual(record.mock.calls[0]![0]);
+  });
+
+  it("unlocks corrections only after an explicit first-attempt server rejection", async () => {
+    const seed = await makeRepo().getData();
+    const repo = makeRepo({ ...seed, returns: [], movements: [] });
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: { code: "P0001", message: "Quarantine bin is inactive" } });
+    const live = new SupabaseRepository({ rpc } as unknown as SupabaseClient);
+    const record = vi.spyOn(repo, "recordReturn").mockImplementationOnce((input) => live.recordReturn(input));
+    const user = userEvent.setup();
+    renderWithProviders(<ReturnsPage />, { repo });
+    await screen.findByText("Recent returns");
+    await user.selectOptions(screen.getByLabelText("Product"), "shirt-l");
+    await user.selectOptions(screen.getByLabelText("Quarantine location"), "loc-wh");
+    await user.selectOptions(screen.getByLabelText("Quarantine bin"), "bin-pasig-a1");
+    await user.click(screen.getByRole("button", { name: "Record return" }));
+    await screen.findByText("Quarantine bin is inactive");
+    expect(screen.getByLabelText("Quantity")).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Recover original result" })).not.toBeInTheDocument();
+    expect((await repo.getData()).returns).toHaveLength(0);
+    await user.click(screen.getByRole("button", { name: "Increase" }));
+    await user.click(screen.getByRole("button", { name: "Record return" }));
+    await screen.findByText("Return logged in inspection staging");
+    expect(record.mock.calls[1]![0].idempotencyKey).not.toBe(record.mock.calls[0]![0].idempotencyKey);
+    expect((await repo.getData()).returns).toHaveLength(1);
+    expect((await repo.getData()).returns[0]!.lines[0]!.quantity).toBe(2);
+  });
+
+  it("blocks submission during evidence upload and cancels evidence from an old return context", async () => {
+    const repo = makeRepo();
+    const record = vi.spyOn(repo, "recordReturn");
+    vi.spyOn(dataSource, "resolveDataSource").mockReturnValue("supabase");
+    let finish!: (path: string) => void;
+    const upload = vi.spyOn(evidenceStorage, "uploadEvidence").mockImplementation(() => new Promise<string>((resolve) => { finish = resolve; }));
+    const user = userEvent.setup();
+    renderWithProviders(<ReturnsPage />, { repo });
+    await screen.findByText("Recent returns");
+    await user.selectOptions(screen.getByLabelText("Product"), "shirt-l");
+    await user.selectOptions(screen.getByLabelText("Quarantine location"), "loc-wh");
+    await user.selectOptions(screen.getByLabelText("Quarantine bin"), "bin-pasig-a1");
+    await user.upload(screen.getByLabelText("Attach return evidence"), new File(["photo"], "return.png", { type: "image/png" }));
+    await waitFor(() => expect(upload).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole("button", { name: "Record return" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Record return" }));
+    expect(record).not.toHaveBeenCalled();
+    await user.selectOptions(screen.getByLabelText("Return source"), "vendor");
+    await act(async () => finish("evidence/old-customer-return.png"));
+    expect(screen.queryByRole("list", { name: "Captured evidence" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Record return" }));
+    await screen.findByText("Return logged in inspection staging");
+    expect(record.mock.calls[0]![0]).toMatchObject({ source: "vendor", evidenceUrls: [] });
+  });
+
+  it("does not send a return if its immutable intent cannot be saved", async () => {
+    const repo = makeRepo();
+    const record = vi.spyOn(repo, "recordReturn");
+    const user = userEvent.setup();
+    renderWithProviders(<ReturnsPage />, { repo });
+    await screen.findByText("Recent returns");
+    await user.selectOptions(screen.getByLabelText("Product"), "shirt-l");
+    await user.selectOptions(screen.getByLabelText("Quarantine location"), "loc-wh");
+    await user.selectOptions(screen.getByLabelText("Quarantine bin"), "bin-pasig-a1");
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("Quota exceeded"); });
+    await user.click(screen.getByRole("button", { name: "Record return" }));
+    expect(record).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent(/draft could not be saved/i);
+    expect(screen.getByLabelText("Product")).toHaveValue("shirt-l");
+  });
+
+  it("recovers an immutable serialized return after reload and a lost committed response", async () => {
+    const seed = await makeRepo().getData();
+    const repo = makeRepo({ ...seed, returns: [], movements: [] });
+    const original = repo.recordReturn.bind(repo);
+    const record = vi.spyOn(repo, "recordReturn").mockImplementationOnce(async (input) => {
+      await original(input);
+      throw new Error("Network response lost");
+    });
+    const user = userEvent.setup();
+    const view = renderWithProviders(<ReturnsPage />, { role: "warehouse_operator", repo });
+    await screen.findByText("Recent returns");
+    await user.selectOptions(screen.getByLabelText("Product"), "smart-watch");
+    await user.type(screen.getByLabelText("Serial number"), "SMART-WATCH-VIP001");
+    await user.selectOptions(screen.getByLabelText("Quarantine location"), "loc-wh");
+    await user.selectOptions(screen.getByLabelText("Quarantine bin"), "bin-pasig-a1");
+    await user.upload(screen.getByLabelText("Attach return evidence"), new File(["photo"], "return.png", { type: "image/png" }));
+    await screen.findByRole("list", { name: "Captured evidence" });
+    await user.click(screen.getByRole("button", { name: "Record return" }));
+    await screen.findByText("Network response lost");
+    for (const label of ["Product", "Quantity", "Reason", "Serial number", "Attach return evidence"]) {
+      expect(screen.getByLabelText(label)).toBeDisabled();
+    }
+    await user.click(screen.getByRole("button", { name: "Increase" }));
+    await user.type(screen.getByLabelText("Serial number"), "CHANGED");
+    expect(screen.getByLabelText("Quantity")).toHaveValue(1);
+    expect(screen.getByLabelText("Serial number")).toHaveValue("SMART-WATCH-VIP001");
+    view.unmount();
+    const other = renderWithProviders(<ReturnsPage />, { role: "operations", repo });
+    await screen.findByText("Recent returns");
+    expect(screen.queryByRole("button", { name: "Recover original result" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Product")).toHaveValue("");
+    other.unmount();
+    renderWithProviders(<ReturnsPage />, { role: "warehouse_operator", repo });
+    await screen.findByRole("button", { name: "Recover original result" });
+    expect(record).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText("Serial number")).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Recover original result" }));
+    await screen.findByText("Return logged in inspection staging");
+    expect(record.mock.calls[1]![0]).toEqual(record.mock.calls[0]![0]);
+    expect((await repo.getData()).returns).toHaveLength(1);
+    expect((await repo.getData()).movements).toHaveLength(1);
+  });
+
+  it("offers resume and discard for an unfinished return without submitting on reload", async () => {
+    const repo = makeRepo();
+    const record = vi.spyOn(repo, "recordReturn");
+    const user = userEvent.setup();
+    const view = renderWithProviders(<ReturnsPage />, { repo });
+    await screen.findByText("Recent returns");
+    await user.selectOptions(screen.getByLabelText("Product"), "shirt-l");
+    await user.click(screen.getByRole("button", { name: "Increase" }));
+    view.unmount();
+    const resumed = renderWithProviders(<ReturnsPage />, { repo });
+    await user.click(await screen.findByRole("button", { name: "Resume draft" }));
+    expect(screen.getByLabelText("Quantity")).toHaveValue(2);
+    expect(record).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Discard draft" }));
+    expect(screen.getByLabelText("Product")).toHaveValue("");
+    resumed.unmount();
+    renderWithProviders(<ReturnsPage />, { repo });
+    await screen.findByText("Recent returns");
+    expect(screen.queryByRole("button", { name: "Resume draft" })).not.toBeInTheDocument();
+  });
   it("excludes inactive quarantine locations and bins", async () => {
     const seed = await makeRepo().getData();
     const location = seed.locations.find((row) => row.id === "loc-wh")!;
@@ -177,7 +333,8 @@ describe("ReturnsPage", () => {
     await user.click(screen.getByRole("button", { name: "Record return" }));
     await screen.findByText("Return rejected");
     expect(screen.getByLabelText("Product")).toHaveValue("shirt-l");
-    await user.click(screen.getByRole("button", { name: "Record return" }));
+    expect(screen.getByLabelText("Quantity")).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Recover original result" }));
     await waitFor(async () =>
       expect((await repo.getData()).returns).toHaveLength(1),
     );
@@ -226,11 +383,11 @@ describe("ReturnsPage", () => {
     await screen.findByText("Network response lost");
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: "Record return" }),
+        screen.getByRole("button", { name: "Recover original result" }),
       ).toBeEnabled(),
     );
     expect((await repo.getData()).returns).toHaveLength(1);
-    await user.click(screen.getByRole("button", { name: "Record return" }));
+    await user.click(screen.getByRole("button", { name: "Recover original result" }));
     await screen.findByText("Return logged in inspection staging");
     expect(record.mock.calls[1]![0]).toEqual(record.mock.calls[0]![0]);
     const after = await repo.getData();
