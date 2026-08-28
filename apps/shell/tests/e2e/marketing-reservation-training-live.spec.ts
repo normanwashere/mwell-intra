@@ -45,7 +45,7 @@ test("Marketing completes reservation assessment through the governed UI", async
   if (!completed) {
     // Old event practice completion must not make the new reservation action available.
     await page.goto("/warehouse/allocations");
-    await expect(page.getByRole("heading", { name: "Allocations", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "You don't have access to this page", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: /^(?:New reservation|Reserve)$/i })).toHaveCount(0);
     await page.goto(destination);
     const start = page.getByRole("button", { name: new RegExp(`^(Start|Resume|Try again) Marketing event reservation controls`) });
@@ -74,10 +74,11 @@ test("Marketing completes reservation assessment through the governed UI", async
     expect(response.ok()).toBe(true);
     const result = await response.json();
     expect(result).toMatchObject({ status: "passed", score: 100 });
-    await expect(dialog.getByRole("heading", { name: "Assessment passed", exact: true })).toBeVisible();
     await info.attach("governed-assessment-result", {
       body: JSON.stringify({ status: result.status, score: result.score }), contentType: "application/json",
     });
+    // Completion refreshes readiness and unmounts the runner; assert the durable result.
+    await expect(row.getByText("Complete", { exact: true })).toBeVisible();
     await page.screenshot({ path: info.outputPath("assessment-passed.png") });
   } else {
     info.annotations.push({ type: "already-completed", description: "Existing normal completion retained; no evidence reset or manufactured reattempt." });

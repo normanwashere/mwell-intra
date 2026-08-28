@@ -1,0 +1,30 @@
+{
+  "date": "2026-08-28",
+  "target": "https://mwell-intra-uat.vercel.app",
+  "applicationCommit": "ef22d20",
+  "deploymentId": "dpl_7PxZBKV4qnpb8pcU43VXesp6GM43",
+  "supabaseProjectRef": "kkoitlvydytdhlpxhuah",
+  "productionChanged": false,
+  "liveBrowser": {
+    "targetedWorkflowCases": { "passed": 10, "failed": 0 },
+    "marketingAccessCases": { "passed": 2, "failed": 0 },
+    "viewports": ["1440x900", "390x844"],
+    "roles": ["Operations Associate", "Operations Lead", "Marketing & Events Lead"],
+    "onboarding": { "assessmentStatus": "passed", "score": 100, "attempt": 1, "completionInsertedDirectly": false },
+    "operationalWrites": "Receiving progress saved, reloaded and exact-version cleared. Other operational form submissions not committed by browser tests."
+  },
+  "databaseProbes": {
+    "scope": ["receiving draft isolation", "four separate 100-serial PO-line receipts", "backorder split and replay", "multi-product return and one-unit Quality acceptance"],
+    "operationalTransactions": "rolled back",
+    "notSimulated": "Four simultaneous human operators with physical scanners"
+  },
+  "preservation": {
+    "po0001Untouched100UnitLines": 4,
+    "rollbackProbeCommandsRemaining": 0,
+    "rollbackProbeSerialsRemaining": 0,
+    "testOperatorDraftBodyCleared": true,
+    "otherTesterProgressReset": false
+  },
+  "reportChecks": ["1440 and 1920 desktop widths", "search", "section anchors", "all embedded images load", "image enlargement", "Escape dismissal", "no runtime errors"],
+  "limitations": ["Targeted August 27 regression, not all-module certification", "Physical camera optics and scanners require supervised acceptance", "Real printing and courier execution not tested", "Reservation commands are per-line, not atomic across the form"]
+}

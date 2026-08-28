@@ -22,7 +22,8 @@ export default defineConfig({
     colorScheme: "light",
     reducedMotion: "reduce",
     screenshot: "only-on-failure",
-    trace: "retain-on-failure",
+    // Keep synthetic credentials and session tokens out of shareable artifacts.
+    trace: "off",
   },
   projects: [
     {

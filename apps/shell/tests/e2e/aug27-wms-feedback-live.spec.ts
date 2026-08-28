@@ -44,8 +44,13 @@ async function capture(page: Page, info: TestInfo, name: string) {
   );
   const dialog = page.getByRole("dialog");
   if (await dialog.count()) {
+    await dialog.evaluate(async (element) => {
+      await Promise.all(element.getAnimations().map((animation) => animation.finished.catch(() => {})));
+    });
     const box = await dialog.boundingBox();
     expect(box?.x).toBeGreaterThanOrEqual(0);
+    expect(box?.y).toBeGreaterThanOrEqual(0);
+    expect((box?.y ?? 0) + (box?.height ?? 0), `${name}: entire dialog inside viewport`).toBeLessThanOrEqual(page.viewportSize()!.height + 1);
     expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(
       width.viewport + 1,
     );
@@ -53,6 +58,7 @@ async function capture(page: Page, info: TestInfo, name: string) {
   await page.screenshot({
     path: resolve(evidence, `${info.project.name}-${name}.png`),
     fullPage: false,
+    animations: "disabled",
   });
 }
 
@@ -83,7 +89,7 @@ test("Operations receiving: item selection, serial input, safe evidence and draf
     dialog.getByRole("button", { name: "Save progress" }),
   ).toBeEnabled();
   await expect(
-    dialog.getByRole("button", { name: "Upload or photograph delivery note" }),
+    dialog.getByRole("button", { name: "Upload or photograph delivery note" }).and(dialog.locator("button")),
   ).toBeVisible();
   const items = dialog.getByRole("checkbox");
   expect(await items.count()).toBeGreaterThan(0);
@@ -187,8 +193,9 @@ test("Marketing reserves multiple purposes without gaining issue authority", asy
   await signIn(page, "marketing.events", "/warehouse/allocations");
   await expect(page.getByRole("button", { name: /^Issue$/i })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /^Return$/i })).toHaveCount(0);
-  await page.getByRole("button", { name: /new reservation/i }).click();
+  await page.getByRole("button", { name: "Reserve", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "New reservation" });
+  await dialog.getByLabel("Event", { exact: true }).selectOption("UAT-AUG24-EVENT-A");
   await dialog.getByRole("button", { name: /add product/i }).click();
   await expect(dialog.getByLabel("Purpose", { exact: true })).toHaveCount(2);
   await dialog
@@ -230,6 +237,8 @@ test("Operations sees multi-item quarantine return intake", async ({
   ).toBeDisabled();
   await expect(page.getByText(/quarantine/i).first()).toBeVisible();
   await capture(page, info, "multi-item-return-intake");
+  await page.getByText("Product 2", { exact: true }).scrollIntoViewIfNeeded();
+  await capture(page, info, "multi-item-return-second-product");
 });
 
 test("Operations Lead reviews requested items and queue counts", async ({

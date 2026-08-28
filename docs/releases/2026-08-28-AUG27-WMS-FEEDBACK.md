@@ -14,4 +14,8 @@ Scope: pages 1-5, August 27 section of `wms comments (4).pdf`. Earlier-dated com
 
 ## Validation Boundary
 
+Released to `https://mwell-intra-uat.vercel.app` from application commit `ef22d20`, deployment `dpl_7PxZBKV4qnpb8pcU43VXesp6GM43`. Health verification identifies the UAT Supabase project `kkoitlvydytdhlpxhuah`. Production was not changed.
+
+Live verification: 10 targeted desktop/mobile workflow cases and two Marketing access checks passed. The Marketing assessment was completed normally through the live UI (100%, attempt one), not by inserting completion. Browser saved-progress writes were read back and cleaned up; transaction probes were rolled back. The four 100-unit PO lines remain available to testers. The response report contains screenshots, implementation context and remaining operational acceptance work.
+
 This is a targeted August 27 regression, not a fresh certification of every Intra module. Unit, component, database isolation/concurrency and live UAT desktop/mobile evidence are recorded in the matching remediation report. Real camera optics, four people scanning simultaneously, and production transactions require supervised operational acceptance. No production data should be used to demonstrate these fixes.
