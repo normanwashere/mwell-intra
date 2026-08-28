@@ -8,7 +8,7 @@ Target: **Mwell Intra UAT**, https://mwell-intra-uat.vercel.app. This report doe
 
 **28 August corrective implementation: automated regression passed and UAT database updated.** The targeted fixes and evidence below remain valid. The re-review found that equivalent entry points and interrupted interactions were not sufficiently covered in the original regression. Match the app's health-reported commit to its deployment receipt; automated checks are not full operational sign-off.
 
-Five isolated component diagnostics reproduced: the alternate Event detail reservation still lacks multiple products; repeated Reserve clicks can submit twice; a delayed upload can restore removed evidence; a delayed inspection upload can carry evidence into a different inspection; and changing a return after a lost response can produce a same-key/different-payload recovery dead end. These are local reproductions of the deployed application source, not newly committed UAT transactions.
+Before the corrective build, five isolated component diagnostics reproduced these defects: the alternate Event detail reservation lacked multiple products; repeated Reserve clicks could submit twice; a delayed upload could restore removed evidence; a delayed inspection upload could carry evidence into a different inspection; and changing a return after a lost response could produce a same-key/different-payload recovery dead end. These were local reproductions of the previous deployed application source, not newly committed UAT transactions. They are addressed by the corrective build described below.
 
 The corrective build adds record-scoped evidence, upload reconciliation, atomic event reservations, and immutable unknown-outcome return recovery. It also addresses scanner consistency, departmental attachments, training-lock explanations, draft recovery and request-review presentation. Current test results and deployment status are maintained in [Cross-Role Recovery and Evidence Remediation](../releases/2026-08-28-CROSS-ROLE-RECOVERY.md). These local checks are not a full authenticated UAT or physical-device sign-off.
 
@@ -60,7 +60,7 @@ These new screenshots were captured from the actual local application in demo mo
 
 **Change:** Use **Add product** in New reservation. Each product line has its own quantity and **Selling / Giveaway** purpose. Combined demand for repeated products is checked against available stock before any line is saved. Marketing receives reservation authority through its applicable training requirement, not issue or approval authority.
 
-Reservations remain acknowledged per-line commands, not an atomic batch. If a response is uncertain, the form locks, identifies confirmed saves, and directs the user to review recorded allocations before reserving only quantities confirmed missing. This avoids presenting an uncertain submission as a safe automatic retry.
+The follow-up replaces the original per-line implementation with an atomic server batch. Either every product line is reserved or none is. If a response is uncertain, the form locks the original products, quantities and command key. Use **Recover reservation** to retrieve or safely replay that same command before attempting a different reservation. Do not manually re-enter an uncertain batch.
 
 ![Desktop reservation: separate products with Selling and Giveaway purposes](../evidence/2026-08-28-aug27-remediation/desktop-marketing-multi-item-reservation.png)
 
@@ -110,14 +110,14 @@ Regression testing also checks lost responses, replay safety and the Quality que
 
 ## Validation Record
 
-Pre-deployment verification: 200 Warehouse component/logic tests, 142 data-repository tests, 135 Learning tests, 58 RBAC tests, 47 database regression tests, six training-publisher tests and 49 documentation-model tests passed. All 15 package typecheck tasks and the optimized Next.js build passed. Counts are per distinct test set, not totals inflated by repeated runs.
+Original Aug27 remediation baseline: 200 Warehouse component/logic tests, 142 data-repository tests, 135 Learning tests, 58 RBAC tests, 47 database regression tests, six training-publisher tests and 49 documentation-model tests passed. All 15 package typecheck tasks and the optimized Next.js build passed. These historical results cover the original release, not the later cross-role corrections; current results are in the linked Cross-Role Recovery release record. Counts are per distinct test set, not totals inflated by repeated runs.
 
 - Automated component/logic checks cover each changed workflow and negative cases.
 - Database checks cover draft ownership, direct-write denial, stale revisions, capability revocation, bounded JSON, backorder validation and replay.
 - Live authenticated probes cover draft save/read/isolation, independent PO-line receipts and backorder persistence. Operational probe writes were rolled back.
-- The deployed application is commit `ef22d20`, Vercel deployment `dpl_7PxZBKV4qnpb8pcU43VXesp6GM43`. The public UAT alias and `/api/health` identify the UAT Supabase project `kkoitlvydytdhlpxhuah`.
+- The original baseline was commit `ef22d20`, Vercel deployment `dpl_7PxZBKV4qnpb8pcU43VXesp6GM43`. It has been superseded. Read `/api/health` and the latest deployment receipt for the current version; the UAT Supabase project remains `kkoitlvydytdhlpxhuah`.
 
-**Live browser results:** Ten targeted cases passed: five workflows at desktop 1440 x 900 and mobile 390 x 844. Two additional Marketing access checks passed, preserving the completion earned during the first live assessment run. These are 12 distinct browser cases, not a certification of all Intra roles and modules. The affected personas are Operations Associate, Operations Lead and Marketing & Events Lead.
+**Original-release live browser results:** Ten targeted cases passed: five workflows at desktop 1440 x 900 and mobile 390 x 844. Two additional Marketing access checks passed, preserving the completion earned during the first live assessment run. These are 12 distinct browser cases, not a certification of the later corrective build or of all Intra roles and modules. The affected personas are Operations Associate, Operations Lead and Marketing & Events Lead.
 
 Receiving was saved through the UI, read back after reload and cleaned up by its exact actor/PO/revision. The other browser scenarios exercised controls and validation without posting operational receipts, reservations, returns or backorders. Their server transactions were tested separately in rolled-back UAT probes. No production transactions were performed.
 
@@ -139,6 +139,6 @@ Keep using the seeded UAT POs, stock, events, department requests and orders. Do
 
 ## Follow-Up Improvements
 
-The request-review dialog still shows technical user IDs and raw timestamps in its audit metadata. A subsequent usability improvement should resolve permitted display names, format timestamps locally and place technical IDs in expandable audit details. The requested items are now readable, but the metadata is not yet as approachable as it could be.
+The request-review dialog now puts requested items first, formats dates locally and places technical IDs in expandable audit details. If a permitted display name is unavailable, it says so rather than inventing a name or exposing an unrestricted user directory.
 
-The multi-product return form is long on a narrow screen. Its sections and actions remain reachable, but a compact line summary would make reviewing larger returns faster. Reservation writes remain per-line; an atomic multi-line server command would provide a stronger all-or-nothing guarantee than the current explicit recovery flow.
+The multi-product return form remains long on a narrow screen. Its sections and actions are reachable; a compact line summary is a further usability enhancement for larger returns, not a reason to bypass item validation. The former reservation atomicity gap is closed by the new multi-line server command and original-result recovery. Full live role-by-role uploads and physical-device rehearsal remain acceptance work, not completed certification.

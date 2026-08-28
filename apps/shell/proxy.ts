@@ -54,6 +54,10 @@ export async function proxy(request: NextRequest) {
 
   let response = NextResponse.next({ request });
 
+  // This endpoint verifies its own session, origin and record authority. A page
+  // redirect would turn expired-session POSTs into a login-page 405, not JSON.
+  if (request.nextUrl.pathname === '/api/evidence') return response;
+
   // No live backend configured — the shell runs in memory/demo mode.
   if (DATA_SOURCE === 'memory') return response;
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return response;

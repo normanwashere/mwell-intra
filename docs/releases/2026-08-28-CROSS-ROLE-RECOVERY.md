@@ -20,6 +20,7 @@ Corrective implementation and automated regression are complete. The four review
 | P2 draft loss | Returns, order intake and Finance drafting gain operator-scoped recovery | Browser-local drafts are not shared assignments, business transactions or cross-device backup |
 | P2 request review metadata | Short Review request title, requested items first, purpose in body, local dates, expandable raw audit details | Unknown identities remain explicitly unavailable rather than exposing a directory or inventing a name |
 | Additional P1 Event/Finance reconciliation | Status and reconciled actor/time are written in the same row update | Existing separation-of-duties, optimistic locking, lineage trigger and audit checks remain intact |
+| Deployment-discovered evidence session error | The exact evidence endpoint handles its own verified session and same-origin checks instead of inheriting the page login redirect | Expired sessions receive JSON 401, foreign origins receive 403; adjacent routes retain their existing gate |
 
 ## Verification Record
 
@@ -28,6 +29,7 @@ Corrective implementation and automated regression are complete. The four review
 - Additional inspection/excess-custody regression: 3 files, 15 tests passed. This overlaps inspection coverage above; these totals are not additive unique cases.
 - Shared authentication Guard: 23 tests passed.
 - Private evidence API: 20 tests passed, including signature/type validation, same-origin authentication, record-bound references, denied access, rate-limit response, malformed responses and the exact 4 MB boundary.
+- Evidence proxy/API integration: six tests passed. The initial live HTTP check exposed a POST-to-login redirect ending in 405; two regression tests reproduced it before correction. The exact self-authenticating evidence endpoint now returns its own API denial without changing page or adjacent-path protection.
 - Department regression checkpoints: Finance 48, Events 32, Legal 163 and Procurement 199 tests passed. Additional saved-evidence UI checks passed: Legal 5 and Procurement 6. These are execution counts, not a claim of unique end-to-end business scenarios.
 - Scoped evidence and Finance SQL: 24 PGlite checks passed, including text/UUID document registries, complete Event approval/post/reconcile handoff, independent actors, stale versions, private access and the actor-scoped upload limit. Atomic reservation SQL: 13 checks passed.
 - Knowledge Base content and evidence provenance: 80 tests passed. Handbook catalog and guide contracts: 43 tests passed.
@@ -51,6 +53,8 @@ The last validation screenshot is a 1280 x 720 desktop capture. The browser's vi
 2. Automated checks cover the changed repository, components, API, database, permissions and documentation contracts. Browser screenshots above cover the actual local app, not a complete live role matrix.
 3. Deployment acceptance requires a successful Vercel build, UAT identity, reachable Supabase and page assets, and signed-out route/API checks. The health endpoint must identify `appEnv: uat` and project `kkoitlvydytdhlpxhuah`.
 4. Authenticated role-by-role live uploads and physical-device rehearsal remain necessary before operational sign-off. No suitable pre-existing posted Event close entry was available for a non-destructive live reconciliation rehearsal; the complete transition was verified in isolated SQL tests.
+
+The first corrective deployment (`a7605d7`) passed the UAT health and Supabase checks, then exposed the evidence-route redirect during the HTTP acceptance check. It is not the final acceptance build; the follow-up includes the proxy correction above. A fresh authenticated browser pass was blocked by the browser tool's navigation policy on an existing error tab. This is a verification limitation, not evidence that the UAT application failed to load.
 
 ## Operational Limits
 
