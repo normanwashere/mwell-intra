@@ -9,6 +9,7 @@ import type {
   SimulationDefinition,
 } from "./types";
 import {
+  MARKETING_RESERVATION_ASSESSMENT,
   WAREHOUSE_RECEIVING_ASSESSMENT_ID,
   WAREHOUSE_RECEIVING_POLICY_ID,
 } from "./content";
@@ -770,6 +771,8 @@ const capabilityRequirements = roleDefinitions.flatMap((roleDefinition) => {
         capabilityClassificationByKey.get(`${grant.module}:${grant.cap}`)
           ?.access === "mutation",
     )
+    // Reservation has its own scored check; old event practice cannot certify it.
+    .filter((grant) => !(grant.module === "warehouse" && grant.role === "marketing" && grant.cap === "reserve_allocate"))
     .map((grant) => ({ module: grant.module, capability: grant.cap }));
   if (capabilities.length === 0) return [];
 
@@ -855,6 +858,20 @@ const requirements: readonly RequirementDefinition[] = [
   ...baselineRequirements,
   ...vendorJourneyRequirements,
   ...warehouseReceivingRequirements,
+  {
+    id: MARKETING_RESERVATION_ASSESSMENT.id,
+    version: 1,
+    audience: "internal",
+    kind: "assessment",
+    title: MARKETING_RESERVATION_ASSESSMENT.title,
+    mandatory: true,
+    prerequisiteIds: ["internal.role.warehouse.marketing.capability-practice.v1"],
+    capabilityOutcomes: roleCapabilities
+      .filter((grant) => grant.module === "warehouse" && grant.role === "marketing" && grant.cap === "reserve_allocate")
+      .map((grant) => ({ module: grant.module, capability: grant.cap })),
+    passingScore: MARKETING_RESERVATION_ASSESSMENT.passingScore,
+    maxAttempts: MARKETING_RESERVATION_ASSESSMENT.maxAttempts,
+  },
   ...capabilityRequirements,
   ...personaPracticeRequirements,
   ...unassignedCapabilityRequirements,
@@ -908,6 +925,9 @@ export const ROLE_CURRICULA: readonly RoleCurriculumDefinition[] =
             ? [VENDOR_EVIDENCE_REQUIREMENT_ID]
             : []),
           ...(hasCapabilityPractice ? [capabilityRequirementId] : []),
+          ...(roleDefinition.module === "warehouse" && roleDefinition.role === "marketing"
+            ? [MARKETING_RESERVATION_ASSESSMENT.id]
+            : []),
           ...(!hasCapabilityPractice &&
           requirements.some(
             (requirement) => requirement.id === personaPracticeRequirementId,

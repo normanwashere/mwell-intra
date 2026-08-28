@@ -276,6 +276,7 @@ const TASK_DEFINITIONS = [
     searchSynonyms: ["Receive and inspect a delivery."],
     sources: [
       section("receiving-putaway", "docs/manual/MWELL_INTRA_USER_MANUAL.md", "Receiving and Putaway"),
+      section("receiving-aug27-update", "docs/manual/MWELL_INTRA_USER_MANUAL.md", "August 27 Warehouse Feedback Update"),
       section("receiving-contract", "docs/TECHNICAL_AND_FUNCTIONAL_SPECIFICATION.md", "Receiving", "system-record"),
       section("receiving-quality-rma", "docs/PROCESS_REFERENCE_LIBRARY.md", "Receiving, quality and RMA", "policy-basis"),
     ],
@@ -1089,6 +1090,7 @@ const SOURCE_ROOT_HEADINGS = {
   "mwell-canonical-procurement-policy-alignment-release": "Canonical Mwell Procurement Policy Alignment",
   "uat-transaction-certification-remediation-release": "UAT Transaction Certification Remediation",
   "outcome-first-handbook-release": "Outcome-First Standalone Handbook Certification",
+  "aug27-wms-feedback-release": "August 27 WMS Feedback Remediation",
   "policy-alignment-cutover": "Policy Alignment Cutover",
   "supabase-security-controls": "Supabase Security Controls",
   "uat-live-certification": "UAT Live Certification",
@@ -1418,6 +1420,7 @@ const LEGACY_TARGET_BY_SOURCE_ID = {
   "mwell-canonical-procurement-policy-alignment-release": ["system", "release-qa", "source-references"],
   "uat-transaction-certification-remediation-release": ["system", "release-qa", "source-references"],
   "outcome-first-handbook-release": ["system", "release-qa", "outcome-first-handbook-certification"],
+  "aug27-wms-feedback-release": ["system", "release-qa", "source-references"],
   "policy-alignment-cutover": ["system", "infrastructure-continuity", "source-references"],
   "supabase-security-controls": ["system", "security-governance", "source-references"],
   "uat-live-certification": ["system", "release-qa", "source-references"],

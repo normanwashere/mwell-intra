@@ -193,8 +193,8 @@ export const warehouseModule: ModuleDefinition<
     marketing: {
       label: "Marketing",
       description:
-        "Request campaign stock, monitor fulfillment, and track distribution.",
-      capabilities: [...ALL_INVENTORY, "request_stock"],
+        "Request campaign stock, reserve event inventory, and track distribution.",
+      capabilities: [...ALL_INVENTORY, "request_stock", "reserve_allocate"],
     },
     procurement: {
       label: "Procurement",

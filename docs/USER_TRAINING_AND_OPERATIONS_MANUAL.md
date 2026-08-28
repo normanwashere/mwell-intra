@@ -6,6 +6,12 @@
 
 ## Training Format
 
+### August 27 WMS Practice
+
+Train two operators using separate accounts on different items of one issued PO. Save an incomplete serial list, close and reopen the PO, and verify the draft resumes without changing inventory. Submit one selected line and verify pending inspection while the other line stays receivable. Test duplicate scans and an HTTP evidence link as rejection paths; use delivery-note upload for the successful path.
+
+Marketing then reserves several event products with Selling and Giveaway purposes. The issuer remains separately authorized. If a reservation response is uncertain, the form locks to prevent accidental duplicates: close it, check the recorded allocations, and create another reservation only for quantities confirmed missing. In Returns receiving, add several items and confirm quarantine-first intake in one batch; an invalid line must block the entire batch, and an unchanged retry uses the same intake reference. Supervisors use View request to inspect actual demand and test a backorder with one fulfill-now line set to zero, without creating an empty overall split.
+
 Use a role-specific test account and realistic test data. Each learner completes one happy path, one correction path, one unauthorized action check, and a recovery from refresh/offline interruption. Trainers record attendance, role, environment, scenario IDs, result, and follow-up owner.
 
 ## Common Controls

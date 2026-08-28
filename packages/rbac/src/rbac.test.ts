@@ -142,7 +142,7 @@ describe('warehouse parity vs source roles.ts', () => {
     ],
     bi_analyst: ['view_dashboard', 'view_inventory', 'view_analytics', 'view_exceptions'],
     business_unit: ['view_dashboard', 'view_inventory', 'request_stock'],
-    marketing: ['view_dashboard', 'view_inventory', 'request_stock'],
+    marketing: ['view_dashboard', 'view_inventory', 'request_stock', 'reserve_allocate'],
     procurement: ['view_dashboard', 'view_inventory', 'view_procurement', 'manage_products'],
     pricing: ['view_dashboard', 'view_inventory', 'view_pricing', 'view_finance'],
     warehouse_admin: warehouseModule.capabilities.filter(

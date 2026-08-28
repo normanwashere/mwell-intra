@@ -148,6 +148,7 @@ export interface IssueInput {
 }
 
 export interface ReturnInput {
+  idempotencyKey?: string;
   source: ReturnRecord["source"];
   eventId?: string;
   /** When set, the matching allocation is closed out (status -> 'returned'). */

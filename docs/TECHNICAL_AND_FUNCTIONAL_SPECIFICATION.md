@@ -10,6 +10,14 @@ Mwell Intra is the shared operating platform for cross-department workflows. War
 
 ## Runtime architecture
 
+### August 27 Receiving and Intake Controls
+
+Procurement receiving supports a selected subset of PO lines. The existing governed receipt transaction locks the PO and validates remaining quantities; the UI does not grant new receiving authority. Per-operator receiving drafts are separate from stock records, scoped by authenticated actor and PO, and protected by optimistic revision checks. Saved scans are not evidence of receipt or inspection. Draft reads never fall back to browser storage in live mode, and changed PO balances require review.
+
+Serial scanning reuses the camera/manual-entry component and rejects duplicates and over-capacity scans. Delivery-note image capture stores private evidence references; external delivery evidence must use HTTPS. Multi-line reservation entry uses acknowledged per-line commands and removes successful lines from pending entry. Multi-line returns submit one validated batch with a stable intake idempotency key; a failed batch keeps the complete form for review. Intake cannot authorize restocking. Marketing reservation permission does not confer stock issue or approval authority.
+
+The versioned `warehouse.record_return_v2` command owns inventory, movement, return and provisional Quality writes. Physical serialized units use the database's `in_stock` counting model with exact active quarantine holds in the same transaction. Consequently, pending intake does not increase available-to-promise stock, and releasing one accepted serial increases availability by one. Legacy intake remains compatible with already-open clients during rollout. Marketing curriculum v2 adds a dedicated reservation assessment; publishing it does not manufacture learner completion or bypass `has_live_cap`.
+
 - Next.js shell deployed on Vercel.
 - Modular React workspaces under `modules/`.
 - Supabase Auth for identity and session management.
@@ -70,7 +78,7 @@ The strict model rejects wrong hosts, routes, roles, targets, contexts, paths, h
 
 ### Task 8 certification result
 
-The final model contains 29 maintained sources, four public modes, 13 task guides with 52 stages, 11 role guides, 48 decisions, 96 branches, 27 terminal outcomes, and 313 legacy-route migrations. The unit trio passed 81 of 81 tests. Strict evidence coverage and provenance returned zero warnings and zero errors, and the independent CI attestation verified. The eight-project browser suite passed 116 tests with 100 project-conditional skips and zero failures in 19.6 minutes. Its 24 captures cover light, dark, and print at 1440, 1280, 1024, 768, 430, 390, 360, and 320 CSS pixels.
+The current model contains 30 maintained sources, four public modes, 13 task guides with 52 stages, 11 role guides, 48 decisions, 96 branches, 27 terminal outcomes, and 321 legacy-route migrations. Eight routes and one release source were added on August 28. The original August 24 unit trio passed 81 of 81 tests; strict evidence coverage and provenance returned zero warnings and zero errors, and the independent CI attestation verified. That original eight-project browser suite passed 116 tests with 100 project-conditional skips and zero failures in 19.6 minutes. Its 24 captures cover light, dark, and print at 1440, 1280, 1024, 768, 430, 390, 360, and 320 CSS pixels; those historical results are not a fresh certification of later changes.
 
 Repository verification passed: documentation build/check from all 29 sources, lint with 15 of 15 Turbo tasks and no errors, typecheck with 15 of 15 Turbo tasks, and release-documentation verification with no operational source changed. The three existing lint warnings are recorded by exact file and line in the release record. Local pnpm commands emitted the declared-engine warning because certification ran on Node `v20.18.1` and pnpm `9.15.9` while the repository requires Node 22 or newer and pnpm 10.
 

@@ -64,12 +64,6 @@ export function QualityPage() {
 
   const pending = useMemo<PendingInspection[]>(() => {
     if (!data) return [];
-    const inspectedQuantity = (sourceType: PendingInspection['sourceType'], sourceId: string, productId: string) => inspections
-      .filter((inspection) => inspection.sourceType === sourceType
-        && inspection.sourceId === sourceId
-        && inspection.disposition !== 'pending'
-        && inspection.productId === productId)
-      .reduce((sum, inspection) => sum + inspection.quantity, 0);
     const receipts = data.receipts.flatMap((receipt) => receipt.lines.flatMap((line, lineIndex) => {
       const procurementPoLineId = (line as typeof line & { procurementLineId?: string }).procurementLineId;
       const staged = inspections.filter((inspection) => inspection.sourceType === 'receipt'
@@ -110,18 +104,34 @@ export function QualityPage() {
         ...(procurementPoLineId ? { procurementPoLineId } : {}),
       }] : [];
     }));
-    const returns = data.returns.flatMap((returned) => returned.lines.flatMap((line, lineIndex) => {
-      const quantity = Math.max(0, line.quantity - inspectedQuantity('return', returned.id, line.productId));
-      return quantity > 0 ? [{
-        id: `${returned.id}-${line.productId}-${lineIndex}`,
-        sourceType: 'return' as const,
-        sourceId: returned.id,
-        productId: line.productId,
-        quantity,
-        ...(line.binId ? { binId: line.binId } : {}),
-        recordedAt: returned.createdAt,
-      }] : [];
-    }));
+    const returns = data.returns.flatMap((returned) => {
+      const groups = new Map<string, (typeof returned.lines)[number]>();
+      for (const line of returned.lines) {
+        const key = JSON.stringify([line.productId, line.binId ?? null, line.serialNumber ?? null]);
+        const existing = groups.get(key);
+        if (existing) existing.quantity += line.quantity;
+        else groups.set(key, { ...line });
+      }
+      return [...groups.entries()].flatMap(([key, line]) => {
+        const inspected = inspections.filter((inspection) =>
+          inspection.sourceType === 'return' && inspection.sourceId === returned.id
+          && inspection.productId === line.productId && inspection.disposition !== 'pending'
+          && (inspection.binId ?? null) === (line.binId ?? null)
+          && (inspection.serialNumber ?? null) === (line.serialNumber ?? null)
+        ).reduce((sum, inspection) => sum + inspection.quantity, 0);
+        const quantity = Math.max(0, line.quantity - inspected);
+        return quantity > 0 ? [{
+          id: `${returned.id}-${key}`,
+          sourceType: 'return' as const,
+          sourceId: returned.id,
+          productId: line.productId,
+          quantity,
+          ...(line.binId ? { binId: line.binId } : {}),
+          ...(line.serialNumber ? { serialNumber: line.serialNumber } : {}),
+          recordedAt: returned.createdAt,
+        }] : [];
+      });
+    });
     return [...receipts, ...returns];
   }, [data, inspections]);
 

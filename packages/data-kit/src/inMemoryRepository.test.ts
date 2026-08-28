@@ -39,6 +39,7 @@ function miniData(): WarehouseData {
     storageAreas: [
       { id: "bin-a", locationId: "loc-wh", code: "WH-A-01", active: true },
       { id: "bin-b", locationId: "loc-wh", code: "WH-B-01", active: true },
+      { id: "bin-cebu", locationId: "loc-cebu", code: "CEBU-01", active: true },
     ],
     suppliers: [{ id: "sup-1", name: "Supplier One", leadTimeDays: 7 }],
     lots: [],
@@ -768,7 +769,7 @@ describe("return Quality completion", () => {
           quantity: 2,
           reason: "Unopened surplus",
           locationId: "loc-cebu",
-          binId: "bin-a",
+          binId: "bin-cebu",
         },
       ],
     });
@@ -787,7 +788,7 @@ describe("return Quality completion", () => {
       sourceType: "return",
       sourceId: returned.id,
       productId: "shirt",
-      binId: "bin-a",
+      binId: "bin-cebu",
       quantity: 2,
       disposition: "accepted",
     });

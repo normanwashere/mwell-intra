@@ -1,5 +1,8 @@
 import type { AssessmentQuestion } from "./AssessmentRunner";
 import type { ControlledPolicyDocument } from "./PolicyAcknowledgment";
+import marketingReservationAssessment from "./marketing-reservation-assessment.json";
+
+export const MARKETING_RESERVATION_ASSESSMENT = marketingReservationAssessment;
 
 export const WAREHOUSE_RECEIVING_POLICY_ID =
   "internal.warehouse.receiving-custody-policy.v1";
@@ -59,6 +62,9 @@ const RECEIVING_POLICY: ControlledPolicyDocument = {
 export function assessmentQuestionsFor(
   requirementId: string,
 ): readonly AssessmentQuestion[] | null {
+  if (requirementId === MARKETING_RESERVATION_ASSESSMENT.id) {
+    return MARKETING_RESERVATION_ASSESSMENT.questions;
+  }
   return requirementId === WAREHOUSE_RECEIVING_ASSESSMENT_ID
     ? RECEIVING_QUESTIONS
     : null;

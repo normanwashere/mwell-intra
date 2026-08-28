@@ -4,7 +4,9 @@
 
 **Live app:** https://mwell-intra.vercel.app
 
-**Reviewed:** August 25, 2026
+**UAT app:** https://mwell-intra-uat.vercel.app (August 27 feedback changes target UAT only)
+
+**Reviewed:** August 28, 2026 for the August 27 WMS feedback; other sections retain their documented acceptance boundaries
 
 **Current UAT operating baseline:** August 26, 2026; includes the August 24/25 WMS feedback scenarios, governed mixed PO receiving, exact serialized Quality custody, and corrected cross-role operational visibility
 
@@ -17,6 +19,16 @@
 This handbook is the complete standalone operating reference for Mwell Intra. Use its contents, full-text search, process diagrams, role procedures, application screenshots, and governed source register without opening a separate help system. Operational routes continue to enforce role-based access.
 
 ## Start Here
+
+### August 27 Warehouse Feedback Update
+
+- **Receive a PO:** Open Purchase Orders, choose Receive and inspect, and select only the item lines assigned to you. Other staff use their own accounts for the remaining items. Reconcile clean, damaged, unidentified, short and excess quantities for each selected line.
+- **Scan and pause:** Open the serial scanner for the correct item and condition. A camera, scanner keyboard input, or manual entry can add serials. Save progress accepts unfinished scans; it does not receive stock. Reopen the same PO with the same account to resume. If the PO changed, review deselected items before continuing.
+- **Delivery evidence:** Upload or photograph the delivery note. A secure HTTPS document link is optional; an insecure HTTP address cannot be submitted. Confirm governed receipt only after the selected items and evidence are complete. Quality inspection still precedes putaway and availability.
+- **Reserve an event:** Add multiple product lines and choose Selling or Giveaway per line. Marketing may reserve after the applicable training requirement, but cannot use that permission to issue stock or approve its own transactions. If a response is uncertain, close the locked form, check recorded allocations, and reserve only confirmed missing quantities.
+- **Marketing training:** Complete the five-question Marketing event reservation controls assessment in Onboarding. Existing event training alone does not unlock the new reservation permission. The new assessment requires all answers correct and permits three attempts; failed attempts do not grant stock authority.
+- **Return stock:** Add multiple return items, identify their source event where applicable, and scan the returned identities. Intake always goes into quarantine. Quality, not the intake operator, authorizes restocking.
+- **Review requests:** In Pick & Pack, check the tab counters and use View request to inspect item quantities before approval. Split backorder permits zero fulfill-now for an individual line, but the split still needs both a fulfill-now quantity and a deferred quantity overall.
 
 1. Use the handbook search to find an outcome such as `receive stock`, `PR`, `vendor renewal`, `bins`, or `DOA`.
 2. Read the complete process diagram first, including every decision and exception branch.
@@ -678,7 +690,7 @@ Use these records only in the UAT environment. They provide known starting point
 
 The Operations Associate can see these receivable goods purchase orders and their lines without receiving broad access to Procurement request records. Use `Q-01-01` for evidence-backed quarantine when an inspection outcome prevents normal putaway.
 
-For the August 25 mixed-receipt check on one serialized PO 0001 line, record: 50 clean, 20 damaged, 10 unidentified and 20 short. Scan 80 unique serials across the three physically present outcomes, attach delivery evidence and an exception reason, then confirm that one receipt and one Supervisor decision are created atomically. After Quality acceptance, put away each SKU to its planned final bin; do not treat `Q-01-01` staging as the permanent location.
+For the August 25 mixed-receipt check on one serialized PO 0001 line, record: 50 clean, 20 damaged, 10 unidentified and 20 short. Scan 80 unique serials across the three physically present outcomes, attach delivery evidence and an exception reason, then confirm that one receipt and separate Supervisor decisions for damaged, unidentified, and short outcomes are created atomically. After Quality acceptance, put away each SKU to its planned final bin; do not treat `Q-01-01` staging as the permanent location.
 
 ### Fulfillment, Delivery and Backorder Scenarios
 

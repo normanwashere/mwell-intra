@@ -31,6 +31,312 @@ function HistoryControls() {
 }
 
 describe("FulfillmentPage", () => {
+  it("defers an entire item line with zero fulfill-now quantity", async () => {
+    const repo = makeRepo();
+    const order = await repo.createFulfillmentOrder({
+      source: "event",
+      eventId: "evt-makati",
+      externalReference: "ZERO-LINE",
+      sourceLocationId: "loc-wh",
+      lines: [
+        { productId: "doctor-token", quantity: 4 },
+        { productId: "shirt-l", quantity: 2 },
+      ],
+      actor: "marketing@mwell.com.ph",
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<FulfillmentPage />, {
+      role: "warehouse_operator",
+      repo,
+    });
+    await user.click(
+      await screen.findByRole("button", { name: "Split backorder" }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Split backorder / ZERO-LINE",
+    });
+    const input = within(dialog).getByLabelText("Event Shirt (L)");
+    await user.clear(input);
+    await user.type(input, "0");
+    expect(input).toBeValid();
+    await user.click(
+      within(dialog).getByRole("button", { name: "Create backorder" }),
+    );
+    await waitFor(async () =>
+      expect((await repo.getData()).fulfillmentOrders).toHaveLength(2),
+    );
+    const data = await repo.getData();
+    expect(
+      data.fulfillmentOrders.find((row) => row.id === order.id)?.lines,
+    ).toEqual([
+      expect.objectContaining({ productId: "doctor-token", quantity: 3 }),
+    ]);
+    expect(
+      data.fulfillmentOrders.find((row) => row.parentOrderId === order.id)
+        ?.lines,
+    ).toEqual([
+      expect.objectContaining({ productId: "doctor-token", quantity: 1 }),
+      expect.objectContaining({ productId: "shirt-l", quantity: 2 }),
+    ]);
+  });
+
+  it.each(["0", "4", "-1", "5", "1.5", ""])(
+    "blocks invalid split quantity %s before submission",
+    async (quantity) => {
+      const repo = makeRepo();
+      await repo.createFulfillmentOrder({
+        source: "event",
+        eventId: "evt-makati",
+        externalReference: "INVALID-SPLIT",
+        sourceLocationId: "loc-wh",
+        lines: [{ productId: "doctor-token", quantity: 4 }],
+        actor: "marketing@mwell.com.ph",
+      });
+      const before = await repo.getData();
+      const user = userEvent.setup();
+      renderWithProviders(<FulfillmentPage />, {
+        role: "warehouse_operator",
+        repo,
+      });
+      await user.click(
+        await screen.findByRole("button", { name: "Split backorder" }),
+      );
+      const dialog = await screen.findByRole("dialog", {
+        name: "Split backorder / INVALID-SPLIT",
+      });
+      const input = within(dialog).getByLabelText("Doctor Token");
+      await user.clear(input);
+      if (quantity) await user.type(input, quantity);
+      expect(
+        within(dialog).getByRole("button", { name: "Create backorder" }),
+      ).toBeDisabled();
+      expect(await repo.getData()).toEqual(before);
+    },
+  );
+
+  it("filters Orders and events using actionable counters and clears conflicting filters", async () => {
+    const repo = makeRepo();
+    const order = await repo.createFulfillmentOrder({
+      source: "ecommerce",
+      externalReference: "COUNTER-RECEIVED",
+      sourceLocationId: "loc-wh",
+      lines: [{ productId: "smart-watch", quantity: 2 }],
+      actor: "sales@mwell.com.ph",
+    });
+    const data = await repo.getData();
+    data.fulfillmentOrders.push(
+      {
+        ...order,
+        id: "counter-allocated",
+        externalReference: "COUNTER-ALLOCATED",
+        status: "allocated",
+      },
+      {
+        ...order,
+        id: "counter-picking",
+        externalReference: "COUNTER-PICKING",
+        status: "picking",
+      },
+      {
+        ...order,
+        id: "counter-ready",
+        externalReference: "COUNTER-READY",
+        status: "ready",
+      },
+      {
+        ...order,
+        id: "counter-completed",
+        externalReference: "COUNTER-COMPLETED",
+        status: "completed",
+      },
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<FulfillmentPage />, {
+      role: "warehouse_operator",
+      repo: makeRepo(data),
+    });
+
+    const counters = await screen.findByRole("group", {
+      name: "Order counters",
+    });
+    expect(
+      within(counters).getByRole("button", { name: "Active work: 4" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await user.type(screen.getByLabelText("Search orders"), "missing");
+    await user.click(
+      within(counters).getByRole("button", { name: "Picking: 2" }),
+    );
+    expect(screen.getByLabelText("Search orders")).toHaveValue("");
+    expect(screen.getByLabelText("Status")).toHaveValue("pick_queue");
+    expect(
+      within(
+        screen.getByRole("list", { name: "Fulfillment demand" }),
+      ).getAllByRole("listitem"),
+    ).toHaveLength(2);
+    expect(screen.queryByText("COUNTER-READY")).not.toBeInTheDocument();
+    await user.click(
+      within(counters).getByRole("button", { name: "Ready for release: 1" }),
+    );
+    expect(screen.getByText("COUNTER-READY")).toBeInTheDocument();
+    expect(screen.queryByText("COUNTER-PICKING")).not.toBeInTheDocument();
+    await user.click(
+      within(counters).getByRole("button", { name: "Packing: 0" }),
+    );
+    expect(screen.getByText("No orders ready to pick")).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Status"), "all");
+    expect(
+      within(counters).getByRole("button", { name: "Packing: 0" }),
+    ).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByText("COUNTER-COMPLETED")).toBeInTheDocument();
+  });
+
+  it("filters department request counters and updates counts after a reviewed decision", async () => {
+    const repo = makeRepo();
+    const request = await repo.createDepartmentStockRequest({
+      requestingDepartment: "marketing",
+      purpose: "Counter pending",
+      costCenter: "CC-4100",
+      requiredDate: "2026-09-01",
+      expenseTreatment: "expense",
+      lines: [{ productId: "doctor-token", quantity: 3 }],
+      actor: "marketing@mwell.com.ph",
+    });
+    const data = await repo.getData();
+    data.departmentStockRequests.push({
+      ...request,
+      id: "approved-request",
+      purpose: "Counter approved",
+      status: "approved",
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<FulfillmentPage />, {
+      role: "warehouse_supervisor",
+      repo: makeRepo(data),
+      route: "/fulfillment?tab=requests",
+    });
+    const counters = await screen.findByRole("group", {
+      name: "Request counters",
+    });
+    await user.click(
+      within(counters).getByRole("button", { name: "Awaiting decision: 1" }),
+    );
+    expect(screen.queryByText("Counter approved")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "View request" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "View request / Counter pending",
+    });
+    await user.click(within(dialog).getByRole("button", { name: "Approve" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(
+      within(counters).getByRole("button", { name: "Awaiting decision: 0" }),
+    ).toBeInTheDocument();
+    await user.click(
+      within(counters).getByRole("button", { name: "Approved: 2" }),
+    );
+    expect(screen.getByText("Counter pending")).toBeInTheDocument();
+    expect(screen.getByText("Counter approved")).toBeInTheDocument();
+    await user.click(
+      within(counters).getByRole("button", { name: "All requests: 2" }),
+    );
+    expect(
+      within(
+        screen.getByRole("list", { name: "Department stock requests" }),
+      ).getAllByRole("listitem"),
+    ).toHaveLength(2);
+  });
+
+  it("shows every request item and its quantity before approval", async () => {
+    const repo = makeRepo();
+    await repo.createDepartmentStockRequest({
+      requestingDepartment: "marketing",
+      purpose: "Review all lines",
+      costCenter: "CC-4100",
+      requiredDate: "2026-09-01",
+      expenseTreatment: "expense",
+      lines: [
+        { productId: "doctor-token", quantity: 3 },
+        { productId: "shirt-l", quantity: 7 },
+      ],
+      actor: "marketing@mwell.com.ph",
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<FulfillmentPage />, {
+      role: "warehouse_supervisor",
+      repo,
+      route: "/fulfillment?tab=requests",
+    });
+    await screen.findByText("Review all lines");
+    expect(
+      screen.queryByRole("button", { name: "Approve" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "View request" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "View request / Review all lines",
+    });
+    const items = within(dialog).getByRole("table", {
+      name: "Requested items",
+    });
+    const products = (await repo.getData()).products;
+    for (const [id, quantity] of [
+      ["doctor-token", 3],
+      ["shirt-l", 7],
+    ] as const) {
+      const row = within(items).getByRole("row", {
+        name: (name) =>
+          name.includes(products.find((product) => product.id === id)!.name),
+      });
+      expect(
+        within(row).getByRole("cell", { name: String(quantity) }),
+      ).toBeInTheDocument();
+    }
+    expect(within(dialog).getByText("CC-4100")).toBeInTheDocument();
+    expect(
+      within(dialog).getByText("marketing@mwell.com.ph"),
+    ).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Approve" }));
+    await waitFor(async () =>
+      expect((await repo.getData()).departmentStockRequests[0]?.status).toBe(
+        "approved",
+      ),
+    );
+    expect((await repo.getData()).fulfillmentOrders[0]?.lines).toEqual([
+      expect.objectContaining({ productId: "doctor-token", quantity: 3 }),
+      expect.objectContaining({ productId: "shirt-l", quantity: 7 }),
+    ]);
+  });
+
+  it("lets a requester view all items without decision controls", async () => {
+    const repo = makeRepo();
+    await repo.createDepartmentStockRequest({
+      requestingDepartment: "marketing",
+      purpose: "Read only review",
+      costCenter: "CC-4100",
+      requiredDate: "2026-09-01",
+      expenseTreatment: "expense",
+      lines: [{ productId: "doctor-token", quantity: 3 }],
+      actor: "marketing@mwell.com.ph",
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<FulfillmentPage />, { role: "marketing", repo });
+    await user.click(
+      await screen.findByRole("button", { name: "View request" }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "View request / Read only review",
+    });
+    expect(
+      within(dialog).getByRole("table", { name: "Requested items" }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: "Approve" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: "Reject" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("opens the requests workspace from a Marketing deep link", async () => {
     renderWithProviders(
       <>

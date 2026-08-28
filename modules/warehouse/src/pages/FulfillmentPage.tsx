@@ -219,6 +219,53 @@ function SummaryStrip({
   );
 }
 
+function QueueCounters({
+  label,
+  counters,
+  selected,
+  onSelect,
+}: {
+  label: string;
+  counters: Array<{ id: string; label: string; count: number }>;
+  selected: string;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label={label}
+      className="grid grid-cols-2 border-y border-line bg-surface sm:grid-cols-3 lg:grid-cols-5"
+    >
+      {counters.map((counter) => (
+        <button
+          key={counter.id}
+          type="button"
+          aria-label={`${counter.label}: ${counter.count}`}
+          aria-pressed={selected === counter.id}
+          onClick={() => onSelect(counter.id)}
+          className={`min-h-20 min-w-0 border-b-2 px-3 py-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500 ${selected === counter.id ? "border-brand-500 bg-brand-500/10" : "border-transparent hover:bg-inset"}`}
+        >
+          <span className="block text-xs leading-4 text-muted">
+            {counter.label}
+          </span>
+          <span className="mt-1 block font-display text-xl font-bold tabular-nums text-ink">
+            {counter.count}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function matchesOrderStatus(order: FulfillmentOrder, filter: string) {
+  if (filter === "all") return true;
+  if (filter === "active")
+    return !["completed", "cancelled"].includes(order.status);
+  if (filter === "pick_queue")
+    return ["allocated", "picking"].includes(order.status);
+  return order.status === filter;
+}
+
 export function FulfillmentPage() {
   const warehouse = useWarehouse();
   const { data, role, roleLabel, can, actor, identityId } = warehouse;
@@ -291,17 +338,19 @@ export function FulfillmentPage() {
         icon="list"
       />
 
-      <SummaryStrip
-        orders={data.fulfillmentOrders}
-        requests={
-          data.departmentStockRequests.filter(
-            (row) => row.status === "pending_approval",
-          ).length
-        }
-        returns={data.customerReturnCases}
-        reKits={data.reKitWorkOrders}
-        floorMode={isFloorOperator}
-      />
+      {tab !== "orders" && tab !== "requests" && (
+        <SummaryStrip
+          orders={data.fulfillmentOrders}
+          requests={
+            data.departmentStockRequests.filter(
+              (row) => row.status === "pending_approval",
+            ).length
+          }
+          returns={data.customerReturnCases}
+          reKits={data.reKitWorkOrders}
+          floorMode={isFloorOperator}
+        />
+      )}
 
       {visibleTabs.length > 1 && (
         <div
@@ -325,6 +374,25 @@ export function FulfillmentPage() {
             >
               <span className="sm:hidden">{item.shortLabel}</span>
               <span className="hidden sm:inline">{item.label}</span>
+              {(item.id === "orders" || item.id === "requests") && (
+                <span
+                  className="ml-2 inline-flex min-w-5 items-center justify-center rounded-full bg-inset px-1.5 text-xs tabular-nums text-ink"
+                  title={
+                    item.id === "orders"
+                      ? "Active orders and events"
+                      : "Requests awaiting a decision"
+                  }
+                  aria-hidden="true"
+                >
+                  {item.id === "orders"
+                    ? data.fulfillmentOrders.filter((order) =>
+                        matchesOrderStatus(order, "active"),
+                      ).length
+                    : data.departmentStockRequests.filter(
+                        (request) => request.status === "pending_approval",
+                      ).length}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -446,11 +514,7 @@ function OrdersWorkspace({
         order.courier,
         order.waybillNumber,
       ].some((value) => value?.toLowerCase().includes(normalized));
-    const matchesStatus =
-      statusFilter === "all" ||
-      (statusFilter === "active"
-        ? !["completed", "cancelled"].includes(order.status)
-        : order.status === statusFilter);
+    const matchesStatus = matchesOrderStatus(order, statusFilter);
     const matchesChannel =
       channelFilter === "all" || order.ecommerceChannel === channelFilter;
     return matchesQuery && matchesStatus && matchesChannel;
@@ -471,6 +535,26 @@ function OrdersWorkspace({
 
   return (
     <section className="space-y-4" aria-labelledby="orders-title">
+      <QueueCounters
+        label="Order counters"
+        counters={[
+          { id: "active", label: "Active work" },
+          { id: "received", label: "Waiting allocation" },
+          { id: "pick_queue", label: "Picking" },
+          { id: "packing", label: "Packing" },
+          { id: "ready", label: "Ready for release" },
+        ].map((counter) => ({
+          ...counter,
+          count: orders.filter((order) => matchesOrderStatus(order, counter.id))
+            .length,
+        }))}
+        selected={statusFilter}
+        onSelect={(status) => {
+          setStatusFilter(status);
+          setQuery("");
+          setChannelFilter("all");
+        }}
+      />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2
@@ -559,6 +643,7 @@ function OrdersWorkspace({
           >
             <option value="active">Active work</option>
             <option value="all">All statuses</option>
+            <option value="pick_queue">Allocated and picking</option>
             {[
               "received",
               "allocated",
@@ -847,6 +932,7 @@ function OrdersWorkspace({
         onClose={() => setPackOrder(undefined)}
       />
       <BackorderSheet
+        key={backorderOrder?.id}
         order={backorderOrder}
         products={products}
         onClose={() => setBackorderOrder(undefined)}
@@ -1851,18 +1937,45 @@ function BackorderSheet({
   const { advanceFulfillmentOrder } = useWarehouse();
   const toast = useToast();
   const [saving, setSaving] = useState(false);
+  const [quantities, setQuantities] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      (order?.lines ?? []).map((line) => [
+        line.productId,
+        String(Math.max(1, line.quantity - 1)),
+      ]),
+    ),
+  );
   if (!order) return null;
+  const fulfilledLines = order.lines.map((line) => ({
+    productId: line.productId,
+    quantity: Number(quantities[line.productId]),
+  }));
+  const invalidQuantity = order.lines.some((line, index) => {
+    const quantity = fulfilledLines[index]!.quantity;
+    return (
+      !quantities[line.productId]?.trim() ||
+      !Number.isInteger(quantity) ||
+      quantity < 0 ||
+      quantity > line.quantity
+    );
+  });
+  const validationMessage = invalidQuantity
+    ? "Enter a whole fulfill-now quantity from zero to the original demand for every item."
+    : !fulfilledLines.some((line) => line.quantity > 0)
+      ? "At least one item must have a fulfill-now quantity."
+      : !fulfilledLines.some(
+            (line, index) => line.quantity < order.lines[index]!.quantity,
+          )
+        ? "At least one item must have a deferred quantity."
+        : undefined;
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    if (saving || validationMessage) return;
     setSaving(true);
     const ok = await advanceFulfillmentOrder({
       orderId: order.id,
       action: "split_backorder",
-      fulfilledLines: order.lines.map((line) => ({
-        productId: line.productId,
-        quantity: Number(form.get(`quantity-${line.productId}`)),
-      })),
+      fulfilledLines,
     });
     setSaving(false);
     if (ok) {
@@ -1885,7 +1998,7 @@ function BackorderSheet({
           type="submit"
           form="split-backorder-form"
           className="btn-primary w-full"
-          disabled={saving}
+          disabled={saving || Boolean(validationMessage)}
         >
           {saving ? "Splitting..." : "Create backorder"}
         </button>
@@ -1904,20 +2017,36 @@ function BackorderSheet({
               line.productId
             }
             htmlFor={`backorder-${line.productId}`}
-            hint={`Original demand: ${line.quantity}`}
+            hint={`Original demand: ${line.quantity}; deferred: ${invalidQuantity ? "-" : line.quantity - Number(quantities[line.productId])}`}
           >
             <input
               id={`backorder-${line.productId}`}
               name={`quantity-${line.productId}`}
               className="input"
               type="number"
-              min="1"
+              min="0"
+              step="1"
               max={line.quantity}
-              defaultValue={Math.max(1, line.quantity - 1)}
+              value={quantities[line.productId] ?? ""}
+              onChange={(event) =>
+                setQuantities((current) => ({
+                  ...current,
+                  [line.productId]: event.target.value,
+                }))
+              }
+              disabled={saving}
               required
             />
           </Field>
         ))}
+        {validationMessage && (
+          <p
+            role="status"
+            className="text-sm text-amber-800 dark:text-amber-300"
+          >
+            {validationMessage}
+          </p>
+        )}
       </form>
     </Sheet>
   );
@@ -2238,14 +2367,47 @@ function RequestsWorkspace({
   const toast = useToast();
   const [open, setOpen] = useState(false);
   const [workingId, setWorkingId] = useState<string>();
+  const [detailId, setDetailId] = useState<string>();
+  const [statusFilter, setStatusFilter] = useState("all");
+  const detailRequest = requests.find((request) => request.id === detailId);
+  const filteredRequests = requests.filter(
+    (request) => statusFilter === "all" || request.status === statusFilter,
+  );
   const decide = async (id: string, decision: "approved" | "rejected") => {
+    if (
+      workingId ||
+      !canApprove ||
+      requests.find((request) => request.id === id)?.status !==
+        "pending_approval"
+    )
+      return;
     setWorkingId(id);
     const ok = await decideDepartmentStockRequest({ requestId: id, decision });
     setWorkingId(undefined);
-    if (ok) toast.success(`Request ${decision}.`);
+    if (ok) {
+      setDetailId(undefined);
+      toast.success(`Request ${decision}.`);
+    }
   };
   return (
     <section className="space-y-4" aria-labelledby="requests-title">
+      <QueueCounters
+        label="Request counters"
+        counters={[
+          { id: "all", label: "All requests" },
+          { id: "pending_approval", label: "Awaiting decision" },
+          { id: "approved", label: "Approved" },
+          { id: "allocated", label: "Allocated" },
+          { id: "issued", label: "Issued" },
+        ].map((counter) => ({
+          ...counter,
+          count: requests.filter(
+            (request) => counter.id === "all" || request.status === counter.id,
+          ).length,
+        }))}
+        selected={statusFilter}
+        onSelect={setStatusFilter}
+      />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2
@@ -2284,7 +2446,7 @@ function RequestsWorkspace({
           },
         ]}
       />
-      {requests.length === 0 ? (
+      {filteredRequests.length === 0 ? (
         <EmptyState
           icon="clipboard"
           title="No department requests"
@@ -2295,11 +2457,13 @@ function RequestsWorkspace({
           className="grid gap-3 lg:grid-cols-2"
           aria-label="Department stock requests"
         >
-          {requests.map((request) => (
-            <li key={request.id} className="card p-4">
+          {filteredRequests.map((request) => (
+            <li key={request.id} className="card min-w-0 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="font-semibold text-ink">{request.purpose}</p>
+                  <p className="break-words font-semibold text-ink">
+                    {request.purpose}
+                  </p>
                   <p className="text-xs text-muted">
                     {titleCase(request.requestingDepartment)} ·{" "}
                     {request.costCenter}
@@ -2321,29 +2485,109 @@ function RequestsWorkspace({
                   </dd>
                 </div>
               </dl>
-              {canApprove && request.status === "pending_approval" && (
-                <div className="mt-4 grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    className="btn-outline"
-                    disabled={workingId === request.id}
-                    onClick={() => void decide(request.id, "rejected")}
-                  >
-                    Reject
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-primary"
-                    disabled={workingId === request.id}
-                    onClick={() => void decide(request.id, "approved")}
-                  >
-                    Approve
-                  </button>
-                </div>
-              )}
+              <button
+                type="button"
+                className="btn-ghost mt-3 w-full justify-between sm:w-auto"
+                onClick={() => setDetailId(request.id)}
+              >
+                View request <Icon name="chevron" className="h-4 w-4" />
+              </button>
             </li>
           ))}
         </ul>
+      )}
+      {detailRequest && (
+        <Sheet
+          open
+          onOpenChange={(nextOpen) => {
+            if (!nextOpen && !workingId) setDetailId(undefined);
+          }}
+          title={`View request / ${detailRequest.purpose}`}
+          footer={
+            canApprove && detailRequest.status === "pending_approval" ? (
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  className="btn-outline"
+                  disabled={Boolean(workingId)}
+                  onClick={() => void decide(detailRequest.id, "rejected")}
+                >
+                  Reject
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  disabled={Boolean(workingId)}
+                  onClick={() => void decide(detailRequest.id, "approved")}
+                >
+                  Approve
+                </button>
+              </div>
+            ) : undefined
+          }
+        >
+          <StatusBadge status={detailRequest.status} />
+          <dl className="my-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+            {[
+              ["Department", titleCase(detailRequest.requestingDepartment)],
+              ["Cost center", detailRequest.costCenter],
+              ["Required date", detailRequest.requiredDate],
+              ["Expense treatment", titleCase(detailRequest.expenseTreatment)],
+              ["Requested by", detailRequest.requestedBy],
+              ["Requested at", detailRequest.requestedAt],
+              ["Request ID", detailRequest.id],
+              ...(detailRequest.approvedBy
+                ? [["Approved by", detailRequest.approvedBy]]
+                : []),
+              ...(detailRequest.fulfillmentOrderId
+                ? [["Fulfillment order", detailRequest.fulfillmentOrderId]]
+                : []),
+            ].map(([label, value]) => (
+              <div key={label} className="min-w-0">
+                <dt className="text-xs text-muted">{label}</dt>
+                <dd className="break-words font-medium text-ink">{value}</dd>
+              </div>
+            ))}
+          </dl>
+          <table
+            className="w-full table-fixed text-left text-sm"
+            aria-label="Requested items"
+          >
+            <thead>
+              <tr className="border-b border-line">
+                <th scope="col" className="py-2">
+                  Item
+                </th>
+                <th scope="col" className="w-24 py-2 text-right">
+                  Quantity
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {detailRequest.lines.map((line, index) => {
+                const product = products.find(
+                  (candidate) => candidate.id === line.productId,
+                );
+                return (
+                  <tr
+                    key={`${line.productId}-${index}`}
+                    className="border-b border-line"
+                  >
+                    <td className="break-words py-3 pr-3">
+                      {product?.name ?? line.productId}
+                      <span className="block text-xs text-muted">
+                        {product?.sku ?? line.productId}
+                      </span>
+                    </td>
+                    <td className="py-3 text-right tabular-nums">
+                      {line.quantity}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </Sheet>
       )}
       <CreateRequestSheet
         open={open}

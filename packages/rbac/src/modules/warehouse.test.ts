@@ -75,8 +75,12 @@ describe("warehouse W1 capabilities", () => {
     expect(can(operations, "warehouse", "issue_items")).toBe(false);
     expect(can(operations, "warehouse", "receive_stock")).toBe(false);
     expect(can(marketing, "warehouse", "request_stock")).toBe(true);
-    expect(can(marketing, "warehouse", "reserve_allocate")).toBe(false);
+    expect(can(marketing, "warehouse", "reserve_allocate")).toBe(true);
     expect(can(marketing, "warehouse", "manage_returns")).toBe(false);
+    expect(can(marketing, "warehouse", "issue_items")).toBe(false);
+    expect(can(marketing, "warehouse", "approve_stock_adjustment")).toBe(false);
+    expect(can(marketing, "warehouse", "approve_stock_adjustment_finance")).toBe(false);
+    expect(can(marketing, "warehouse", "release_quality_hold")).toBe(false);
   });
 
   it.each(["warehouse_operator", "warehouse_supervisor"])(

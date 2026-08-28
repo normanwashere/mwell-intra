@@ -1349,7 +1349,7 @@ describe("SupabaseRepository concurrency-safe payloads (warehouse.* v8 RPCs)", (
     expect(call.payload.cycle_count).not.toHaveProperty("requested_by");
   });
 
-  it("recordReturn registers quarantine custody and its additive physical delta", async () => {
+  it("recordReturn sends quarantine intent and leaves physical deltas to the RPC", async () => {
     const { client, calls } = makeMockClient(seed);
     const repo = new SupabaseRepository(client);
     await repo.recordReturn({
@@ -1366,10 +1366,11 @@ describe("SupabaseRepository concurrency-safe payloads (warehouse.* v8 RPCs)", (
       evidenceUrls: ["evidence/return/abc.jpg"],
       actor: "test",
     });
-    const call = calls.find((c) => c.fn === "record_return")!;
-    const deltas = call.payload.stock_deltas as { delta: number }[];
-    expect(deltas).toHaveLength(1);
-    expect(deltas[0]!.delta).toBe(3);
+    const call = calls.find((c) => c.fn === "record_return_v2")!;
+    expect(call.payload.stock_deltas).toBeUndefined();
+    expect(call.payload.unit_updates).toBeUndefined();
+    expect(call.payload.movements).toBeUndefined();
+    expect(call.payload.idempotency_key).toMatch(/^return-/);
     const ret = call.payload.return as Record<string, unknown>;
     expect(ret.event_id).toBe("evt-makati");
     expect(ret.evidence_urls).toEqual(["evidence/return/abc.jpg"]);

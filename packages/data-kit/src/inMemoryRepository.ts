@@ -650,111 +650,212 @@ export class InMemoryRepository implements WarehouseControlRepository {
   }
 
   async recordReturn(input: ReturnInput): Promise<ReturnRecord> {
-    if (
-      input.lines.some(
-        (line) => line.disposition && line.disposition !== "quarantine",
-      )
-    ) {
-      throw new Error(
-        "Return intake is quarantine-first; Quality controls final disposition.",
-      );
-    }
-    if (input.lines.some((line) => !line.locationId)) {
-      throw new Error(
-        "A quarantine location is required for every returned line.",
-      );
-    }
-    const createdAt = this.now();
-    const quarantinedLines = input.lines.map((line) => ({
-      ...line,
-      disposition: "quarantine" as const,
-    }));
-    const record: ReturnRecord = {
-      id: uid("ret"),
-      source: input.source,
-      eventId: input.eventId,
-      lines: quarantinedLines,
-      evidenceUrls: input.evidenceUrls,
-      actor: input.actor,
-      createdAt,
-    };
-
-    for (const line of quarantinedLines) {
-      const product = this.data.products.find((p) => p.id === line.productId);
-      if (!product) throw new Error(`Unknown product: ${line.productId}`);
-
-      if (product.serialized && line.serialNumber) {
-        const unit = this.data.units.find(
-          (u) =>
-            u.serialNumber === line.serialNumber && u.productId === product.id,
-        );
-        // A return that references a serial we can't find (typo / wrong SKU)
-        // would otherwise log a movement and close the allocation while no unit
-        // actually changes state — leaving ghost issued units. Refuse it.
-        if (!unit) {
-          throw new Error(
-            `Serial ${line.serialNumber} not found for ${product.name}.`,
-          );
-        }
-        unit.status = "pending_inspection";
-        unit.assignedTo = undefined;
-        unit.locationId = line.locationId!;
-        if (line.binId !== undefined) unit.binId = line.binId;
-      } else if (!product.serialized) {
-        const level = this.stockRow(
-          product.id,
-          line.locationId!,
-          line.binId,
-          true,
-        )!;
-        level.quantity += line.quantity;
-        level.unavailable = (level.unavailable ?? 0) + line.quantity;
-      }
-
-      this.data.movements.push({
-        id: uid("mv"),
-        type: "return",
-        productId: product.id,
-        quantity: line.quantity,
-        toLocationId: line.locationId,
-        toBinId: line.binId,
-        eventId: input.eventId,
-        reason: `${line.reason} (quarantine)`,
-        serialNumber: line.serialNumber,
-        reference: record.id,
-        evidenceUrls: input.evidenceUrls,
-        actor: input.actor,
-        createdAt,
-      });
-    }
-
-    // Close out the originating allocation only when this return fully accounts
-    // for it. Partial serialized returns keep the allocation `issued` until all
-    // issued units have come back.
-    if (input.allocationId) {
-      const allocation = this.data.allocations.find(
-        (a) => a.id === input.allocationId,
-      );
-      if (allocation && allocation.status === "issued") {
-        const product = this.data.products.find(
-          (p) => p.id === allocation.productId,
-        );
+    return this.idempotent(
+      "record_return",
+      input.idempotencyKey ?? uid("return"),
+      input,
+      () => {
+        if (!input.lines.length)
+          throw new Error("At least one return line is required.");
+        if (!["customer", "vendor", "event"].includes(input.source))
+          throw new Error("Invalid return source.");
+        if (input.source === "event" && !input.eventId)
+          throw new Error("A source event is required.");
         if (
-          returnClosesAllocation(
-            allocation,
-            product,
-            input.lines,
-            this.data.units,
+          input.eventId &&
+          !this.data.events.some((event) => event.id === input.eventId)
+        )
+          throw new Error("Return event not found.");
+        if (
+          input.lines.some(
+            (line) => line.disposition && line.disposition !== "quarantine",
           )
         ) {
-          allocation.status = "returned";
+          throw new Error(
+            "Return intake is quarantine-first; Quality controls final disposition.",
+          );
         }
-      }
-    }
+        if (input.lines.some((line) => !line.locationId)) {
+          throw new Error(
+            "A quarantine location is required for every returned line.",
+          );
+        }
+        const createdAt = this.now();
+        const quarantinedLines = input.lines.map((line) => ({
+          ...line,
+          disposition: "quarantine" as const,
+        }));
+        const serials = new Set<string>();
+        // Validate every line before mutating inventory, movements, or allocations.
+        for (const line of quarantinedLines) {
+          const product = this.data.products.find(
+            (row) => row.id === line.productId,
+          );
+          if (!product) throw new Error(`Unknown product: ${line.productId}`);
+          if (
+            !Number.isSafeInteger(line.quantity) ||
+            line.quantity < 1 ||
+            line.quantity > 2147483647
+          )
+            throw new Error("Return quantity must be a positive whole number.");
+          if (!line.reason.trim())
+            throw new Error("A return reason is required.");
+          const location = this.data.locations.find(
+            (row) => row.id === line.locationId,
+          );
+          if (
+            !location ||
+            location.type === "vendor" ||
+            location.active === false
+          )
+            throw new Error(
+              "An active non-vendor quarantine location is required.",
+            );
+          if (
+            line.binId &&
+            !this.data.storageAreas.some(
+              (bin) =>
+                bin.id === line.binId &&
+                bin.locationId === line.locationId &&
+                bin.active !== false,
+            )
+          )
+            throw new Error(
+              "Quarantine bin must be active and belong to its location.",
+            );
+          if (product.serialized) {
+            if (!line.serialNumber || line.quantity !== 1)
+              throw new Error(
+                "Serialized returns require exactly one serial per line.",
+              );
+            const normalized = normalizeSerialIdentity(line.serialNumber);
+            if (serials.has(normalized))
+              throw new Error("Serial is already included in this return.");
+            serials.add(normalized);
+            const unit = this.data.units.find(
+              (row) =>
+                normalizeSerialIdentity(row.serialNumber) === normalized &&
+                row.productId === product.id,
+            );
+            if (!unit)
+              throw new Error(
+                `Serial ${line.serialNumber} not found for ${product.name}.`,
+              );
+            if (unit.status !== "issued")
+              throw new Error("Only an issued serial can be returned.");
+            if (input.eventId && unit.eventId !== input.eventId)
+              throw new Error("Serial belongs to a different event.");
+            line.serialNumber = unit.serialNumber;
+          } else if (line.serialNumber)
+            throw new Error("Bulk products cannot carry a serial number.");
+        }
+        if (input.allocationId) {
+          const allocation = this.data.allocations.find(
+            (row) => row.id === input.allocationId,
+          );
+          if (
+            !allocation ||
+            allocation.status !== "issued" ||
+            allocation.eventId !== input.eventId ||
+            quarantinedLines.some(
+              (line) => line.productId !== allocation.productId,
+            ) ||
+            quarantinedLines.reduce((sum, line) => sum + line.quantity, 0) >
+              allocation.quantity
+          )
+            throw new Error("Return does not match an issued allocation.");
+        }
+        const record: ReturnRecord = {
+          id: uid("ret"),
+          source: input.source,
+          eventId: input.eventId,
+          lines: quarantinedLines,
+          evidenceUrls: input.evidenceUrls,
+          actor: input.actor,
+          createdAt,
+        };
 
-    this.data.returns.push(record);
-    this.persist();
-    return clone(record);
+        for (const line of quarantinedLines) {
+          const product = this.data.products.find(
+            (p) => p.id === line.productId,
+          );
+          if (!product) throw new Error(`Unknown product: ${line.productId}`);
+
+          if (product.serialized && line.serialNumber) {
+            const unit = this.data.units.find(
+              (u) =>
+                u.serialNumber === line.serialNumber &&
+                u.productId === product.id,
+            );
+            // A return that references a serial we can't find (typo / wrong SKU)
+            // would otherwise log a movement and close the allocation while no unit
+            // actually changes state — leaving ghost issued units. Refuse it.
+            if (!unit) {
+              throw new Error(
+                `Serial ${line.serialNumber} not found for ${product.name}.`,
+              );
+            }
+            unit.status = "pending_inspection";
+            unit.assignedTo = undefined;
+            unit.locationId = line.locationId!;
+            if (line.binId !== undefined) unit.binId = line.binId;
+          } else if (!product.serialized) {
+            const level = this.stockRow(
+              product.id,
+              line.locationId!,
+              line.binId,
+              true,
+            )!;
+            level.quantity += line.quantity;
+            level.unavailable = (level.unavailable ?? 0) + line.quantity;
+          }
+
+          this.data.movements.push({
+            id: uid("mv"),
+            type: "return",
+            productId: product.id,
+            quantity: line.quantity,
+            toLocationId: line.locationId,
+            toBinId: line.binId,
+            eventId: input.eventId,
+            reason: `${line.reason} (quarantine)`,
+            serialNumber: line.serialNumber,
+            reference: record.id,
+            evidenceUrls: input.evidenceUrls,
+            actor: input.actor,
+            createdAt,
+          });
+        }
+
+        // Close out the originating allocation only when this return fully accounts
+        // for it. Partial serialized returns keep the allocation `issued` until all
+        // issued units have come back.
+        if (input.allocationId) {
+          const allocation = this.data.allocations.find(
+            (a) => a.id === input.allocationId,
+          );
+          if (allocation && allocation.status === "issued") {
+            const product = this.data.products.find(
+              (p) => p.id === allocation.productId,
+            );
+            if (
+              returnClosesAllocation(
+                allocation,
+                product,
+                input.lines,
+                this.data.units,
+              )
+            ) {
+              allocation.status = "returned";
+            }
+          }
+        }
+
+        this.data.returns.push(record);
+        this.persist();
+        return clone(record);
+      },
+    );
   }
 
   async recordCycleCount(input: CycleCountInput): Promise<CycleCount> {
@@ -2595,23 +2696,39 @@ export class InMemoryRepository implements WarehouseControlRepository {
 
     if (input.action === "split_backorder") {
       const fulfilledLines = input.fulfilledLines ?? [];
+      if (
+        fulfilledLines.length !== order.lines.length ||
+        new Set(fulfilledLines.map((line) => line.productId)).size !==
+          order.lines.length
+      ) {
+        throw new Error(
+          "Provide exactly one fulfill-now quantity for every order line.",
+        );
+      }
+      const currentLines: FulfillmentOrder["lines"] = [];
       const backorderLines = order.lines.flatMap((line) => {
         const selection = fulfilledLines.find(
           (row) => row.productId === line.productId,
         );
         if (
           !selection ||
-          selection.quantity <= 0 ||
+          !Number.isInteger(selection.quantity) ||
+          selection.quantity < 0 ||
           selection.quantity > line.quantity
         ) {
           throw new Error(
-            "Every line must keep a positive quantity that does not exceed the original demand.",
+            "Every line must have a whole fulfill-now quantity from zero to the original demand.",
           );
         }
         const remainder = line.quantity - selection.quantity;
-        line.quantity = selection.quantity;
+        if (selection.quantity > 0) {
+          currentLines.push({ ...clone(line), quantity: selection.quantity });
+        }
         return remainder > 0 ? [{ ...clone(line), quantity: remainder }] : [];
       });
+      if (currentLines.length === 0) {
+        throw new Error("At least one line must have a fulfill-now quantity.");
+      }
       if (backorderLines.length === 0) {
         throw new Error("At least one line must have a backordered quantity.");
       }
@@ -2640,6 +2757,7 @@ export class InMemoryRepository implements WarehouseControlRepository {
         acknowledgedBy: undefined,
         acknowledgedAt: undefined,
       });
+      order.lines = currentLines;
       order.updatedAt = createdAt;
       this.persist();
       return clone(order);

@@ -1,0 +1,58 @@
+{
+  "id": "internal.warehouse.marketing-reservation-assessment.v1",
+  "title": "Marketing event reservation controls (UAT)",
+  "passingScore": 100,
+  "maxAttempts": 3,
+  "questions": [
+    {
+      "id": "reservation-availability",
+      "prompt": "An event needs 10 units. Only 8 are available to reserve after existing commitments. What should Marketing do?",
+      "options": [
+        { "id": "use-on-hand", "label": "Reserve 10 using the total on-hand quantity" },
+        { "id": "respect-availability", "label": "Reserve no more than 8 and coordinate the remaining demand with Warehouse" },
+        { "id": "split-to-exceed", "label": "Split the same product across lines to reserve all 10" }
+      ],
+      "explanation": "Reservations must fit uncommitted available stock. Quantities for the same product are combined across lines; splitting lines does not increase availability."
+    },
+    {
+      "id": "reservation-custody",
+      "prompt": "Marketing successfully reserves stock for an event. What has this action established?",
+      "options": [
+        { "id": "hold-not-issue", "label": "An event stock commitment; authorized Warehouse staff must still issue the items" },
+        { "id": "already-issued", "label": "The stock has been physically issued to the event" },
+        { "id": "quality-released", "label": "Any quality hold on the stock has been released" }
+      ],
+      "explanation": "A reservation commits stock but is not a physical issue or quality release. Warehouse retains the governed custody and issue workflow."
+    },
+    {
+      "id": "reservation-details",
+      "prompt": "What must be checked on an event reservation before submission?",
+      "options": [
+        { "id": "quantity-only", "label": "Only the total quantity across all products" },
+        { "id": "any-event", "label": "Any available event, with all items marked as giveaways" },
+        { "id": "event-product-purpose", "label": "The correct event, each product, a positive whole quantity, and selling or giveaway purpose for each line" }
+      ],
+      "explanation": "Each reservation must remain attributable to the intended event and product, with an accurate quantity and selling or giveaway classification."
+    },
+    {
+      "id": "reservation-authority",
+      "prompt": "Does passing Marketing reservation training authorize Marketing to issue stock, process return custody, release quality holds, or approve adjustments?",
+      "options": [
+        { "id": "all-warehouse-actions", "label": "Yes, certification unlocks all Warehouse actions" },
+        { "id": "reservation-only", "label": "No. It certifies reservation only, and the active Marketing role grant is still required" },
+        { "id": "self-approve", "label": "Only when Marketing created the event" }
+      ],
+      "explanation": "Training does not grant a role or widen its permissions. Reservation certification cannot authorize issue, return custody, quality release, or approval."
+    },
+    {
+      "id": "reservation-uncertain-response",
+      "prompt": "A multi-product reservation reports one saved line and an unconfirmed response for the remaining lines. What should Marketing do next?",
+      "options": [
+        { "id": "retry-everything", "label": "Immediately submit the whole draft again" },
+        { "id": "assume-nothing-saved", "label": "Assume nothing was saved and create an identical reservation" },
+        { "id": "reconcile-before-retry", "label": "Check the recorded allocations and coordinate any uncertainty before creating another reservation" }
+      ],
+      "explanation": "An uncertain response is not proof that nothing saved. Reconcile confirmed and unconfirmed lines first to avoid duplicate commitments."
+    }
+  ]
+}

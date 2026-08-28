@@ -40,7 +40,6 @@ import {
   type VendorReturn,
 } from "../domain/warehouseControls";
 import {
-  returnClosesAllocation,
   validateReservation,
 } from "../domain/allocations";
 import { primaryStockLocation, validateTransfer } from "../domain/transfers";
@@ -1105,6 +1104,12 @@ export class SupabaseRepository implements WarehouseControlRepository {
   }
 
   async recordReturn(input: ReturnInput): Promise<ReturnRecord> {
+    const idempotencyKey = input.idempotencyKey ?? uid("return");
+    if (!/^[A-Za-z0-9_-]{12,128}$/.test(idempotencyKey)) {
+      throw new Error("A valid idempotency key is required.");
+    }
+    if (!input.lines.length)
+      throw new Error("At least one return line is required.");
     if (
       input.lines.some(
         (line) => line.disposition && line.disposition !== "quarantine",
@@ -1119,111 +1124,24 @@ export class SupabaseRepository implements WarehouseControlRepository {
         "A quarantine location is required for every returned line.",
       );
     }
-    const createdAt = new Date().toISOString();
-    const data = await this.getData();
-    const quarantinedLines = input.lines.map((line) => ({
-      ...line,
-      disposition: "quarantine" as const,
-    }));
-    const record: ReturnRecord = {
-      id: uid("ret"),
-      source: input.source,
-      eventId: input.eventId,
-      lines: quarantinedLines,
-      evidenceUrls: input.evidenceUrls,
-      actor: input.actor,
-      createdAt,
-    };
-
-    const unitUpdates: Row[] = [];
-    const movements: Row[] = [];
-    // Aggregate additive restock by (product, location) for a single upsert key.
-    const stockByKey = new Map<string, Row>();
-
-    for (const line of quarantinedLines) {
-      const product = data.products.find((p) => p.id === line.productId);
-      if (!product) throw new Error(`Unknown product: ${line.productId}`);
-      if (product.serialized && line.serialNumber) {
-        const status = "pending_inspection";
-        const update: Row = { serial_number: line.serialNumber, status };
-        // A restocked unit physically re-enters the warehouse at the chosen
-        // location/bin — persist that so it's found by scan-to-bin.
-        if (line.locationId) {
-          update.location_id = line.locationId;
-          update.bin_id = line.binId ?? null;
-        }
-        unitUpdates.push(update);
-      } else if (!product.serialized) {
-        const targetLoc =
-          line.locationId ??
-          primaryStockLocation(toStockState(data), product.id);
-        if (targetLoc) {
-          const key = `${product.id}|${targetLoc}|${line.binId ?? ""}`;
-          let entry = stockByKey.get(key);
-          if (!entry) {
-            entry = {
-              product_id: product.id,
-              location_id: targetLoc,
-              bin_id: line.binId ?? null,
-              lot_id: null,
-              delta: 0,
-            };
-            stockByKey.set(key, entry);
-          }
-          entry.delta = (entry.delta as number) + line.quantity;
-        }
-      }
-      movements.push(
-        movementToRow({
-          id: uid("mv"),
-          type: "return",
-          productId: product.id,
-          quantity: line.quantity,
-          toLocationId: line.locationId,
-          toBinId: line.binId,
-          eventId: input.eventId,
-          reason: `${line.reason} (quarantine)`,
-          serialNumber: line.serialNumber,
-          reference: record.id,
-          evidenceUrls: input.evidenceUrls,
-          actor: input.actor,
-          createdAt,
-        }),
-      );
-    }
-
-    // Only close the allocation when this return fully accounts for it. Partial
-    // serialized returns keep the allocation `issued` until all units are back.
-    let allocationId: string | null = null;
-    if (input.allocationId) {
-      const allocation = data.allocations.find(
-        (a) => a.id === input.allocationId,
-      );
-      if (allocation && allocation.status === "issued") {
-        const product = data.products.find(
-          (p) => p.id === allocation.productId,
-        );
-        if (
-          returnClosesAllocation(allocation, product, input.lines, data.units)
-        ) {
-          allocationId = allocation.id;
-        }
-      }
-    }
-
-    const row = await this.callRpc("record_return", {
-      unit_updates: unitUpdates,
-      stock_deltas: [...stockByKey.values()],
-      movements,
-      allocation_id: allocationId,
+    // Send intent only. The RPC validates locked inventory and owns every row.
+    // No timestamps or mutable snapshot-derived fields may change on a retry.
+    const row = await this.callRpc("record_return_v2", {
+      idempotency_key: idempotencyKey,
+      allocation_id: input.allocationId ?? null,
       return: {
-        id: record.id,
-        source: record.source,
-        event_id: record.eventId ?? null,
-        lines: record.lines,
-        evidence_urls: record.evidenceUrls ?? [],
-        actor: record.actor,
-        created_at: createdAt,
+        source: input.source,
+        event_id: input.eventId ?? null,
+        lines: input.lines.map((line) => ({
+          productId: line.productId,
+          quantity: line.quantity,
+          reason: line.reason,
+          ...(line.serialNumber ? { serialNumber: line.serialNumber } : {}),
+          locationId: line.locationId,
+          ...(line.binId ? { binId: line.binId } : {}),
+          disposition: "quarantine",
+        })),
+        evidence_urls: input.evidenceUrls ?? [],
       },
     });
     return rowToReturn(row);

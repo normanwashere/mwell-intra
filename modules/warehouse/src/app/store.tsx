@@ -558,14 +558,19 @@ export function WarehouseProvider({
         issueOverlay(input, data),
         input as Record<string, unknown>,
       ),
-    recordReturn: (input) =>
-      runAuthorizedAction(
+    recordReturn: (input) => {
+      const command = {
+        ...input,
+        idempotencyKey: input.idempotencyKey ?? `return-${crypto.randomUUID()}`,
+      };
+      return runAuthorizedAction(
         "manage_returns",
-        "recordReturn",
-        () => repo.recordReturn({ ...input, actor }),
-        returnOverlay(input, actor, data),
-        input as Record<string, unknown>,
-      ),
+        input.allocationId ? "recordReturn" : "other",
+        () => repo.recordReturn({ ...command, actor }),
+        input.allocationId ? returnOverlay(command, actor, data) : undefined,
+        input.allocationId ? (command as Record<string, unknown>) : undefined,
+      );
+    },
     recordCycleCount: (input) =>
       runAuthorizedAction("cycle_count", "other", () =>
         repo.recordCycleCount({ ...input, actor, requesterId: identityId }),

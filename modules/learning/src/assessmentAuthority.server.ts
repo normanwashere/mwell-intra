@@ -11,6 +11,13 @@ const ANSWER_KEYS: Readonly<Record<string, Readonly<Record<string, string>>>> =
       "receiving-identifiers": "capture-identifiers",
       "receiving-exception": "controlled-quality",
     },
+    "internal.warehouse.marketing-reservation-assessment.v1": {
+      "reservation-availability": "respect-availability",
+      "reservation-custody": "hold-not-issue",
+      "reservation-details": "event-product-purpose",
+      "reservation-authority": "reservation-only",
+      "reservation-uncertain-response": "reconcile-before-retry",
+    },
   };
 
 export function scoreServerAssessment(input: ServerAssessmentInput): {

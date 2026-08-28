@@ -985,7 +985,7 @@ const definitions: FeatureDefinition[] = [
     module: "warehouse",
     route: "/warehouse/receiving",
     purpose:
-      "Receives approved purchase-order quantities in a scan-friendly receipt table with traceability, evidence, inspection routing, and destination control.",
+      "Receives selected approved purchase-order items with serial scanning, per-operator saved progress, delivery-note photo upload, inspection routing, and destination control. Different operators may handle different PO items with their own accounts.",
     reads:
       "Approved purchase orders, remaining lines, products, suppliers, warehouses, bins, and operation routes.",
     writes:
@@ -993,7 +993,7 @@ const definitions: FeatureDefinition[] = [
     statuses:
       "Receivable, partial, complete, pending inspection, held, rejected, or failed.",
     exception:
-      "Standard receiving is PO-first. A direct non-PO receipt or overage requires an evidenced exception; otherwise stop for damaged goods, invalid route, or duplicate serial and record evidence.",
+      "Save progress preserves unfinished scans without receiving stock. Reopen the PO to resume. A changed PO balance deselects stale draft items for review. Use uploaded delivery evidence or a secure HTTPS link; HTTP links are rejected. Standard receiving remains PO-first, duplicate serials are blocked, and exceptions require evidence.",
     completionEvidence:
       "Receipt number, received quantity, pending-inspection status, unavailable custody, traceability identity, destination, and Quality handoff are visible.",
   },
@@ -1003,7 +1003,7 @@ const definitions: FeatureDefinition[] = [
     module: "warehouse",
     route: "/warehouse/allocations",
     purpose:
-      "Reserves available stock for approved demand and records custody when items are issued.",
+      "Reserves multiple stock items for one event, with a Selling or Giveaway purpose on each line. Marketing may reserve event demand; issuing custody remains an Operations responsibility.",
     reads:
       "Events, demand lines, stock availability, existing reservations, recipients, and custody history.",
     writes:
@@ -1011,7 +1011,7 @@ const definitions: FeatureDefinition[] = [
     statuses:
       "Requested, reserved, partially reserved, issued, cancelled, returned, or short.",
     exception:
-      "Resolve insufficient stock, overlapping reservations, missing recipient, or stale demand before retrying.",
+      "Resolve insufficient stock, overlapping reservations, missing recipient, or stale demand before retrying. If a multi-item reservation response is uncertain, close the locked form and check recorded allocations before reserving only confirmed missing quantities. Returns go to quarantine; independent Quality decides whether they can be restocked.",
     completionEvidence:
       "Allocation status, quantity, source stock, recipient, and movement reference reconcile to the event demand.",
   },
@@ -1023,7 +1023,7 @@ const definitions: FeatureDefinition[] = [
     purpose:
       "Coordinates app-native multi-line ecommerce intake, transitional CSV migration, internal and third-party event demand, multi-item department stock requests, customer returns, Product-approved kits, directed rack/bin picking, packing supplies, shipments, accountable handovers, open-box re-kitting, and warehouse release in one governed workspace.",
     reads:
-      "Demand references, governed department and cost center, event and third-party locations, reported sales value, products, item classes, stock, explicit reservations, serial identities, fulfillment supplies, return cases, Product approval references, shipment or handover evidence, and request decisions.",
+      "Orders and events and Department requests display actionable counts. View request shows item quantities and approval context before a decision. Demand references, department and cost center, events, stock, reservations, serial identities, supplies, returns, Product approval, shipment evidence, and decisions remain linked.",
     writes:
       "Creates complete app-native ecommerce orders or validated CSV migration records, event demand, multi-line department requests, and returns; calculates commercial totals and VAT; records independent request decisions, reservations, scanned pick bins, optional line evidence, courier tracking, and linked backorders; advances separated pick-pack-release-delivery states with shipment history; and preserves replacement, Finance, supplier, closure, packaging, issue, and re-kit lineage.",
     statuses:
@@ -1039,7 +1039,7 @@ const definitions: FeatureDefinition[] = [
     module: "warehouse",
     route: "/warehouse/returns",
     purpose:
-      "Receives customer, vendor, or event-specific returns into a named receiving location and bin, quarantines every return before an independent Quality decision, then routes each unit to restock, hold, loss, damage, or vendor return.",
+      "Receives multiple customer, vendor, or event-specific return items into a named location and quarantine bin in one governed intake. Enter quantity and serials per item; the complete batch is validated before submission and stays unavailable until an independent Quality decision.",
     reads:
       "Open issues, event allocations, products, traceability identity, prior returns, and valid destinations.",
     writes:

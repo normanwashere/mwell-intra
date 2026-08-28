@@ -15,7 +15,11 @@ import {
   formatWhen,
   poNumberMap,
 } from "@/domain/format";
-import { useProcurementPOs, type BridgedPO } from "@/data/procurementBridge";
+import {
+  loadProcurementPOs,
+  useProcurementPOs,
+  type BridgedPO,
+} from "@/data/procurementBridge";
 import type { POStatus, PurchaseOrder } from "@/domain/types";
 import {
   BarRow,
@@ -33,6 +37,21 @@ import {
   type Tone,
 } from "@/components/ui";
 import { Icon } from "@/components/Icon";
+import { BarcodeScanner } from "@/components/camera/BarcodeScanner";
+import { EvidenceCapture } from "@/components/camera/EvidenceCapture";
+import { EvidenceGallery } from "@/components/EvidenceGallery";
+import { normalizeSafeHttpsUrl } from "@intra/data-kit";
+import {
+  loadReceivingDraft,
+  saveReceivingDraft,
+  deleteReceivingDraft,
+  ReceivingDraftConflictError,
+  type ReceivingDraftRecord,
+} from "@/data/receivingDrafts";
+import {
+  readReceivingProgress,
+  type ReceivingProgress,
+} from "@/data/receivingProgress";
 import {
   ReceiptExceptionDecisionPanel,
   type ReceiptExceptionDecisionInput,
@@ -78,6 +97,15 @@ function initialOutcomeSerials(): ReceiptOutcomeSerials {
   return { clean: "", damaged: "", unidentified: "", excess: "" };
 }
 
+function safeDeliveryEvidence(value: string): boolean {
+  const candidate = value.trim();
+  if (normalizeSafeHttpsUrl(candidate)) return true;
+  return (
+    /^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_./-]+$/.test(candidate) &&
+    !candidate.split("/").includes("..")
+  );
+}
+
 const STATUS_TONE: Record<POStatus, Tone> = {
   draft: "slate",
   ordered: "brand",
@@ -106,7 +134,7 @@ export function PurchaseOrdersPage() {
     canOpenRoute,
   } = useWarehouse();
   const toast = useToast();
-  const { mode, supabaseClient } = useSession();
+  const { mode, supabaseClient, profile } = useSession();
   const [searchParams] = useSearchParams();
   const handoffPoId = searchParams.get("po");
   const openedHandoffRef = useRef<string | null>(null);
@@ -141,6 +169,15 @@ export function PurchaseOrdersPage() {
   const [bridgeReceivePO, setBridgeReceivePO] = useState<BridgedPO | null>(
     null,
   );
+  const receivingSessionRef = useRef(0);
+  const [receivingRequest, setReceivingRequest] = useState<{
+    po: BridgedPO;
+    session: number;
+    load: typeof loadReceivableProcurementPOs;
+  } | null>(null);
+  const receiptAttemptRef = useRef<{ payload: string; key: string } | null>(
+    null,
+  );
   const [bridgeProducts, setBridgeProducts] = useState<Record<string, string>>(
     {},
   );
@@ -159,6 +196,44 @@ export function PurchaseOrdersPage() {
   const [bridgeLocation, setBridgeLocation] = useState("");
   const [bridgeBin, setBridgeBin] = useState("");
   const [bridgeEvidence, setBridgeEvidence] = useState("");
+  const [bridgePhotos, setBridgePhotos] = useState<string[]>([]);
+  const [bridgeSelected, setBridgeSelected] = useState<Record<string, boolean>>(
+    {},
+  );
+  const [bridgeBusy, setBridgeBusy] = useState(false);
+  const bridgeSubmitting = useRef(false);
+  const [serialTarget, setSerialTarget] = useState<string | null>(null);
+  const [draftVersion, setDraftVersion] = useState(0);
+  const [draftLoading, setDraftLoading] = useState(false);
+  const [draftError, setDraftError] = useState("");
+  const [draftSaveError, setDraftSaveError] = useState("");
+  const [draftConflict, setDraftConflict] = useState(false);
+  const [confirmDraftReload, setConfirmDraftReload] = useState(false);
+  const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
+  const [restoredPhotos, setRestoredPhotos] = useState<string[]>([]);
+  const receivingStateRef = useRef({
+    bridgeSerials,
+    bridgeOutcomes,
+    bridgeSelected,
+    restoredPhotos,
+  });
+  receivingStateRef.current = {
+    bridgeSerials,
+    bridgeOutcomes,
+    bridgeSelected,
+    restoredPhotos,
+  };
+  const draftKey = `intra.receiving-draft.v1:${profile?.id ?? "anonymous"}:${bridgeReceivePO?.id ?? ""}`;
+  const bridgeEvidenceError =
+    bridgeEvidence.trim() && !safeDeliveryEvidence(bridgeEvidence)
+      ? "Use a secure HTTPS link, or upload a photo of the delivery note. HTTP links are not accepted."
+      : "";
+  const bridgeEvidenceUrls = [
+    ...bridgePhotos,
+    ...(bridgeEvidence.trim() && !bridgeEvidenceError
+      ? [bridgeEvidence.trim()]
+      : []),
+  ];
   const [bridgeExceptionReason, setBridgeExceptionReason] = useState("");
   const [exceptionDecisions, setExceptionDecisions] = useState<
     ReceiptExceptionDecisionItem[]
@@ -171,6 +246,167 @@ export function PurchaseOrdersPage() {
       data?.locations.filter((location) => location.type === "warehouse") ?? [],
     [data],
   );
+
+  useEffect(() => {
+    if (!receivingRequest || !profile) return;
+    const { po, session, load } = receivingRequest;
+    let cancelled = false;
+    setDraftLoading(true);
+    setDraftError("");
+    setDraftSaveError("");
+    setDraftConflict(false);
+    setConfirmDraftReload(false);
+    setDraftSavedAt(null);
+    setRestoredPhotos([]);
+    setDraftVersion(0);
+    const restore = async () => {
+      try {
+        const currentPO = (await loadProcurementPOs(source, load)).find(
+          (current) => current.id === po.id,
+        );
+        if (!currentPO)
+          throw new Error("This PO is no longer available for receiving.");
+        let record: ReceivingDraftRecord;
+        if (mode === "supabase") {
+          if (!supabaseClient)
+            throw new Error(
+              "Receiving progress is unavailable until your connection is restored.",
+            );
+          record = await loadReceivingDraft(supabaseClient, po.id);
+        } else {
+          const saved = localStorage.getItem(draftKey);
+          record = saved
+            ? (JSON.parse(saved) as ReceivingDraftRecord)
+            : {
+                poId: po.id,
+                body: null,
+                version: 0,
+                updatedAt: null,
+              };
+        }
+        if (cancelled || receivingSessionRef.current !== session) return;
+        const progress = record.body
+          ? readReceivingProgress(record.body)
+          : null;
+        setBridgeReceivePO(currentPO);
+        setDraftVersion(record.version);
+        if (progress) {
+          setBridgeLocation(progress.locationId);
+          setBridgeBin(progress.binId);
+          setBridgeEvidence(progress.evidenceLink);
+          setBridgePhotos(progress.evidencePhotos);
+          setRestoredPhotos(progress.evidencePhotos);
+          setBridgeExceptionReason(progress.reason);
+          setBridgeProducts(
+            Object.fromEntries(
+              progress.lines.map((line) => [line.id, line.productId]),
+            ),
+          );
+          setBridgeOutcomes(
+            Object.fromEntries(
+              progress.lines.map((line) => [line.id, line.outcomes]),
+            ),
+          );
+          setBridgeSerials(
+            Object.fromEntries(
+              progress.lines.map((line) => [line.id, line.serials]),
+            ),
+          );
+          setBridgeObservedDescriptions(
+            Object.fromEntries(
+              progress.lines.map((line) => [line.id, line.description]),
+            ),
+          );
+          setBridgeObservedIdentifiers(
+            Object.fromEntries(
+              progress.lines.map((line) => [line.id, line.identifiers]),
+            ),
+          );
+          setBridgeSelected(
+            Object.fromEntries(
+              currentPO.lines.map((line) => {
+                const saved = progress.lines.find(
+                  (item) => item.id === line.id,
+                );
+                return [
+                  line.id,
+                  !!saved?.selected &&
+                    saved.expected ===
+                      Math.max(0, line.quantity - line.receivedQuantity),
+                ];
+              }),
+            ),
+          );
+          const changed = progress.lines.some(
+            (saved) =>
+              saved.selected &&
+              !currentPO.lines.some(
+                (line) =>
+                  line.id === saved.id &&
+                  Math.max(0, line.quantity - line.receivedQuantity) ===
+                    saved.expected,
+              ),
+          );
+          if (changed)
+            toast.error(
+              "PO balances changed since this draft. Changed items are deselected; review their remaining quantities before receiving.",
+            );
+          setDraftSavedAt(record.updatedAt);
+        } else {
+          setBridgeSelected(
+            Object.fromEntries(currentPO.lines.map((line) => [line.id, true])),
+          );
+          setBridgeProducts(
+            Object.fromEntries(
+              currentPO.lines.map((line) => [line.id, line.productId ?? ""]),
+            ),
+          );
+          setBridgeObservedDescriptions(
+            Object.fromEntries(
+              currentPO.lines.map((line) => [line.id, line.description]),
+            ),
+          );
+          setBridgeOutcomes(
+            Object.fromEntries(
+              currentPO.lines.map((line) => [
+                line.id,
+                initialOutcomeQuantities(
+                  Math.max(0, line.quantity - line.receivedQuantity),
+                ),
+              ]),
+            ),
+          );
+          setBridgeSerials(
+            Object.fromEntries(
+              currentPO.lines.map((line) => [line.id, initialOutcomeSerials()]),
+            ),
+          );
+        }
+      } catch (error) {
+        if (!cancelled && receivingSessionRef.current === session)
+          setDraftError(
+            error instanceof Error
+              ? error.message
+              : "Could not load receiving progress.",
+          );
+      } finally {
+        if (!cancelled && receivingSessionRef.current === session)
+          setDraftLoading(false);
+      }
+    };
+    void restore();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    receivingRequest,
+    draftKey,
+    mode,
+    profile?.id,
+    supabaseClient,
+    source,
+    toast,
+  ]);
 
   const mayResolveReceiptExceptions =
     can("release_quality_hold") && can("resolve_exceptions");
@@ -322,10 +558,22 @@ export function PurchaseOrdersPage() {
     const handoff = bridgedPOs.find((po) => po.id === handoffPoId);
     if (!handoff) return;
     openedHandoffRef.current = handoffPoId;
+    setReceivingRequest({
+      po: handoff,
+      session: ++receivingSessionRef.current,
+      load: loadReceivableProcurementPOs,
+    });
+    setDraftLoading(true);
+    receiptAttemptRef.current = null;
     setBridgeReceivePO(handoff);
     setBridgeLocation(warehouses[0]?.id ?? "");
     setBridgeBin("");
     setBridgeEvidence("");
+    setBridgePhotos([]);
+    setSerialTarget(null);
+    setBridgeSelected(
+      Object.fromEntries(handoff.lines.map((line) => [line.id, true])),
+    );
     setBridgeExceptionReason("");
     setBridgeProducts(
       Object.fromEntries(
@@ -353,7 +601,7 @@ export function PurchaseOrdersPage() {
         handoff.lines.map((line) => [line.id, initialOutcomeSerials()]),
       ),
     );
-  }, [bridgedPOs, handoffPoId, warehouses]);
+  }, [bridgedPOs, handoffPoId, warehouses, loadReceivableProcurementPOs]);
 
   const poNumbers = useMemo(
     () => poNumberMap(data?.purchaseOrders ?? []),
@@ -372,6 +620,7 @@ export function PurchaseOrdersPage() {
     const commandSerials: string[] = [];
     let hasExceptions = false;
     for (const line of bridgeReceivePO.lines) {
+      if (!bridgeSelected[line.id]) continue;
       const expected = Math.max(0, line.quantity - line.receivedQuantity);
       const quantities =
         bridgeOutcomes[line.id] ?? initialOutcomeQuantities(expected);
@@ -432,6 +681,9 @@ export function PurchaseOrdersPage() {
     if (new Set(commandSerials).size !== commandSerials.length) {
       errors.command = ["Serial numbers must be unique across receipt lines."];
     }
+    if (!bridgeReceivePO.lines.some((line) => bridgeSelected[line.id])) {
+      errors.command = ["Select at least one item to receive."];
+    }
     return {
       valid: Object.keys(errors).length === 0,
       hasExceptions,
@@ -443,6 +695,7 @@ export function PurchaseOrdersPage() {
     bridgeProducts,
     bridgeReceivePO,
     bridgeSerials,
+    bridgeSelected,
     data?.products,
   ]);
 
@@ -527,10 +780,23 @@ export function PurchaseOrdersPage() {
   };
 
   const openBridgeReceive = (po: BridgedPO) => {
+    if (bridgeSubmitting.current) return;
+    setReceivingRequest({
+      po,
+      session: ++receivingSessionRef.current,
+      load: loadReceivableProcurementPOs,
+    });
+    setDraftLoading(true);
+    receiptAttemptRef.current = null;
     setBridgeReceivePO(po);
     setBridgeLocation(warehouses[0]?.id ?? "");
     setBridgeBin("");
     setBridgeEvidence("");
+    setBridgePhotos([]);
+    setSerialTarget(null);
+    setBridgeSelected(
+      Object.fromEntries(po.lines.map((line) => [line.id, true])),
+    );
     setBridgeExceptionReason("");
     setBridgeProducts(
       Object.fromEntries(
@@ -558,8 +824,105 @@ export function PurchaseOrdersPage() {
     );
   };
 
+  const closeBridgeReceive = () => {
+    receivingSessionRef.current += 1;
+    setReceivingRequest(null);
+    setBridgeReceivePO(null);
+  };
+
+  const receivingProgress = (): ReceivingProgress => ({
+    version: 1,
+    locationId: bridgeLocation,
+    binId: bridgeBin,
+    evidenceLink: bridgeEvidence,
+    evidencePhotos: bridgePhotos,
+    reason: bridgeExceptionReason,
+    lines: (bridgeReceivePO?.lines ?? []).map((line) => ({
+      id: line.id,
+      expected: Math.max(0, line.quantity - line.receivedQuantity),
+      selected: !!bridgeSelected[line.id],
+      productId: bridgeProducts[line.id] ?? "",
+      description: bridgeObservedDescriptions[line.id] ?? line.description,
+      identifiers: bridgeObservedIdentifiers[line.id] ?? "",
+      outcomes:
+        bridgeOutcomes[line.id] ??
+        initialOutcomeQuantities(
+          Math.max(0, line.quantity - line.receivedQuantity),
+        ),
+      serials: bridgeSerials[line.id] ?? initialOutcomeSerials(),
+    })),
+  });
+
+  const persistProgress = async (body: ReceivingProgress | null) => {
+    if (!bridgeReceivePO) return;
+    // Version zero means no saved record exists; positive null-body versions are tombstones.
+    if (!body && draftVersion === 0) return;
+    let record: ReceivingDraftRecord;
+    if (mode === "supabase") {
+      if (!supabaseClient)
+        throw new Error(
+          "Receiving progress cannot be saved while disconnected.",
+        );
+      record = body
+        ? await saveReceivingDraft(
+            supabaseClient,
+            bridgeReceivePO.id,
+            body,
+            draftVersion,
+          )
+        : await deleteReceivingDraft(
+            supabaseClient,
+            bridgeReceivePO.id,
+            draftVersion,
+          );
+    } else {
+      record = {
+        poId: bridgeReceivePO.id,
+        body,
+        version: draftVersion + 1,
+        updatedAt: new Date().toISOString(),
+      };
+      localStorage.setItem(draftKey, JSON.stringify(record));
+    }
+    setDraftVersion(record.version);
+    setDraftSavedAt(body ? record.updatedAt : null);
+  };
+
+  const saveProgress = async () => {
+    if (bridgeSubmitting.current || draftLoading || draftError) return;
+    bridgeSubmitting.current = true;
+    setBridgeBusy(true);
+    try {
+      setDraftSaveError("");
+      await persistProgress(receivingProgress());
+      setDraftConflict(false);
+      toast.success(
+        "Receiving progress saved. No stock has been received yet.",
+      );
+    } catch (error) {
+      setDraftConflict(error instanceof ReceivingDraftConflictError);
+      setDraftSaveError(
+        error instanceof Error
+          ? error.message
+          : "Could not save receiving progress.",
+      );
+    } finally {
+      bridgeSubmitting.current = false;
+      setBridgeBusy(false);
+    }
+  };
+
   const submitBridgeReceive = async () => {
-    if (!bridgeReceivePO || !bridgeLocation || !bridgeEvidence.trim()) return;
+    if (
+      !bridgeReceivePO ||
+      !bridgeLocation ||
+      !bridgeEvidenceUrls.length ||
+      bridgeEvidenceError ||
+      bridgeSubmitting.current ||
+      draftLoading ||
+      draftError
+    )
+      return;
     if (!bridgeReceiptValidation.valid) return;
     if (
       bridgeReceiptValidation.hasExceptions &&
@@ -568,6 +931,7 @@ export function PurchaseOrdersPage() {
       return;
     }
     const lines = bridgeReceivePO.lines
+      .filter((line) => bridgeSelected[line.id])
       .map((line) => {
         const expectedQuantity = Math.max(
           0,
@@ -618,25 +982,50 @@ export function PurchaseOrdersPage() {
         );
       });
     if (lines.length === 0) return;
-    const idempotencyKey = crypto.randomUUID();
-    const ok = await receiveProcurementPO({
-      mode: "breakdown",
-      idempotencyKey,
+    bridgeSubmitting.current = true;
+    setBridgeBusy(true);
+    const input = {
+      mode: "breakdown" as const,
       poId: bridgeReceivePO.id,
       locationId: bridgeLocation,
       binId: bridgeBin || undefined,
       lines,
       exceptionReason: bridgeExceptionReason.trim() || undefined,
-      evidenceUrls: [bridgeEvidence.trim()],
-    });
-    if (!ok) return;
-    toast.success(
-      bridgeReceiptValidation.hasExceptions
-        ? "Receipt breakdown sent to inspection staging and the Supervisor queue"
-        : "Procurement PO received into inspection staging",
-    );
-    setBridgeReceivePO(null);
-    setBridgeReload((value) => value + 1);
+      evidenceUrls: bridgeEvidenceUrls,
+    };
+    const payload = JSON.stringify(input);
+    if (receiptAttemptRef.current?.payload !== payload) {
+      receiptAttemptRef.current = { payload, key: crypto.randomUUID() };
+    }
+    try {
+      const ok = await receiveProcurementPO({
+        ...input,
+        idempotencyKey: receiptAttemptRef.current.key,
+      });
+      if (!ok) return;
+      try {
+        const remaining = receivingProgress();
+        remaining.lines = remaining.lines.filter(
+          (line) => !bridgeSelected[line.id],
+        );
+        await persistProgress(remaining.lines.length ? remaining : null);
+      } catch {
+        toast.error(
+          "Receipt succeeded, but saved progress could not be updated. Reopen the PO and review current balances before retrying anything.",
+        );
+      }
+      toast.success(
+        bridgeReceiptValidation.hasExceptions
+          ? "Receipt breakdown sent to inspection staging and the Supervisor queue"
+          : "Procurement PO received into inspection staging",
+      );
+      receiptAttemptRef.current = null;
+      closeBridgeReceive();
+      setBridgeReload((value) => value + 1);
+    } finally {
+      bridgeSubmitting.current = false;
+      setBridgeBusy(false);
+    }
   };
 
   return (
@@ -981,7 +1370,7 @@ export function PurchaseOrdersPage() {
             {({ execute, pending }) => (
               <button
                 type="button"
-                className="btn-primary w-full"
+                className="btn-primary w-full sm:w-auto"
                 onClick={() => void execute(submitReceive)}
                 disabled={pending}
               >
@@ -1075,268 +1464,512 @@ export function PurchaseOrdersPage() {
 
       <Sheet
         open={bridgeReceivePO !== null}
-        onOpenChange={(open) => !open && setBridgeReceivePO(null)}
+        onOpenChange={(open) => !open && !bridgeBusy && closeBridgeReceive()}
         title="Receive approved procurement PO"
         description={bridgeReceivePO?.poNumber}
         footer={
-          <button
-            type="button"
-            className="btn-primary w-full"
-            disabled={
-              !bridgeLocation ||
-              !bridgeEvidence.trim() ||
-              !bridgeReceiptValidation.valid ||
-              (bridgeReceiptValidation.hasExceptions &&
-                !bridgeExceptionReason.trim())
-            }
-            onClick={() => void submitBridgeReceive()}
-          >
-            Confirm governed receipt
-          </button>
+          <div className="flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              className="btn-ghost"
+              disabled={
+                bridgeBusy || draftLoading || !!draftError || draftConflict
+              }
+              onClick={() => void saveProgress()}
+            >
+              {draftSaveError && !draftConflict
+                ? "Retry save progress"
+                : "Save progress"}
+            </button>
+            <button
+              type="button"
+              className="btn-primary w-full"
+              disabled={
+                !bridgeLocation ||
+                !bridgeEvidenceUrls.length ||
+                !!bridgeEvidenceError ||
+                bridgeBusy ||
+                draftLoading ||
+                !!draftError ||
+                !bridgeReceiptValidation.valid ||
+                (bridgeReceiptValidation.hasExceptions &&
+                  !bridgeExceptionReason.trim())
+              }
+              onClick={() => void submitBridgeReceive()}
+            >
+              Confirm governed receipt
+            </button>
+          </div>
         }
       >
         {bridgeReceivePO && (
           <div className="space-y-3">
-            <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-800 dark:text-amber-200">
-              Inspection required before putaway or allocation.
-            </p>
-            <Field label="Receive into" htmlFor="bridge-receive-location">
-              <select
-                id="bridge-receive-location"
-                className="input"
-                value={bridgeLocation}
-                onChange={(event) => {
-                  setBridgeLocation(event.target.value);
-                  setBridgeBin("");
-                }}
+            {draftLoading && (
+              <p role="status" className="text-sm text-muted">
+                Loading your saved receiving progress...
+              </p>
+            )}
+            {draftSavedAt && (
+              <p role="status" className="text-sm text-muted">
+                Your saved progress: {formatWhen(draftSavedAt)}. Stock changes
+                only after confirmation.
+              </p>
+            )}
+            {draftError && (
+              <div
+                role="alert"
+                className="space-y-2 text-sm text-rose-700 dark:text-rose-300"
               >
-                {warehouses.map((location) => (
-                  <option key={location.id} value={location.id}>
-                    {location.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Receiving staging bin" htmlFor="bridge-receive-bin">
-              <select
-                id="bridge-receive-bin"
-                className="input"
-                value={bridgeBin}
-                onChange={(event) => setBridgeBin(event.target.value)}
+                <p>{draftError}</p>
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  onClick={() => openBridgeReceive(bridgeReceivePO)}
+                >
+                  Reload saved progress
+                </button>
+              </div>
+            )}
+            {draftSaveError && (
+              <div
+                role="alert"
+                className="space-y-2 text-sm text-rose-700 dark:text-rose-300"
               >
-                <option value="">General area</option>
-                {data.storageAreas
-                  .filter(
-                    (bin) =>
-                      bin.locationId === bridgeLocation && bin.active !== false,
-                  )
-                  .map((bin) => (
-                    <option key={bin.id} value={bin.id}>
-                      {bin.code}
+                <p>{draftSaveError}</p>
+                {draftConflict && !confirmDraftReload && (
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    disabled={bridgeBusy}
+                    onClick={() => setConfirmDraftReload(true)}
+                  >
+                    Reload saved progress
+                  </button>
+                )}
+                {draftConflict && confirmDraftReload && (
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="btn-ghost"
+                      onClick={() => setConfirmDraftReload(false)}
+                    >
+                      Keep editing
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-ghost"
+                      disabled={bridgeBusy}
+                      onClick={() => openBridgeReceive(bridgeReceivePO)}
+                    >
+                      Discard unsaved changes and reload
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+            <fieldset
+              disabled={draftLoading || bridgeBusy || !!draftError}
+              className="min-w-0 space-y-3"
+            >
+              <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-800 dark:text-amber-200">
+                Inspection required before putaway or allocation.
+              </p>
+              <p className="text-sm text-muted">
+                Select the items you are receiving. Other operators can receive
+                the remaining items with their own accounts.
+              </p>
+              <Field label="Receive into" htmlFor="bridge-receive-location">
+                <select
+                  id="bridge-receive-location"
+                  className="input"
+                  value={bridgeLocation}
+                  onChange={(event) => {
+                    setBridgeLocation(event.target.value);
+                    setBridgeBin("");
+                  }}
+                >
+                  {warehouses.map((location) => (
+                    <option key={location.id} value={location.id}>
+                      {location.name}
                     </option>
                   ))}
-              </select>
-            </Field>
-            <Field
-              label="Delivery evidence URL"
-              htmlFor="bridge-receive-evidence"
-            >
-              <input
-                id="bridge-receive-evidence"
-                className="input"
-                value={bridgeEvidence}
-                onChange={(event) => setBridgeEvidence(event.target.value)}
-                placeholder="evidence/delivery-note.jpg"
-              />
-            </Field>
-            {bridgeReceiptValidation.hasExceptions && (
-              <Field label="Exception reason" htmlFor="bridge-exception-reason">
-                <textarea
-                  id="bridge-exception-reason"
+                </select>
+              </Field>
+              <Field label="Receiving staging bin" htmlFor="bridge-receive-bin">
+                <select
+                  id="bridge-receive-bin"
                   className="input"
-                  rows={3}
-                  value={bridgeExceptionReason}
-                  onChange={(event) =>
-                    setBridgeExceptionReason(event.target.value)
-                  }
+                  value={bridgeBin}
+                  onChange={(event) => setBridgeBin(event.target.value)}
+                >
+                  <option value="">General area</option>
+                  {data.storageAreas
+                    .filter(
+                      (bin) =>
+                        bin.locationId === bridgeLocation &&
+                        bin.active !== false,
+                    )
+                    .map((bin) => (
+                      <option key={bin.id} value={bin.id}>
+                        {bin.code}
+                      </option>
+                    ))}
+                </select>
+              </Field>
+              <EvidenceCapture
+                key={receivingRequest?.session}
+                reference={`procurement-receiving/${bridgeReceivePO.id}`}
+                label="Upload or photograph delivery note"
+                onChange={(photos) => {
+                  if (
+                    !mountedRef.current ||
+                    receivingRequest?.session !== receivingSessionRef.current
+                  )
+                    return;
+                  setBridgePhotos([
+                    ...receivingStateRef.current.restoredPhotos,
+                    ...photos,
+                  ]);
+                }}
+              />
+              {restoredPhotos.length > 0 && (
+                <div className="space-y-2">
+                  <EvidenceGallery urls={restoredPhotos} />
+                  {restoredPhotos.map((photo, index) => (
+                    <button
+                      key={photo}
+                      type="button"
+                      className="btn-ghost btn-sm"
+                      onClick={() => {
+                        setRestoredPhotos((current) =>
+                          current.filter((value) => value !== photo),
+                        );
+                        setBridgePhotos((current) =>
+                          current.filter((value) => value !== photo),
+                        );
+                      }}
+                    >
+                      <Icon name="x" /> Remove saved photo {index + 1}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <Field
+                label="Delivery evidence URL"
+                htmlFor="bridge-receive-evidence"
+              >
+                <input
+                  id="bridge-receive-evidence"
+                  className="input"
+                  value={bridgeEvidence}
+                  onChange={(event) => setBridgeEvidence(event.target.value)}
+                  placeholder="Optional HTTPS link to a delivery document"
                 />
               </Field>
-            )}
-            <ul className="space-y-3" aria-label="Procurement PO receipt lines">
-              {bridgeReceivePO.lines.map((line) => {
-                const remaining = Math.max(
-                  0,
-                  line.quantity - line.receivedQuantity,
-                );
-                const quantities =
-                  bridgeOutcomes[line.id] ??
-                  initialOutcomeQuantities(remaining);
-                const serials =
-                  bridgeSerials[line.id] ?? initialOutcomeSerials();
-                const mappedProduct = data.products.find(
-                  (product) => product.id === bridgeProducts[line.id],
-                );
-                const physical =
-                  quantities.clean +
-                  quantities.damaged +
-                  quantities.unidentified +
-                  quantities.excess;
-                const lineErrors =
-                  bridgeReceiptValidation.errors[line.id] ?? [];
-                return (
-                  <li
-                    key={line.id}
-                    className="space-y-3 rounded-lg bg-inset p-3"
-                  >
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <p className="text-sm font-semibold text-ink">
-                        {line.description}
-                      </p>
-                      <p className="text-xs text-muted">
-                        {remaining} expected · {physical} physical ·{" "}
-                        {quantities.short} short · {quantities.excess} excess
-                      </p>
-                    </div>
-                    <ProductSelect
-                      aria-label={`Map ${line.description}`}
-                      products={data.products}
-                      value={bridgeProducts[line.id] ?? ""}
-                      onChange={(productId) =>
-                        setBridgeProducts((current) => ({
-                          ...current,
-                          [line.id]: productId,
-                        }))
-                      }
-                      placeholder="Map identified units to Warehouse product"
-                    />
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                      {(
-                        [
-                          "clean",
-                          "damaged",
-                          "unidentified",
-                          "short",
-                          "excess",
-                        ] as const
-                      ).map((outcome) => (
-                        <Field
-                          key={outcome}
-                          label={`${outcome[0]!.toUpperCase()}${outcome.slice(1)}`}
-                          htmlFor={`${outcome}-quantity-${line.id}`}
-                        >
-                          <input
-                            id={`${outcome}-quantity-${line.id}`}
-                            aria-label={`${outcome} quantity for ${line.description}`}
-                            className="input text-center"
-                            type="number"
-                            inputMode="numeric"
-                            min={0}
-                            max={outcome === "excess" ? undefined : remaining}
-                            value={quantities[outcome]}
-                            onChange={(event) => {
-                              const next = Number(event.target.value);
-                              setBridgeOutcomes((current) => ({
-                                ...current,
-                                [line.id]: {
-                                  ...quantities,
-                                  [outcome]: Number.isFinite(next)
-                                    ? Math.max(0, Math.trunc(next))
-                                    : 0,
-                                },
-                              }));
-                            }}
-                          />
-                        </Field>
-                      ))}
-                    </div>
-                    {mappedProduct?.serialized && (
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        {PHYSICAL_OUTCOMES.filter(
-                          (outcome) => quantities[outcome] > 0,
-                        ).map((outcome) => (
-                          <Field
-                            key={outcome}
-                            label={`${outcome[0]!.toUpperCase()}${outcome.slice(1)} serials (${quantities[outcome]})`}
-                            htmlFor={`${outcome}-serials-${line.id}`}
-                          >
-                            <textarea
-                              id={`${outcome}-serials-${line.id}`}
-                              aria-label={`${outcome} serials for ${line.description}`}
-                              className="input min-h-24 resize-y font-mono text-sm"
-                              rows={Math.min(
-                                6,
-                                Math.max(2, quantities[outcome]),
-                              )}
-                              value={serials[outcome]}
-                              onChange={(event) =>
-                                setBridgeSerials((current) => ({
-                                  ...current,
-                                  [line.id]: {
-                                    ...serials,
-                                    [outcome]: event.target.value,
-                                  },
-                                }))
-                              }
-                            />
-                          </Field>
-                        ))}
-                      </div>
-                    )}
-                    {quantities.unidentified > 0 && (
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        <Field
-                          label={`Observed description for ${line.description}`}
-                          htmlFor={`observed-description-${line.id}`}
-                        >
-                          <input
-                            id={`observed-description-${line.id}`}
-                            className="input"
-                            value={bridgeObservedDescriptions[line.id] ?? ""}
-                            onChange={(event) =>
-                              setBridgeObservedDescriptions((current) => ({
-                                ...current,
-                                [line.id]: event.target.value,
-                              }))
-                            }
-                          />
-                        </Field>
-                        <Field
-                          label={`Observed identifiers for ${line.description}`}
-                          htmlFor={`observed-identifiers-${line.id}`}
-                        >
-                          <input
-                            id={`observed-identifiers-${line.id}`}
-                            className="input"
-                            value={bridgeObservedIdentifiers[line.id] ?? ""}
-                            onChange={(event) =>
-                              setBridgeObservedIdentifiers((current) => ({
-                                ...current,
-                                [line.id]: event.target.value,
-                              }))
-                            }
-                          />
-                        </Field>
-                      </div>
-                    )}
-                    {lineErrors.length > 0 && (
-                      <ul className="space-y-1 text-xs font-medium text-rose-700 dark:text-rose-300">
-                        {lineErrors.map((error) => (
-                          <li key={error}>{error}</li>
-                        ))}
-                      </ul>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-            {bridgeReceiptValidation.errors.command?.map((error) => (
-              <p
-                key={error}
-                className="text-xs font-medium text-rose-700 dark:text-rose-300"
+              {bridgeEvidenceError && (
+                <p
+                  role="alert"
+                  className="text-sm text-rose-700 dark:text-rose-300"
+                >
+                  {bridgeEvidenceError}
+                </p>
+              )}
+              {bridgeReceiptValidation.hasExceptions && (
+                <Field
+                  label="Exception reason"
+                  htmlFor="bridge-exception-reason"
+                >
+                  <textarea
+                    id="bridge-exception-reason"
+                    className="input"
+                    rows={3}
+                    value={bridgeExceptionReason}
+                    onChange={(event) =>
+                      setBridgeExceptionReason(event.target.value)
+                    }
+                  />
+                </Field>
+              )}
+              <ul
+                className="space-y-3"
+                aria-label="Procurement PO receipt lines"
               >
-                {error}
-              </p>
-            ))}
+                {bridgeReceivePO.lines.map((line) => {
+                  const remaining = Math.max(
+                    0,
+                    line.quantity - line.receivedQuantity,
+                  );
+                  const quantities =
+                    bridgeOutcomes[line.id] ??
+                    initialOutcomeQuantities(remaining);
+                  const serials =
+                    bridgeSerials[line.id] ?? initialOutcomeSerials();
+                  const mappedProduct = data.products.find(
+                    (product) => product.id === bridgeProducts[line.id],
+                  );
+                  const physical =
+                    quantities.clean +
+                    quantities.damaged +
+                    quantities.unidentified +
+                    quantities.excess;
+                  const lineErrors =
+                    bridgeReceiptValidation.errors[line.id] ?? [];
+                  return (
+                    <li
+                      key={line.id}
+                      className="space-y-3 rounded-lg bg-inset p-3"
+                    >
+                      <div className="flex flex-wrap items-baseline justify-between gap-2">
+                        <label className="flex min-h-11 items-center gap-2 text-sm font-semibold text-ink">
+                          <input
+                            type="checkbox"
+                            checked={!!bridgeSelected[line.id]}
+                            aria-label={`Receive ${line.description}`}
+                            onChange={(event) =>
+                              setBridgeSelected((current) => ({
+                                ...current,
+                                [line.id]: event.target.checked,
+                              }))
+                            }
+                          />
+                          {line.description}
+                        </label>
+                        <p className="text-xs text-muted">
+                          {remaining} expected · {physical} physical ·{" "}
+                          {quantities.short} short · {quantities.excess} excess
+                        </p>
+                      </div>
+                      <fieldset
+                        disabled={!bridgeSelected[line.id] || bridgeBusy}
+                        className="min-w-0 space-y-3 disabled:opacity-50"
+                      >
+                        <ProductSelect
+                          aria-label={`Map ${line.description}`}
+                          products={data.products}
+                          value={bridgeProducts[line.id] ?? ""}
+                          onChange={(productId) =>
+                            setBridgeProducts((current) => ({
+                              ...current,
+                              [line.id]: productId,
+                            }))
+                          }
+                          placeholder="Map identified units to Warehouse product"
+                        />
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                          {(
+                            [
+                              "clean",
+                              "damaged",
+                              "unidentified",
+                              "short",
+                              "excess",
+                            ] as const
+                          ).map((outcome) => (
+                            <Field
+                              key={outcome}
+                              label={`${outcome[0]!.toUpperCase()}${outcome.slice(1)}`}
+                              htmlFor={`${outcome}-quantity-${line.id}`}
+                            >
+                              <input
+                                id={`${outcome}-quantity-${line.id}`}
+                                aria-label={`${outcome} quantity for ${line.description}`}
+                                className="input text-center"
+                                type="number"
+                                inputMode="numeric"
+                                min={0}
+                                max={
+                                  outcome === "excess" ? undefined : remaining
+                                }
+                                value={quantities[outcome]}
+                                onChange={(event) => {
+                                  const next = Number(event.target.value);
+                                  setBridgeOutcomes((current) => ({
+                                    ...current,
+                                    [line.id]: {
+                                      ...quantities,
+                                      [outcome]: Number.isFinite(next)
+                                        ? Math.max(0, Math.trunc(next))
+                                        : 0,
+                                    },
+                                  }));
+                                }}
+                              />
+                            </Field>
+                          ))}
+                        </div>
+                        {mappedProduct?.serialized && (
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            {PHYSICAL_OUTCOMES.filter(
+                              (outcome) => quantities[outcome] > 0,
+                            ).map((outcome) => (
+                              <Field
+                                key={outcome}
+                                label={`${outcome[0]!.toUpperCase()}${outcome.slice(1)} serials (${quantities[outcome]})`}
+                                htmlFor={`${outcome}-serials-${line.id}`}
+                              >
+                                <button
+                                  type="button"
+                                  className="btn-ghost w-full mb-2"
+                                  aria-expanded={
+                                    serialTarget === `${line.id}:${outcome}`
+                                  }
+                                  onClick={() =>
+                                    setSerialTarget((current) =>
+                                      current === `${line.id}:${outcome}`
+                                        ? null
+                                        : `${line.id}:${outcome}`,
+                                    )
+                                  }
+                                >
+                                  <Icon name="scan" /> Scan {outcome} serials
+                                  for {line.description}
+                                </button>
+                                {serialTarget === `${line.id}:${outcome}` && (
+                                  <BarcodeScanner
+                                    label="Start camera scan"
+                                    manualLabel={`Serial for ${outcome} ${line.description}`}
+                                    manualActionLabel="Add serial"
+                                    onDetected={(code) => {
+                                      if (
+                                        !mountedRef.current ||
+                                        receivingRequest?.session !==
+                                          receivingSessionRef.current ||
+                                        bridgeSubmitting.current
+                                      )
+                                        return;
+                                      const latest = receivingStateRef.current;
+                                      if (!latest.bridgeSelected[line.id])
+                                        return;
+                                      const value = code.trim();
+                                      if (!value) return;
+                                      const existing = Object.values(
+                                        latest.bridgeSerials,
+                                      ).flatMap((group) =>
+                                        Object.values(group).flatMap(
+                                          parseSerials,
+                                        ),
+                                      );
+                                      if (existing.includes(value)) {
+                                        toast.error(
+                                          "Serial already scanned in this receipt.",
+                                        );
+                                        return;
+                                      }
+                                      const currentGroup =
+                                        latest.bridgeSerials[line.id] ??
+                                        initialOutcomeSerials();
+                                      const currentSerials = parseSerials(
+                                        currentGroup[outcome],
+                                      );
+                                      if (
+                                        currentSerials.length >=
+                                        (latest.bridgeOutcomes[line.id]?.[
+                                          outcome
+                                        ] ?? 0)
+                                      ) {
+                                        toast.error(
+                                          "This outcome already has all required serials.",
+                                        );
+                                        return;
+                                      }
+                                      const next = {
+                                        ...latest.bridgeSerials,
+                                        [line.id]: {
+                                          ...currentGroup,
+                                          [outcome]: [
+                                            ...currentSerials,
+                                            value,
+                                          ].join("\n"),
+                                        },
+                                      };
+                                      receivingStateRef.current.bridgeSerials =
+                                        next;
+                                      setBridgeSerials(next);
+                                    }}
+                                  />
+                                )}
+                                <textarea
+                                  id={`${outcome}-serials-${line.id}`}
+                                  aria-label={`${outcome} serials for ${line.description}`}
+                                  className="input min-h-24 resize-y font-mono text-sm"
+                                  rows={Math.min(
+                                    6,
+                                    Math.max(2, quantities[outcome]),
+                                  )}
+                                  value={serials[outcome]}
+                                  onChange={(event) =>
+                                    setBridgeSerials((current) => ({
+                                      ...current,
+                                      [line.id]: {
+                                        ...serials,
+                                        [outcome]: event.target.value,
+                                      },
+                                    }))
+                                  }
+                                />
+                              </Field>
+                            ))}
+                          </div>
+                        )}
+                        {quantities.unidentified > 0 && (
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            <Field
+                              label={`Observed description for ${line.description}`}
+                              htmlFor={`observed-description-${line.id}`}
+                            >
+                              <input
+                                id={`observed-description-${line.id}`}
+                                className="input"
+                                value={
+                                  bridgeObservedDescriptions[line.id] ?? ""
+                                }
+                                onChange={(event) =>
+                                  setBridgeObservedDescriptions((current) => ({
+                                    ...current,
+                                    [line.id]: event.target.value,
+                                  }))
+                                }
+                              />
+                            </Field>
+                            <Field
+                              label={`Observed identifiers for ${line.description}`}
+                              htmlFor={`observed-identifiers-${line.id}`}
+                            >
+                              <input
+                                id={`observed-identifiers-${line.id}`}
+                                className="input"
+                                value={bridgeObservedIdentifiers[line.id] ?? ""}
+                                onChange={(event) =>
+                                  setBridgeObservedIdentifiers((current) => ({
+                                    ...current,
+                                    [line.id]: event.target.value,
+                                  }))
+                                }
+                              />
+                            </Field>
+                          </div>
+                        )}
+                        {lineErrors.length > 0 && (
+                          <ul className="space-y-1 text-xs font-medium text-rose-700 dark:text-rose-300">
+                            {lineErrors.map((error) => (
+                              <li key={error}>{error}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </fieldset>
+                    </li>
+                  );
+                })}
+              </ul>
+              {bridgeReceiptValidation.errors.command?.map((error) => (
+                <p
+                  key={error}
+                  className="text-xs font-medium text-rose-700 dark:text-rose-300"
+                >
+                  {error}
+                </p>
+              ))}
+            </fieldset>
           </div>
         )}
       </Sheet>

@@ -21,6 +21,7 @@ import {
 } from "./catalog";
 import { OPERATING_PERSONA_IDS } from "./personas";
 import { REQUIREMENT_PROGRESS_STATES } from "./types";
+import { assessmentQuestionsFor } from "./content";
 
 const allCurricula = [
   ...LEARNING_CATALOG.curricula,
@@ -146,13 +147,17 @@ describe("learning catalog", () => {
     ).toMatch(/Product.*go-live.*Operations/i);
   });
 
-  it("maps mutation-bearing role requirements only to supported persona practices", () => {
+  it("maps mutation-bearing requirements only to supported practices or assessments", () => {
     const supportedSimulationIds = new Set(
       LEARNING_CATALOG.rolePractices.map((practice) => practice.simulation.id),
     );
 
     for (const requirement of LEARNING_CATALOG.requirements) {
       if (requirement.capabilityOutcomes.length === 0) continue;
+      if (requirement.kind === "assessment") {
+        expect(assessmentQuestionsFor(requirement.id), requirement.id).not.toBeNull();
+        continue;
+      }
       if (requirement.id.includes(".unassigned.")) {
         expect(requirement.simulationId, requirement.id).toBeUndefined();
         continue;

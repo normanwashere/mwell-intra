@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useWarehouse } from '@/app/store';
 import { toStockState } from '@/data/repository';
-import { uncommittedAvailable, validateReservation } from '@/domain/allocations';
 import { primaryStockLocation, stockByLocation } from '@/domain/transfers';
 import { stockByBin } from '@/domain/storage';
 import type { Allocation, AllocationStatus } from '@/domain/types';
@@ -11,8 +10,6 @@ import {
   EmptyState,
   Field,
   PageHeader,
-  ProductSelect,
-  QuantityStepper,
   SegmentedControl,
   Sheet,
   useToast,
@@ -22,7 +19,7 @@ import { Icon } from '@/components/Icon';
 import { EvidenceCapture } from '@/components/camera/EvidenceCapture';
 import { WarehouseScanFlow } from '@/components/camera/WarehouseScanFlow';
 import { AllocationReturnSheet } from '@/components/AllocationReturnSheet';
-import { expiryStatusForProduct } from '@/components/ExpiryStatus';
+import { AllocationReservationSheet } from '@/components/AllocationReservationSheet';
 
 type StatusFilter = 'all' | 'reserved' | 'issued';
 
@@ -35,7 +32,7 @@ const STATUS_TONE: Record<AllocationStatus, Tone> = {
 };
 
 export function AllocationsPage() {
-  const { data, reserve, issue, cancelAllocation, can } = useWarehouse();
+  const { data, issue, cancelAllocation, can } = useWarehouse();
   const toast = useToast();
   const canIssue = can('issue_items');
   const canReserve = can('reserve_allocate');
@@ -43,11 +40,6 @@ export function AllocationsPage() {
   const [returnAlloc, setReturnAlloc] = useState<Allocation | null>(null);
 
   const [open, setOpen] = useState(false);
-  const [eventId, setEventId] = useState('');
-  const [productId, setProductId] = useState('');
-  const [quantity, setQuantity] = useState(1);
-  const [promotional, setPromotional] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const [issuing, setIssuing] = useState<Allocation | null>(null);
   const [assignedTo, setAssignedTo] = useState('');
@@ -84,16 +76,6 @@ export function AllocationsPage() {
     );
   }, [data, issuing, issueLoc, issueBin]);
 
-  const available = useMemo(() => {
-    if (!data || !productId) return 0;
-    return uncommittedAvailable(toStockState(data), data.allocations, productId);
-  }, [data, productId]);
-
-  const selectedExpiry = expiryStatusForProduct(
-    data?.products.find((product) => product.id === productId),
-    data?.lots ?? [],
-  );
-
   if (!data) return null;
   const eventName = (id: string) => data.events.find((e) => e.id === id)?.name ?? id;
   const eventDate = (id: string) => {
@@ -118,31 +100,6 @@ export function AllocationsPage() {
         ? isReserved(a)
         : a.status === 'issued',
   );
-
-  const submit = async () => {
-    setError(null);
-    const ev = eventId || data.events[0]?.id;
-    if (!ev || !productId) {
-      setError('Select an event and product.');
-      return;
-    }
-    const result = validateReservation(
-      toStockState(data),
-      data.allocations,
-      productId,
-      quantity,
-    );
-    if (!result.ok) {
-      setError(result.error ?? 'Invalid reservation');
-      return;
-    }
-    const ok = await reserve({ eventId: ev, productId, quantity, promotional });
-    if (!ok) return;
-    toast.success(`Reserved ${quantity}× ${productName(productId)}`);
-    setOpen(false);
-    setQuantity(1);
-    setProductId('');
-  };
 
   const issuingProduct = issuing
     ? data.products.find((p) => p.id === issuing.productId)
@@ -303,7 +260,7 @@ export function AllocationsPage() {
                   </p>
                   <p className="text-xs text-faint">
                     {eventName(a.eventId)} • {eventDate(a.eventId)} • Qty {a.quantity}
-                    {a.promotional ? ' • promo' : ''}
+                    {a.promotional ? ' • Giveaway' : ' • Selling'}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -346,84 +303,7 @@ export function AllocationsPage() {
         )}
       </Card>
 
-      <Sheet
-        open={open}
-        onOpenChange={setOpen}
-        title="New reservation"
-        description="Hold stock for a confirmed event."
-        footer={
-          <button
-            type="button"
-            className="btn-primary w-full"
-            disabled={!productId}
-            onClick={() => void submit()}
-          >
-            Reserve
-          </button>
-        }
-      >
-        <div className="space-y-3">
-          <Field label="Event" htmlFor="alloc-event">
-            <select
-              id="alloc-event"
-              className="input"
-              value={eventId || data.events[0]?.id || ''}
-              onChange={(e) => setEventId(e.target.value)}
-            >
-              {data.events.map((ev) => (
-                <option key={ev.id} value={ev.id}>
-                  {ev.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Product" htmlFor="alloc-product">
-            <ProductSelect
-              id="alloc-product"
-              products={data.products}
-              value={productId}
-              onChange={setProductId}
-            />
-          </Field>
-          <Field
-            label="Quantity"
-            htmlFor="alloc-qty"
-            hint={productId ? `${available} available to reserve` : undefined}
-          >
-            <QuantityStepper
-              id="alloc-qty"
-              aria-label="Quantity"
-              value={quantity}
-              onChange={setQuantity}
-              min={1}
-            />
-          </Field>
-          {selectedExpiry?.risk === 'expired' && (
-            <p role="status" className="rounded-xl bg-rose-500/10 px-3 py-2 text-sm font-medium text-rose-700 dark:text-rose-300">
-              Expired lot on hand. Reservation remains available in W1; verify the lot before issue.
-            </p>
-          )}
-          {selectedExpiry?.risk === 'warning' && (
-            <p role="status" className="rounded-xl bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-800 dark:text-amber-200">
-              Near-expiry lot on hand. Verify the lot before issue.
-            </p>
-          )}
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              className="h-4 w-4 rounded"
-              checked={promotional}
-              onChange={(e) => setPromotional(e.target.checked)}
-            />
-            <span className="text-sm text-muted">Promotional / give-away</span>
-          </label>
-          {error && (
-            <p role="alert" className="text-sm text-rose-600 dark:text-rose-300">
-              {error}
-            </p>
-          )}
-        </div>
-      </Sheet>
+      {open && canReserve && <AllocationReservationSheet onClose={() => setOpen(false)} />}
 
       <Sheet
         open={issuing !== null}
