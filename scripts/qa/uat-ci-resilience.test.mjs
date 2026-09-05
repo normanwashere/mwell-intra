@@ -189,10 +189,36 @@ test("UAT certification workflow gates deployment and always certifies cleanup",
   assert.doesNotMatch(workflow, /SUPABASE_SERVICE_ROLE_KEY:\s*eyJ/);
 });
 
-test("UAT runs actual disclosure browser regressions after Chromium installation", async () => {
+test("prepare runs only reviewed Sep05 SQL suites before persona provisioning", async () => {
+  const workflow = await readFile(new URL("../../.github/workflows/uat-live-certification.yml", import.meta.url), "utf8");
+  const prepare = workflow.split("  prepare:\n")[1]?.split("\n  routes:")[0];
+  assert.ok(prepare, "prepare job exists");
+  const stepName = "Verify Sep05 isolated SQL regression suites";
+  const step = prepare.split(`      - name: ${stepName}\n`)[1]?.split("      - name:")[0];
+  assert.ok(step, "dedicated SQL gate exists in prepare");
+  assert.match(step, /^        run: \|\n/);
+  assert.doesNotMatch(step, /continue-on-error|if:|\|\||\*|\$\{|provision|fetch/);
+  const command = step.replace(/^        run: \|\n/, "").replace(/\\\r?\n/g, " ").trim().split(/\s+/);
+  assert.deepEqual(command, [
+    "node", "--test", "--test-concurrency=1",
+    "scripts/verify-sep05-procurement.pglite.test.mjs",
+    "scripts/verify-sep05-procurement-integration.pglite.test.mjs",
+    "scripts/verify-putaway-tasks.pglite.test.mjs",
+    "scripts/verify-receiving-drafts.pglite.test.mjs",
+    "modules/finance/platform-remediation.pglite.test.mjs",
+    "scripts/verify-return-intake.pglite.test.mjs",
+    "scripts/verify-offline-replay-identity.pglite.test.mjs",
+    "scripts/verify-warehouse-custody-truncate.pglite.test.mjs",
+  ]);
+  assert.ok(prepare.indexOf(stepName) > prepare.indexOf("Install locked dependencies"));
+  assert.ok(prepare.indexOf(stepName) < prepare.indexOf("Reconcile guarded UAT personas"));
+  assert.match(prepare, /timeout-minutes: 40\b/);
+});
+
+test("UAT runs disclosure and actual Quality workflow browser regressions after Chromium installation", async () => {
   const workflow = await readFile(new URL("../../.github/workflows/uat-live-certification.yml", import.meta.url), "utf8");
   const installed = workflow.indexOf("Install Chromium for first-login certification");
-  const contract = workflow.indexOf("node --test scripts/qa/audit-disclosure.browser.test.mjs");
+  const contract = workflow.indexOf("run: node --test scripts/qa/audit-disclosure.browser.test.mjs scripts/qa/quality-validation-workflow.browser.test.mjs");
   const orientation = workflow.indexOf("Complete first-login role orientations on desktop");
   assert.ok(installed >= 0 && contract > installed && orientation > contract);
 });

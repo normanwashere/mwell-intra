@@ -26,6 +26,12 @@ The September 5 follow-up through UAT commit `7dd30cb` includes source-specific 
 
 When enlarged text leaves too little space beside a page-title icon, the title and icon must stack rather than collide. Event outcome totals must also reflow without losing their labels or values. This final layout follow-up requires a matching deployed visual check; do not reduce text size to work around crowding.
 
+The account menu must stay within the available screen area. Long role information may scroll inside the menu; scroll there to reach its lower actions. Authority labels must wrap instead of widening the page. Escape closes the menu and returns focus to the account button; clicking outside closes it without signing out.
+
+The notification popup must also stay above fixed navigation. Scroll inside it to read the complete message or reach a notification action. Its header, explanatory text and action labels must remain readable at enlarged text sizes.
+
+Notifications belong to the currently verified account and access scope. Changing accounts or permissions must clear the previous list before loading the new one. Do not interpret an unavailable notification service as confirmation that there are no alerts.
+
 This handbook is the complete standalone operating reference for Mwell Intra. Use its contents, full-text search, process diagrams, role procedures, application screenshots, and governed source register without opening a separate help system. Operational routes continue to enforce role-based access.
 
 ## Start Here

@@ -22,6 +22,7 @@ import {
 } from "@shell/lib/navigation";
 import { cx } from "@shell/lib/cx";
 import { NotificationBell } from "./NotificationBell";
+import { notificationScopeKey } from "@shell/lib/notificationScopeKey";
 import { ThemeToggle } from "./ThemeToggle";
 import { UserMenu } from "./UserMenu";
 import { CommandPalette } from "./CommandPalette";
@@ -72,7 +73,7 @@ function mobileNavLabel(label: string): string {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { profile, userRoles, userCapabilities, mode, loading } = useSession();
+  const { profile, userRoles, userCapabilities, roleCapabilities, mode, loading } = useSession();
   const { snapshot } = useLearning();
   const access = { mode, userRoles, userCapabilities };
   const profileId = profile?.id;
@@ -368,7 +369,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <Icon name="info" className="h-5 w-5" />
                 </Link>
               )}
-              <NotificationBell />
+              <NotificationBell key={notificationScopeKey({ mode, principalId: profileId, roleCapabilities })} />
               <span className="hidden min-[400px]:block">
                 <ThemeToggle />
               </span>

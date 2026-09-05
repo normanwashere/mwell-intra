@@ -13,6 +13,7 @@ import { cx } from "@shell/lib/cx";
 import { resetDemoData } from "@shell/lib/demoData";
 import { hasCapability } from "@shell/lib/navigation";
 import { resolvePersonaPresentation } from "@shell/lib/personaPresentation";
+import { useHeaderPopoverBounds } from "@shell/lib/useHeaderPopoverBounds";
 
 function initials(nameOrEmail: string): string {
   const source = nameOrEmail.trim();
@@ -33,6 +34,7 @@ export function UserMenu() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const bounds = useHeaderPopoverBounds(open, triggerRef, 22);
 
   useEffect(() => {
     if (!open) return;
@@ -100,15 +102,16 @@ export function UserMenu() {
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-12 z-30 w-[min(22rem,calc(100vw-2rem))] animate-pop-in rounded-2xl border border-line bg-surface p-3 shadow-pop"
+          style={bounds}
+          className="absolute right-0 z-30 animate-pop-in overflow-y-auto overscroll-contain rounded-2xl border border-line bg-surface p-3 shadow-pop [overflow-wrap:anywhere]"
         >
-          <div className="flex items-center gap-3 px-1 pb-3">
+          <div className="flex flex-wrap items-center gap-3 px-1 pb-3">
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-600 text-sm font-bold text-white">
               {initials(label)}
             </span>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-ink">{label}</p>
-              <p className="truncate text-xs text-muted">{profile.email}</p>
+            <div className="min-w-0 flex-1 basis-[8rem]">
+              <p className="text-sm font-semibold text-ink">{label}</p>
+              <p className="text-xs text-muted">{profile.email}</p>
             </div>
           </div>
 
@@ -136,10 +139,10 @@ export function UserMenu() {
                   persona.authority.map((item) => (
                     <div
                       key={`${item.module}:${item.role}`}
-                      className="flex items-start justify-between gap-3 text-xs"
+                      className="flex min-w-0 flex-wrap items-start justify-between gap-x-3 gap-y-1 text-xs"
                     >
                       <span className="font-medium text-ink">{item.label}</span>
-                      <span className="shrink-0 text-faint">
+                      <span className="max-w-full text-faint">
                         {item.moduleLabel}
                       </span>
                     </div>

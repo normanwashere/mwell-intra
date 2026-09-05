@@ -20,6 +20,7 @@ import { useSession } from '@intra/auth';
 import { ENABLE_NOTIFICATIONS } from '@shell/lib/supabase/env';
 import type { ShellSupabaseClient } from '@shell/lib/supabase/types';
 import { cx } from '@shell/lib/cx';
+import { useHeaderPopoverBounds } from '@shell/lib/useHeaderPopoverBounds';
 
 /** How often we re-fetch notifications in supabase mode. */
 const POLL_INTERVAL_MS = 60_000;
@@ -71,8 +72,13 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [rows, setRows] = useState<NotificationRow[]>([]);
   const [initialFetch, setInitialFetch] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [retryVersion, setRetryVersion] = useState(0);
   const [busyId, setBusyId] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const bounds = useHeaderPopoverBounds(open && !disabled, triggerRef, 20);
 
   // Poll core.notifications while signed in with a live backend.  RLS scopes
   // rows to auth.uid() so we don't add a user_id filter (that also means the
@@ -82,6 +88,7 @@ export function NotificationBell() {
     let active = true;
 
     const fetchRows = async () => {
+      setRefreshing(true);
       try {
         const { data, error } = await client
           .from('notifications')
@@ -91,13 +98,20 @@ export function NotificationBell() {
         if (!active) return;
         if (!error && Array.isArray(data)) {
           setRows(data as NotificationRow[]);
+          setLoadFailed(false);
+        } else {
+          setLoadFailed(true);
         }
       } catch {
         // Route changes can abort the live fetch. Notifications are secondary,
         // so keep the shell quiet and leave the last known list in place.
         if (!active) return;
+        setLoadFailed(true);
       } finally {
-        if (active) setInitialFetch(true);
+        if (active) {
+          setInitialFetch(true);
+          setRefreshing(false);
+        }
       }
     };
 
@@ -107,7 +121,7 @@ export function NotificationBell() {
       active = false;
       window.clearInterval(timer);
     };
-  }, [client, disabled]);
+  }, [client, disabled, retryVersion]);
 
   useEffect(() => {
     if (!open) return;
@@ -116,8 +130,19 @@ export function NotificationBell() {
         setOpen(false);
       }
     };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setOpen(false);
+        window.requestAnimationFrame(() => triggerRef.current?.focus());
+      }
+    };
     document.addEventListener('mousedown', onClick);
-    return () => document.removeEventListener('mousedown', onClick);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onClick);
+      document.removeEventListener('keydown', onKeyDown);
+    };
   }, [open]);
 
   const unread = useMemo(
@@ -162,6 +187,7 @@ export function NotificationBell() {
   return (
     <div className="relative" ref={ref}>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => {
           if (disabled) return;
@@ -193,9 +219,10 @@ export function NotificationBell() {
       {open && !disabled && (
         <div
           role="menu"
-          className="absolute right-0 top-12 z-30 w-80 max-w-[calc(100vw-1rem)] animate-pop-in overflow-hidden rounded-2xl border border-line bg-surface shadow-pop"
+          style={bounds}
+          className="absolute right-0 z-30 animate-pop-in overflow-y-auto overscroll-contain rounded-2xl border border-line bg-surface shadow-pop [overflow-wrap:anywhere]"
         >
-          <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
             <div className="min-w-0">
               <p className="text-sm font-semibold text-ink">Notifications</p>
               <p className="text-xs text-muted">
@@ -210,17 +237,61 @@ export function NotificationBell() {
                   : 'bg-inset text-muted',
               )}
             >
-              {unread > 0 ? `${unread} unread` : 'All read'}
+              {notificationSummary(initialFetch, loadFailed, unread)}
             </span>
           </div>
 
-          <ul className="max-h-96 divide-y divide-line/60 overflow-auto">
+          <NotificationResults
+            rows={rows}
+            initialFetch={initialFetch}
+            loadFailed={loadFailed}
+            refreshing={refreshing}
+            busyId={busyId}
+            onMarkRead={markRead}
+            onRetry={() => setRetryVersion((version) => version + 1)}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function notificationSummary(initialFetch: boolean, loadFailed: boolean, unread: number) {
+  if (loadFailed) return 'Unavailable';
+  if (!initialFetch) return 'Loading';
+  return unread > 0 ? `${unread} unread` : 'All read';
+}
+
+export function NotificationResults({ rows, initialFetch, loadFailed, refreshing, busyId, onMarkRead, onRetry }: {
+  rows: NotificationRow[];
+  initialFetch: boolean;
+  loadFailed: boolean;
+  refreshing: boolean;
+  busyId: string | null;
+  onMarkRead: (id: string) => Promise<void>;
+  onRetry: () => void;
+}) {
+  return (
+    <>
+      {loadFailed && (
+        <div role="alert" className="space-y-2 border-b border-line px-4 py-3 text-sm text-muted">
+          <p>{rows.length > 0
+            ? 'Notifications could not be refreshed. Previously loaded alerts may be out of date.'
+            : 'Notifications are unavailable. Try again.'}</p>
+          <button type="button" role="menuitem" disabled={refreshing} onClick={onRetry}
+            className="btn-ghost min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere]">
+            <Icon name="rotate" className="h-4 w-4 shrink-0" />
+            {refreshing ? 'Retrying...' : 'Retry'}
+          </button>
+        </div>
+      )}
+      <ul className="divide-y divide-line/60">
             {!initialFetch ? (
               <li className="grid place-items-center gap-2 px-4 py-8 text-sm text-muted">
                 <Icon name="rotate" className="h-4 w-4 animate-spin" />
                 <span>Loading…</span>
               </li>
-            ) : rows.length === 0 ? (
+            ) : rows.length === 0 && !loadFailed ? (
               <li className="grid place-items-center gap-2 px-4 py-8 text-center">
                 <span className="grid h-10 w-10 place-items-center rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
                   <Icon name="check" className="h-5 w-5" />
@@ -238,18 +309,16 @@ export function NotificationBell() {
                   key={row.id}
                   row={row}
                   busy={busyId === row.id}
-                  onMarkRead={markRead}
+                  onMarkRead={onMarkRead}
                 />
               ))
             )}
           </ul>
-        </div>
-      )}
-    </div>
+    </>
   );
 }
 
-function NotificationItem({
+export function NotificationItem({
   row,
   busy,
   onMarkRead,
@@ -262,7 +331,7 @@ function NotificationItem({
   return (
     <li
       className={cx(
-        'flex items-start gap-3 px-4 py-3 text-sm transition',
+        'flex min-w-0 flex-wrap items-start gap-3 px-4 py-3 text-sm transition',
         unread ? 'bg-brand-500/5' : 'bg-transparent',
       )}
     >
@@ -273,10 +342,10 @@ function NotificationItem({
           unread ? 'bg-rose-500' : 'bg-transparent',
         )}
       />
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 basis-[8rem]">
         <p
           className={cx(
-            'truncate font-medium',
+            'font-medium [overflow-wrap:anywhere]',
             unread ? 'text-ink' : 'text-muted',
           )}
         >
@@ -293,7 +362,7 @@ function NotificationItem({
           role="menuitem"
           onClick={() => void onMarkRead(row.id)}
           disabled={busy}
-          className="shrink-0 rounded-lg px-2 py-1 text-xs font-semibold text-brand-700 transition hover:bg-brand-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-wait disabled:opacity-60 dark:text-brand-300"
+          className="min-h-11 min-w-11 max-w-full whitespace-normal rounded-lg px-2 py-1 text-xs font-semibold text-brand-700 transition [overflow-wrap:anywhere] hover:bg-brand-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-wait disabled:opacity-60 dark:text-brand-300"
         >
           {busy ? '…' : 'Mark read'}
         </button>

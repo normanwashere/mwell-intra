@@ -72,6 +72,17 @@ jobs:
         run: pnpm typecheck
       - name: Run unit and contract tests
         run: pnpm test
+      - name: Verify Sep05 isolated SQL regression suites
+        run: |
+          node --test --test-concurrency=1 \
+            scripts/verify-sep05-procurement.pglite.test.mjs \
+            scripts/verify-sep05-procurement-integration.pglite.test.mjs \
+            scripts/verify-putaway-tasks.pglite.test.mjs \
+            scripts/verify-receiving-drafts.pglite.test.mjs \
+            modules/finance/platform-remediation.pglite.test.mjs \
+            scripts/verify-return-intake.pglite.test.mjs \
+            scripts/verify-offline-replay-identity.pglite.test.mjs \
+            scripts/verify-warehouse-custody-truncate.pglite.test.mjs
       - name: Build all workspaces
         run: pnpm build
       - name: Analyze source with CodeQL
@@ -97,7 +108,7 @@ jobs:
       - name: Install Chromium for first-login certification
         run: pnpm --filter @intra/shell exec playwright install --with-deps chromium
       - name: Verify browser audit visibility and readiness contracts
-        run: node --test scripts/qa/audit-disclosure.browser.test.mjs
+        run: node --test scripts/qa/audit-disclosure.browser.test.mjs scripts/qa/quality-validation-workflow.browser.test.mjs
       - name: Complete first-login role orientations on desktop
         env:
           AUDIT_VIEWPORT: desktop-1440

@@ -6958,16 +6958,25 @@ async function warehouseQualityValidationWorkflow(page, { captureState }) {
     )
     .catch(() => {});
   const inspect = page
-    .getByRole("button", { name: "Inspect", exact: true })
+    .getByRole("button", { name: "Inspect", exact: true, includeHidden: true })
     .first();
   if (!(await inspect.count()))
     return {
       name: "warehouse quality validation",
+      validationState: "empty-queue",
+      mutationPerformed: false,
       ok: /No inspections waiting/i.test(
         await page.locator("body").innerText(),
       ),
       finalUrl: page.url().replace(baseUrl, ""),
     };
+  // Inspect belongs to a collapsed receipt/product disclosure in the queue.
+  for (const group of await inspect.locator("xpath=ancestor::details").all()) {
+    if (!(await group.evaluate((element) => element.open))) {
+      await group.locator(":scope > summary").click();
+    }
+  }
+  await inspect.waitFor({ state: "visible" });
   await inspect.click();
   const dialog = page.getByRole("dialog", { name: "Inspect stock" });
   const submit = dialog.getByRole("button", { name: "Submit inspection" });
@@ -6981,6 +6990,8 @@ async function warehouseQualityValidationWorkflow(page, { captureState }) {
   await dialog.getByRole("button", { name: "Close" }).click();
   return {
     name: "warehouse quality validation",
+    validationState: "evidence-and-hold-required",
+    mutationPerformed: false,
     ok: true,
     finalUrl: page.url().replace(baseUrl, ""),
   };

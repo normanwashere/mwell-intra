@@ -439,7 +439,14 @@ export const WORKFLOW_SCENARIO_EVIDENCE = [
     "warehouse-quality-and-return",
     ["operations_lead"],
     ["validation"],
-    ["inspection-created"],
+    [],
+  ),
+  evidence(
+    "Task 3 supervisor quarantine and variance transactions",
+    "warehouse-quality-and-return",
+    ["operations_lead"],
+    ["authorized", "correction", "refresh", "handoff"],
+    ["inspection-created", "vendor-return-visible"],
   ),
   evidence(
     "Task 3 Supervisor excess custody final disposition",
@@ -453,7 +460,7 @@ export const WORKFLOW_SCENARIO_EVIDENCE = [
     "warehouse-quality-and-return",
     ["operations_associate"],
     ["validation", "refresh"],
-    ["vendor-return-visible"],
+    [],
   ),
   evidence(
     "procurement receipt authority denial",
