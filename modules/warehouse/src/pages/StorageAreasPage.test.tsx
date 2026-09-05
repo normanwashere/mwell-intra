@@ -118,7 +118,9 @@ describe('StorageAreasPage', () => {
     });
 
     const dialog = await screen.findByRole('dialog', { name: 'Add storage area' });
-    expect(within(dialog).getByLabelText('Bin code')).toHaveFocus();
+    const binCode = within(dialog).getByLabelText('Bin code');
+    expect(binCode).toHaveAttribute('id', 'sa-code');
+    await waitFor(() => expect(binCode).toHaveFocus());
     expect(within(dialog).getByRole('button', { name: 'Add bin' })).toBeInTheDocument();
     expect(
       within(dialog).getByRole('link', { name: 'Back to workflow guide' }),

@@ -13,7 +13,7 @@ import {
 import { useSession } from "@intra/auth";
 import { useCan } from "@intra/auth";
 import { paymentUrgency } from './paymentUrgency';
-import { summarizeFinanceData, useFinanceData } from "./data";
+import { summarizeFinanceData, useFinanceData, type FinanceSource } from "./data";
 import { FinanceActivityTable } from "./components/FinanceActivityTable";
 import { FinanceOverview } from "./components/FinanceOverview";
 import { FinanceReviewQueue } from "./components/FinanceReviewQueue";
@@ -24,7 +24,7 @@ export function FinanceApp() {
   const warehouseFinance = useCan('warehouse', 'view_finance');
   const procurementFinance = useCan('procurement', 'view_finance');
   const mayManageClose = useCan('warehouse', 'manage_finance_close');
-  const { data, loading, error, refresh, manageCloseEntry, openCloseEvidence, isDemo, searchSources, loadEvidenceOptions } =
+  const { data, loading, error, refresh, retrySource, retryingSources = {}, manageCloseEntry, openCloseEvidence, isDemo, searchSources, loadEvidenceOptions } =
     useFinanceData();
 
   if (sessionLoading || (profile && loading)) {
@@ -62,6 +62,8 @@ export function FinanceApp() {
   }
 
   const summary = summarizeFinanceData(data);
+  const failedSources = (Object.entries(data.sourceStates ?? {}) as [FinanceSource, string][])
+    .filter(([, state]) => state === 'error').map(([source]) => source);
   const nextReview = paymentUrgency(data.payments).find(
     (item) => item.status === "ready_for_finance" || (item.status === 'accepted' && item.remainingAmount > 0),
   );
@@ -118,18 +120,23 @@ export function FinanceApp() {
           <button
             type="button"
             className="btn-ghost btn-sm shrink-0"
-            onClick={() => void refresh()}
+            disabled={Object.values(retryingSources).some(Boolean)}
+            onClick={() => {
+              if (failedSources.length) for (const source of failedSources) void retrySource(source);
+              else void refresh();
+            }}
           >
-            <Icon name="rotate" className="h-4 w-4" /> Retry
+            <Icon name="rotate" className="h-4 w-4" /> Retry unavailable sources
           </button>
         </div>
       )}
 
       {data.totals && <p className="text-sm text-muted">Activity period: {data.totals.periodStart} to {data.totals.periodEnd}</p>}
       <FinanceOverview summary={summary} states={data.sourceStates} procurement={procurementFinance} warehouse={warehouseFinance} />
+      {data.sourceStates?.inventory === 'error' && <button className="btn-outline" disabled={retryingSources.inventory} onClick={() => void retrySource('inventory')}>Retry inventory source</button>}
 
       <div className="grid min-w-0 max-w-full gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)] xl:items-start">
-        {procurementFinance && (data.sourceStates?.payments === 'error' ? <p role="status">Payment queue unavailable. <button className="btn-outline" onClick={() => void refresh()}>Retry payment source</button></p> : <FinanceReviewQueue items={data.payments} />)}
+        {procurementFinance && (data.sourceStates?.payments === 'error' ? <p role="status">Payment queue unavailable. <button className="btn-outline" disabled={retryingSources.payments} onClick={() => void retrySource('payments')}>Retry payment source</button></p> : <FinanceReviewQueue items={data.payments} />)}
         <Card className="space-y-4">
           <div>
             <p className="text-xs font-semibold uppercase text-faint">
@@ -177,7 +184,7 @@ export function FinanceApp() {
       </div>
 
       {mode === 'supabase' && !mayManageClose && roleCapabilities?.warehouse?.includes('manage_finance_close') && <p role="status">Close actions require certification. <a className="underline" href="/onboarding">Complete Finance onboarding</a></p>}
-      {data.sourceStates?.close === 'error' ? <p role="status">Close queue unavailable. <button className="btn-outline" onClick={() => void refresh()}>Retry close source</button></p> : <FinanceClosePanel
+      {data.sourceStates?.close === 'error' ? <p role="status">Close queue unavailable. <button className="btn-outline" disabled={retryingSources.close} onClick={() => void retrySource('close')}>Retry close source</button></p> : <FinanceClosePanel
         entries={data.closeEntries}
         searchSources={searchSources}
         loadEvidenceOptions={loadEvidenceOptions}
@@ -187,7 +194,7 @@ export function FinanceApp() {
         currentActorId={profile.id}
       />}
 
-      {data.sourceStates?.activity === 'error' ? <p role="status">Financial activity unavailable. <button className="btn-outline" onClick={() => void refresh()}>Retry activity source</button></p> : <FinanceActivityTable activity={data.activity} canPrepare={mayManageClose} />}
+      {data.sourceStates?.activity === 'error' ? <p role="status">Financial activity unavailable. <button className="btn-outline" disabled={retryingSources.activity} onClick={() => void retrySource('activity')}>Retry activity source</button></p> : <FinanceActivityTable activity={data.activity} canPrepare={mayManageClose} />}
     </div>
   );
 }

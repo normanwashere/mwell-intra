@@ -266,7 +266,7 @@ export function ProductApp() {
           id="readiness-queue-title"
           eyebrow="Decision queue"
           title="Go-live queue"
-          subtitle="Evidence, decision history, conditions, and Operations acknowledgement remain together."
+          subtitle="Evidence, latest decision, conditions, and Operations acknowledgement remain together."
         />
         {workspace.data.readiness.length === 0 ? (
           <EmptyState
@@ -503,7 +503,7 @@ function ReadinessCard({
             ? `Completed by ${item.operationsAcknowledgedBy ?? 'Actor unavailable'} at ${item.operationsAcknowledgedAt}`
             : item.status === 'approved' ? 'Pending - Operations partner is next' : 'Awaiting go-live approval'}
         </p>
-        <a className="text-sm underline" href={`#readiness-${item.id}`}>Record and decision history</a>
+        <a className="inline-flex min-h-11 items-center px-1 text-sm underline" href={`#readiness-${item.id}`}>Link to this record</a>
         <ul className="space-y-2" aria-label="Readiness evidence">
           {item.evidence.map((evidenceItem) => (
             <li
@@ -606,7 +606,7 @@ function PriceCard({
         </dl>
         <p className="text-sm text-muted">{item.reason}</p>
         <DecisionReadback item={item} />
-        <a className="text-sm underline" href={`#pricing-${item.id}`}>Record and decision history</a>
+        <a className="inline-flex min-h-11 items-center px-1 text-sm underline" href={`#pricing-${item.id}`}>Link to this record</a>
         {canDecide && (
           <div className="flex flex-wrap gap-2">
             <button

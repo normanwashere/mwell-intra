@@ -137,6 +137,20 @@ describe("ProductApp", () => {
     expect(screen.queryByRole("button", { name: "Propose price" })).not.toBeInTheDocument();
   });
 
+  it('provides thumb-sized permalinks without promising a separate history view', () => {
+    render(<ProductApp />);
+    const links = screen.getAllByRole('link', { name: 'Link to this record' });
+    expect(links).toHaveLength(DATA.readiness.length + DATA.pricing.length);
+    for (const link of links) {
+      expect(link).toHaveClass('min-h-11', 'inline-flex');
+      const target = link.getAttribute('href');
+      expect(target).toMatch(/^#(?:readiness|pricing)-/);
+      expect(document.getElementById(target!.slice(1))).toBeInTheDocument();
+    }
+    expect(screen.queryByText('Record and decision history')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Evidence, decision history/)).not.toBeInTheDocument();
+  });
+
   it('renders exact rejected reasons and completed Operations attribution after reload', () => {
     state.workspace.data = {...DATA,readiness:[{...DATA.readiness[0]!,status:'rejected',decidedBy:'owner-A',decidedAt:'2026-09-05T01:00:00Z',decisionNote:'Replace the expired evidence'}]};
     const view=render(<ProductApp />);

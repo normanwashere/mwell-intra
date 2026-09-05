@@ -525,7 +525,11 @@ export function EventsApp({
           }
         />
         <Card className="overflow-hidden p-0">
-          <dl className="grid grid-cols-3 divide-x divide-line">
+          <dl
+            aria-label="Event custody totals"
+            className="grid gap-1"
+            style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 5rem), 1fr))" }}
+          >
             {(
               [
                 ["Reserved", selectedEvent.reservedUnits, "tag"],
@@ -534,12 +538,12 @@ export function EventsApp({
               ] as const
             ).map(([label, value, icon]) => (
               <div key={label} className="min-w-0 px-3 py-3 sm:px-5 sm:py-4">
-                <dt className="flex min-w-0 flex-col items-start gap-2 text-xs font-semibold text-muted sm:flex-row sm:items-center">
+                <dt className="flex min-w-0 flex-col items-start gap-2 text-xs font-semibold text-muted sm:flex-row sm:flex-wrap sm:items-center">
                   <Icon
                     name={icon}
                     className="h-4 w-4 shrink-0 text-brand-600"
                   />
-                  <span className="break-words">{label}</span>
+                  <span className="max-w-full [overflow-wrap:anywhere]">{label}</span>
                 </dt>
                 <dd className="tnum mt-2 break-all font-display text-lg font-extrabold leading-tight text-ink sm:text-2xl">
                   {value}

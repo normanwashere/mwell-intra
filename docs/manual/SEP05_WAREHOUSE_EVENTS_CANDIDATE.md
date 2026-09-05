@@ -10,6 +10,14 @@ Candidate remediation covers WE01, WE02, WE05, WE10, WE13, WE14, LV06 and LV07. 
 
 ## Candidate Behavior
 
+### Local WE04 Follow-up (Pending Deployment)
+
+Conflicting inspection records now show an inline quality-queue error with Retry quality queue instead of escaping rendering. Until a complete valid queue is restored, source auto-opening and inspection/hold submissions are blocked. Retrying corrected records restores the exact-source workflow without submitting an inspection. Latest focused verification: 32 domain/UI tests passed; scoped lint and warehouse typecheck passed.
+
+Quality receipt reconciliation now allocates exact procurement-line and serial identities before legacy quantities, independent of inspection input order. Each inspection quantity is consumed once; identical repeated IDs count once, while conflicting records with one ID produce an explicit reload error. Legacy quantities only reduce an unambiguous remaining custody identity. Unresolved alternatives remain pending rather than being assigned by row order. Serialized residual work retains one exact serial per quantity-one task.
+
+Stored legacy receipt JSON may omit the bin. A matching exact procurement line or serial can still account for an inspection with a bin when only one custody identity remains; known bin conflicts or competing unknown/known-bin identities remain pending. Local domain/UI verification passed 31 tests, including reversed records, repeated IDs, split quantities, serial boundaries, 101 active holds across pagination, and retained group search/current-versus-total counts. These source changes are not yet a deployed or live transaction acceptance claim. The separate live Inspect hit-target finding remains with the visibility investigation owner.
+
 - Linked allocation returns retain their allocation identity and enforce cumulative outstanding quantity. Partial returns may complete an allocation across calls; excess returns fail atomically and exact idempotent retries do not write again.
 - New reservations require a planned or active event. Previously committed reservation retries retain their original result after event closure.
 - Live Events and Warehouse event detail use the common lifetime custody projection. Returned allocations remain part of lifetime issued totals. Outstanding custody is not automatically treated as sold or consumed.

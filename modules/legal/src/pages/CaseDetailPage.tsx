@@ -262,7 +262,7 @@ export function CaseDetailPage() {
 
   const nextAction = isVendor
     ? outstandingCount > 0
-      ? `${outstandingCount} to upload`
+      ? `${outstandingCount} requirement${outstandingCount === 1 ? '' : 's'} remaining`
       : kase.status === 'draft'
         ? 'Ready to submit'
         : 'Nothing owed'

@@ -200,6 +200,70 @@ class LiveProcurementRepository extends InMemoryRepository {
 }
 
 describe("PurchaseOrdersPage", () => {
+  const largeNames = Array.from({ length: 4 }, (_, index) =>
+    `Clinical wearable collection ${index + 1} with extended supplier model and traceability description`,
+  );
+  const largeSerials = (index: number) => Array.from({ length: 100 }, (_, serial) =>
+    `LINE-${index + 1}-SERIAL-${String(serial + 1).padStart(3, '0')}`,
+  ).join('\n');
+  async function largeReceipt() {
+    const repo = new LiveProcurementRepository(100);
+    const [po] = await repo.getReceivableProcurementPOs();
+    vi.spyOn(repo, 'getReceivableProcurementPOs').mockResolvedValue([{ ...po!, lines: largeNames.map((description, index) => ({
+      id: `large-line-${index}`, productId: 'smart-watch', description, quantity: 100, receivedQuantity: 0,
+    })) }]);
+    return repo;
+  }
+
+  it('handles 400 units with 100 serials per long-named line and enables only after the last footer blocker', async () => {
+    const repo = await largeReceipt();
+    const user = userEvent.setup();
+    renderReceiving(repo);
+    const dialog = await openReceiving(user);
+    const confirm = within(dialog).getByRole('button', { name: 'Confirm governed receipt' });
+    for (const [index, name] of largeNames.entries()) {
+      fireEvent.change(within(dialog).getByLabelText(`clean serials for ${name}`), { target: { value: largeSerials(index) } });
+    }
+    expect(confirm).toBeDisabled();
+    const evidence = within(dialog).getByLabelText('Delivery evidence URL');
+    evidence.scrollIntoView = vi.fn();
+    await user.click(within(dialog).getByRole('button', { name: 'Attach delivery evidence' }));
+    expect(evidence).toHaveFocus();
+    fireEvent.change(evidence, { target: { value: 'https://example.com/delivery-evidence.jpg' } });
+    expect(confirm).toBeEnabled();
+    const last = within(dialog).getByLabelText(`clean serials for ${largeNames[3]}`);
+    fireEvent.change(last, { target: { value: largeSerials(3).split('\n').slice(0, 99).join('\n') } });
+    expect(confirm).toBeDisabled();
+    const details = last.closest('details')!;
+    details.open = false;
+    details.scrollIntoView = vi.fn();
+    await user.click(within(dialog).getByRole('button', { name: `${largeNames[3]}: review 1 required corrections` }));
+    expect(details.open).toBe(true);
+    expect(details.contains(document.activeElement)).toBe(true);
+    fireEvent.change(last, { target: { value: largeSerials(3) } });
+    expect(confirm).toBeEnabled();
+    expect(repo.receivedInputs).toHaveLength(0);
+  });
+
+  it('reopens a large saved receipt with selected lines and all 100 captured serials retained', async () => {
+    const repo = await largeReceipt();
+    const user = userEvent.setup();
+    const view = renderReceiving(repo);
+    let dialog = await openReceiving(user);
+    for (const name of largeNames.slice(1)) await user.click(within(dialog).getByRole('checkbox', { name: `Receive ${name}` }));
+    fireEvent.change(within(dialog).getByLabelText(`clean serials for ${largeNames[0]}`), { target: { value: largeSerials(0) } });
+    await user.click(within(dialog).getByRole('button', { name: 'Save progress' }));
+    await screen.findByText(/receiving progress saved/i);
+    view.unmount();
+    renderReceiving(repo);
+    dialog = await openReceiving(user);
+    await waitFor(() => expect(within(dialog).getByLabelText(`clean serials for ${largeNames[0]}`)).toHaveValue(largeSerials(0)));
+    expect(within(dialog).getByRole('checkbox', { name: `Receive ${largeNames[0]}` })).toBeChecked();
+    for (const name of largeNames.slice(1)) expect(within(dialog).getByRole('checkbox', { name: `Receive ${name}` })).not.toBeChecked();
+    expect(within(dialog).getByRole('button', { name: 'Confirm governed receipt' })).toBeDisabled();
+    expect(repo.receivedInputs).toHaveLength(0);
+  });
+
   it("links sticky receipt requirements to the missing field without submitting", async () => {
     const user = userEvent.setup();
     renderReceiving();

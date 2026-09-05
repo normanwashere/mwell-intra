@@ -2173,9 +2173,9 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         control(
           "Retry unavailable sources",
-          "Reloads the Finance workspace sources together when a source reports an error; the retry is not limited to one source.",
-          "Retry only after checking whether valid partial data is already visible.",
-          "Available sources remain visible and recovered sources rejoin the combined view.",
+          "Retries unavailable sources and their required dependencies without reloading successful sources.",
+          "A source-specific retry retains valid metrics, filters, and selection only within the same authorized user scope.",
+          "Recovered sources rejoin the view; unrelated warnings remain. Changing user or capabilities clears the previous scope's visible data.",
         ),
       ],
       fields: [

@@ -27,17 +27,34 @@ export interface PendingInspection {
 }
 
 export function pendingQualityWork(data: WarehouseData, inspections: QualityInspection[]): PendingInspection[] {
-  const pending: PendingInspection[] = inspections.filter(i => i.disposition === 'pending').map(i => ({
+  const specificity = (i: QualityInspection) => 2 * Number(Boolean(i.procurementPoLineId))
+    + 4 * Number(Boolean(i.serialNumber)) + Number(Boolean(i.binId));
+  const unique = new Map<string, QualityInspection>();
+  const identity = (i: QualityInspection) => JSON.stringify([
+    i.sourceType, i.sourceId, i.productId, i.quantity, i.disposition,
+    i.procurementPoLineId ?? null, i.serialNumber ?? null, i.binId ?? null, i.inspectedAt,
+  ]);
+  for (const inspection of inspections) {
+    const previous = unique.get(inspection.id);
+    if (previous && identity(previous) !== identity(inspection)) {
+      throw new Error('Conflicting inspection records. Reload the quality queue before acting.');
+    }
+    unique.set(inspection.id, inspection);
+  }
+  const ordered = [...unique.values()].sort((a, b) =>
+    specificity(b) - specificity(a)
+    || a.id.localeCompare(b.id));
+  const pending: PendingInspection[] = ordered.filter(i => i.disposition === 'pending').map(i => ({
     id: i.id, sourceType: i.sourceType, sourceId: i.sourceId, productId: i.productId,
     quantity: i.quantity, binId: i.binId, serialNumber: i.serialNumber,
     procurementPoLineId: i.procurementPoLineId, recordedAt: i.inspectedAt,
   }));
   // Legacy receipts do not all have a line ID. Consume each inspection quantity
   // once across matching lines instead of subtracting the same total repeatedly.
-  const remaining = new Map(inspections.map(i => [i.id, i.quantity]));
+  const remaining = new Map(ordered.map(i => [i.id, i.quantity]));
   const consume = (quantity: number, matches: (i: QualityInspection) => boolean) => {
     let outstanding = quantity;
-    for (const i of inspections.filter(matches)) {
+    for (const i of ordered.filter(matches)) {
       const used = Math.min(outstanding, remaining.get(i.id) ?? 0);
       remaining.set(i.id, (remaining.get(i.id) ?? 0) - used);
       outstanding -= used;
@@ -45,15 +62,38 @@ export function pendingQualityWork(data: WarehouseData, inspections: QualityInsp
     }
     return outstanding;
   };
-  for (const receipt of data.receipts) receipt.lines.forEach((line, index) => {
-    const lineId = line.procurementLineId;
-    const quantity = consume(line.quantity, i => i.sourceType === 'receipt' && i.sourceId === receipt.id
-      && i.productId === line.productId && (!i.procurementPoLineId || i.procurementPoLineId === lineId)
-      && (!i.serialNumber || !line.serialNumbers?.length || line.serialNumbers.includes(i.serialNumber)));
-    if (quantity > 0) pending.push({ id: `${receipt.id}-${line.productId}-${index}`, sourceType: 'receipt',
-      sourceId: receipt.id, productId: line.productId, quantity, binId: line.binId,
-      procurementPoLineId: lineId, recordedAt: receipt.createdAt });
-  });
+  for (const receipt of data.receipts) {
+    const slots = receipt.lines.flatMap<{ line: typeof receipt.lines[number]; index: number; serialNumber: string | undefined; quantity: number }>((line, index) => {
+      const serials = [...new Set(line.serialNumbers ?? [])].sort();
+      return serials.length && serials.length === line.quantity ? serials.map(serialNumber => ({ line, index, serialNumber, quantity: 1 }))
+        : [{ line, index, serialNumber: undefined, quantity: line.quantity }];
+    });
+    // Exact identifiers get first claim on custody. Legacy rows can consume
+    // repeated equivalent lines, but never choose among distinct identities.
+    for (const inspection of ordered.filter(i => i.sourceType === 'receipt' && i.sourceId === receipt.id)) {
+      const candidates = slots.filter(slot => slot.quantity > 0
+        && slot.line.productId === inspection.productId
+        && (!inspection.procurementPoLineId || slot.line.procurementLineId === inspection.procurementPoLineId)
+        && (!inspection.serialNumber || slot.serialNumber === inspection.serialNumber)
+        && (!inspection.binId || slot.line.binId === inspection.binId
+          || (!slot.line.binId && Boolean(inspection.procurementPoLineId || inspection.serialNumber))));
+      const identities = new Set(candidates.map(slot => JSON.stringify([
+        slot.line.procurementLineId ?? null, slot.line.binId ?? null, slot.serialNumber ?? null,
+      ])));
+      if (identities.size !== 1) continue;
+      for (const slot of candidates) {
+        const used = Math.min(slot.quantity, remaining.get(inspection.id) ?? 0);
+        slot.quantity -= used;
+        remaining.set(inspection.id, (remaining.get(inspection.id) ?? 0) - used);
+      }
+    }
+    for (const slot of slots) if (slot.quantity > 0) pending.push({
+      id: `${receipt.id}-${slot.line.productId}-${slot.index}${slot.serialNumber ? `-${slot.serialNumber}` : ''}`,
+      sourceType: 'receipt', sourceId: receipt.id, productId: slot.line.productId, quantity: slot.quantity,
+      binId: slot.line.binId, serialNumber: slot.serialNumber,
+      procurementPoLineId: slot.line.procurementLineId, recordedAt: receipt.createdAt,
+    });
+  }
   for (const returned of data.returns) returned.lines.forEach((line, index) => {
     const quantity = consume(line.quantity, i => i.sourceType === 'return' && i.sourceId === returned.id
       && i.productId === line.productId && (i.binId ?? null) === (line.binId ?? null)

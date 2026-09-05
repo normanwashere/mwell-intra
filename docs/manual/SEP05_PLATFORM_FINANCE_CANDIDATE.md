@@ -8,7 +8,9 @@ Release maintenance also pins Browserslist to patched 4.28.7 following the Septe
 
 Payment cards show invoice identity, due date or an explicit unavailable label, and waiting age. The hero and queue use the same ordering: ready packs and accepted packs with an unpaid balance first, then due date, oldest preparation, and stable identity. Accepted is not the same as released. Ordering still requires business-owner confirmation.
 
-Activity totals are calculated on the server for the displayed month-to-date period. Detail records are retrieved in stable server pages. Unauthorized sources say **Not in your scope**; failed sources say **Unavailable** and offer retry instead of claiming zero or an empty operational queue. Retry currently refreshes the Finance workspace sources together.
+Activity totals are calculated on the server for the displayed month-to-date period. Detail records are retrieved in stable server pages. Unauthorized sources say **Not in your scope**; failed sources say **Unavailable** and offer retry instead of claiming zero or an empty operational queue.
+
+Source-specific retry is implemented locally and requires a new app deployment and UAT acceptance. It reloads only the failed source and its dependencies (payment packs plus orders; inventory plus products; activity plus period totals). Successful metrics, activity filters, and selection remain visible within the same authorized scope. Only the retried source's warnings are replaced. An actor or capability change hides previous-scope data immediately; late responses cannot restore it. The deployed version must not be assumed to have this behavior until redeployed and verified.
 
 ## Close Preparation and Correction
 
@@ -26,7 +28,7 @@ Payment-read visibility follow-up, pending the next frontend deployment: on the 
 
 ## Product and My Work
 
-Product readiness and pricing cards show the recorded decision reason, actor, and time. Approved readiness distinguishes pending Operations handoff from completed acknowledgement, with actor/time attribution. Record links anchor to the individual card. This is current-version readback, not a complete multi-event history viewer.
+Product readiness and pricing cards show the recorded decision reason, actor, and time. Approved readiness distinguishes pending Operations handoff from completed acknowledgement, with actor/time attribution. The follow-up **Link to this record** control anchors to the individual card and has a thumb-sized target. It replaces the misleading history label; this is current-version readback, not a complete multi-event history viewer. Confirm the follow-up deployment before using its new label in training.
 
 My Work adds Product decisions, Operations handoffs, independent Finance posting/reconciliation, and owned Leadership follow-ups while preserving the previous domain projections. Future deadlines use **Due in**, today's deadlines use **Due today**, and past deadlines use **Overdue by**, with exact Philippine-calendar dates.
 

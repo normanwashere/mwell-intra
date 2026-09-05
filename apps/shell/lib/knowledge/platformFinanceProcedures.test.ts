@@ -40,7 +40,8 @@ describe("Platform Finance KB procedures", () => {
     expect(byName("Post").validation).toContain("differ from the preparer and any Event settlement approver");
     expect(byName("Reconcile").validation).toContain("preparer, poster, and any Event settlement approver");
     expect(byName("Open evidence").result).toContain("does not enable Prepare, Post, or Reconcile");
-    expect(byName("Retry unavailable sources").behavior).toContain("not limited to one source");
+    expect(byName("Retry unavailable sources").behavior).toContain("unavailable sources and their required dependencies");
+    expect(byName("Retry unavailable sources").behavior).toContain("without reloading successful sources");
   });
 
   it("documents attributable Product readback and owned follow-up transitions", () => {

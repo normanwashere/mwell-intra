@@ -1,6 +1,6 @@
 # September 5 UAT Audit Remediation
 
-Status: application/security patch commit 2b61b45945ae402afcfa46d40ea884d1a76842fd deployed to UAT; live journey acceptance in progress. Target is mwell-intra-uat.vercel.app and Supabase kkoitlvydytdhlpxhuah only. Main production is untouched.
+Status: application/security and documentation patches through d0c98a890b89d2e4c2becef290458a4d9635837f deployed to UAT; a further acceptance-driven correction is being verified. Target is mwell-intra-uat.vercel.app and Supabase kkoitlvydytdhlpxhuah only. Main production is untouched. This is not a completed live-transaction certificate.
 
 ## Scope
 
@@ -8,7 +8,7 @@ The 53 canonical audit findings are assigned across Procurement/Legal, Platform/
 
 ## Completed Local Checks
 
-- Final full workspace run passed all 15 package test suites, including 643 warehouse tests. All 15 package typechecks passed. Earlier navigation-contract, dashboard timing, and grouped Quality list regressions were corrected and retested.
+- Latest full workspace run passes all 45 test/lint/typecheck tasks, including 666 Warehouse tests. Earlier navigation-contract, dashboard timing, grouped Quality list, and obsolete KB retry assertions were corrected and retested. The separate handbook checks pass 83/83; audit/browser contracts pass 114 with one explicit skip. Counts from overlapping runs must not be added as unique cases.
 - Quality list semantics were restored; the serial return handoff regression then passed. The expectation now counts actionable inspections rather than counting both receipt groups and child list items.
 - Follow-up parent suite passed 31 tests covering Quality, tasks, approvals, and exceptions, including retry after failed reads and blocking approvals when source-count context is missing.
 - Governed PO receiving's existing 30 tests passed; a new sticky-requirement focus test passed separately.
@@ -45,7 +45,7 @@ The Supabase migration tool assigned the following installed versions. Repositor
 
 Readback confirmed authenticated TRUNCATE=false and service-role TRUNCATE=true for all four targeted custody tables; the legacy return entry point contains the retirement guard. Security-invoker task and event-custody views remain enabled. Read-only projections returned 102 tasks, 3 event-custody rows, and 0 lineage-audit issues at verification time. These counts are not transaction certification.
 
-The latest combined selected SQL suite passed 54 tests. A production application build passed. The service-key security check was not run locally because the CI-only vaulted credential is absent; it must run through the guarded UAT certification workflow.
+The combined selected SQL suite passed 54 tests. A production application build passed. The CI-only vaulted service-key security check subsequently passed in guarded UAT run 33947512758; the credential was not exported locally.
 
 Public UAT health verified the exact deployed commit, APP_ENV=uat, Supabase kkoitlvydytdhlpxhuah reachable, real Supabase client authentication, accessible static assets, and configured notification, vendor-invite, legal-document and service-worker features. Live vendor workspace and case detail were visually reviewed without modifying its seeded case.
 
@@ -55,13 +55,23 @@ Direct installed-metadata review additionally found redundant raw-capability che
 
 ## Live Desktop Route Audit
 
-All 11 UAT test roles signed in successfully at 1440 pixels. Ten roles completed without detected route-expectation failures, overflow, overlaps, console errors or network errors. Operations Lead completed the expected navigation checks but encountered HTTP 400 from procurement.payment_evidence_options. The caller now checks the same employee/effective-capability boundary as the server, cancels stale results, and retains authorized reviewer errors. All 210 Procurement tests pass, including nine admission regressions. The original live run remains failed until the frontend fix is deployed and retested. Read-only route coverage does not certify transaction handoffs or physical-device ergonomics.
+All 11 UAT test roles signed in successfully at 1440 pixels. Ten roles completed without detected route-expectation failures, overflow, overlaps, console errors or network errors. Operations Lead originally encountered HTTP 400 from procurement.payment_evidence_options. The deployed caller now checks the same employee/effective-capability boundary as the server, cancels stale results, and retains authorized reviewer errors. All 210 Procurement tests pass, including nine admission regressions. The d0c98a8 Operations Lead retest at 1440 and 390 pixels recorded zero network or console errors, resolving that failure. It separately retained a closed-disclosure audit-targeting failure on desktop and two undersized Product links on mobile. Neither was silently excluded from the report.
+
+The follow-up corrects disclosure visibility/readiness in the audit, preserves its genuine obstruction checks, and supplies six real-browser harness tests. Product links now truthfully identify record permalinks and have a 44px minimum height. Their deployed geometry still requires a fresh screenshot check. Read-only route coverage does not certify transaction handoffs or physical-device ergonomics.
+
+Further acceptance tests reproduced and corrected Finance retries hiding successful sources, exact Quality inspections losing priority to legacy records, and a vendor count incorrectly describing agreement requirements as uploads. Finance actor/capability changes discard stale results and late callbacks; Quality conflicting identifiers block actions with an explicit retry instead of crashing or showing a false empty queue. Focused acceptance covers seven Finance recovery/identity cases, 32 Quality cases including 101 repository-created holds, 33 PO receiving cases including a 400-unit serial draft, and seven new Legal component cases within its 174-test suite. These are local acceptance checks, not substitutes for the pending live write/read/handoff run.
+
+CI run 33947512758 passed dependency, deployed schema/runtime authority, lint, typecheck, unit/contract tests and build. It was deliberately cancelled during CodeQL before persona reconciliation or transactions while these additional defects were corrected. No transaction cleanup was required by that cancelled run. A new commit-bound certification must finish before declaring complete acceptance.
 
 Actual live Operations Associate mobile putaway and desktop procurement-receiving screenshots were captured and visually reviewed. The dialogs retain visible identity, validation and action controls. Other captured screens require their own recorded review; screenshot existence alone is not acceptance.
 
+Additional reviewed live evidence verifies the exact request popover at 390/1440 (8px viewport inset, wrapped content, Escape, outside dismissal and focus return); all three August request details at 320/360/390/1440 without document horizontal overflow; Admin's longest displayed role chip at 320/390 and all 11 Manage actions at 44px height; the three desktop User type options and keyboard selection; and an Employee task's exact event handoff at 320/390/1440. The Operations Associate's existing 400-serial receiving draft retains persistent correction links while scrolling, and a stale putaway ID opens no unrelated dialog. These read-only checks preserved tester data.
+
+Legal's first case remained below the initial mobile viewport despite the earlier lifecycle separation. A compact heading and count-filter layout now corrects that residual in the candidate, with all 175 Legal tests passing. New live first-case and action bounds are still required. The approved August request fixtures also display missing-document checklist items; they are synthetic existing data, not proof of a current-policy approval bypass or a verified grandfathering exemption. Do not use their approved state to certify today's policy transitions.
+
 ## Documentation Verification
 
-The standalone handbook includes 35 maintained sources, with Procurement/Legal, Platform/Finance, Warehouse/Events guides and the certification follow-up release note. The source registry includes all 365 current article/heading routes. Updated procedures distinguish UAT deployment from pending end-to-end acceptance and are not represented as live transaction evidence. August screenshots retain their real dates and are stale under the unchanged seven-day evidence gate; historical-fixture unit tests do not renew their certification.
+The standalone handbook includes 35 maintained sources, with Procurement/Legal, Platform/Finance, Warehouse/Events guides and the certification follow-up release note. The source registry includes all 366 current article/heading routes. Updated procedures distinguish UAT deployment from pending end-to-end acceptance and are not represented as live transaction evidence. August screenshots retain their real dates and are stale under the unchanged seven-day evidence gate; historical-fixture unit tests do not renew their certification.
 
 ## Remaining Release Gates
 

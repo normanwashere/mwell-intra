@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSession, useCan } from '@intra/auth';
 import { FINANCE_DEMO_DATA } from './seed';
 import type { SearchCloseSources, LoadCloseEvidence, CloseSource, CloseEvidenceOption } from './sourceSelection';
@@ -116,6 +116,27 @@ export function validateFinanceCloseEntry(input: ManageFinanceCloseEntryInput): 
     errors.push('Provide a correction reason before flagging a close entry.');
   }
   return errors;
+}
+
+export type FinanceSource = keyof NonNullable<FinanceData['sourceStates']>;
+const FINANCE_SOURCES: FinanceSource[] = ['activity', 'payments', 'inventory', 'close'];
+const EMPTY_FINANCE_DATA: FinanceData = { activity: [], payments: [], closeEntries: [], inventoryValue: 0, warnings: [] };
+function warningSource(warning: string): FinanceSource {
+  if (warning.startsWith('Purchase orders:') || warning.startsWith('Payment readiness:')) return 'payments';
+  if (warning.startsWith('Inventory valuation:')) return 'inventory';
+  if (warning.startsWith('Finance close:')) return 'close';
+  return 'activity';
+}
+
+export function mergeFinanceSource(current: FinanceData, next: FinanceData, source: FinanceSource): FinanceData {
+  return {
+    ...current,
+    ...(source === 'activity' ? { activity: next.activity, totals: next.totals }
+      : source === 'payments' ? { payments: next.payments }
+        : source === 'inventory' ? { inventoryValue: next.inventoryValue } : { closeEntries: next.closeEntries }),
+    sourceStates: { ...current.sourceStates!, [source]: next.sourceStates![source] },
+    warnings: [...current.warnings.filter((warning) => warningSource(warning) !== source), ...next.warnings],
+  };
 }
 
 export function isSupportedFinanceEvidenceReference(value?: string): boolean {
@@ -461,7 +482,9 @@ export async function loadFinancePages(client: FinanceClient, source: string): P
 export async function loadLiveFinanceData(
   client: FinanceClient,
   access: FinanceSourceAccess = { procurement: true, warehouse: true },
+  source?: FinanceSource,
 ): Promise<FinanceData> {
+  const includes = (candidate: FinanceSource) => !source || source === candidate;
   const emptyResult = () =>
     Promise.resolve({
       data: [] as UnknownRow[],
@@ -475,29 +498,31 @@ export async function loadLiveFinanceData(
     productResult,
     closeEntryResult,
   ] = await Promise.all([
-    access.procurement || access.warehouse
+    includes('activity') && (access.procurement || access.warehouse)
       ? loadFinancePages(client, 'activity')
       : emptyResult(),
-    access.procurement
+    includes('payments') && access.procurement
       ? loadFinancePages(client, 'orders')
       : emptyResult(),
-    access.procurement
+    includes('payments') && access.procurement
       ? loadFinancePages(client, 'payments')
       : emptyResult(),
-    access.warehouse
+    includes('inventory') && access.warehouse
       ? loadFinancePages(client, 'inventory')
       : emptyResult(),
-    access.warehouse
+    includes('inventory') && access.warehouse
       ? loadFinancePages(client, 'products')
       : emptyResult(),
-    access.procurement || access.warehouse
+    includes('close') && (access.procurement || access.warehouse)
       ? loadFinancePages(client, 'close')
       : emptyResult(),
   ]);
 
   const warnings: string[] = [];
   const end = new Date().toISOString().slice(0,10);
-  const totalsResult = await client.schema('core').rpc('platform_finance_totals', { p_start: end.slice(0,8) + '01', p_end: end });
+  const totalsResult = includes('activity') && (access.procurement || access.warehouse)
+    ? await client.schema('core').rpc('platform_finance_totals', { p_start: end.slice(0,8) + '01', p_end: end })
+    : { data: undefined, error: null };
   if (totalsResult.error) warnings.push(`Period totals: ${totalsResult.error.message}`);
   if (activityResult.error) warnings.push(`Financial activity: ${activityResult.error.message}`);
   if (purchaseOrderResult.error)
@@ -550,16 +575,26 @@ export function useFinanceData(): {
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
+  retrySource: (source: FinanceSource) => Promise<void>;
+  retryingSources: Partial<Record<FinanceSource, boolean>>;
   manageCloseEntry: (input: ManageFinanceCloseEntryInput) => Promise<FinanceCloseEntry>;
   openCloseEvidence: (entry: FinanceCloseEntry) => Promise<string>;
   isDemo: boolean;
   searchSources?: SearchCloseSources;
   loadEvidenceOptions?: LoadCloseEvidence;
 } {
-  const { mode, supabaseClient, profile } = useSession();
+  const { mode, supabaseClient, profile, userCapabilities, roleCapabilities } = useSession();
   const live = mode === 'supabase' ? supabaseClient : null;
   const procurementAccess = useCan('procurement', 'view_finance');
   const warehouseAccess = useCan('warehouse', 'view_finance');
+  const capabilityIdentity = JSON.stringify([userCapabilities, roleCapabilities]);
+  const scope = useMemo(() => ({ live, actor: profile?.id, procurementAccess, warehouseAccess, capabilityIdentity }),
+    [live, profile?.id, procurementAccess, warehouseAccess, capabilityIdentity]);
+  const activeScope = useRef(scope);
+  activeScope.current = scope;
+  const dataScope = useRef(scope);
+  const generations = useRef<Record<FinanceSource, number>>({ activity: 0, payments: 0, inventory: 0, close: 0 });
+  const refreshGeneration = useRef(0);
   const searchSources = useCallback<SearchCloseSources>(async (query, type, id) => {
     if (!live) return [];
     if (type && closeSourceBlocker(type)) throw new Error(closeSourceBlocker(type));
@@ -591,9 +626,28 @@ export function useFinanceData(): {
   );
   const [loading, setLoading] = useState(Boolean(live));
   const [error, setError] = useState<string | null>(null);
+  const [retryingSources, setRetryingSources] = useState<Partial<Record<FinanceSource, boolean>>>({});
+  const dataRef = useRef(data);
+  dataRef.current = data;
 
   const refresh = useCallback(async () => {
+    if (activeScope.current !== scope) return;
+    const request = ++refreshGeneration.current;
+    for (const source of FINANCE_SOURCES) generations.current[source]++;
+    setRetryingSources({});
     if (!live) {
+      const next = scopeFinanceData(FINANCE_DEMO_DATA, { procurement: procurementAccess, warehouse: warehouseAccess });
+      dataScope.current = scope;
+      dataRef.current = next;
+      setData(next);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+    if (!scope.actor) {
+      dataScope.current = scope;
+      dataRef.current = EMPTY_FINANCE_DATA;
+      setData(EMPTY_FINANCE_DATA);
       setError(null);
       setLoading(false);
       return;
@@ -604,14 +658,53 @@ export function useFinanceData(): {
         procurement: procurementAccess,
         warehouse: warehouseAccess,
       });
+      if (activeScope.current !== scope || refreshGeneration.current !== request) return;
+      dataScope.current = scope;
+      dataRef.current = next;
       setData(next);
       setError(next.warnings.length > 0 ? next.warnings.join(' ') : null);
     } catch (cause) {
+      if (activeScope.current !== scope || refreshGeneration.current !== request) return;
+      if (dataScope.current !== scope) {
+        dataRef.current = EMPTY_FINANCE_DATA;
+        setData(EMPTY_FINANCE_DATA);
+      }
+      dataScope.current = scope;
       setError(cause instanceof Error ? cause.message : 'Finance data could not be loaded.');
     } finally {
-      setLoading(false);
+      if (activeScope.current === scope && refreshGeneration.current === request) setLoading(false);
     }
-  }, [live, procurementAccess, warehouseAccess]);
+  }, [live, procurementAccess, warehouseAccess, scope]);
+
+  const retrySource = useCallback(async (source: FinanceSource) => {
+    if (!live || !scope.actor || activeScope.current !== scope || dataScope.current !== scope || loading) return;
+    if (source === 'payments' ? !procurementAccess : source === 'inventory' ? !warehouseAccess : !procurementAccess && !warehouseAccess) return;
+    const request = ++generations.current[source];
+    setRetryingSources((current) => ({ ...current, [source]: true }));
+    try {
+      const next = await loadLiveFinanceData(live, { procurement: procurementAccess, warehouse: warehouseAccess }, source);
+      if (activeScope.current !== scope || generations.current[source] !== request) return;
+      const merged = mergeFinanceSource(dataRef.current, next, source);
+      dataRef.current = merged;
+      setData(merged);
+      setError(merged.warnings.length ? merged.warnings.join(' ') : null);
+    } catch (cause) {
+      if (activeScope.current !== scope || generations.current[source] !== request) return;
+      // A transport throw is an unavailable source, never a successful empty response.
+      const prefix = { activity: 'Financial activity', payments: 'Payment readiness', inventory: 'Inventory valuation', close: 'Finance close' }[source];
+      const current = dataRef.current;
+      const failed = { ...current, sourceStates: { ...current.sourceStates!, [source]: 'error' as const },
+        warnings: [`${prefix}: ${cause instanceof Error ? cause.message : 'Source unavailable'}`] };
+      const merged = mergeFinanceSource(current, failed, source);
+      dataRef.current = merged;
+      setData(merged);
+      setError(merged.warnings.join(' '));
+    } finally {
+      if (activeScope.current === scope && generations.current[source] === request) {
+        setRetryingSources((current) => ({ ...current, [source]: false }));
+      }
+    }
+  }, [live, scope, loading, procurementAccess, warehouseAccess]);
 
   const manageCloseEntry = useCallback(
     async (input: ManageFinanceCloseEntryInput) => {
@@ -640,7 +733,14 @@ export function useFinanceData(): {
   );
   useEffect(() => {
     void refresh();
+    return () => {
+      refreshGeneration.current++;
+      for (const source of FINANCE_SOURCES) generations.current[source]++;
+    };
   }, [refresh]);
 
-  return { data, loading, error, refresh, manageCloseEntry, openCloseEvidence, isDemo: !live, searchSources: live ? searchSources : undefined, loadEvidenceOptions: live ? loadEvidenceOptions : undefined };
+  const sameScope = dataScope.current === scope;
+  return { data: sameScope ? data : EMPTY_FINANCE_DATA, loading: loading || !sameScope,
+    error: sameScope ? error : null, refresh, retrySource, retryingSources: sameScope ? retryingSources : {},
+    manageCloseEntry, openCloseEvidence, isDemo: !live, searchSources: live ? searchSources : undefined, loadEvidenceOptions: live ? loadEvidenceOptions : undefined };
 }

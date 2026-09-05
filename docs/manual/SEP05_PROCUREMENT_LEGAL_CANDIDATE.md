@@ -35,13 +35,13 @@ An active Finance role plus an expired admin grant does **not** confer final-app
 
 ## Legal Case Review
 
-Accreditation cases are the default workspace. **Vendor lifecycle** opens the separate lifecycle controls; selecting it does not grant additional authority.
+Accreditation cases are the default workspace. The candidate uses a compact heading and count filters for **Waiting on vendor**, **Waiting on Legal**, **Ready for decision**, and **Renewals**, retaining the **Waiting on you** total. Select a count to filter the case list and clear the selected filter to return to all cases. **Vendor lifecycle** opens the separate lifecycle controls; selecting it does not grant additional authority. The compact layout addresses the observed mobile first-case visibility gap; final deployed bounds above the bottom navigation still require verification.
 
 **Request correction** is proposed to remain available for an eligible submitted/under-review case even when all document requirements are present. Legal supplies a factual correction note. The correction remains bound to the submitted source version.
 
 **Record manual reminder** records follow-up activity only. It does not send an email or establish delivery. Contact the vendor through the approved channel separately. Historic reminder labels are not evidence that an automatic message was delivered.
 
-Outstanding counts use **requirements**, which includes both uploaded documents and agreements needing signatures.
+In this candidate, the case banner and sticky next action count **requirements**, including both missing uploads and agreements needing signatures. The vendor home preserves the document/agreement split: three missing documents plus one unsigned agreement correspond to **4 requirements remaining** in the case. Uploading documents or signing the agreement updates both views; one outstanding item reads **1 requirement remaining**. Local component/store tests verify these transitions, not live upload delivery, browser captures, or deployment of this label change.
 
 ## Vendor Correction Working Copy
 

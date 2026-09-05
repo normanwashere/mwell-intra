@@ -96,6 +96,8 @@ jobs:
         run: node scripts/qa/wait-for-uat-deployment.mjs
       - name: Install Chromium for first-login certification
         run: pnpm --filter @intra/shell exec playwright install --with-deps chromium
+      - name: Verify browser audit visibility and readiness contracts
+        run: node --test scripts/qa/audit-disclosure.browser.test.mjs
       - name: Complete first-login role orientations on desktop
         env:
           AUDIT_VIEWPORT: desktop-1440

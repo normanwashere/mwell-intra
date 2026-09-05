@@ -189,6 +189,14 @@ test("UAT certification workflow gates deployment and always certifies cleanup",
   assert.doesNotMatch(workflow, /SUPABASE_SERVICE_ROLE_KEY:\s*eyJ/);
 });
 
+test("UAT runs actual disclosure browser regressions after Chromium installation", async () => {
+  const workflow = await readFile(new URL("../../.github/workflows/uat-live-certification.yml", import.meta.url), "utf8");
+  const installed = workflow.indexOf("Install Chromium for first-login certification");
+  const contract = workflow.indexOf("node --test scripts/qa/audit-disclosure.browser.test.mjs");
+  const orientation = workflow.indexOf("Complete first-login role orientations on desktop");
+  assert.ok(installed >= 0 && contract > installed && orientation > contract);
+});
+
 test("production certification is read-only and covers every supported viewport", async () => {
   const workflow = await readFile(
     new URL(

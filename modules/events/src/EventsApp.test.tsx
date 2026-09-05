@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionValue } from "@intra/auth";
 import { ToastProvider } from "@intra/ui";
@@ -110,6 +110,23 @@ describe("event reconciliation handoff", () => {
     state.issuedUnits = 3;
     state.saveReconciliation.mockClear();
     state.openReconciliationEvidence.mockClear();
+  });
+
+  it("LV07 preserves custody labels and large counts in a text-relative wrapping grid", () => {
+    state.issuedUnits = 123456789;
+    state.session = session({ events: ["coordinator"] });
+    renderEvent();
+    const totals = screen.getByLabelText("Event custody totals");
+    expect(totals.style.gridTemplateColumns).toBe("repeat(auto-fit, minmax(min(100%, 5rem), 1fr))");
+    for (const [label, count] of [["Reserved", "3"], ["Issued", "123456789"], ["Returned", "0"]] as const) {
+      const term = within(totals).getByText(label);
+      expect(term).toHaveClass("max-w-full", "[overflow-wrap:anywhere]");
+      expect(term.closest("dt")).toHaveClass("sm:flex-wrap");
+      expect(term.closest("dt")?.nextElementSibling).toHaveTextContent(count);
+      expect(term.closest("dt")?.nextElementSibling).toHaveClass("break-all");
+    }
+    expect(totals.querySelectorAll("dd")).toHaveLength(3);
+    expect(state.saveReconciliation).not.toHaveBeenCalled();
   });
 
   it("gives Event operations the evidence-backed submission action without asking for a Finance reference", async () => {

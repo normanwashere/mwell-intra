@@ -11,6 +11,9 @@ Use these scenarios with the matching UAT release only. The initial September 5 
 5. Simulate a queue loading error. The page must offer retry and must not say there is no work. Retest the same record after recovery.
 6. As Operations Lead, open an authorized Procurement PO. Confirm acceptance information remains usable and restricted payment documents are not requested. As an authorized Procurement or Finance reader, inspect the same document area and verify valid evidence opens; a real server denial must remain visible. Never grant Finance access as a workaround for a page error.
 7. In the putaway dialog, verify the selected product and serial against the physical item before scanning its destination. The redundant task description has been removed; the actual stock identity and quantity remain visible.
+8. Retry a failed Finance source while another source is valid. Its figures, selected tab and filters must remain usable. Switching accounts or losing a capability must not retain the previous authorized view, even if an old request completes late.
+9. Review a vendor case with three missing documents and one unsigned agreement. Both the list and sticky case summary must call the total four requirements, then one requirement when only the agreement remains. Recording a manual reminder does not send an email.
+10. Expand a Quality receipt group before selecting Inspect. Verify repeated product lines and serialized identities against their source. Conflicting inspection records must show a retryable error and block decisions. Product **Link to this record** controls provide a record permalink, not an additional decision-history view.
 
 **Reviewed:** August 23, 2026
 

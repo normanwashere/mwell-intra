@@ -650,6 +650,10 @@ function classify(text, url) {
 async function routeReadinessSnapshot(page) {
   return page.evaluate(() => {
     const visible = (element) => {
+      for (let details = element.parentElement?.closest("details:not([open])"); details; details = details.parentElement?.closest("details:not([open])")) {
+        const summary = [...details.children].find(child => child.tagName === "SUMMARY");
+        if (!summary?.contains(element)) return false;
+      }
       const style = getComputedStyle(element);
       const rect = element.getBoundingClientRect();
       return (
@@ -666,6 +670,10 @@ async function routeReadinessSnapshot(page) {
     const busyCount = [
       ...document.querySelectorAll("[aria-busy='true']"),
     ].filter(visible).length;
+    const loadingStateCount = visibleMains.flatMap(main => [...main.querySelectorAll("[role='status'], p")])
+      .filter(element => visible(element) && /^\s*Loading\b/i.test(element.innerText) && element.innerText.length < 200).length;
+    const queueErrorCount = visibleMains.flatMap(main => [...main.querySelectorAll("[role='alert']")])
+      .filter(element => visible(element) && [...element.querySelectorAll("button")].some(button => /^Retry\b.*\bqueue\b/i.test(button.innerText))).length;
     const routeOwnedText = visibleMains
       .map((main) => main.innerText.trim().replace(/\s+/g, " "))
       .join(" ")
@@ -678,6 +686,8 @@ async function routeReadinessSnapshot(page) {
       ).length,
       routeOwnedTextLength: routeOwnedText.length,
       busyCount,
+      loadingStateCount,
+      queueErrorCount,
       restoringSession: document.body.innerText
         .toLowerCase()
         .includes("restoring your session"),
@@ -700,15 +710,25 @@ function describeRouteStructureProblems(readiness) {
     readiness.busyCount !== 0
       ? `${readiness.busyCount} visible busy region(s) remain`
       : null,
+    readiness.loadingStateCount > 0
+      ? `${readiness.loadingStateCount} visible source loading state(s) remain`
+      : null,
+    readiness.queueErrorCount > 0
+      ? `${readiness.queueErrorCount} visible source queue error(s) remain`
+      : null,
     readiness.restoringSession ? "session restoration did not settle" : null,
   ].filter(Boolean);
 }
 
-async function waitForMeaningfulRoute(page) {
+async function waitForMeaningfulRoute(page, { timeout = 12_000 } = {}) {
   await page.waitForLoadState("domcontentloaded", { timeout: 20_000 });
   await page.waitForFunction(
     () => {
       const visible = (element) => {
+        for (let details = element.parentElement?.closest("details:not([open])"); details; details = details.parentElement?.closest("details:not([open])")) {
+          const summary = [...details.children].find(child => child.tagName === "SUMMARY");
+          if (!summary?.contains(element)) return false;
+        }
         const style = getComputedStyle(element);
         const rect = element.getBoundingClientRect();
         return (
@@ -736,21 +756,23 @@ async function waitForMeaningfulRoute(page) {
       const busyCount = [
         ...document.querySelectorAll("[aria-busy='true']"),
       ].filter(visible).length;
+      const loadingStateCount = visibleMains.flatMap(main => [...main.querySelectorAll("[role='status'], p")])
+        .filter(element => visible(element) && /^\s*Loading\b/i.test(element.innerText) && element.innerText.length < 200).length;
       return (
         visibleMainCount === 1 &&
         visibleH1Count === 1 &&
         h1InMainCount === 1 &&
         routeOwnedTextLength >= 20 &&
         busyCount === 0 &&
+        loadingStateCount === 0 &&
         !document.body.innerText
           .toLowerCase()
           .includes("restoring your session")
       );
     },
     undefined,
-    { timeout: 12_000 },
+    { timeout },
   );
-  await page.waitForTimeout(250);
 }
 
 async function waitForRouteExpectation(page, expected) {
@@ -771,12 +793,16 @@ async function waitForRouteExpectation(page, expected) {
 async function pageAudit(page) {
   return page.evaluate(() => {
     function isVisible(el) {
+      for (let details = el.parentElement?.closest("details:not([open])"); details; details = details.parentElement?.closest("details:not([open])")) {
+        const summary = [...details.children].find(child => child.tagName === "SUMMARY");
+        if (!summary?.contains(el)) return false;
+      }
       const style = getComputedStyle(el);
       if (
         style.display === "none" ||
         style.visibility === "hidden" ||
         Number(style.opacity) === 0 ||
-        el.closest("[hidden], [aria-hidden='true'], details:not([open])")
+        el.closest("[hidden], [aria-hidden='true']")
       ) {
         return false;
       }
@@ -810,7 +836,7 @@ async function pageAudit(page) {
 
     const text = document.body.innerText.trim().replace(/\s+/g, " ");
     const controlSelector =
-      'a,button,input,select,textarea,[role="button"],[role="link"],[tabindex]:not([tabindex="-1"])';
+      'a,button,details > summary:first-of-type,input,select,textarea,[role="button"],[role="link"],[tabindex]:not([tabindex="-1"])';
     const controls = Array.from(document.querySelectorAll(controlSelector))
       .filter((el) => !el.classList.contains("sr-only"))
       .filter((el) => el.type !== "file")
@@ -1027,14 +1053,21 @@ async function auditKeyboardAndHotspots(page) {
   await page.keyboard.press("Tab");
   const result = await page.evaluate(async () => {
     const selector =
-      'a[href],button,input:not([type="hidden"]):not([type="file"]),select,textarea,[role="button"],[role="link"],[tabindex]:not([tabindex="-1"])';
+      'a[href],button,details > summary:first-of-type,input:not([type="hidden"]):not([type="file"]),select,textarea,[role="button"],[role="link"],[tabindex]:not([tabindex="-1"])';
     const visible = (element) => {
+      // A closed disclosure renders only its first direct summary, including
+      // summary descendants. Every closed ancestor must permit the target.
+      for (let details = element.parentElement?.closest("details:not([open])"); details; details = details.parentElement?.closest("details:not([open])")) {
+        const summary = [...details.children].find(child => child.tagName === "SUMMARY");
+        if (!summary?.contains(element)) return false;
+      }
       const style = getComputedStyle(element);
       const rect = element.getBoundingClientRect();
       return (
         style.display !== "none" &&
         style.visibility !== "hidden" &&
         Number(style.opacity) !== 0 &&
+        !element.closest("[hidden]") &&
         rect.width > 0 &&
         rect.height > 0
       );

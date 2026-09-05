@@ -18,6 +18,8 @@
 
 **Content owners:** Platform, Procurement, Legal, Warehouse
 
+The next September 5 acceptance follow-up addresses source-specific Finance retry, precise mixed legacy/exact Quality accounting, the vendor requirement counter, and larger Product record links. Retry must retain valid information from other authorized Finance sources; an account/access change must clear the previous scope. Quality must stop with a recoverable error if inspection records conflict, rather than inventing a zero queue. Vendor outstanding requirements include documents and agreements, not uploads alone. Product record links are permalinks, not a separate history browser. Confirm the release manifest before treating these follow-up behaviors as deployed.
+
 This handbook is the complete standalone operating reference for Mwell Intra. Use its contents, full-text search, process diagrams, role procedures, application screenshots, and governed source register without opening a separate help system. Operational routes continue to enforce role-based access.
 
 ## Start Here

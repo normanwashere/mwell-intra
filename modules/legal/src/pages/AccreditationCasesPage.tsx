@@ -2,10 +2,8 @@
 
 // Reviewer inbox (internal) + vendor application card (external).
 //
-// Internal (UX-REVIEW-VENDOR-LEGAL.md §2.3): StatCards are the ONLY count
-// surface and act as the filter; the active filter renders as one dismissible
-// chip above the table; the hero accessory keeps a single number ("Waiting on
-// you: N"); the table gains a "Waiting on" bucket column.
+// Internal: compact count filters keep the first case above the mobile
+// bottom navigation; lifecycle administration is a separate workspace.
 //
 // Vendor (§2.1): the case list is replaced by a status-first application
 // card — plain-language status + InfoTip, progress, tappable next actions,
@@ -20,13 +18,9 @@ import {
   DataTable,
   EmptyState,
   Icon,
-  HeroStat,
   InfoTip,
   ModuleHero,
   SectionTitle,
-  StatCard,
-  StaggerGrid,
-  StaggerItem,
   type Column,
 } from "@intra/ui";
 import { Guard, useSession } from "@intra/auth";
@@ -209,97 +203,79 @@ export function AccreditationCasesPage() {
   );
 
   return (
-    <div className="space-y-6">
-      <ModuleHero
-        eyebrow="Legal and compliance"
-        title="Vendor accreditation workspace"
-        description="Review evidence, resolve vendor dependencies, record decisions, and monitor renewals from one governed queue."
-        icon="clipboard"
-        accessory={
-          <HeroStat label="Waiting on you" align="right">
-            <p className="tnum font-display text-2xl font-extrabold text-ink">
-              {waitingOnYou}
-            </p>
-          </HeroStat>
-        }
-      />
+    <div className="space-y-3 md:space-y-4" data-testid="legal-case-workspace">
+      <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
+        <div className="min-w-0">
+          <h1 className="font-display text-xl font-bold text-ink">Vendor accreditation</h1>
+          <p className="mt-1 text-sm text-muted">Case review, vendor follow-up, and renewals.</p>
+        </div>
+        <p className="text-sm text-muted">Waiting on you: <strong className="tnum text-ink">{waitingOnYou}</strong></p>
+      </header>
 
-      <StaggerGrid className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4" aria-label="Case queue filters">
         {(
           [
             {
               key: "waiting_on_vendor" as const,
               label: "Waiting on vendor",
               value: bucketCounts.waiting_on_vendor,
-              icon: "building" as const,
-              tone: "slate" as const,
               hint: "Docs / signatures outstanding",
             },
             {
               key: "waiting_on_legal" as const,
               label: "Waiting on Legal",
               value: bucketCounts.waiting_on_legal,
-              icon: "rotate" as const,
-              tone: "amber" as const,
               hint: "Evidence needs your review",
             },
             {
               key: "ready_for_decision" as const,
               label: "Ready for decision",
               value: bucketCounts.ready_for_decision,
-              icon: "signature" as const,
-              tone: "emerald" as const,
               hint: "All required items approved",
             },
             {
               key: "renewal_due" as const,
               label: "Renewals",
               value: bucketCounts.renewal_due,
-              icon: "alert" as const,
-              tone: "rose" as const,
               hint: "Expiring within 30 days",
             },
           ] as const
         ).map((c) => {
           const active = filter === c.key;
           return (
-            <StaggerItem
+            <button
+              type="button"
               key={c.key}
-              className={
-                active
-                  ? "rounded-2xl ring-2 ring-brand-500 ring-offset-2 ring-offset-app"
-                  : undefined
-              }
+              aria-pressed={active}
+              aria-label={`${c.label}: ${c.value}`}
+              title={c.hint}
+              className={`min-h-11 min-w-0 rounded-md border px-3 py-2 text-left text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 ${active ? 'border-brand-500 bg-brand-500/10 text-brand-700 dark:text-brand-300' : 'border-line text-ink hover:bg-inset'}`}
+              onClick={() => applyFilter(c.key)}
             >
-              <StatCard
-                label={c.label}
-                value={c.value}
-                icon={c.icon}
-                tone={c.tone}
-                hint={active ? "Showing below" : c.hint}
-                onClick={() => applyFilter(c.key)}
-              />
-            </StaggerItem>
+              <span className="flex items-start justify-between gap-2">
+                <span className="min-w-0 break-words font-medium">{c.label}</span>
+                <strong className="tnum shrink-0">{c.value}</strong>
+              </span>
+              <span className="mt-0.5 block text-xs text-muted">{c.hint}</span>
+            </button>
           );
         })}
-      </StaggerGrid>
+      </div>
 
-      <div className="flex gap-3" aria-label="Legal workspace">
+      <div className="flex flex-wrap gap-2" aria-label="Legal workspace">
         <button type="button" className="btn-outline" aria-pressed={workspace === 'cases'} onClick={() => setWorkspace('cases')}>Accreditation cases</button>
         <button type="button" className="btn-outline" aria-pressed={workspace === 'lifecycle'} onClick={() => setWorkspace('lifecycle')}>Vendor lifecycle</button>
       </div>
       {workspace === 'lifecycle' && <VendorLifecyclePanel vendors={lifecycleVendors} />}
 
       <div hidden={workspace !== 'cases'}>
-        <SectionTitle
-          title="Accreditation cases"
-          action={
+        <div className="mb-3 flex items-center justify-between gap-2 border-b border-line pb-2">
+          <h2 className="font-display text-base font-bold text-ink">Accreditation cases</h2>
             <InfoTip
               label="About this list"
-              content="All vendor cases across the pipeline. Tap a stat card to filter by what unblocks the case next; tap a row to review. Approvals here unblock procurement PO awards."
+              content="All vendor cases across the pipeline. Select a count filter for what unblocks the case next; select a row to review. Approvals here unblock procurement PO awards."
             />
-          }
-        />
+        </div>
 
         {filter !== "all" && (
           <div className="mb-3">
@@ -330,7 +306,7 @@ export function AccreditationCasesPage() {
             message={
               filter === "all"
                 ? "Invite a vendor to start their onboarding — a case appears here once they submit."
-                : "Nothing here right now. Tap a stat card above to see other cases."
+                : "Nothing here right now. Select a count filter above to see other cases."
             }
             action={
               filter === "all" ? (

@@ -3,6 +3,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QualityPage } from "./QualityPage";
 import { makeRepo, renderWithProviders } from "@/test/renderWithProviders";
+import { InMemoryRepository } from '@/data/inMemoryRepository';
 
 async function repositoryWithPendingReceipt() {
   const repo = makeRepo();
@@ -25,15 +26,106 @@ async function repositoryWithPendingReceipt() {
 }
 
 describe("QualityPage", () => {
+  it('shows conflicting inspection IDs as a retryable queue failure and recovers the exact source', async () => {
+    const { repo, receipt } = await repositoryWithPendingReceipt();
+    const row = {
+      id: 'conflicting-source', sourceType: 'receipt' as const, sourceId: receipt.id,
+      productId: 'shirt-l', quantity: 2, disposition: 'pending' as const,
+      inspectedAt: '2026-09-01T00:00:00Z', inspectedBy: 'receiver', evidenceUrls: [],
+    };
+    const load = vi.spyOn(repo, 'listQualityInspections').mockResolvedValue({ rows: [row, { ...row, quantity: 1 }] });
+    const inspect = vi.spyOn(repo, 'inspectQuality');
+    renderWithProviders(<QualityPage />, { repo, route: '/quality?source=conflicting-source', role: 'warehouse_operator' });
+    expect(await screen.findByRole('alert')).toHaveTextContent('Conflicting inspection records');
+    expect(screen.getByRole('heading', { name: 'Quality control' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Inspect' })).not.toBeInTheDocument();
+    expect(screen.queryByText('0 pending inspections')).not.toBeInTheDocument();
+    expect(inspect).not.toHaveBeenCalled();
+    load.mockResolvedValue({ rows: [row] });
+    await userEvent.click(screen.getByRole('button', { name: 'Retry quality queue' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Inspect stock' });
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(load).toHaveBeenCalledWith({ limit: 100 });
+    expect(inspect).not.toHaveBeenCalled();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Pending inspections' })).toBeInTheDocument();
+  });
+  it('loads an old active hold beyond the first 100 through real repository pagination', async () => {
+    const data = await makeRepo().getData();
+    data.receipts = [];
+    data.returns = [];
+    let sequence = 0;
+    const repo = new InMemoryRepository(data, {
+      storage: null,
+      now: () => '2026-01-01T00:00:00Z',
+      id: prefix => `${prefix}-${String(++sequence).padStart(5, '0')}`,
+    });
+    const receipt = await repo.receiveStock({
+      actor: 'receiver', locationId: data.locations.find(row => row.type === 'warehouse')!.id,
+      lines: [{ productId: 'shirt-l', quantity: 107 }], evidenceUrls: [],
+      receiptException: { type: 'non_po', reason: 'Local acceptance fixture', evidenceUrls: ['data:application/pdf;base64,fixture'] },
+    });
+    for (let index = 0; index < 101; index++) await repo.inspectQuality({
+      idempotencyKey: `old-hold-boundary-${index}`, sourceType: 'receipt', sourceId: receipt.id,
+      productId: 'shirt-l', quantity: 1, disposition: 'hold', reason: `Boundary hold ${index}`,
+      evidenceUrls: ['data:image/png;base64,fixture'],
+    });
+    const first = await repo.listHolds({ limit: 100 });
+    expect(first.rows).toHaveLength(100);
+    const later = await repo.listHolds({ limit: 100, cursor: first.nextCursor });
+    expect(later.rows).toHaveLength(1);
+    expect(later.rows[0]?.reason).toBe('Boundary hold 0');
+    renderWithProviders(<QualityPage />, { repo, role: 'warehouse_supervisor' });
+    expect(await screen.findByText('1 pending inspections')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('tab', { name: 'Holds' }));
+    const holds = await screen.findByRole('list', { name: 'Active holds' });
+    expect(within(holds).getAllByRole('listitem')).toHaveLength(101);
+    expect(within(holds).getByText('Boundary hold 0')).toBeInTheDocument();
+    await userEvent.type(screen.getByRole('searchbox'), 'Boundary hold 0');
+    expect(within(holds).getAllByRole('listitem')).toHaveLength(1);
+  });
+
+  it('retains group search and current versus total counts after inspecting and switching tabs', async () => {
+    const data = await makeRepo().getData();
+    data.returns = [];
+    data.receipts = Array.from({ length: 6 }, (_, index) => ({
+      id: `group-receipt-${index}`, actor: 'receiver', locationId: data.locations[0]!.id,
+      createdAt: '2026-01-01T00:00:00Z', lines: [
+        { productId: 'shirt-l', quantity: 2 }, { productId: 'shirt-l', quantity: 3 },
+      ],
+    }));
+    renderWithProviders(<QualityPage />, { repo: makeRepo(data), role: 'warehouse_operator' });
+    expect(await screen.findByText('12 pending inspections')).toBeInTheDocument();
+    const search = screen.getByRole('searchbox');
+    await userEvent.type(search, 'group-receipt-4');
+    expect(screen.getByText('2 of 12 pending inspections')).toBeInTheDocument();
+    const queue = screen.getByRole('list', { name: 'Pending inspections' });
+    expect(queue.querySelectorAll('details')).toHaveLength(1);
+    expect(queue.querySelector('details')).toHaveAttribute('open');
+    await userEvent.click(within(queue).getAllByRole('button', { name: 'Inspect' })[0]!);
+    const dialog = await screen.findByRole('dialog', { name: 'Inspect stock' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(search).toHaveValue('group-receipt-4');
+    await userEvent.click(screen.getByRole('tab', { name: 'Completed' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'Pending' }));
+    expect(search).toHaveValue('group-receipt-4');
+    expect(screen.getByText('2 of 12 pending inspections')).toBeInTheDocument();
+    await userEvent.clear(search);
+    expect(screen.getByText('12 pending inspections')).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Pending inspections' }).querySelectorAll('details')).toHaveLength(6);
+  });
+
   it("opens the exact task inspection from a later queue page", async () => {
     const { repo, receipt } = await repositoryWithPendingReceipt();
     const staged = {
       sourceType: 'receipt' as const, sourceId: receipt.id, productId: 'shirt-l', quantity: 1,
       disposition: 'pending' as const, inspectedAt: '2026-09-01T00:00:00Z', inspectedBy: 'receiver', evidenceUrls: [],
     };
-    vi.spyOn(repo, 'listQualityInspections')
-      .mockResolvedValueOnce({ rows: [{ ...staged, id: 'first', serialNumber: 'FIRST' }], nextCursor: 'older' })
-      .mockResolvedValueOnce({ rows: [{ ...staged, id: 'target', serialNumber: 'TARGET-UNIT' }] });
+    vi.spyOn(repo, 'listQualityInspections').mockImplementation(async query => query?.cursor === 'older'
+      ? { rows: [{ ...staged, id: 'target', serialNumber: 'TARGET-UNIT' }] }
+      : { rows: [{ ...staged, id: 'first', serialNumber: 'FIRST' }], nextCursor: 'older' });
     renderWithProviders(<QualityPage />, { repo, route: '/quality?source=target', role: 'warehouse_operator' });
     const dialog = await screen.findByRole('dialog', { name: 'Inspect stock' });
     expect(within(dialog).getByText(/TARGET-UNIT/)).toBeInTheDocument();

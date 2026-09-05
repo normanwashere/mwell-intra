@@ -61,9 +61,24 @@ export function QualityPage() {
     void reloadControls();
   }, [reloadControls]);
 
-  const pending = useMemo(() => data ? pendingQualityWork(data, inspections) : [], [data, inspections]);
+  const projection = useMemo(() => {
+    try {
+      return { pending: data ? pendingQualityWork(data, inspections) : [], error: null };
+    } catch (error) {
+      return { pending: [], error: error instanceof Error ? error.message : 'Quality queue could not be reconciled.' };
+    }
+  }, [data, inspections]);
+  const pending = projection.pending;
+  const queueError = loadError ?? projection.error;
+  const queueBlocked = loading || Boolean(queueError);
   useEffect(() => {
-    if (!selectedSource || loading || loadError || openedSource.current === selectedSource) return;
+    if (queueError) {
+      setSelectedPending(null);
+      setSelectedHold(null);
+    }
+  }, [queueError]);
+  useEffect(() => {
+    if (!selectedSource || queueBlocked || openedSource.current === selectedSource) return;
     openedSource.current = selectedSource;
     const item = pending.find(i => i.id === selectedSource);
     if (item) { setTab('pending'); if (can(WAREHOUSE_MUTATION_CAPABILITIES.inspectQuality)) setSelectedPending(item); else setSearch(selectedSource); return; }
@@ -74,7 +89,7 @@ export function QualityPage() {
     const inspection = inspections.find(i => i.id === selectedSource);
     if (inspection && inspection.disposition !== 'pending') setTab('completed');
     setSearch(selectedSource);
-  }, [selectedSource, loading, loadError, pending, holds, inspections, can]);
+  }, [selectedSource, queueBlocked, pending, holds, inspections, can]);
 
   if (!data) return null;
   const productName = (productId: string) => data.products.find((product) => product.id === productId)?.name ?? productId;
@@ -103,6 +118,7 @@ export function QualityPage() {
     holdMode(hold) === 'vendor_return' ? mayCreateVendorReturn : mayRelease;
 
   const inspect = async (input: Parameters<typeof inspectQuality>[0]) => {
+    if (queueBlocked) return false;
     const ok = await inspectQuality({
       ...input,
       ...(selectedPending?.procurementPoLineId
@@ -113,17 +129,19 @@ export function QualityPage() {
     return ok;
   };
   const release = async (input: Parameters<typeof releaseHold>[0]) => {
+    if (queueBlocked) return false;
     const ok = await releaseHold(input);
     if (ok) await reloadControls();
     return ok;
   };
   const createReturn = async (input: Parameters<typeof createVendorReturn>[0]) => {
+    if (queueBlocked) return false;
     const ok = await createVendorReturn(input);
     if (ok) await reloadControls();
     return ok;
   };
   const rejectToVendor = async (input: Parameters<typeof createVendorReturn>[0]) => {
-    if (mode !== 'supabase' || !supabaseClient) return false;
+    if (queueBlocked || mode !== 'supabase' || !supabaseClient) return false;
     const { error } = await supabaseClient.schema('warehouse').rpc('reject_quality_hold_to_vendor', {
       payload: {
         idempotency_key: input.idempotencyKey,
@@ -169,17 +187,17 @@ export function QualityPage() {
         <label className="min-w-0 flex-1 text-sm font-medium">Find receipt, product or serial
           <input type="search" className="input mt-1 w-full" value={search} onChange={e => setSearch(e.target.value)} />
         </label>
-        <p className="text-sm text-muted sm:py-3">{tab === 'pending' && search ? `${shownPending.length} of ${pending.length} pending inspections` : `${pending.length} pending inspections`}</p>
+        {!queueBlocked && <p className="text-sm text-muted sm:py-3">{tab === 'pending' && search ? `${shownPending.length} of ${pending.length} pending inspections` : `${pending.length} pending inspections`}</p>}
       </div>
       {selectedSource && <div className="space-y-1 rounded-lg border border-line p-3 text-sm">
         <p className="break-all">Selected source: {selectedSource}</p>
-        {!loading && !loadError && !pending.some(i => i.id === selectedSource || i.sourceId === selectedSource)
+        {!queueBlocked && !pending.some(i => i.id === selectedSource || i.sourceId === selectedSource)
           && !holds.some(h => h.id === selectedSource || h.inspectionId === selectedSource)
           && <p role="status">{inspections.some(i => i.id === selectedSource) ? 'This inspection is already recorded. Review its disposition below.' : 'This source is unavailable or outside your access. No different item was selected.'}</p>}
         <Link to="/tasks" className="btn-ghost btn-sm">Back to tasks</Link>
       </div>}
 
-      {loadError ? <div role="alert" className="rounded-lg border border-rose-400 p-4"><p>{loadError}</p><button type="button" className="btn-ghost mt-2" onClick={() => void reloadControls()}>Retry quality queue</button></div> : loading ? (
+      {queueError ? <div role="alert" className="rounded-lg border border-rose-400 p-4"><p>{queueError}</p><button type="button" disabled={loading} className="btn-ghost mt-2" onClick={() => void reloadControls()}>Retry quality queue</button></div> : loading ? (
         <p className="text-sm text-muted">Loading quality controls...</p>
       ) : tab === 'pending' ? (
         shownPending.length === 0 ? <EmptyState icon="clipboard" title={search ? 'No matching inspections' : 'No inspections waiting'} /> : (
@@ -238,7 +256,7 @@ export function QualityPage() {
       )}
 
       <InspectionSheet
-        target={selectedPending ? {
+        target={!queueBlocked && selectedPending ? {
           sourceType: selectedPending.sourceType,
           sourceId: selectedPending.sourceId,
           productId: selectedPending.productId,
@@ -252,7 +270,7 @@ export function QualityPage() {
         onSubmit={inspect}
       />
       <HoldReleaseSheet
-        hold={selectedHold}
+        hold={queueBlocked ? null : selectedHold}
         actor={identityId}
         productName={selectedHold ? productName(selectedHold.productId) : ''}
         mode={selectedHold ? holdMode(selectedHold) : 'release'}
