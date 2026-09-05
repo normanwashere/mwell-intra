@@ -18,6 +18,12 @@
 
 **Content owners:** Platform, Procurement, Legal, Warehouse
 
+The September 6 certification follow-up documents the UAT changes deployed in `ab00617`; full live certification is still pending. In Pick & Pack, **Floor work** filters the queue to actionable floor tasks. For a pending department or event request, select **View request**, review quantities in **Review request**, then choose **Approve** only with the required independent authority. Reopen the source request to confirm its approved status before the Operations handoff. The request card itself is not the approval form.
+
+For excess custody, select **Upload evidence**, choose the actual supporting file, and wait for the attachment to finish before submitting. A typed storage path is not an upload. A provisional receipt hold remains in place until a separate authorized inspector accepts the exact receipt line and stock identity with matching evidence. Receiving staff cannot release that hold directly. Finance payment preparation similarly requires the real invoice and registered supporting documents; missing goods acceptance must be corrected by its authorized owner, not bypassed by Finance.
+
+When opening DOA settings, wait until the workspace finishes loading and **Save draft** becomes enabled before entering or saving a policy. Authority-history loading settles separately. On narrow screens, department actions appear below their details; on desktop they sit beside them. These layout and readiness changes do not grant additional authority.
+
 The final September 5 follow-up lets the shared header wrap when enlarged text cannot fit on one row; branding and account/help controls must remain available without horizontal scrolling. Local training inspections must also retain their exact procurement line: inspecting the same SKU in the same bin on line A must not consume line B or make A reappear pending. These local simulation safeguards complement, but do not replace, the governed live database workflow.
 
 Warehouse task filters are retained in the URL. Opening a task and choosing Back to tasks restores Due, Blocked or Completed; unrelated return URLs are not accepted. My Work source links announce the task title to screen readers. Receipt requirement links open the matching line and focus the specific quantity, serial, product-mapping or description field. The persistent requirements region provides a polite update after leaving a field rather than announcing on each keystroke.

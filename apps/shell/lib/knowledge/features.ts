@@ -989,7 +989,7 @@ const definitions: FeatureDefinition[] = [
     reads:
       "Approved purchase orders, remaining lines, products, suppliers, warehouses, bins, and operation routes.",
     writes:
-      "Creates receipt, unit or lot, evidence, movement, stock-ledger, and quality-control records in pending inspection. Received stock remains unavailable until Quality records acceptance.",
+      "Creates receipt, unit or lot, evidence, movement, stock-ledger, and quality-control records in pending inspection. Received stock remains unavailable until an independent inspector records acceptance for the exact receipt line and stock identity. The receiving operator cannot release the provisional Quality hold directly. For excess custody, use Upload evidence and wait for the attachment to finish before submitting; a typed storage path is not an uploaded document.",
     statuses:
       "Receivable, partial, complete, pending inspection, held, rejected, or failed.",
     exception:
@@ -1023,7 +1023,7 @@ const definitions: FeatureDefinition[] = [
     purpose:
       "Coordinates app-native multi-line ecommerce intake, transitional CSV migration, internal and third-party event demand, multi-item department stock requests, customer returns, Product-approved kits, directed rack/bin picking, packing supplies, shipments, accountable handovers, open-box re-kitting, and warehouse release in one governed workspace.",
     reads:
-      "Orders and events and Department requests display actionable counts. View request shows item quantities and approval context before a decision. Demand references, department and cost center, events, stock, reservations, serial identities, supplies, returns, Product approval, shipment evidence, and decisions remain linked.",
+      "Orders and events and Department requests display actionable counts. Floor work filters the fulfillment queue to actionable floor tasks. For a pending department or event request, select View request to open Review request, inspect quantities and approval context, then select Approve only when authorized. Recheck the source request status before the Operations handoff. Demand references, department and cost center, events, stock, reservations, serial identities, supplies, returns, Product approval, shipment evidence, and decisions remain linked.",
     writes:
       "Creates complete app-native ecommerce orders or validated CSV migration records, event demand, multi-line department requests, and returns; calculates commercial totals and VAT; records independent request decisions, reservations, scanned pick bins, optional line evidence, courier tracking, and linked backorders; advances separated pick-pack-release-delivery states with shipment history; and preserves replacement, Finance, supplier, closure, packaging, issue, and re-kit lineage.",
     statuses:
