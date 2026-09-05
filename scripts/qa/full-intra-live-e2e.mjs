@@ -22,7 +22,7 @@ import {
 } from "./live-e2e-db-verify.mjs";
 import { cleanupRun } from "./live-e2e-cleanup.mjs";
 import { createPaymentAuditEvidence, evidencePdf } from "./payment-audit-evidence.mjs";
-import { cleanupPaymentEvidenceStorage, cleanupExcessCustodyStorage } from "./cleanup-uat-live-run.mjs";
+import { cleanupCertificationRequestEvidence, cleanupExcessCustodyStorage, gateCertificationRequestCleanup } from "./cleanup-uat-live-run.mjs";
 import { resolveSharedUatPassword } from "./provision-uat-intra-test-users.mjs";
 
 const require = createRequire(path.resolve("apps/shell/package.json"));
@@ -6536,12 +6536,10 @@ async function cleanupTask3ReceiptFixture(fixture) {
   await remove("procurement", "payment_readiness_packs", (query) =>
     query.in("purchase_order_id", poIds),
   );
-  const { data: attachmentRows, error: attachmentError } = await client.schema("procurement")
-    .from("request_attachments").select("id,request_id,storage_path").eq("request_id", ids.request);
-  if (attachmentError) throw new Error(`Payment storage discovery failed: ${attachmentError.message}`);
-  await cleanupPaymentEvidenceStorage(client, [ids.request], attachmentRows,
+  const requestEvidence = await cleanupCertificationRequestEvidence(client, marker,
     (fixture.paymentEvidenceCleanup ?? []).flatMap(plan => plan.storagePaths));
-  await remove("procurement", "request_attachments", query => query.eq("request_id", ids.request));
+  if (requestEvidence.requestIds.length) await remove("procurement", "request_attachments", query =>
+    query.in("request_id", requestEvidence.requestIds));
   await remove("procurement", "acceptance_packs", (query) =>
     query.in("purchase_order_id", poIds),
   );
@@ -9276,10 +9274,14 @@ try {
           });
         }
       }
-      cleanup = await cleanupRun(auditRunId, cleanupTargets, {
+      const requestEvidenceGate = await gateCertificationRequestCleanup(
+        createAuditDatabaseClient(), auditMarkers, cleanupTargets,
+      );
+      cleanup = await cleanupRun(auditRunId, requestEvidenceGate.targets, {
         authEmails: auditMarkers.map((marker) => vendorAuditEmail(marker)),
       });
       cleanup.results.push(
+        ...requestEvidenceGate.results,
         ...vendorInviteCommandResults,
         ...governedActivityResults,
         ...eventDependencyResults,
@@ -9288,6 +9290,7 @@ try {
       );
       cleanup.complete =
         cleanup.complete &&
+        requestEvidenceGate.complete &&
         vendorInviteCommandResults.every(
           (result) => result.remaining === 0 && !result.error,
         ) &&

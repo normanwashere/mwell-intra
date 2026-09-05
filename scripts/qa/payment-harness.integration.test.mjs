@@ -142,7 +142,9 @@ test('draft PDFs use exported generator with real xref and safe string escaping'
 test('both cleanup paths order exact evidence discovery and storage before rows and identities before packs', () => {
   const narrow = source.slice(source.indexOf('async function cleanupTask3ReceiptFixture('), source.indexOf('async function cleanupGovernedWorkflowActivity('));
   assert.ok(narrow.indexOf('await cleanupExcessCustodyStorage') < narrow.indexOf('await remove("warehouse", "procurement_receipt_excess_custody"'));
-  assert.ok(narrow.indexOf('await cleanupPaymentEvidenceStorage') < narrow.indexOf('await remove("procurement", "request_attachments"'));
+  assert.ok(narrow.indexOf('await cleanupCertificationRequestEvidence') < narrow.indexOf('await remove("procurement", "request_attachments"'));
+  assert.match(source, /cleanupRun\(auditRunId, requestEvidenceGate\.targets,/);
+  assert.match(source, /cleanup\.complete &&\s+requestEvidenceGate\.complete &&/);
   assert.ok(narrow.indexOf('await remove("procurement", "vendor_invoice_identities"') < narrow.indexOf('await remove("procurement", "payment_readiness_packs"'));
   assert.ok(narrow.indexOf('await remove("procurement", "request_attachments"') < narrow.indexOf('await remove("procurement", "purchase_orders"'));
   assert.match(narrow, /\.rpc\("cleanup_certification_requests", \{ p_marker: marker \}\)/);

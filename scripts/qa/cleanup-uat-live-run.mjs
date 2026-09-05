@@ -57,6 +57,60 @@ export async function cleanupPaymentEvidenceStorage(database, requestIds, attach
     /^att_[A-Za-z0-9_-]+-[A-Za-z0-9][A-Za-z0-9._-]*$/, [...attachments.map(row => row.storage_path), ...attemptedPaths]);
 }
 
+export async function cleanupCertificationRequestEvidence(database, marker, attemptedPaths = []) {
+  if (typeof marker !== "string" || !/^QA-[0-9]{8}-[A-F0-9]{8}-(desktop-1440|mobile-390)$/.test(marker))
+    throw new Error("Invalid certification evidence marker");
+  const readAll = async (table, configure) => {
+    const rows = [];
+    for (let offset = 0; ; offset += 100) {
+      const { data, error } = await configure(database.schema("procurement").from(table)
+        .select(table === "requests" ? "id,title" : "id,request_id,storage_path")
+        .order("id", { ascending: true }).range(offset, offset + 99));
+      if (error || !Array.isArray(data))
+        throw new Error(`Request evidence discovery failed (${table}): ${error?.message ?? "missing rows"}`);
+      rows.push(...data);
+      if (data.length < 100) return rows;
+    }
+  };
+  // Keep these predicates identical to private.cleanup_certification_requests.
+  const receiptId = `req_${marker}-receipt-request`;
+  const requests = [
+    ...await readAll("requests", query => query.like("id", `${marker}-%`)),
+    ...await readAll("requests", query => query.eq("title", `${marker} Procurement draft`)),
+    ...await readAll("requests", query => query.eq("id", receiptId)),
+  ];
+  if (requests.some(row => typeof row.id !== "string" ||
+    !(row.id.startsWith(`${marker}-`) || row.id === receiptId || row.title === `${marker} Procurement draft`)))
+    throw new Error("Request evidence discovery returned an out-of-scope request");
+  const requestIds = [...new Set(requests.map(row => row.id))];
+  const attachments = [];
+  for (const id of requestIds) {
+    const rows = await readAll("request_attachments", query => query.eq("request_id", id));
+    if (rows.some(row => row.request_id !== id)) throw new Error("Request attachment discovery escaped scope");
+    attachments.push(...rows);
+  }
+  const storageIds = [...new Set([...requestIds.filter(id => /^req_[A-Za-z0-9_-]{8,}$/.test(id)), receiptId])];
+  const result = await cleanupPaymentEvidenceStorage(database, storageIds, attachments, attemptedPaths);
+  return { ...result, requestIds };
+}
+
+export async function gateCertificationRequestCleanup(database, markers, targets) {
+  const results = [];
+  for (const marker of markers) {
+    try {
+      results.push({ ...await cleanupCertificationRequestEvidence(database, marker), marker });
+    } catch (error) {
+      results.push({ entity: "storage.procurement-requests", marker, remaining: null,
+        error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  const complete = results.every(result => result.remaining === 0 && !result.error);
+  // Generic cleanup runs even when fixture cleanup failed. Do not let it cascade
+  // away the only remaining discovery rows after an evidence failure.
+  return { complete, results, targets: complete ? targets : targets.filter(target =>
+    !(target.schema === "procurement" && target.table === "requests")) };
+}
+
 export async function cleanupExcessCustodyStorage(database, custodyIds) {
   for (const id of custodyIds) {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) throw new Error("Unsafe custody ID");
@@ -406,15 +460,12 @@ export async function cleanupAndVerifyRun({
   const paymentRows = poIds.length ? await find("paymentPacks", "procurement",
     "payment_readiness_packs", "id,purchase_order_id", query => query.in("purchase_order_id", poIds)) : [];
   const paymentPackIds = unique(paymentRows.map(row => row.id));
-  const attachmentRows = requestIds.length ? await find("requestAttachments", "procurement",
-    "request_attachments", "id,request_id,storage_path", query => query.in("request_id", requestIds)) : [];
   // Fail closed before removing discoverability rows, including on a failed lookup.
   if (results.some(item => item.error)) throw new Error("Cleanup discovery failed; evidence and parent rows retained");
   results.push(await cleanupExcessCustodyStorage(database, custodyRows.map(row => row.id)));
-  const storageRequestIds = requestIds.filter(id => /^req_[A-Za-z0-9_-]{8,}$/.test(id));
-  // The exact synthetic ID also discovers uploads whose registration never committed.
-  storageRequestIds.push(`req_${scope.marker}-receipt-request`);
-  results.push(await cleanupPaymentEvidenceStorage(database, storageRequestIds, attachmentRows));
+  const requestEvidence = await cleanupCertificationRequestEvidence(database, scope.marker);
+  results.push(requestEvidence);
+  for (const id of requestEvidence.requestIds) if (!requestIds.includes(id)) requestIds.push(id);
   const holdRows = qualityIds.length
     ? await find(
         "holds",
