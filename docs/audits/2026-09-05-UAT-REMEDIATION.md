@@ -1,6 +1,16 @@
 # September 5 UAT Audit Remediation
 
-Status: application/security and documentation patches through d0c98a890b89d2e4c2becef290458a4d9635837f deployed to UAT; a further acceptance-driven correction is being verified. Target is mwell-intra-uat.vercel.app and Supabase kkoitlvydytdhlpxhuah only. Main production is untouched. This is not a completed live-transaction certificate.
+Status: application/security and documentation patches through 7a28fa7e29a785747fff9bf1eeb43c06fb47edea are pushed to GitHub and deployed to UAT. Target is mwell-intra-uat.vercel.app and Supabase kkoitlvydytdhlpxhuah only. Main production is untouched. This is not a completed live-transaction certificate. Earlier checkpoints below retain their original verification scope.
+
+## Current Verification Checkpoint
+
+The 7a28fa7 deployment passed actual Account/Notification popup checks at 320, 390 and 1440 pixels, plus enlarged text at 320 pixels. Escape, outside dismissal, focus return, reachable account actions and readable notification content were verified without activating Sign out. Employee and Finance each passed controlled notification HTTP 503, disabled retry-in-progress, and real-server HTTP 200 recovery on desktop and mobile. Captures were opened and reviewed.
+
+The actual Quality validation flow passed desktop on its first attempt. Mobile first remained on Loading quality controls beyond the unchanged 12-second readiness limit; one fresh retry passed. Both successful runs checked inspection and hold requirements without committing stock. The first failure is retained; its transport/auth cause was not established. Source review separately found unbounded Quality queue reads and an overlapping-load race. The next correction adds a 12-second application deadline, retry and stale-generation protection while retaining real data/access refreshes. Its five loading regressions and four exact large-population regressions pass locally; deployed recovery still needs verification.
+
+Retained-Home account-switch isolation remains inconclusive: the second-tab Finance login did not establish the new identity. This is neither a live isolation pass nor proof of an auth deadlock. Existing local identity-boundary tests remain local evidence.
+
+CI run 33971167663 passed dependency security, deployed authority/schema, lint and type checks, then failed a Learning test that asserted rendered acknowledgment before asynchronous completion. It stopped before persona reconciliation and transactions; no audit-record cleanup was required. The test now awaits the actual success state while preserving the exact controlled-document version assertion and unchanged time limits. Five repeated focused runs and all 135 Learning tests pass locally. The full certification is not complete.
 
 ## Scope
 

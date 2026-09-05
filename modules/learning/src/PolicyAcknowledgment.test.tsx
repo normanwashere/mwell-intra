@@ -95,7 +95,7 @@ describe("PolicyAcknowledgment", () => {
         evidenceHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       }),
     );
-    expect(screen.getByText("Policy acknowledged")).toBeInTheDocument();
+    expect(await screen.findByText("Policy acknowledged")).toBeInTheDocument();
   });
 
   it("requires fresh acceptance when the controlled document identity changes", () => {

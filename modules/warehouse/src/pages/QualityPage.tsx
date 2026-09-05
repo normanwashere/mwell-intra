@@ -8,7 +8,8 @@ import { WAREHOUSE_MUTATION_CAPABILITIES } from '@/app/authorization';
 import { Badge, EmptyState, PageHeader, SegmentedControl } from '@/components/ui';
 import { InspectionSheet } from '@/components/quality/InspectionSheet';
 import { HoldReleaseSheet } from '@/components/quality/HoldReleaseSheet';
-import { loadCompleteControlQueue, pendingQualityWork, type PendingInspection } from '@/domain/controlQueues';
+import { pendingQualityWork, type PendingInspection } from '@/domain/controlQueues';
+import { loadQualityControlPopulation } from '@/domain/qualityControlLoad';
 
 type QualityTab = 'pending' | 'holds' | 'completed';
 
@@ -16,6 +17,7 @@ export function QualityPage() {
   const {
     data,
     can,
+    capabilities,
     identityId,
     loadQualityInspections,
     loadHolds,
@@ -37,30 +39,43 @@ export function QualityPage() {
   const [params] = useSearchParams();
   const selectedSource = params.get('source') ?? params.get('inspection');
   const openedSource = useRef<string | null>(null);
+  const loaders = useRef({ inspections: loadQualityInspections, holds: loadHolds, vendorReturns: loadVendorReturns });
+  const loadSequence = useRef(0);
+  const activeLoad = useRef<AbortController | null>(null);
+  const accessScope = [...capabilities].sort().join('|');
+  useEffect(() => {
+    loaders.current = { inspections: loadQualityInspections, holds: loadHolds, vendorReturns: loadVendorReturns };
+  });
 
   const reloadControls = useCallback(async () => {
+    const sequence = ++loadSequence.current;
+    activeLoad.current?.abort();
+    const controller = new AbortController();
+    activeLoad.current = controller;
     setLoading(true);
     setLoadError(null);
     try {
-      const [inspectionPage, holdPage, vendorReturnPage] = await Promise.all([
-        loadCompleteControlQueue(loadQualityInspections),
-        loadCompleteControlQueue(loadHolds),
-        loadCompleteControlQueue(loadVendorReturns),
-      ]);
+      const [inspectionPage, holdPage, vendorReturnPage] = await loadQualityControlPopulation(loaders.current, controller.signal);
+      if (sequence !== loadSequence.current) return;
       setInspections(inspectionPage);
       setHolds(holdPage);
       setVendorReturns(vendorReturnPage);
     } catch (error) {
+      if (sequence !== loadSequence.current) return;
       setSelectedPending(null);
       setLoadError(error instanceof Error ? error.message : 'Quality controls could not be loaded.');
     } finally {
-      setLoading(false);
+      if (sequence === loadSequence.current) setLoading(false);
     }
-  }, [loadHolds, loadQualityInspections, loadVendorReturns]);
+  }, [identityId, mode, supabaseClient]);
 
   useEffect(() => {
     void reloadControls();
-  }, [reloadControls]);
+    return () => {
+      loadSequence.current += 1;
+      activeLoad.current?.abort();
+    };
+  }, [reloadControls, data, accessScope]);
 
   const projection = useMemo(() => {
     try {
