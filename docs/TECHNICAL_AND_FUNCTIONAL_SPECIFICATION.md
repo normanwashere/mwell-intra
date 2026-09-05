@@ -2,7 +2,7 @@
 
 ## September 5 Remediation Candidate
 
-This addendum describes the working UAT candidate, not a completed deployment. Earlier release evidence below retains its original boundary.
+This addendum describes the September 5 UAT implementation and follow-up candidate. Initial application and database changes are deployed, but end-to-end acceptance remains incomplete. Earlier release evidence below retains its original boundary; main production is untouched.
 
 - Control queues follow cursor pagination through the complete authorized result. A repeated cursor or failed later page produces an explicit retry state, never a partial-success or empty-work claim.
 - Receipt inspection reconciliation consumes an inspection quantity once. The persisted procurementLineId and serialized identity distinguish repeated products on separate receipt lines.
@@ -10,6 +10,8 @@ This addendum describes the working UAT candidate, not a completed deployment. E
 - Shared adaptive dialogs support a wide desktop size while preserving mobile sheet behavior. Contextual tooltips are rendered in a portal with measured viewport bounds.
 - Queued inventory mutations are not reported as committed success. Durable intent identity and actor-scoped replay receipts protect retries; legacy unowned/unkeyed entries require reconciliation rather than automatic replay. Deploy the corresponding adapter and migration together.
 - UAT migration review includes actual catalog types, function signatures, effective role validity, and negative permission tests. Local fixtures alone do not certify deployed storage, concurrency, or cross-role handoffs.
+- Procurement payment evidence admission uses the effective employee capability set, not generic PO-view access or raw role templates. Requests are generation-bound so a response arriving after actor/access changes cannot expose stale evidence. Authorized read-only reviewers retain visible server errors.
+- Forward migrations make receiving-draft and return-v2 certification boundaries explicit without changing draft ownership/versioning or return quarantine/replay semantics. Quality verification fingerprints the reviewed guarded public-to-v3-to-v2 and controlled-return implementation chain, including execution boundaries. Unexpected bodies or malformed verifier responses fail closed. The installed UAT verifier returned zero raw boundaries, no missing objects/grants, and a valid quality chain in a read-only metadata check; CI HTTP and transaction acceptance remain separate gates.
 
 **Reviewed:** August 28, 2026 for the recovery and evidence addendum; other sections retain their documented evidence boundaries
 **Procurement application behavior baseline:** `32170e425e125c63597ea8e05c6287a7cd256f5b`
@@ -102,7 +104,7 @@ The strict model rejects wrong hosts, routes, roles, targets, contexts, paths, h
 
 ### Task 8 certification result
 
-The current model contains 34 maintained sources, four public modes, 13 task guides with 52 stages, 11 role guides, 48 decisions, 96 branches, 27 terminal outcomes, and 335 legacy-route migrations. Eighteen routes and two release sources were added on August 28; September 5 adds three candidate guides and four routes. The original August 24 unit trio passed 81 of 81 tests; strict evidence coverage and provenance returned zero warnings and zero errors, and the independent CI attestation verified. That original eight-project browser suite passed 116 tests with 100 project-conditional skips and zero failures in 19.6 minutes. Its 24 captures cover light, dark, and print at 1440, 1280, 1024, 768, 430, 390, 360, and 320 CSS pixels; those historical results are not a fresh certification of later changes.
+The current model contains 35 maintained sources, four public modes, 13 task guides with 52 stages, 11 role guides, 48 decisions, 96 branches, 27 terminal outcomes, and 365 legacy-route migrations. Eighteen routes and two release sources were added on August 28; September 5 adds three candidate guides, one follow-up release note and 34 article/heading routes across the updated maintained sources. The original August 24 unit trio passed 81 of 81 tests; strict evidence coverage and provenance returned zero warnings and zero errors, and the independent CI attestation verified. That original eight-project browser suite passed 116 tests with 100 project-conditional skips and zero failures in 19.6 minutes. Its 24 captures cover light, dark, and print at 1440, 1280, 1024, 768, 430, 390, 360, and 320 CSS pixels; those historical results are not a fresh certification of later changes. The August capture evidence is stale under the unchanged seven-day age gate as of September 5; historical-fixture unit checks do not recertify it.
 
 Repository verification passed: documentation build/check from all 29 sources, lint with 15 of 15 Turbo tasks and no errors, typecheck with 15 of 15 Turbo tasks, and release-documentation verification with no operational source changed. The three existing lint warnings are recorded by exact file and line in the release record. Local pnpm commands emitted the declared-engine warning because certification ran on Node `v20.18.1` and pnpm `9.15.9` while the repository requires Node 22 or newer and pnpm 10.
 

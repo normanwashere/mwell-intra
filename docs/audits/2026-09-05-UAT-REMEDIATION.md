@@ -61,7 +61,7 @@ Actual live Operations Associate mobile putaway and desktop procurement-receivin
 
 ## Documentation Verification
 
-The standalone handbook includes 34 maintained sources, with Procurement/Legal, Platform/Finance, and Warehouse/Events guides. All 40 documentation generator tests pass. Updated procedures distinguish UAT deployment from pending end-to-end acceptance and are not represented as live transaction evidence.
+The standalone handbook includes 35 maintained sources, with Procurement/Legal, Platform/Finance, Warehouse/Events guides and the certification follow-up release note. The source registry includes all 365 current article/heading routes. Updated procedures distinguish UAT deployment from pending end-to-end acceptance and are not represented as live transaction evidence. August screenshots retain their real dates and are stale under the unchanged seven-day evidence gate; historical-fixture unit tests do not renew their certification.
 
 ## Remaining Release Gates
 

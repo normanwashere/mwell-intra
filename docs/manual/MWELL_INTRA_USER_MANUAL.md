@@ -14,6 +14,8 @@
 
 **Release authority:** Use the commit-bound manifest packaged with this handbook.
 
+**September 5 UAT follow-up:** Operations users may inspect an authorized purchase order and complete their acceptance work without receiving access to private payment documents. Payment-document lookup is reserved for employees with effective Procurement authoring, administration, or Finance-read capability. A scope message is expected for other PO viewers; do not request extra Finance access merely to remove that message. Putaway shows the selected stock identity once inside its capture dialog. Receiving progress, correction links, independent stock approval, and queued-versus-committed recovery are described in the September 5 operating guides. These UAT changes are not a promotion of the main production app, and full transaction certification is still pending.
+
 **Content owners:** Platform, Procurement, Legal, Warehouse
 
 This handbook is the complete standalone operating reference for Mwell Intra. Use its contents, full-text search, process diagrams, role procedures, application screenshots, and governed source register without opening a separate help system. Operational routes continue to enforce role-based access.

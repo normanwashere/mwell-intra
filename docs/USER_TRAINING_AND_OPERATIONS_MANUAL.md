@@ -2,13 +2,15 @@
 
 ## September 5 Candidate Training Delta
 
-Use these scenarios with the matching UAT release only; deployment verification is still required.
+Use these scenarios with the matching UAT release only. The initial September 5 implementation and database changes are deployed; follow-up caller and documentation changes require the matching release manifest. Live navigation is not transaction certification.
 
 1. Search a large Quality queue by serial or receipt, expand the matching group, and verify exactly one intended inspection opens from its task. Repeat with a completed and an unavailable source.
 2. Open a governed PO receipt on desktop and mobile. Expand item lines, select a missing requirement in the footer, and verify focus reaches its field. Saving progress must not receive stock; confirmation remains blocked until the selected lines and evidence reconcile.
 3. Review a stock adjustment against its product, warehouse/bin, expected/counted quantities, requester and evidence. A missing source count must block approval. The requester must not decide their own change.
 4. Interrupt a supported queued stock action. Confirm that queued status is not success, the draft remains recoverable, and replay does not duplicate the movement. Escalate legacy queue records that lack a verifiable owner or intent key.
 5. Simulate a queue loading error. The page must offer retry and must not say there is no work. Retest the same record after recovery.
+6. As Operations Lead, open an authorized Procurement PO. Confirm acceptance information remains usable and restricted payment documents are not requested. As an authorized Procurement or Finance reader, inspect the same document area and verify valid evidence opens; a real server denial must remain visible. Never grant Finance access as a workaround for a page error.
+7. In the putaway dialog, verify the selected product and serial against the physical item before scanning its destination. The redundant task description has been removed; the actual stock identity and quantity remain visible.
 
 **Reviewed:** August 23, 2026
 

@@ -556,7 +556,8 @@ test("validation rejects missing or invalid decision placement and branch target
   }
 });
 
-test("strict task evidence coverage is complete for every implemented stage", () => {
+test("historical task evidence coverage is complete for every implemented stage at its review date", (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-08-25T00:00:00.000Z") });
   assert.equal(typeof handbookGuideModel.validateHandbookEvidenceCoverage, "function");
   const result = handbookGuideModel.validateHandbookEvidenceCoverage();
   const taskSteps = HANDBOOK_GUIDES.filter(({ type }) => type === "task")
@@ -843,8 +844,12 @@ test("validation reports orphan maintained sources and invalid legacy targets", 
 
 test("validation rejects a legacy route retargeted to a different valid guide", () => {
   const retargetedRoutes = structuredClone(LEGACY_ROUTES);
-  retargetedRoutes[0] = {
-    ...retargetedRoutes[0],
+  const index = retargetedRoutes.findIndex((route) =>
+    route.legacyArticleId === legacyArticleId("docs/manual/MWELL_INTRA_USER_MANUAL.md") &&
+    route.legacyHeadingId === null);
+  assert.notEqual(index, -1);
+  retargetedRoutes[index] = {
+    ...retargetedRoutes[index],
     modeId: "tasks",
     guideId: "procurement-request-approval",
     headingId: "document-controls",
@@ -1105,8 +1110,13 @@ test("screenshot evidence approval is independent, actionable, and fails joint s
 });
 
 test("capture provenance rejects future, stale, unreachable, and jointly-mutated records", () => {
-  const valid = handbookGuideModel.validateHandbookEvidenceProvenance();
+  const valid = handbookGuideModel.validateHandbookEvidenceProvenance({ now: "2026-08-25T00:00:00.000Z" });
   assert.deepEqual(valid.errors, []);
+  assert.match(
+    handbookGuideModel.validateHandbookEvidenceProvenance({ now: "2026-09-05T00:00:00.000Z" }).errors.join("\n"),
+    /future or stale capture metadata/,
+    "historical evidence must not pass the real seven-day age gate",
+  );
 
   const guides = cloneGuides();
   const approvals = structuredClone(handbookGuideModel.EVIDENCE_APPROVAL_CONTRACT.stages);

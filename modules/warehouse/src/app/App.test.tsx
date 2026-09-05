@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { describe, it, expect } from 'vitest';
+import { beforeAll, describe, it, expect } from 'vitest';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { App } from './App';
 import { renderWithProviders } from '@/test/renderWithProviders';
@@ -70,6 +70,12 @@ function RefreshProbe() {
 const FIRST_RENDER_TIMEOUT = 10_000;
 
 describe('App routing & guards', () => {
+  beforeAll(async () => {
+    // Exercise the real lazy route without charging its cold module transform
+    // to the live-capability assertion's DOM polling window.
+    await import('@/pages/InventoryPage');
+  });
+
   it('retains Warehouse chrome and recovers from an initial load failure', async () => {
     const repo = new RetryableLoadRepository();
     renderWithProviders(<App />, { repo, route: '/' });
@@ -183,9 +189,11 @@ describe('App routing & guards', () => {
       capabilities: ['view_inventory'],
       route: '/inventory',
     });
-    expect(
-      await screen.findByRole('heading', { name: /inventory/i }),
-    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByLabelText('Loading warehouse page')).not.toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /inventory/i })).toBeInTheDocument();
+      expect(screen.queryByText(/don't have access to this page/i)).not.toBeInTheDocument();
+    });
   });
 
   it('allows logistics to open the dedicated Scan workspace', async () => {
