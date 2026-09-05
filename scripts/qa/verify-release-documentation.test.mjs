@@ -61,7 +61,7 @@ test("accepts operational releases with the complete documentation set", () => {
 });
 
 test("derives the certified legacy-route count and rejects any declared count drift", () => {
-  assert.equal(LEGACY_ROUTES.length, 321);
+  assert.equal(LEGACY_ROUTES.length, 372);
   const documents = Object.fromEntries(
     LEGACY_ROUTE_COUNT_DOCUMENTS.map(({ file }) => [
       file,
