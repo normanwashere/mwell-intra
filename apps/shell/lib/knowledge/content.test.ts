@@ -25,6 +25,15 @@ import {
 } from "./validate";
 
 describe("Knowledge Base content", () => {
+  it("explains bounded Quality recovery without presenting incomplete records as empty", () => {
+    const recovery = EXPLICIT_FEATURE_DETAILS["warehouse-quality"].controls.find(
+      (control) => control.name === "Retry quality queue",
+    );
+    expect(recovery).toBeDefined();
+    expect(JSON.stringify(recovery)).toMatch(/12 seconds/);
+    expect(JSON.stringify(recovery)).toMatch(/Decisions stay blocked/);
+    expect(JSON.stringify(recovery)).toMatch(/Late responses/);
+  });
   it("covers every required administrator control surface with operational detail", () => {
     expect(ADMINISTRATOR_GUIDES.map((item) => item.id)).toEqual(
       expect.arrayContaining([

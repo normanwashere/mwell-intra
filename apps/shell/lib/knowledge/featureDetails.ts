@@ -1944,6 +1944,12 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
     "warehouse-quality": {
       controls: [
         control(
+          "Retry quality queue",
+          "Reloads inspection, hold and vendor-return records after a failed or stalled read.",
+          "Check your connection. A load taking longer than 12 seconds offers recovery; an incomplete queue is not proof that there is no work.",
+          "Decisions stay blocked until every control list loads. Late responses from an older attempt cannot replace the current queue.",
+        ),
+        control(
           "Open inspection",
           "Loads a pending receipt or return into the inspection sheet.",
           "The item must still require inspection.",
