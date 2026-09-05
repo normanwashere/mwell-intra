@@ -26,7 +26,7 @@ import {
 
 describe("Knowledge Base content", () => {
   it("explains bounded Quality recovery without presenting incomplete records as empty", () => {
-    const recovery = EXPLICIT_FEATURE_DETAILS["warehouse-quality"].controls.find(
+    const recovery = EXPLICIT_FEATURE_DETAILS["warehouse-quality"]?.controls.find(
       (control) => control.name === "Retry quality queue",
     );
     expect(recovery).toBeDefined();
