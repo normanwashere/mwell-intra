@@ -4,6 +4,8 @@ Target: https://mwell-intra-uat.vercel.app and Supabase kkoitlvydytdhlpxhuah onl
 
 ## Corrections
 
+- Package the four Warehouse/Event handbook screenshots in version control instead of relying on ignored local output directories. Preserve the original image bytes and use their actual JPEG extension. Missing local images now fail with a specific source/asset error, and every Markdown screenshot is checked against the tracked checkout. Validate generated output from a clean checkout, not only the development directory.
+
 - Restrict Procurement payment-document lookup to the same effective employee capabilities enforced by the server. Operations PO viewers keep their authorized acceptance workflow without a predictably denied private-document request. Ignore stale asynchronous evidence after actor or scope changes; retain genuine reviewer errors.
 - Remove the duplicate putaway task description while retaining selected stock identity and eligible quantity.
 - Update Procurement, Legal, Finance, Product and Insights operating guidance, the standalone HTML handbook, technical specification, and training material.

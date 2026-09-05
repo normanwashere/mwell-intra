@@ -152,10 +152,12 @@ function mimeFor(file) {
         : "image/png";
 }
 
-function embeddedImage(href, sourceFile) {
+export function embeddedImage(href, sourceFile) {
   if (/^(https?:|data:)/i.test(href)) return href;
   const absolute = path.resolve(root, path.dirname(sourceFile), href);
-  if (!existsSync(absolute)) return href;
+  if (!existsSync(absolute)) {
+    throw new Error(`Missing handbook image: ${href} (source: ${sourceFile || "guide evidence"}). Include the asset in version control before building.`);
+  }
   return `data:${mimeFor(absolute)};base64,${readFileSync(absolute).toString("base64")}`;
 }
 

@@ -2,6 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { marked } from "marked";
 import * as documentationGenerator from "./build-app-documentation.mjs";
 import {
   HANDBOOK_GUIDES,
@@ -14,6 +18,23 @@ const {
   documentationSources,
   SYSTEM_SEARCH_INTENT_TERMS,
 } = documentationGenerator;
+
+test("missing local handbook images fail explicitly instead of changing clean-checkout output", () => {
+  assert.throws(() => documentationGenerator.embeddedImage("missing-regression-fixture.png", "docs/manual/test.md"), /Missing handbook image/);
+});
+
+test("every local Markdown screenshot is available in a tracked checkout", () => {
+  const root = fileURLToPath(new URL("../../", import.meta.url));
+  const tracked = new Set(execFileSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8" }).split("\0"));
+  for (const source of documentationGenerator.loadDocumentationSources()) {
+    if (!source.file.endsWith(".md")) continue;
+    marked.walkTokens(marked.lexer(source.sourceText), token => {
+      if (token.type !== "image" || /^(https?:|data:)/i.test(token.href)) return;
+      const asset = path.relative(root, path.resolve(root, path.dirname(source.file), token.href)).replaceAll("\\", "/");
+      assert.ok(tracked.has(asset), `${source.file} references an untracked image: ${asset}`);
+    });
+  }
+});
 
 const TASK_SECTION_IDS = Object.freeze([
   "outcome",

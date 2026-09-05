@@ -45,13 +45,13 @@ The memory Events and Warehouse modules display different seeded event populatio
 
 ## Captured Evidence
 
-![Events reconciliation at 1440](../../outputs/sep05-remediation/warehouse-events-visual/events-reconciliation-1440.png)
+![Events reconciliation at 1440](assets/sep05/events-reconciliation-1440.jpg)
 
-![Events reconciliation at 390](../../outputs/sep05-remediation/warehouse-events-visual/events-reconciliation-390.png)
+![Events reconciliation at 390](assets/sep05/events-reconciliation-390.jpg)
 
-![Warehouse dashboard at 1440](../../outputs/sep05-remediation/warehouse-events-visual/warehouse-dashboard-1440.png)
+![Warehouse dashboard at 1440](assets/sep05/warehouse-dashboard-1440.jpg)
 
-![Warehouse dashboard at 390](../../outputs/sep05-remediation/warehouse-events-visual/warehouse-dashboard-390.png)
+![Warehouse dashboard at 390](assets/sep05/warehouse-dashboard-390.jpg)
 
 ## Automated Verification
 
