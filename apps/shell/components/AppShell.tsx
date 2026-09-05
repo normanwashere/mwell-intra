@@ -288,11 +288,11 @@ export function AppShell({ children }: { children: ReactNode }) {
         >
           <div
             className={cx(
-              "flex items-center justify-between gap-3 px-4 sm:px-6 transition-[padding]",
+              "flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 transition-[padding]",
               scrolled ? "py-2 md:py-3" : "py-3",
             )}
           >
-            <div className="flex min-w-0 flex-1 items-center gap-2 md:hidden">
+            <div className="flex min-w-0 flex-1 basis-[5rem] items-center gap-2 md:hidden">
               <BrandMark compact showLabel={!scrolled} />
               {scrolled && (
                 <p className="hidden min-w-0 truncate font-display text-sm font-semibold text-ink sm:block">
@@ -316,7 +316,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               )}
             </div>
             <div
-              className="flex shrink-0 items-center gap-1.5"
+              className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-1.5"
               data-shell-header-actions="true"
             >
               <button

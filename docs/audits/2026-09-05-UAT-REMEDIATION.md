@@ -69,6 +69,12 @@ Additional reviewed live evidence verifies the exact request popover at 390/1440
 
 Legal's first case remained below the initial mobile viewport despite the earlier lifecycle separation. A compact heading and count-filter layout now corrects that residual in the candidate, with all 175 Legal tests passing. New live first-case and action bounds are still required. The approved August request fixtures also display missing-document checklist items; they are synthetic existing data, not proof of a current-policy approval bypass or a verified grandfathering exemption. Do not use their approved state to certify today's policy transitions.
 
+## Final Follow-up Verification
+
+UAT commit f764ee81e958cf5e21331bdbe7a1a7bf51bca0d5 was independently health-verified against the UAT database. Read-only desktop/mobile checks confirmed Finance's isolated payment-source failure and retry recovery, Legal's first visible case and 44px action, the vendor's four outstanding requirements, and the exact Quality receipt dialog and Product link targets. Captures were opened and reviewed. These checks did not create operational transactions.
+
+The subsequent candidate fixes task queue status restoration across all four Warehouse source pages, task-specific accessible source-link names, precise receiving error focus, explicit PO-line identity in training/demo inspections, and header/event-title wrapping at 320px with enlarged text. Its combined regression completed 45 of 45 tasks, including 678 Warehouse tests in 84 files. The latter changes still require their own deployed verification; temporary live DOM previews are not deployed acceptance.
+
 ## Documentation Verification
 
 The standalone handbook includes 35 maintained sources, with Procurement/Legal, Platform/Finance, Warehouse/Events guides and the certification follow-up release note. The source registry includes all 366 current article/heading routes. Updated procedures distinguish UAT deployment from pending end-to-end acceptance and are not represented as live transaction evidence. August screenshots retain their real dates and are stale under the unchanged seven-day evidence gate; historical-fixture unit tests do not renew their certification.

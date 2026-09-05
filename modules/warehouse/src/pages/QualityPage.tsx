@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { tasksReturnPath } from '@/domain/taskNavigation';
 import type { InventoryHold, QualityInspection, VendorReturn } from '@intra/data-kit';
 import { useSession } from '@intra/auth';
 import { useWarehouse } from '@/app/store';
@@ -194,7 +195,7 @@ export function QualityPage() {
         {!queueBlocked && !pending.some(i => i.id === selectedSource || i.sourceId === selectedSource)
           && !holds.some(h => h.id === selectedSource || h.inspectionId === selectedSource)
           && <p role="status">{inspections.some(i => i.id === selectedSource) ? 'This inspection is already recorded. Review its disposition below.' : 'This source is unavailable or outside your access. No different item was selected.'}</p>}
-        <Link to="/tasks" className="btn-ghost btn-sm">Back to tasks</Link>
+        <Link to={tasksReturnPath(params)} className="btn-ghost btn-sm">Back to tasks</Link>
       </div>}
 
       {queueError ? <div role="alert" className="rounded-lg border border-rose-400 p-4"><p>{queueError}</p><button type="button" disabled={loading} className="btn-ghost mt-2" onClick={() => void reloadControls()}>Retry quality queue</button></div> : loading ? (

@@ -168,7 +168,7 @@ function EmployeeWorkApp({
                   </p>
                 )}
               </div>
-              <a href={item.href} className="btn-primary shrink-0">
+              <a href={item.href} aria-label={`Open source: ${item.title}`} className="btn-primary shrink-0">
                 Open source <Icon name="arrowRight" className="h-4 w-4" />
               </a>
             </Card>

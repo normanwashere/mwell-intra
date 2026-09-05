@@ -1,0 +1,83 @@
+import { createRequire } from 'node:module';
+import { readFile, mkdir, writeFile } from 'node:fs/promises';
+import assert from 'node:assert/strict';
+const require = createRequire(new URL('../../apps/shell/package.json', import.meta.url));
+const { chromium } = require('@playwright/test');
+const ts = require('typescript');
+const source = await readFile(new URL('./full-intra-live-e2e.mjs', import.meta.url), 'utf8');
+const ast = ts.createSourceFile('audit.mjs', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+const names = ['waitForMeaningfulRoute', 'auditKeyboardAndHotspots'];
+const declarations = names.map(name => ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name).getText(ast));
+const helpers = new Function(`${declarations.join('\n')}\nreturn {${names.join(',')}};`)();
+const base = 'https://mwell-intra-uat.vercel.app';
+assert.ok(process.env.AUDIT_PASSWORD, 'AUDIT_PASSWORD is required');
+const healthResponse = await fetch(`${base}/api/health?audit=${Date.now()}`);
+assert.ok(healthResponse.ok, 'UAT health must be readable');
+const health = await healthResponse.json();
+assert.equal(health.deployment?.appEnv, 'uat');
+assert.equal(health.deployment?.supabaseProjectRef, 'kkoitlvydytdhlpxhuah');
+assert.match(health.commit, /^[a-f0-9]{40}$/);
+if (process.env.AUDIT_EXPECTED_COMMIT) assert.equal(health.commit, process.env.AUDIT_EXPECTED_COMMIT);
+const out = process.env.AUDIT_EVIDENCE_DIR ?? `outputs/sep05-remediation/opslead-${health.commit.slice(0, 8)}-${Date.now()}`;
+await mkdir(out, { recursive: true });
+const browser = await chromium.launch({ headless: true });
+const results = [];
+try {
+  for (const width of [1440, 390]) {
+    const height = width === 390 ? 844 : 900;
+    const context = await browser.newContext({ viewport: { width, height }, isMobile: width === 390, hasTouch: width === 390, reducedMotion: 'reduce' });
+    const result = { width, height, commit: health.commit, verifiedAt: health.timestamp, networkErrors: [] };
+    results.push(result);
+    const page = await context.newPage();
+    page.on('response', response => { if (response.status() >= 400) result.networkErrors.push({ status: response.status(), url: response.url().split('?')[0] }); });
+    try {
+      await page.goto(`${base}/login`);
+      await page.locator('#email').fill('intra.test.operations.lead@mwell.com.ph');
+      await page.locator('#password').fill(process.env.AUDIT_PASSWORD);
+      await page.getByRole('button', { name: /^sign in$/i }).click();
+      await page.waitForURL(url => !url.pathname.startsWith('/login'));
+      await helpers.waitForMeaningfulRoute(page);
+      await page.goto(`${base}/warehouse/quality`);
+      await helpers.waitForMeaningfulRoute(page);
+      const group = page.locator('main details').first();
+      await group.locator('summary').click();
+      const inspect = group.getByRole('button', { name: 'Inspect', exact: true }).first();
+      await inspect.waitFor({ state: 'visible' });
+      result.sourceGroup = await group.locator('summary').innerText();
+      result.sourceRow = await inspect.locator('..').innerText();
+      result.expandedHotspots = await helpers.auditKeyboardAndHotspots(page);
+      assert.equal(result.expandedHotspots.interceptedTargets.length, 0);
+      await page.screenshot({ path: `${out}/quality-expanded-${width}.png` });
+      await inspect.click();
+      const dialog = page.getByRole('dialog', { name: 'Inspect stock' });
+      await dialog.waitFor({ state: 'visible' });
+      result.dialogText = await dialog.innerText();
+      const serial = result.sourceRow.match(/Serial ([^\n]+)/)?.[1];
+      assert.ok(serial, 'selected actual source has a serial identity');
+      assert.ok(result.dialogText.includes(`Serial ${serial}`), 'dialog matches selected serial');
+      result.sourceMatched = true;
+      result.submitDisabled = await dialog.getByRole('button', { name: 'Submit inspection' }).isDisabled();
+      await page.screenshot({ path: `${out}/quality-dialog-${width}.png` });
+      await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+      await dialog.waitFor({ state: 'hidden' });
+      result.dismissed = true;
+      await page.goto(`${base}/product`);
+      await helpers.waitForMeaningfulRoute(page);
+      const links = page.getByRole('link', { name: 'Link to this record', exact: true });
+      await links.first().waitFor({ state: 'visible' });
+      result.productLinks = await links.evaluateAll(elements => elements.map(element => ({ text: element.textContent, href: element.getAttribute('href'), height: element.getBoundingClientRect().height, width: element.getBoundingClientRect().width })));
+      assert.ok(result.productLinks.every(link => link.height >= 44 && link.width >= 44));
+      await links.first().scrollIntoViewIfNeeded();
+      await page.screenshot({ path: `${out}/product-link-${width}.png` });
+      result.ok = true;
+    } catch (error) {
+      result.ok = false;
+      result.error = error.message;
+      await page.screenshot({ path: `${out}/explicit-failure-${width}.png` });
+      console.error(JSON.stringify(result));
+    } finally { await context.close(); }
+    console.log(JSON.stringify(result));
+    await writeFile(`${out}/explicit-results.json`, JSON.stringify(results, null, 2));
+  }
+} finally { await browser.close(); }
+if (results.some(result => !result.ok || result.networkErrors.length)) process.exitCode = 1;

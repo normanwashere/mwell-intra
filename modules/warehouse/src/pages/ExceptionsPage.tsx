@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { tasksReturnPath } from '@/domain/taskNavigation';
 import type { ResolveExceptionInput, WarehouseException } from '@intra/data-kit';
 import { useWarehouse } from '@/app/store';
 import { Badge, EmptyState, Field, PageHeader, Sheet } from '@/components/ui';
@@ -96,7 +97,7 @@ export function ExceptionsPage() {
         </Field>
       </div>
 
-      {sourceId && <p className="break-all text-sm">Selected source: {sourceId} <Link to="/tasks" className="btn-ghost btn-sm">Back to tasks</Link></p>}
+      {sourceId && <p className="break-all text-sm">Selected source: {sourceId} <Link to={tasksReturnPath(params)} className="btn-ghost btn-sm">Back to tasks</Link></p>}
       {loadError ? <div role="alert"><p>{loadError}</p><button type="button" className="btn-ghost mt-2" onClick={() => void reload()}>Retry exceptions</button></div> : loading ? <p className="text-sm text-muted">Loading exceptions...</p> : rows.length === 0 ? (
         <EmptyState
           compact

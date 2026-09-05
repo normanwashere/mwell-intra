@@ -14,6 +14,10 @@ Use these scenarios with the matching UAT release only. The initial September 5 
 8. Retry a failed Finance source while another source is valid. Its figures, selected tab and filters must remain usable. Switching accounts or losing a capability must not retain the previous authorized view, even if an old request completes late.
 9. Review a vendor case with three missing documents and one unsigned agreement. Both the list and sticky case summary must call the total four requirements, then one requirement when only the agreement remains. Recording a manual reminder does not send an email.
 10. Expand a Quality receipt group before selecting Inspect. Verify repeated product lines and serialized identities against their source. Conflicting inspection records must show a retryable error and block decisions. Product **Link to this record** controls provide a record permalink, not an additional decision-history view.
+11. Enlarge text to 200% on a narrow screen. Event custody labels may stack, and the shared header may wrap. Branding, help, notifications and the account control must remain reachable without horizontal panning; do not shrink the text to hide a layout defect.
+12. In local training, receive the same SKU on two different procurement lines in one bin. Inspect only line A, then reload the queue: A must stay completed and B must retain its own pending quantity. An unknown line or a quantity exceeding that line must be rejected.
+13. From Blocked or Completed tasks, open a source and choose Back to tasks. The same status must remain selected, including after refreshing the queue URL. Source links in My Work must announce the task title, not just an indistinguishable Open source action.
+14. Select a specific receipt requirement: a serial mismatch must focus its serial textarea, a quantity error the relevant quantity input, and an unmapped product the product selector. If nothing is selected on a partially received PO, the selection link must focus an outstanding line, not a completed disabled line.
 
 **Reviewed:** August 23, 2026
 

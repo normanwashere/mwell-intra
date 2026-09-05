@@ -99,7 +99,7 @@ describe('StorageAreasPage', () => {
     renderWithProviders(<StorageAreasPage />, { repo, route: '/storage?source=selected' });
     await screen.findByText(status === 'completed' ? 'Store watch: completed.' : 'The selected putaway task is unavailable or you do not have access.');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Back to tasks' })).toHaveAttribute('href', '/tasks');
+    expect(screen.getByRole('link', { name: 'Back to tasks' })).toHaveAttribute('href', '/tasks?status=due');
   });
   it('requires transfer_stock for live putaway', async () => {
     renderWithProviders(<StorageAreasPage />, {

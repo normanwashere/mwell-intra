@@ -1,5 +1,6 @@
 import { Fragment, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { tasksReturnPath } from '@/domain/taskNavigation';
 import { clsx } from 'clsx';
 import { useWarehouse } from '@/app/store';
 import { toStockState } from '@/data/repository';
@@ -42,7 +43,7 @@ export function CycleCountsPage() {
     const record = sourceCount.record;
     return <div className="space-y-4">
       <PageHeader title="Cycle count record" icon="clipboard" subtitle={sourceId} />
-      <Link className="btn-ghost" to="/tasks">Back to tasks</Link>
+      <Link className="btn-ghost" to={tasksReturnPath(searchParams)}>Back to tasks</Link>
       {sourceCount.loading ? <p role="status">Loading source count...</p> : sourceCount.error ? <div role="alert"><p>{sourceCount.error}</p><button type="button" className="btn-ghost mt-2" onClick={sourceCount.retry}>Retry source count</button></div> : record ? <section className="rounded-lg border border-line bg-surface p-4">
         <p className="font-semibold">{data.locations.find(l => l.id === record.locationId)?.name ?? record.locationId} · {record.status ?? 'Recorded'}</p>
         <p className="mt-1 break-all text-sm text-muted">{record.actor} · {record.createdAt.slice(0, 10)}</p>

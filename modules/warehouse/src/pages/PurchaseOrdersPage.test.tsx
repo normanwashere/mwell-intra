@@ -232,16 +232,65 @@ describe("PurchaseOrdersPage", () => {
     fireEvent.change(evidence, { target: { value: 'https://example.com/delivery-evidence.jpg' } });
     expect(confirm).toBeEnabled();
     const last = within(dialog).getByLabelText(`clean serials for ${largeNames[3]}`);
+    last.scrollIntoView = vi.fn();
     fireEvent.change(last, { target: { value: largeSerials(3).split('\n').slice(0, 99).join('\n') } });
     expect(confirm).toBeDisabled();
     const details = last.closest('details')!;
     details.open = false;
     details.scrollIntoView = vi.fn();
-    await user.click(within(dialog).getByRole('button', { name: `${largeNames[3]}: review 1 required corrections` }));
+    await user.click(within(dialog).getByRole('button', { name: `${largeNames[3]}: 100 clean physical units require 100 serials.` }));
     expect(details.open).toBe(true);
-    expect(details.contains(document.activeElement)).toBe(true);
+    expect(last).toHaveFocus();
     fireEvent.change(last, { target: { value: largeSerials(3) } });
     expect(confirm).toBeEnabled();
+    const quantity = within(dialog).getByLabelText(`damaged quantity for ${largeNames[3]}`);
+    quantity.scrollIntoView = vi.fn();
+    fireEvent.change(quantity, { target: { value: '1' } });
+    expect(confirm).toBeDisabled();
+    details.open = false;
+    await user.click(within(dialog).getByRole('button', { name: `${largeNames[3]}: Outcomes must reconcile to 100 expected units.` }));
+    expect(details.open).toBe(true);
+    expect(quantity).toHaveFocus();
+    fireEvent.change(quantity, { target: { value: '0' } });
+    expect(confirm).toBeEnabled();
+    const product = within(dialog).getByLabelText(`Map ${largeNames[3]}`);
+    product.scrollIntoView = vi.fn();
+    fireEvent.change(product, { target: { value: '' } });
+    details.open = false;
+    await user.click(within(dialog).getByRole('button', { name: `${largeNames[3]}: Map physical identified units to a Warehouse product.` }));
+    expect(product).toHaveFocus();
+    expect(details.open).toBe(true);
+    expect(within(dialog).getByRole('region', { name: 'Receipt requirements' })).toHaveTextContent('Map physical identified units');
+    const announcement = dialog.querySelector('[role="status"][aria-live="polite"]')!;
+    expect(announcement).toHaveAttribute('aria-atomic', 'true');
+    const beforeTyping = announcement.textContent;
+    fireEvent.change(product, { target: { value: 'smart-watch' } });
+    expect(announcement.textContent).toBe(beforeTyping);
+    fireEvent.blur(product);
+    expect(announcement).toHaveTextContent('Receipt requirements satisfied.');
+    expect(confirm).toBeEnabled();
+    expect(repo.receivedInputs).toHaveLength(0);
+  });
+
+  it('focuses the first outstanding line when none are selected and the first PO line is complete', async () => {
+    const repo = new LiveProcurementRepository(100);
+    const [po] = await repo.getReceivableProcurementPOs();
+    vi.spyOn(repo, 'getReceivableProcurementPOs').mockResolvedValue([{ ...po!, lines: [
+      { id: 'closed-first', productId: 'smart-watch', description: 'Already received', quantity: 100, receivedQuantity: 100 },
+      { id: 'open-second', productId: 'smart-watch', description: 'Still outstanding', quantity: 100, receivedQuantity: 0 },
+    ] }]);
+    const user = userEvent.setup();
+    renderReceiving(repo);
+    const dialog = await openReceiving(user);
+    const checkbox = within(dialog).getByRole('checkbox', { name: 'Receive Still outstanding' });
+    if ((checkbox as HTMLInputElement).checked) await user.click(checkbox);
+    const closed = within(dialog).getByRole('checkbox', { name: 'Receive Already received' });
+    if ((closed as HTMLInputElement).checked) await user.click(closed);
+    checkbox.scrollIntoView = vi.fn();
+    await user.click(within(dialog).getByRole('button', { name: 'Select at least one item to receive.' }));
+    expect(checkbox).toHaveFocus();
+    expect(closed).not.toHaveFocus();
+    expect(within(dialog).getByRole('button', { name: 'Confirm governed receipt' })).toBeDisabled();
     expect(repo.receivedInputs).toHaveLength(0);
   });
 
@@ -1204,7 +1253,7 @@ describe("PurchaseOrdersPage", () => {
 
     expect(
       within(dialog).getByText(
-        /outcomes must reconcile to 100 expected units/i,
+        /^outcomes must reconcile to 100 expected units\.$/i,
       ),
     ).toBeInTheDocument();
     expect(
@@ -1248,7 +1297,7 @@ describe("PurchaseOrdersPage", () => {
 
     expect(
       within(dialog).getByText(
-        /serial numbers must be unique across outcomes/i,
+        /^serial numbers must be unique across outcomes\.$/i,
       ),
     ).toBeInTheDocument();
     expect(

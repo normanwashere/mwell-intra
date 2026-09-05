@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { tasksReturnPath } from '@/domain/taskNavigation';
 import type { InventoryPosition } from '@intra/data-kit';
 import { useWarehouse } from '@/app/store';
 import { WAREHOUSE_MUTATION_CAPABILITIES } from '@/app/authorization';
@@ -394,7 +395,7 @@ export function StorageAreasPage() {
 
       {sourceId && <div className="space-y-2 border-b border-line pb-3">
         <p role={sourceStatus?.state === 'unavailable' ? 'alert' : 'status'}>{sourceStatus?.message ?? 'Loading the selected putaway task...'}</p>
-        <Link to="/tasks" className="btn-ghost">Back to tasks</Link>
+        <Link to={tasksReturnPath(searchParams)} className="btn-ghost">Back to tasks</Link>
       </div>}
 
       {warehouses.length > 1 && (

@@ -1,27 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useWarehouse } from '@/app/store';
 import type { WarehouseTask, QualityInspection } from '@intra/data-kit';
 import { Badge, EmptyState, PageHeader, SegmentedControl } from '@/components/ui';
 import { Icon } from '@/components/Icon';
 import { loadCompleteControlQueue } from '@/domain/controlQueues';
 
-type TaskStatus = WarehouseTask['status'];
-
-const sourcePathForTask = (task: WarehouseTask) => {
-  const path = task.type === 'quality'
-    ? '/quality'
-    : task.type === 'cycle_count'
-      ? '/cycle-counts'
-      : task.type === 'putaway'
-        ? '/storage'
-        : '/exceptions';
-  return `${path}?source=${encodeURIComponent(task.sourceId)}`;
-};
+import { parseTaskStatus, sourcePathForTask, type TaskStatus } from '@/domain/taskNavigation';
 
 export function TasksPage() {
   const { data, loadWarehouseTasks, loadQualityInspections } = useWarehouse();
-  const [status, setStatus] = useState<TaskStatus>('due');
+  const [params, setParams] = useSearchParams();
+  const status = parseTaskStatus(params.get('status'));
+  const setStatus = (next: TaskStatus) => {
+    const updated = new URLSearchParams(params);
+    updated.set('status', parseTaskStatus(next));
+    setParams(updated);
+  };
   const [tasks, setTasks] = useState<WarehouseTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [inspections, setInspections] = useState<QualityInspection[]>([]);
@@ -77,7 +72,7 @@ export function TasksPage() {
                 <Badge tone={status === 'blocked' ? 'amber' : status === 'completed' ? 'emerald' : 'brand'}>{status}</Badge>
               </span>
               <Link
-                to={sourcePathForTask(task)}
+                to={sourcePathForTask(task, status)}
                 className="btn-ghost btn-sm col-start-2 justify-self-start sm:col-start-auto"
               >
                 Open {task.type === 'cycle_count' ? 'count' : task.type} source

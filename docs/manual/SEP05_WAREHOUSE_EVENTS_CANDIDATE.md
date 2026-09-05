@@ -12,6 +12,8 @@ Candidate remediation covers WE01, WE02, WE05, WE10, WE13, WE14, LV06 and LV07. 
 
 ### Local WE04 Follow-up (Pending Deployment)
 
+Training/demo parity follow-up: memory quality inspections now retain the selected procurement line ID in their returned and listed records, including idempotent replay. When one receipt has the same product in the same bin on lines A and B, inspecting A leaves B pending; do not treat product/bin equality as proof that both lines were inspected. An explicit line must belong to that receipt/product, and cumulative inspections cannot exceed its received quantity. This is a local in-memory adapter correction, not evidence of a Supabase defect or a change to live certification, RLS, or separation of duties.
+
 Conflicting inspection records now show an inline quality-queue error with Retry quality queue instead of escaping rendering. Until a complete valid queue is restored, source auto-opening and inspection/hold submissions are blocked. Retrying corrected records restores the exact-source workflow without submitting an inspection. Latest focused verification: 32 domain/UI tests passed; scoped lint and warehouse typecheck passed.
 
 Quality receipt reconciliation now allocates exact procurement-line and serial identities before legacy quantities, independent of inspection input order. Each inspection quantity is consumed once; identical repeated IDs count once, while conflicting records with one ID produce an explicit reload error. Legacy quantities only reduce an unambiguous remaining custody identity. Unresolved alternatives remain pending rather than being assigned by row order. Serialized residual work retains one exact serial per quantity-one task.

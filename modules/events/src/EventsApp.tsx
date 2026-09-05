@@ -558,7 +558,7 @@ export function EventsApp({
               <p className="text-xs font-semibold uppercase text-faint">
                 Outcome control
               </p>
-              <h2 className="mt-1 font-display text-lg font-bold text-ink">
+              <h2 className="mt-1 font-display text-lg font-bold text-ink [overflow-wrap:anywhere]">
                 Event reconciliation
               </h2>
               <p className="mt-1 text-sm text-muted">

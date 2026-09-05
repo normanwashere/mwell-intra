@@ -126,6 +126,7 @@ describe("event reconciliation handoff", () => {
       expect(term.closest("dt")?.nextElementSibling).toHaveClass("break-all");
     }
     expect(totals.querySelectorAll("dd")).toHaveLength(3);
+    expect(screen.getByRole("heading", { name: "Event reconciliation" })).toHaveClass("[overflow-wrap:anywhere]");
     expect(state.saveReconciliation).not.toHaveBeenCalled();
   });
 

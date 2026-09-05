@@ -13,6 +13,9 @@ Target: https://mwell-intra-uat.vercel.app and Supabase kkoitlvydytdhlpxhuah onl
 - Stabilize real-route and focus assertions without increasing timeouts or removing authority/focus checks. Correct hidden-disclosure audit targeting and wait for meaningful queue readiness while preserving actual obstruction failures.
 - Replace Legal's oversized introductory summary with a compact heading and actionable count filters. The deployed mobile review found the first case below the viewport; the corrected layout must pass a fresh check above the fixed bottom navigation before acceptance.
 - Reflow Event custody metrics when text is enlarged. The live 320px/200% root-text probe reproduced overlapping labels; the candidate must preserve Reserved, Issued and Returned without clipping and receive its own new deployed visual check.
+- The f764ee8 Event metric retest confirms stacked, readable labels; it separately exposed a shared-header overflow at enlarged text. A bounded, wrapping header is the follow-up correction, with new deployed geometry acceptance still required.
+- Preserve procurement-line identity and its remaining quantity in the local training repository. Same-SKU/same-bin A/B tests now cover the previously omitted field. This is not represented as a newly discovered Supabase write vulnerability.
+- Retain Warehouse task status through fixed, validated source/back URLs, and add task-specific accessible names to My Work source links. Receipt correction links now use structured field targets instead of focusing a generic line-selection checkbox; the summary remains accessible and announces on blur.
 
 ## Verification Boundary
 

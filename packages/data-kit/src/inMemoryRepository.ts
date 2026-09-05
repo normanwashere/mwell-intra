@@ -1783,6 +1783,19 @@ export class InMemoryRepository implements WarehouseControlRepository {
             ? this.data.returns.find((row) => row.id === input.sourceId)
             : undefined;
         if (!receipt && !returned) throw new Error("Quality source not found.");
+        if (input.procurementPoLineId) {
+          const exactLines = receipt?.lines.filter(line =>
+            line.productId === input.productId && line.procurementLineId === input.procurementPoLineId,
+          ) ?? [];
+          if (!exactLines.length) throw new Error("Inspection procurement line does not belong to the receipt product.");
+          const inspectedLineQuantity = this.qualityInspections.filter(inspection =>
+            inspection.sourceType === "receipt" && inspection.sourceId === input.sourceId
+            && inspection.productId === input.productId && inspection.procurementPoLineId === input.procurementPoLineId,
+          ).reduce((sum, inspection) => sum + inspection.quantity, 0);
+          if (input.quantity > exactLines.reduce((sum, line) => sum + line.quantity, 0) - inspectedLineQuantity) {
+            throw new Error("Inspection quantity exceeds the procurement line quantity.");
+          }
+        }
         const lines = receipt?.lines ?? returned?.lines ?? [];
         const sourceQuantity = lines
           .filter((line) => line.productId === input.productId)
@@ -1815,6 +1828,7 @@ export class InMemoryRepository implements WarehouseControlRepository {
           sourceType: input.sourceType,
           sourceId: input.sourceId,
           productId: input.productId,
+          procurementPoLineId: input.procurementPoLineId,
           binId: input.binId,
           lotId: input.lotId,
           serialNumber: input.serialNumber,

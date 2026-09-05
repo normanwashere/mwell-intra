@@ -18,6 +18,10 @@
 
 **Content owners:** Platform, Procurement, Legal, Warehouse
 
+The final September 5 follow-up lets the shared header wrap when enlarged text cannot fit on one row; branding and account/help controls must remain available without horizontal scrolling. Local training inspections must also retain their exact procurement line: inspecting the same SKU in the same bin on line A must not consume line B or make A reappear pending. These local simulation safeguards complement, but do not replace, the governed live database workflow.
+
+Warehouse task filters are retained in the URL. Opening a task and choosing Back to tasks restores Due, Blocked or Completed; unrelated return URLs are not accepted. My Work source links announce the task title to screen readers. Receipt requirement links open the matching line and focus the specific quantity, serial, product-mapping or description field. The persistent requirements region provides a polite update after leaving a field rather than announcing on each keystroke.
+
 The next September 5 acceptance follow-up addresses source-specific Finance retry, precise mixed legacy/exact Quality accounting, the vendor requirement counter, and larger Product record links. Retry must retain valid information from other authorized Finance sources; an account/access change must clear the previous scope. Quality must stop with a recoverable error if inspection records conflict, rather than inventing a zero queue. Vendor outstanding requirements include documents and agreements, not uploads alone. Product record links are permalinks, not a separate history browser. Confirm the release manifest before treating these follow-up behaviors as deployed.
 
 This handbook is the complete standalone operating reference for Mwell Intra. Use its contents, full-text search, process diagrams, role procedures, application screenshots, and governed source register without opening a separate help system. Operational routes continue to enforce role-based access.

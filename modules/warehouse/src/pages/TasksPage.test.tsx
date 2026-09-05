@@ -30,10 +30,10 @@ describe('TasksPage', () => {
     renderWithProviders(<TasksPage />, { repo, role: 'logistics_supervisor' });
 
     const sourceLink = (await screen.findAllByRole('link', { name: /open quality source/i }))
-      .find((link) => link.getAttribute('href') === `/quality?source=${receipt.id}`);
+      .find((link) => link.getAttribute('href') === `/quality?source=${receipt.id}&taskStatus=due`);
     expect(sourceLink).toHaveAttribute(
       'href',
-      `/quality?source=${receipt.id}`,
+      `/quality?source=${receipt.id}&taskStatus=due`,
     );
   });
 

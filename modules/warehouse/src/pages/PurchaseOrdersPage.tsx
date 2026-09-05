@@ -69,6 +69,7 @@ type ReceiptOutcome = "clean" | "damaged" | "unidentified" | "short" | "excess";
 type PhysicalReceiptOutcome = Exclude<ReceiptOutcome, "short">;
 type ReceiptOutcomeQuantities = Record<ReceiptOutcome, number>;
 type ReceiptOutcomeSerials = Record<PhysicalReceiptOutcome, string>;
+type ReceiptFieldError = { message: string; target: string; lineId?: string };
 
 const PHYSICAL_OUTCOMES: readonly PhysicalReceiptOutcome[] = [
   "clean",
@@ -195,6 +196,8 @@ export function PurchaseOrdersPage() {
   const [bridgeSerials, setBridgeSerials] = useState<
     Record<string, ReceiptOutcomeSerials>
   >({});
+  const lastQuantityField = useRef<Record<string, ReceiptOutcome>>({});
+  const [requirementsAnnouncement, setRequirementsAnnouncement] = useState('');
   const [bridgeLocation, setBridgeLocation] = useState("");
   const [bridgeBin, setBridgeBin] = useState("");
   const [bridgeEvidence, setBridgeEvidence] = useState("");
@@ -617,9 +620,12 @@ export function PurchaseOrdersPage() {
         valid: false,
         hasExceptions: false,
         errors: {} as Record<string, string[]>,
+        fieldErrors: [] as ReceiptFieldError[],
       };
     }
     const errors: Record<string, string[]> = {};
+    const fieldErrors: ReceiptFieldError[] = [];
+    const seenSerialFields = new Map<string, string>();
     const commandSerials: string[] = [];
     let hasExceptions = false;
     for (const line of bridgeReceivePO.lines) {
@@ -628,14 +634,19 @@ export function PurchaseOrdersPage() {
       const quantities =
         bridgeOutcomes[line.id] ?? initialOutcomeQuantities(expected);
       const lineErrors: string[] = [];
+      const addError = (message: string, target: string) => {
+        lineErrors.push(message);
+        fieldErrors.push({ message, target, lineId: line.id });
+      };
       const reconciled =
         quantities.clean +
         quantities.damaged +
         quantities.unidentified +
         quantities.short;
       if (reconciled !== expected) {
-        lineErrors.push(
+        addError(
           `Outcomes must reconcile to ${expected} expected units.`,
+          `${lastQuantityField.current[line.id] ?? 'clean'}-quantity-${line.id}`,
         );
       }
       const productId = bridgeProducts[line.id] ?? "";
@@ -643,15 +654,17 @@ export function PurchaseOrdersPage() {
         quantities.clean + quantities.damaged + quantities.excess > 0 &&
         !productId
       ) {
-        lineErrors.push(
+        addError(
           "Map physical identified units to a Warehouse product.",
+          `product-map-${line.id}`,
         );
       }
       if (quantities.unidentified > 0) {
         hasExceptions = true;
         if (!bridgeObservedDescriptions[line.id]?.trim()) {
-          lineErrors.push(
+          addError(
             "Observed description is required for unidentified units.",
+            `observed-description-${line.id}`,
           );
         }
       }
@@ -668,14 +681,21 @@ export function PurchaseOrdersPage() {
         for (const outcome of PHYSICAL_OUTCOMES) {
           const serials = parseSerials(bridgeSerials[line.id]?.[outcome] ?? "");
           if (serials.length !== quantities[outcome]) {
-            lineErrors.push(
+            addError(
               `${quantities[outcome]} ${outcome} physical units require ${quantities[outcome]} serials.`,
+              `${outcome}-serials-${line.id}`,
             );
           }
+          for (const serial of serials) {
+            const previousLine = seenSerialFields.get(serial);
+            if (previousLine) {
+              addError(previousLine === line.id ? 'Serial numbers must be unique across outcomes.' : 'Serial numbers must be unique across receipt lines.', `${outcome}-serials-${line.id}`);
+              break;
+            }
+          }
+          for (const serial of serials) seenSerialFields.set(serial, line.id);
+          if (new Set(serials).size !== serials.length) addError('Serial numbers must be unique across outcomes.', `${outcome}-serials-${line.id}`);
           lineSerials.push(...serials);
-        }
-        if (new Set(lineSerials).size !== lineSerials.length) {
-          lineErrors.push("Serial numbers must be unique across outcomes.");
         }
         commandSerials.push(...lineSerials);
       }
@@ -686,11 +706,14 @@ export function PurchaseOrdersPage() {
     }
     if (!bridgeReceivePO.lines.some((line) => bridgeSelected[line.id])) {
       errors.command = ["Select at least one item to receive."];
+      const eligible = bridgeReceivePO.lines.find(line => line.quantity > line.receivedQuantity);
+      if (eligible) fieldErrors.push({ message: errors.command[0]!, target: `receive-line-${eligible.id}` });
     }
     return {
       valid: Object.keys(errors).length === 0,
       hasExceptions,
       errors,
+      fieldErrors,
     };
   }, [
     bridgeObservedDescriptions,
@@ -784,6 +807,8 @@ export function PurchaseOrdersPage() {
 
   const openBridgeReceive = (po: BridgedPO) => {
     if (bridgeSubmitting.current) return;
+    lastQuantityField.current = {};
+    setRequirementsAnnouncement('');
     setReceivingRequest({
       po,
       session: ++receivingSessionRef.current,
@@ -1476,16 +1501,18 @@ export function PurchaseOrdersPage() {
         description={bridgeReceivePO?.poNumber}
         footer={
           <div className="w-full space-y-2">
-            <div aria-label="Receipt requirements" className="max-h-24 overflow-y-auto text-sm text-rose-700 dark:text-rose-300">
+            <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">{requirementsAnnouncement}</p>
+            <div role="region" aria-label="Receipt requirements" className="max-h-24 overflow-y-auto text-sm text-rose-700 dark:text-rose-300">
               {[
                 ...(!bridgeLocation ? [{ text: 'Choose a receiving location', target: 'bridge-receive-location' }] : []),
                 ...(!bridgeEvidenceUrls.length || bridgeEvidenceError ? [{ text: bridgeEvidenceError ? 'Correct the delivery evidence link' : 'Attach delivery evidence', target: 'bridge-receive-evidence' }] : []),
                 ...(bridgeReceiptValidation.hasExceptions && !bridgeExceptionReason.trim() ? [{ text: 'Add the exception reason', target: 'bridge-exception-reason' }] : []),
-                ...Object.entries(bridgeReceiptValidation.errors).map(([id, errors]) => ({ text: id === 'command' ? 'Review receipt line selection and serials' : `${bridgeReceivePO?.lines.find(line => line.id === id)?.description ?? 'Receipt line'}: review ${errors.length} required corrections`, target: id === 'command' ? 'bridge-receipt-lines' : `bridge-line-${id}` })),
+                ...bridgeReceiptValidation.fieldErrors.map(({ message, target, lineId }) => ({ text: lineId ? `${bridgeReceivePO?.lines.find(line => line.id === lineId)?.description ?? 'Receipt line'}: ${message}` : message, target })),
               ].map(({ text, target }, index) => (
                 <button key={`${target}-${index}`} type="button" className="block min-h-11 text-left underline underline-offset-2" onClick={() => {
                   const element = document.getElementById(target);
-                  if (element instanceof HTMLDetailsElement) element.open = true;
+                  const details = element?.closest('details');
+                  if (details) details.open = true;
                   element?.scrollIntoView({ block: 'center', behavior: 'smooth' });
                   (element?.querySelector<HTMLElement>('input:not([disabled]), select:not([disabled]), textarea:not([disabled])') ?? element)?.focus();
                 }}>{text}</button>
@@ -1528,7 +1555,15 @@ export function PurchaseOrdersPage() {
         }
       >
         {bridgeReceivePO && (
-          <div className="space-y-3">
+          <div className="space-y-3" onBlurCapture={() => {
+            const messages = [
+              ...(!bridgeLocation ? ['Choose a receiving location.'] : []),
+              ...(!bridgeEvidenceUrls.length || bridgeEvidenceError ? ['Delivery evidence needs attention.'] : []),
+              ...(bridgeReceiptValidation.hasExceptions && !bridgeExceptionReason.trim() ? ['Add the exception reason.'] : []),
+              ...bridgeReceiptValidation.fieldErrors.map(error => error.message),
+            ].join(' ');
+            setRequirementsAnnouncement(messages ? `Receipt requirements: ${messages}` : 'Receipt requirements satisfied.');
+          }}>
             {draftLoading && (
               <p role="status" className="text-sm text-muted">
                 Loading your saved receiving progress...
@@ -1752,6 +1787,7 @@ export function PurchaseOrdersPage() {
                       <div className="flex flex-wrap items-baseline justify-between gap-2">
                         <label className="flex min-h-11 items-center gap-2 text-sm font-semibold text-ink">
                           <input
+                            id={`receive-line-${line.id}`}
                             type="checkbox"
                             checked={!!bridgeSelected[line.id]}
                             aria-label={`Receive ${line.description}`}
@@ -1774,6 +1810,7 @@ export function PurchaseOrdersPage() {
                         className="min-w-0 space-y-3 disabled:opacity-50"
                       >
                         <ProductSelect
+                          id={`product-map-${line.id}`}
                           aria-label={`Map ${line.description}`}
                           products={data.products}
                           value={bridgeProducts[line.id] ?? ""}
@@ -1812,6 +1849,7 @@ export function PurchaseOrdersPage() {
                                 }
                                 value={quantities[outcome]}
                                 onChange={(event) => {
+                                  lastQuantityField.current[line.id] = outcome;
                                   const next = Number(event.target.value);
                                   setBridgeOutcomes((current) => ({
                                     ...current,
@@ -1830,7 +1868,7 @@ export function PurchaseOrdersPage() {
                         {mappedProduct?.serialized && (
                           <div className="grid gap-2 sm:grid-cols-2">
                             {PHYSICAL_OUTCOMES.filter(
-                              (outcome) => quantities[outcome] > 0,
+                              (outcome) => quantities[outcome] > 0 || parseSerials(serials[outcome]).length > 0,
                             ).map((outcome) => (
                               <Field
                                 key={outcome}
