@@ -657,7 +657,7 @@ const definitions: FeatureDefinition[] = [
     purpose:
       "Shows every module assigned to the employee while guiding each employee through role-specific first-time orientation before operational entry. Later policy, practice, assessment, and attestation requirements restrict only the live actions they govern. Practices without a simulation use a completable guided review, and demo completion persists by profile and role bundle.",
     reads:
-      "Current scoped role assignments, effective curricula, requirement progress, capability locks, support state, and certification evidence.",
+      "Current scoped role assignments, effective curricula, requirement progress, capability locks, support state, and certification evidence. Certification entries name their module and curriculum role so similarly named capabilities remain distinguishable. Role context unavailable means the historical curriculum cannot be matched; ask the role owner rather than assuming another permission was granted.",
     writes:
       "Starts or resumes governed learning attempts and records validated completion evidence through the learning service; viewing the page alone changes no business record.",
     statuses:
@@ -1501,7 +1501,7 @@ const definitions: FeatureDefinition[] = [
     purpose:
       "Controls one purchase order from approved demand through supplier issue, category-specific acceptance, invoice matching, payment release, and closure.",
     reads:
-      "PO, request, award, vendor, accreditation, receipts, inspections, acceptance, invoice, and decision history.",
+      "PO, request, award, vendor, accreditation, receipts, inspections, acceptance, invoice, and decision history. A fully received PO may show Closed before payment; check the separate Finance readiness and payment-release evidence. Issued and fully received Closed POs can enter payment preparation when every required acceptance and invoice control is satisfied. Draft and cancelled POs cannot.",
     writes:
       "Records approval, issue, receipt linkage, goods/service/milestone acceptance, structured invoice evidence, Finance review, payment release reference, and a required PO cancellation reason. A failed live cancellation leaves the displayed PO unchanged.",
     statuses:

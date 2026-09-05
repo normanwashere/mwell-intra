@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { LearningSnapshot } from "./types";
 import { OnboardingCenter } from "./OnboardingCenter";
@@ -437,6 +437,85 @@ describe("OnboardingCenter", () => {
 
     expect(screen.getByText("Certification expired")).toBeInTheDocument();
     expect(screen.getByText("Expired Jan 1, 2026")).toBeInTheDocument();
+  });
+
+  it("distinguishes certification modules and roles without merging grants", () => {
+    const certifications = [
+      { module: "legal" as const, role: "legal_reviewer" },
+      { module: "legal" as const, role: "compliance" },
+      { module: "core" as const, role: "platform_admin" },
+      { module: "legal" as const, role: "legal_reviewer" },
+    ].map(({ module, role }, index) => ({
+      ...snapshot.certifications[0]!,
+      id: `cert-scope-${index}`,
+      sourceRoleAssignmentId: `assignment-${index}`,
+      capability: { module, capability: "manage_documents" },
+      curriculumId: `internal.role.${module}.${role}.v1`,
+    }));
+    renderCenter({ snapshot: { ...snapshot, certifications } });
+
+    expect(screen.getAllByText("Certification active")).toHaveLength(4);
+    expect(screen.getAllByText("Manage Documents")).toHaveLength(4);
+    const rows = screen
+      .getAllByText("Manage Documents")
+      .map((label) => within(label.closest("li")!));
+    expect(rows[0]!.getByText("Legal / Legal Reviewer")).toBeInTheDocument();
+    expect(rows[1]!.getByText("Legal / Compliance")).toBeInTheDocument();
+    expect(
+      rows[2]!.getByText("Core / Platform Administrator"),
+    ).toBeInTheDocument();
+    expect(rows[3]!.getByText("Legal / Legal Reviewer")).toBeInTheDocument();
+    for (const row of rows)
+      expect(row.getByText("Valid until Aug 12, 2027")).toBeInTheDocument();
+  });
+
+  it.each([
+    { revokedAt: "2026-01-01T00:00:00.000Z", status: "revoked" },
+    { supersededAt: "2026-01-01T00:00:00.000Z", status: "superseded" },
+    { expiresAt: "2026-01-01T00:00:00.000Z", status: "expired" },
+  ])(
+    "retains $status certification status with readable role context",
+    ({ status, ...dates }) => {
+      renderCenter({
+        snapshot: {
+          ...snapshot,
+          certifications: [
+            {
+              ...snapshot.certifications[0]!,
+              capability: { module: "legal", capability: "manage_documents" },
+              curriculumId: "internal.role.legal.compliance.v1",
+              ...dates,
+            },
+          ],
+        },
+      });
+      expect(screen.getByText(`Certification ${status}`)).toBeInTheDocument();
+      expect(screen.getByText("Legal / Compliance")).toBeInTheDocument();
+      expect(
+        screen.queryByText("Certification active"),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it("does not guess role or expose assignment IDs for an unknown curriculum", () => {
+    const { container } = renderCenter({
+      snapshot: {
+        ...snapshot,
+        certifications: [
+          {
+            ...snapshot.certifications[0]!,
+            curriculumId: "unknown-private-curriculum-id",
+            sourceRoleAssignmentId: "private-assignment-id",
+            departmentId: "private-department-id",
+          },
+        ],
+      },
+    });
+    expect(
+      screen.getByText("Warehouse / Role context unavailable"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Certification active")).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/private-.*-id/);
   });
 
   it("directs a user with no assignments instead of leaving a dead end", () => {

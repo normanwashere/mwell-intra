@@ -786,6 +786,25 @@ describe("SupabaseRepository W1 control boundary", () => {
     ).toMatchObject({ limit: 100 });
   });
 
+  it("preserves mixed-case inspection payloads and idempotency identity for database canonical matching", async () => {
+    const { client, calls } = makeMockClient(buildSeed());
+    const repo = new SupabaseRepository(client);
+    for (const sourceType of ["receipt", "return"] as const) {
+      const input = {
+        idempotencyKey: `quality-${sourceType}-canonical`, sourceType, sourceId: "receipt-legacy",
+        productId: "shirt", procurementPoLineId: "line-A", binId: "bin-A", quantity: 1,
+        serialNumber: "  Mixed-Serial  ", disposition: "hold" as const, reason: "Quality review",
+      };
+      await repo.inspectQuality(input);
+      expect(calls.filter(item => item.fn === "inspect_quality").at(-1)?.payload).toMatchObject({
+        source_type: sourceType, source_id: "receipt-legacy", product_id: "shirt",
+        procurement_po_line_id: "line-A", bin_id: "bin-A", quantity: 1,
+        serial_number: "  Mixed-Serial  ", idempotency_key: input.idempotencyKey,
+      });
+      expect(input.serialNumber).toBe("  Mixed-Serial  ");
+    }
+  });
+
   it("sends idempotent command payloads without trusted actor or role values", async () => {
     const { client, calls } = makeMockClient(buildSeed());
     const repo = new SupabaseRepository(client);

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { EvidenceAttachment, useEvidenceAttachment } from '@intra/ui';
 import { resolveEvidenceDocument, uploadEvidenceDocument } from '@intra/data-kit/supabase';
-import { getSupabaseClient, hasSupabaseConfig } from '../data/supabase/client';
+import { useSession } from '@intra/auth';
 import { Badge, Field, Sheet } from '@/components/ui';
 
 export interface ExcessCustodyWorkItem {
@@ -37,6 +37,7 @@ export function ExcessCustodyDecisionPanel({
   items: ExcessCustodyWorkItem[];
   onDecision: (input: ExcessCustodyDecisionInput) => Promise<boolean>;
 }) {
+  const { mode, supabaseClient } = useSession();
   const [selected, setSelected] = useState<ExcessCustodyWorkItem | null>(null);
   const [outcome, setOutcome] = useState<ExcessCustodyDecisionInput['outcome']>('vendor_return');
   const [approvedAmendmentId, setApprovedAmendmentId] = useState('');
@@ -135,7 +136,7 @@ export function ExcessCustodyDecisionPanel({
           <EvidenceAttachment id="excess-evidence-url" attachment={attachment} disabled={submitting}
             recordLabel={`${selected.poNumber} / ${selected.productName ?? selected.poLineId}`}
             upload={async (file) => {
-              const client = hasSupabaseConfig() ? getSupabaseClient() : null;
+              const client = mode === 'supabase' ? supabaseClient : null;
               const reference = await uploadEvidenceDocument(client, file, `excess-custody/${selected.custodyId}`);
               return { reference, filename: file.name, preview: async () => {
                 const url = await resolveEvidenceDocument(client, reference);

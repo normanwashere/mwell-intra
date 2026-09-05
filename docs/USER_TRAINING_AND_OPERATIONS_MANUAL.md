@@ -32,6 +32,10 @@ Use these scenarios with the matching UAT release only. September 5 changes thro
 
 ## Training Format
 
+Include an account with several scoped roles in onboarding rehearsal. Read each certification's module and role alongside its capability, status and validity. Similar names must remain separate when their authority differs. Historical curriculum context may be unavailable; escalate it rather than treating the label as an access change. A screenshot with all requirements already completed proves the completed view only, not a fresh orientation or assessment attempt.
+
+Rehearse full delivery with zero outstanding quantity, independent acceptance, real invoice/document registration, and Finance preparation on the resulting Closed PO. Do not add an artificial balance line to keep its status Issued. Reject draft/cancelled POs, wrong-owner evidence and missing acceptance. Separately receive a lowercase serial and independently inspect the same canonical identity. Verify completed raw QC leaves the exact unit `in_stock`, not stranded in `pending_inspection`, without a duplicate inspection. Active holds still enforce availability, including for non-accepted QC; governed hold release does not change the unit status. Do not allocate or pick held stock merely because it is `in_stock`. Repeat with a different serial and a case-only duplicate as rejection paths. On mobile, the procurement route explanation must provide a full-height touch target.
+
 ### August 27 WMS Practice
 
 Train two operators using separate accounts on different items of one issued PO. Save an incomplete serial list, close and reopen the PO, and verify the draft resumes without changing inventory. Submit one selected line and verify pending inspection while the other line stays receivable. Test duplicate scans and an HTTP evidence link as rejection paths; use delivery-note upload for the successful path.

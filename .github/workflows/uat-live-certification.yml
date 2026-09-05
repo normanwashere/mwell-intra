@@ -79,6 +79,8 @@ jobs:
             scripts/qa/request-cleanup.pglite.test.mjs \
             scripts/qa/payment-cleanup.pglite.test.mjs \
             scripts/verify-provisional-quality-hold-release.pglite.test.mjs \
+            scripts/qa/serialized-hold-fixture.pglite.test.mjs \
+            scripts/qa/closed-po-payment.pglite.test.mjs \
             scripts/verify-sep05-procurement-integration.pglite.test.mjs \
             scripts/verify-putaway-tasks.pglite.test.mjs \
             scripts/verify-receiving-drafts.pglite.test.mjs \
@@ -95,7 +97,7 @@ jobs:
       - name: Verify live audit contracts
         run: pnpm test:intra-live-contract
       - name: Verify evidence upload and cleanup contracts
-        run: node --test scripts/qa/payment-audit-evidence.test.mjs scripts/qa/payment-harness.integration.test.mjs scripts/qa/payment-storage-cleanup.test.mjs scripts/qa/payment-run-cleanup.test.mjs
+        run: node --test scripts/qa/payment-audit-evidence.test.mjs scripts/qa/payment-harness.integration.test.mjs scripts/qa/payment-storage-cleanup.test.mjs scripts/qa/payment-run-cleanup.test.mjs scripts/qa/payment-fixture.lifecycle.test.mjs
       - name: Verify release documentation is synchronized
         run: |
           node scripts/qa/verify-release-documentation.mjs --manifest test-results/documentation-sync-source.json
@@ -113,7 +115,7 @@ jobs:
       - name: Install Chromium for first-login certification
         run: pnpm --filter @intra/shell exec playwright install --with-deps chromium
       - name: Verify browser audit visibility and readiness contracts
-        run: node --test scripts/qa/audit-disclosure.browser.test.mjs scripts/qa/quality-validation-workflow.browser.test.mjs
+        run: node --test scripts/qa/audit-disclosure.browser.test.mjs scripts/qa/quality-validation-workflow.browser.test.mjs scripts/qa/route-evidence.browser.test.mjs scripts/qa/evidence-upload.browser.test.mjs
       - name: Complete first-login role orientations on desktop
         env:
           AUDIT_VIEWPORT: desktop-1440

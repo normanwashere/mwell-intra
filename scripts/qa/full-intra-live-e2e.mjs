@@ -1443,30 +1443,62 @@ async function captureScrollableEvidenceForPage(
   page,
   targetPath,
   quality = 72,
+  mask = [],
 ) {
   await mkdir(path.dirname(targetPath), { recursive: true });
-  const scrollContext = await page.evaluate(() => {
+  const scrollHandle = await page.evaluateHandle(() => {
     const documentScroller = document.scrollingElement;
     const main = document.querySelector("main");
+    const visible = (element) => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return !element.closest('[hidden], [inert], [aria-hidden="true"]') &&
+        style.display !== "none" && style.visibility !== "hidden" &&
+        Number(style.opacity) !== 0 && rect.width > 0 && rect.height > 0 &&
+        rect.bottom > 0 && rect.top < innerHeight && rect.right > 0 && rect.left < innerWidth;
+    };
+    const dialogs = [...document.querySelectorAll('dialog[open], [role="dialog"]')].filter(visible);
+    const dialog = dialogs.findLast((element) => element.matches(":modal")) ??
+      dialogs.findLast((element) => element.contains(document.activeElement)) ??
+      dialogs.findLast((element) => {
+        const rect = element.getBoundingClientRect();
+        const hit = document.elementFromPoint(
+          Math.max(0, Math.min(innerWidth - 1, rect.left + rect.width / 2)),
+          Math.max(0, Math.min(innerHeight - 1, rect.top + rect.height / 2)),
+        );
+        return hit && element.contains(hit);
+      }) ?? dialogs.at(-1);
+    // Keep an element handle: a modal's scroll body is often a nested div, not main.
+    const dialogScroller = dialog && [dialog, ...dialog.querySelectorAll("*")]
+      .filter((element) => visible(element) &&
+        !element.matches('input, textarea, select, [contenteditable="true"]') &&
+        element.scrollHeight > element.clientHeight + 8 &&
+        /auto|scroll|overlay/.test(getComputedStyle(element).overflowY))
+      .sort((left, right) => right.clientWidth * right.clientHeight - left.clientWidth * left.clientHeight)[0];
     const scrollElement =
-      main &&
+      dialog ? (dialogScroller ?? dialog) : main &&
       main.scrollHeight > main.clientHeight + 8 &&
       /auto|scroll/.test(getComputedStyle(main).overflowY)
         ? main
         : documentScroller;
-    if (!scrollElement) {
-      return { nested: false, originalTop: 0, maxScroll: 0, step: 1 };
+    const ancestors = new Set([documentScroller, main]);
+    for (let element = scrollElement; element; element = element.parentElement) {
+      ancestors.add(element);
     }
     return {
-      nested: scrollElement !== documentScroller,
-      originalTop: scrollElement.scrollTop,
-      maxScroll: Math.max(
-        0,
-        scrollElement.scrollHeight - scrollElement.clientHeight,
-      ),
-      step: Math.max(1, Math.floor(scrollElement.clientHeight * 0.8)),
+      scrollElement,
+      originalPositions: [...ancestors].filter(Boolean).map((element) => ({
+        element, left: element.scrollLeft, top: element.scrollTop,
+      })),
     };
   });
+  const scrollContext = await scrollHandle.evaluate(({ scrollElement }) => ({
+      maxScroll: Math.max(
+        0,
+        (scrollElement?.scrollHeight ?? 0) - (scrollElement?.clientHeight ?? 0),
+      ),
+      step: Math.max(1, Math.floor((scrollElement?.clientHeight ?? 1) * 0.8)),
+  }));
   const offsets = [];
   for (
     let top = 0;
@@ -1480,44 +1512,45 @@ async function captureScrollableEvidenceForPage(
   const extension = path.extname(targetPath);
   const base = targetPath.slice(0, -extension.length);
   const screenshots = [];
-  for (let index = 0; index < uniqueOffsets.length; index += 1) {
-    await page.evaluate(
-      ({ nested, top }) => {
-        const scrollElement = nested
-          ? document.querySelector("main")
-          : document.scrollingElement;
-        scrollElement?.scrollTo(0, top);
-      },
-      { nested: scrollContext.nested, top: uniqueOffsets[index] },
-    );
-    await page.waitForTimeout(120);
-    const framePath =
-      uniqueOffsets.length === 1
-        ? targetPath
-        : `${base}-frame-${String(index + 1).padStart(2, "0")}${extension}`;
-    await page.screenshot({
-      path: framePath,
-      type: "jpeg",
-      quality,
-      fullPage: false,
-    });
-    screenshots.push(
-      path.relative(process.cwd(), framePath).replaceAll("\\", "/"),
-    );
+  try {
+    for (let index = 0; index < uniqueOffsets.length; index += 1) {
+      await scrollHandle.evaluate(
+        ({ scrollElement }, top) => {
+          scrollElement?.scrollTo({ left: scrollElement.scrollLeft, top, behavior: "instant" });
+        },
+        uniqueOffsets[index],
+      );
+      await page.waitForTimeout(120);
+      const framePath =
+        uniqueOffsets.length === 1
+          ? targetPath
+          : `${base}-frame-${String(index + 1).padStart(2, "0")}${extension}`;
+      await page.screenshot({
+        path: framePath,
+        type: "jpeg",
+        quality,
+        fullPage: false,
+        mask,
+      });
+      screenshots.push(
+        path.relative(process.cwd(), framePath).replaceAll("\\", "/"),
+      );
+    }
+  } finally {
+    try {
+      await scrollHandle.evaluate(({ originalPositions }) => {
+        for (const { element, left, top } of originalPositions) {
+          element.scrollTo({ left, top, behavior: "instant" });
+        }
+      });
+    } finally {
+      await scrollHandle.dispose();
+    }
   }
-  await page.evaluate(
-    ({ nested, top }) => {
-      const scrollElement = nested
-        ? document.querySelector("main")
-        : document.scrollingElement;
-      scrollElement?.scrollTo(0, top);
-    },
-    { nested: scrollContext.nested, top: scrollContext.originalTop },
-  );
   return screenshots;
 }
 
-async function captureRouteFailureEvidence(
+async function captureRouteEvidence(
   page,
   { viewport, role, route, state = "failed" },
 ) {
@@ -1530,8 +1563,32 @@ async function captureRouteFailureEvidence(
     page,
     screenshotPath,
     70,
+    // Mask even revealed passwords and other populated form fields without editing them.
+    [page.locator("input, textarea, [contenteditable='true']")],
   );
-  return screenshots[0] ?? null;
+  if (!screenshots.length) throw new Error("No route screenshot evidence captured.");
+  return screenshots;
+}
+
+async function attachRouteEvidence(page, routeResult, identity) {
+  try {
+    const evidenceScreenshots = await captureRouteEvidence(page, identity);
+    return {
+      ...routeResult,
+      evidenceScreenshot: evidenceScreenshots[0],
+      evidenceScreenshots,
+      evidenceCaptureError: null,
+    };
+  } catch {
+    // Do not leak page values or provider errors through an evidence failure.
+    return {
+      ...routeResult,
+      expectationMet: false,
+      evidenceScreenshot: null,
+      evidenceScreenshots: [],
+      evidenceCaptureError: "Route screenshot evidence capture failed.",
+    };
+  }
 }
 
 async function auditRoute(page, route) {
@@ -2027,7 +2084,8 @@ async function legalInviteVendorInteractionWorkflow(page, marker) {
       (await submit.isEnabled()),
     finalUrl: page.url().replace(baseUrl, ""),
     text: audit.text.slice(0, 260),
-    deliveryStatus: `certified-on-${vendorDeliveryViewport}`,
+    deliveryStatus: "not-attempted-on-this-viewport",
+    deliveryCertificationViewport: vendorDeliveryViewport,
     interactionSurfaceOnly: true,
   };
 }
@@ -2524,6 +2582,7 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
     product: `${marker}-product`,
     serializedIssueProduct: `${marker}-serialized-issue-product`,
     serializedIssueUnit: `${marker}-serialized-issue-unit`,
+    // Keep mixed case to certify canonical matching against normalized inventory.
     serializedIssueSerial: `${marker}-SERIAL-HELD`,
     serializedIssueReceipt: `${marker}-serialized-issue-receipt`,
     request: `req_${marker}-receipt-request`,
@@ -5214,6 +5273,16 @@ async function task3FinanceStockApprovalDenial(page, fixture) {
   };
 }
 
+async function waitForUploadedEvidence(dialog, filename) {
+  const uploaded = dialog.getByText(filename, { exact: true });
+  const error = dialog.getByRole("alert");
+  await uploaded.or(error).first().waitFor({ state: "visible" });
+  if (await error.count()) {
+    throw new Error(`Evidence upload failed: ${(await error.allTextContents()).join("; ")}`);
+  }
+  await uploaded.waitFor({ state: "visible" });
+}
+
 async function task3SupervisorExcessFinalDisposition(page, fixture) {
   const workItems = await callRpcAsBrowserUser(
     page,
@@ -5261,8 +5330,7 @@ async function task3SupervisorExcessFinalDisposition(page, fixture) {
     mimeType: "image/png",
     buffer: await custodyDialog.screenshot(),
   });
-  await custodyDialog.getByText(`${fixture.marker}-QA-excess-custody.png`, { exact: true })
-    .waitFor({ state: "visible" });
+  await waitForUploadedEvidence(custodyDialog, `${fixture.marker}-QA-excess-custody.png`);
   await custodyDialog
     .getByRole("button", { name: "Record final disposition" })
     .click();
@@ -8408,15 +8476,19 @@ if (runRouteAudit) {
             while (routeQueue.length) {
               const route = routeQueue.shift();
               try {
-                const routeResult = await auditRoute(page, route);
-                if (routeNeedsFailureEvidence(routeResult)) {
-                  routeResult.evidenceScreenshot =
-                    await captureRouteFailureEvidence(page, {
-                      viewport: viewport.name,
-                      role: user.role,
-                      route: route.path,
-                    }).catch(() => null);
-                }
+                const auditResult = await auditRoute(page, route);
+                const routeResult = await attachRouteEvidence(
+                  page,
+                  auditResult,
+                  {
+                    viewport: viewport.name,
+                    role: user.role,
+                    route: route.path,
+                    state: routeNeedsFailureEvidence(auditResult)
+                      ? "failed"
+                      : route.expectedAccess,
+                  },
+                );
                 routeResults.push(routeResult);
                 if (
                   route.expectedAccess === "allowed" &&
@@ -8436,22 +8508,22 @@ if (runRouteAudit) {
                   }
                 }
               } catch (error) {
-                const evidenceScreenshot = await captureRouteFailureEvidence(
+                const routeResult = await attachRouteEvidence(
                   page,
+                  {
+                    route: route.path,
+                    class: "navigation-error",
+                    expectationMet: false,
+                    error: String(error.message || error).slice(0, 220),
+                  },
                   {
                     viewport: viewport.name,
                     role: user.role,
                     route: route.path,
                     state: "navigation-error",
                   },
-                ).catch(() => null);
-                routeResults.push({
-                  route: route.path,
-                  class: "navigation-error",
-                  expectationMet: false,
-                  evidenceScreenshot,
-                  error: String(error.message || error).slice(0, 220),
-                });
+                );
+                routeResults.push(routeResult);
               }
             }
           }

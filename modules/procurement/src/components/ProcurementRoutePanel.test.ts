@@ -23,4 +23,7 @@ it('explains high-value goods without calling them an RFP', () => {
   expect(html).toContain('Competitive bidding');
   expect(html).toContain('Formal bid controls');
   expect(html).not.toContain('Request for Proposal');
+  const summary = html.match(/<summary[^>]*class="([^"]+)"[^>]*>Why this route and policy profile<\/summary>/);
+  expect(summary?.[1]?.split(' ')).toContain('min-h-11');
+  expect(summary?.[1]?.split(' ')).toContain('py-3');
 });

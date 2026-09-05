@@ -31,6 +31,20 @@ describe('inspection line identity', () => {
     expect(pending).toHaveLength(1);
     expect(pending[0]).toMatchObject({ quantity: 5, id: 'receipt-shirt-l-1' });
   });
+  it('reconciles canonical inspections with mixed-case receipt evidence without crossing line or bin identity', async () => {
+    const data = await makeRepo().getData();
+    data.receipts = [{ id: 'receipt', locationId: 'main', actor: 'receiver', createdAt: '2026-09-01', lines: [
+      { productId: 'shirt-l', quantity: 1, procurementLineId: 'A', binId: 'bin-A', serialNumbers: [' Mixed-Serial '] },
+    ] }];
+    data.returns = [];
+    const evidence = JSON.stringify(data.receipts);
+    const resolved = inspection({ quantity: 1, serialNumber: 'MIXED-SERIAL', procurementPoLineId: 'A', binId: 'bin-A' });
+    expect(pendingQualityWork(data, [resolved])).toEqual([]);
+    for (const change of [{ serialNumber: 'FOREIGN' }, { procurementPoLineId: 'B' }, { binId: 'bin-B' }]) {
+      expect(pendingQualityWork(data, [{ ...resolved, ...change }])).toHaveLength(1);
+    }
+    expect(JSON.stringify(data.receipts)).toBe(evidence);
+  });
   it('keeps different procurement lines independent', async () => {
     const data = await makeRepo().getData();
     data.receipts = [{ id: 'receipt', locationId: 'main', actor: 'receiver', createdAt: '2026-09-01', lines: [

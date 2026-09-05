@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef } from "react";
 import Link from "next/link.js";
 import { useRouter, useSearchParams } from "next/navigation.js";
 import { useSession } from "@intra/auth";
+import { MODULES } from "@intra/rbac";
 import { Badge, Button, Icon, Sheet } from "@intra/ui";
 import { OPERATING_PERSONAS } from "./personas";
 import { useLearning } from "./LearningProvider";
@@ -13,13 +14,14 @@ import { AssessmentRunner } from "./AssessmentRunner";
 import { PolicyAcknowledgment } from "./PolicyAcknowledgment";
 import { assessmentQuestionsFor, policyDocumentFor } from "./content";
 import { getTrainingAdapter } from "./training/registry";
-import { supportsEmbeddedTraining } from "./catalog";
+import { ROLE_CURRICULA, supportsEmbeddedTraining } from "./catalog";
 import { sharedCompletionKey } from "./requirementIdentity";
 import {
   roleOrientationState,
   sanitizeOnboardingReturnPath,
 } from "./orientationGate";
 import type {
+  Certification,
   RequirementDefinition,
   RequirementProgress,
   RequirementProgressState,
@@ -49,6 +51,20 @@ const capabilityLabel = (value: string) =>
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+
+function certificationContext(certification: Certification): string {
+  const module = MODULES[certification.capability.module];
+  const curriculum = ROLE_CURRICULA.find(
+    (item) =>
+      item.id === certification.curriculumId &&
+      item.version === certification.curriculumVersion &&
+      item.module === certification.capability.module,
+  );
+  const role = curriculum
+    ? Object.entries(module.roles).find(([key]) => key === curriculum.role)?.[1]
+    : undefined;
+  return `${module.label} / ${role?.label ?? "Role context unavailable"}`;
+}
 
 const lockLabel = (reason: string) =>
   reason === "retraining_required"
@@ -741,6 +757,9 @@ export function OnboardingCenter({
                     <p className="text-sm text-ink">
                       {capabilityLabel(certification.capability.capability)}
                     </p>
+                    <p className="break-words text-xs text-muted">
+                      {certificationContext(certification)}
+                    </p>
                     {certification.expiresAt && (
                       <p className="text-xs text-muted">
                         Valid until{" "}
@@ -770,6 +789,9 @@ export function OnboardingCenter({
                     </p>
                     <p className="text-sm text-ink">
                       {capabilityLabel(certification.capability.capability)}
+                    </p>
+                    <p className="break-words text-xs text-muted">
+                      {certificationContext(certification)}
                     </p>
                     {certification.expiresAt &&
                       !certification.revokedAt &&

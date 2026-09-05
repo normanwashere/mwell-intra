@@ -2,6 +2,12 @@
 
 ## September 5 Candidate Handover Gate
 
+For multi-role users, explain certification module/role context alongside the capability name. Repeated names are not proof of duplicate authority. Test active and historical entries separately, preserving expiry and revocation status. Existing-completion screenshots are not evidence of fresh onboarding completion; retain that distinction in handover sign-off.
+
+Require the fully received Closed PO to reach payment preparation without artificial outstanding lines, and a mixed-case serial receipt to reach independent inspection without duplicate custody. Preserve all negative authority and evidence tests. The live route gate's automated geometry/accessibility result is not a substitute for reviewing screenshots. Retain successful-route frames as well as failure evidence, including the bottom of modal content. A mobile invitation-form review must not claim email delivery certified by another viewport whose result is unknown.
+
+For raw-receipt serialized QC, verify that the completed inspection leaves the exact unit `in_stock`, not stranded in `pending_inspection`. Demonstrate that active holds still exclude held stock from availability, including non-accepted QC outcomes. Governed release removes the hold's availability restriction without changing the unit status. Do not teach `in_stock` as permission to allocate or pick held stock; retain independent inspection and exact receipt/product/bin/serial checks.
+
 The current remediation remains a UAT candidate until its release manifest and live checks are complete. Training material must not describe candidate screenshots as production evidence.
 
 - Trainers: demonstrate exact task-to-record navigation, searchable grouped Quality work, actionable receipt validation, source-backed stock approval, and honest queued-versus-committed outcomes.

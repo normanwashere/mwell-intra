@@ -74,7 +74,7 @@ export function pendingQualityWork(data: WarehouseData, inspections: QualityInsp
       const candidates = slots.filter(slot => slot.quantity > 0
         && slot.line.productId === inspection.productId
         && (!inspection.procurementPoLineId || slot.line.procurementLineId === inspection.procurementPoLineId)
-        && (!inspection.serialNumber || slot.serialNumber === inspection.serialNumber)
+        && (!inspection.serialNumber || slot.serialNumber?.trim().toUpperCase() === inspection.serialNumber.trim().toUpperCase())
         && (!inspection.binId || slot.line.binId === inspection.binId
           || (!slot.line.binId && Boolean(inspection.procurementPoLineId || inspection.serialNumber))));
       const identities = new Set(candidates.map(slot => JSON.stringify([

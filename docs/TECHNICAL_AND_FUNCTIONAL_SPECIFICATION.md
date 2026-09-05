@@ -2,6 +2,12 @@
 
 ## September 5 Remediation Candidate
 
+Onboarding certification context resolves the capability module through the canonical module registry and the role through the exact curriculum ID, version and module. Active and historical entries retain their original status, validity and grant identity; presentation does not deduplicate permissions. An unmatched curriculum displays Role context unavailable without exposing raw identifiers. This September 6 presentation follow-up requires deployed visual verification in a new exact-commit run; CI156 has completed and does not certify this forward change.
+
+The September 6 database follow-up restores payment-document and readiness eligibility for fully received Closed POs as well as Issued POs. Acceptance, invoice, evidence version, authority and duplicate-payment controls remain separate requirements. Raw receipt Quality matching uses canonical serial identity without rewriting original receipt JSON or relaxing receipt/product/bin scope. Excess-custody upload and preview use the shell-owned authenticated client. Certification screenshot capture includes successful and denied routes and prioritizes an active dialog's scroll body; capture errors fail the evidence gate.
+
+For completed raw-receipt serialized QC, the exact matching unit transitions from `pending_inspection` to `in_stock` only after the inspection passes the independent-inspector control. Existing active holds remain, and non-accepted QC creates its hold in the same transaction. Availability subtracts active holds: `in_stock` alone does not authorize allocation or picking. Governed hold release does not change the unit status; completed raw QC must not leave a serial stranded in `pending_inspection`. This correction preserves original receipt JSON and does not change v3 PO-line custody or return routing.
+
 This addendum describes the September 5 UAT implementation and follow-up candidate. Changes through `7dd30cb` are deployed, but end-to-end acceptance remains incomplete. The subsequent title-icon and outcome-layout correction requires its own matching deployment and visual verification. Earlier release evidence below retains its original boundary; main production is untouched.
 
 - Control queues follow cursor pagination through the complete authorized result. A repeated cursor or failed later page produces an explicit retry state, never a partial-success or empty-work claim.

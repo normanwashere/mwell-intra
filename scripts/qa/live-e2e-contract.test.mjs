@@ -338,7 +338,7 @@ test("fatal audit evidence retains completed route, workflow, and cleanup progre
   assert.match(source, /\.\.\.auditProgressSnapshot\(\)/);
 });
 
-test("route failures preserve screenshot evidence in every visual shard", async () => {
+test("every route preserves screenshot evidence in every visual shard", async () => {
   const source = await readFile(
     new URL("./full-intra-live-e2e.mjs", import.meta.url),
     "utf8",
@@ -351,9 +351,9 @@ test("route failures preserve screenshot evidence in every visual shard", async 
     "utf8",
   );
 
-  assert.match(source, /captureRouteFailureEvidence/);
-  assert.match(source, /routeResult\.evidenceScreenshot/);
-  assert.match(source, /navigation-error[\s\S]*evidenceScreenshot/);
+  assert.match(source, /captureRouteEvidence/);
+  assert.match(source, /evidenceScreenshot: evidenceScreenshots\[0\]/);
+  assert.match(source, /await attachRouteEvidence\([\s\S]*class: "navigation-error"/);
   assert.match(
     workflow,
     /name: Upload route artifact[\s\S]*test-results\/evidence/,

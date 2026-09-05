@@ -67,7 +67,8 @@ export async function createPaymentAuditEvidence({
       requireValue(typeof fn === 'function', 'Browser-user read, upload and RPC callbacks required');
     }
     const po = await readPurchaseOrderAsBrowserUser(page, purchaseOrderId);
-    requireValue(po?.id === purchaseOrderId && po.status === 'issued', 'Actual issued purchase order required');
+    requireValue(po?.id === purchaseOrderId && ['issued', 'closed'].includes(po.status),
+      `Actual issued or fully received purchase order required (expected id=${purchaseOrderId}, received id=${po?.id ?? 'missing'}, status=${po?.status ?? 'missing'})`);
     requireValue(typeof po.request_id === 'string' && /^req_[A-Za-z0-9_-]{8,}$/.test(po.request_id), 'PO must have a real storage-compatible request_id');
     requireValue(typeof po.core_vendor_id === 'string' && po.core_vendor_id.length > 0, 'Vendor-bound purchase order required');
     requireValue(Number.isSafeInteger(po.acceptance_evidence_version) && po.acceptance_evidence_version >= 0, 'PO acceptance evidence version required');

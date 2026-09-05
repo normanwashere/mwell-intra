@@ -114,7 +114,7 @@ export function ProcurementRoutePanel({
       )}
 
       <details className="rounded-md border border-line bg-surface p-3">
-        <summary className="cursor-pointer text-sm font-semibold text-ink">Why this route and policy profile</summary>
+        <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-ink">Why this route and policy profile</summary>
         <div className="mt-3 space-y-2 text-xs text-muted">
           <p><strong className="text-ink">Profile:</strong> {profile.name} ({profile.code} {profile.version}) · {profile.status === 'active' ? 'active' : 'draft preview'}</p>
           <p><strong className="text-ink">Source document:</strong> {profile.sourceDocumentStatus === 'approved' ? 'approved' : 'updated visual draft for review'}</p>

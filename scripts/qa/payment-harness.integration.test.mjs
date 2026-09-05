@@ -60,6 +60,14 @@ test('actual integration verifies auth endpoint before browser PO read, upload a
     h.calls.filter(call => call.rpc).map(call => call.rpc.attachment.storage_path));
 });
 
+test('browser adapter preserves a fully received closed PO and registers actual evidence', async () => {
+  const h = adapterFixture();
+  h.po.status = 'closed';
+  const references = await h.run();
+  assert.equal(Object.keys(references).length, 3);
+  assert.equal(h.calls.filter(call => call.rpc).length, 3);
+});
+
 for (const failure of ['expired user', 'service role', 'missing token', 'changed session', 'hidden PO', 'upload RLS', 'registration RLS']) {
   test(`actual browser adapter fails closed on ${failure}`, async () => {
     const h = adapterFixture();
