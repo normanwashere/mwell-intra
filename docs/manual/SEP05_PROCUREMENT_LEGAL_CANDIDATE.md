@@ -1,6 +1,6 @@
 # Procurement And Legal - September 05 Candidate
 
-**CANDIDATE ONLY - PENDING DEPLOYMENT AND ACCEPTANCE. NOT LIVE OPERATING GUIDANCE.**
+**UAT RELEASE CANDIDATE - DEPLOYED SEPTEMBER 5; END-TO-END ACCEPTANCE PENDING.** These procedures describe the current UAT implementation at https://mwell-intra-uat.vercel.app. Main production has not been promoted. Deployment is not certification of every approval, vendor, payment, or evidence-delivery scenario.
 
 This supplement describes proposed behavior in the September 05 remediation working tree. It does not amend the main manual, certify deployment, authorize a policy exception, or authorize live test transactions. Procurement/Legal owners must review it before publication. Existing approved policy, current certification, named assignments, separation of duties, and database authorization remain controlling.
 

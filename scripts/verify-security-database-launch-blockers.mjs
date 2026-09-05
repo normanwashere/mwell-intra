@@ -1,6 +1,7 @@
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { QUALITY_CHAIN_CONTRACT_SQL } from "./quality-inspection-chain-contract.mjs";
 
 const require = createRequire(path.resolve("apps/shell/package.json"));
 const { createClient } = require("@supabase/supabase-js");
@@ -95,12 +96,7 @@ with checks(label, present) as (
     ),
     (
       'warehouse.inspect_quality exact PO-line delegate',
-      pg_catalog.pg_get_functiondef(
-        'warehouse.inspect_quality(jsonb)'::pg_catalog.regprocedure
-      ) ~ 'private[.]warehouse_inspect_quality_v2[[:space:]]*[(][[:space:]]*payload[[:space:]]*[)]'
-      and pg_catalog.pg_get_functiondef(
-        'warehouse.inspect_quality(jsonb)'::pg_catalog.regprocedure
-      ) !~ 'private[.]warehouse_inspect_quality[[:space:]]*[(][[:space:]]*payload[[:space:]]*[)]'
+      (${QUALITY_CHAIN_CONTRACT_SQL})
     ),
     (
       'private.warehouse_inspect_quality_v2 unavailable to authenticated',
@@ -183,45 +179,64 @@ with checks(label, present) as (
     )
 )
 select coalesce(
-  pg_catalog.array_agg(label order by label) filter (where not present),
+  pg_catalog.array_agg(label order by label) filter (where present is not true),
   array[]::text[]
 ) as missing_objects
 from checks;
 `;
 
-function normalizeArray(value) {
-  if (Array.isArray(value)) return value;
-  if (value == null) return [];
+function requiredArray(value, field) {
   if (typeof value === "string") {
     try {
-      const parsed = JSON.parse(value);
-      return Array.isArray(parsed) ? parsed : [value];
+      value = value.trim() === "{}" ? [] : JSON.parse(value);
     } catch {
-      return value === "{}" ? [] : [value];
+      throw new Error(`Invalid ${field} verification response`);
     }
   }
-  return [value];
+  if (!Array.isArray(value) || value.some(item => typeof item !== "string" || !item.trim())) {
+    throw new Error(`Invalid ${field} verification response`);
+  }
+  return value;
+}
+
+function requiredRecord(value, label) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`Invalid ${label} verification response`);
+  }
+  return value;
+}
+
+function requiredRow(result, label) {
+  if (!Array.isArray(result?.rows) || result.rows.length !== 1) {
+    throw new Error(`Invalid ${label} verification response`);
+  }
+  return requiredRecord(result.rows[0], label);
+}
+
+function verifyBoundary(value) {
+  const boundary = requiredRecord(value, "raw-boundary");
+  const raw = boundary.raw_boundaries;
+  if (!(typeof raw === "number" || (typeof raw === "string" && /^(0|[1-9]\d*)$/.test(raw.trim())))) {
+    throw new Error("Invalid raw-boundary verification response");
+  }
+  const rawBoundaries = Number(raw);
+  const examples = requiredArray(boundary.examples, "examples");
+  if (!Number.isSafeInteger(rawBoundaries) || rawBoundaries < 0 || examples.length !== rawBoundaries) {
+    throw new Error("Invalid raw-boundary verification response");
+  }
+  if (rawBoundaries !== 0) {
+    throw new Error(`${rawBoundaries} authenticated raw-cap certification-controlled RPC boundary/boundaries remain: ${examples.join(", ")}`);
+  }
+  return rawBoundaries;
 }
 
 export async function verifySecurityDatabaseLaunchBlockers(query) {
   const boundaryResult = await query(RAW_BOUNDARY_QUERY);
-  const boundary = boundaryResult.rows?.[0] ?? {};
-  const rawBoundaries = Number(boundary.raw_boundaries ?? 0);
-  const examples = normalizeArray(boundary.examples);
-
-  if (!Number.isInteger(rawBoundaries) || rawBoundaries < 0) {
-    throw new Error("Invalid raw-boundary verification response");
-  }
-  if (rawBoundaries !== 0) {
-    const detail = examples.length > 0 ? `: ${examples.join(", ")}` : "";
-    throw new Error(
-      `${rawBoundaries} authenticated raw-cap certification-controlled RPC boundary/boundaries remain${detail}`,
-    );
-  }
+  const rawBoundaries = verifyBoundary(requiredRow(boundaryResult, "raw-boundary"));
 
   const objectResult = await query(CRITICAL_OBJECT_QUERY);
-  const missingObjects = normalizeArray(
-    objectResult.rows?.[0]?.missing_objects,
+  const missingObjects = requiredArray(
+    requiredRow(objectResult, "critical-object").missing_objects, "missing_objects",
   );
   if (missingObjects.length > 0) {
     throw new Error(
@@ -258,26 +273,15 @@ export function resolveVerifierConfig(env = process.env) {
   return { url: parsed.origin, serviceRoleKey };
 }
 
-async function runCli() {
-  const { url, serviceRoleKey } = resolveVerifierConfig();
-  const client = createClient(url, serviceRoleKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+export async function verifyLaunchRpcContracts(client) {
   const { data, error } = await client
     .schema("core")
     .rpc("verify_security_database_launch_blockers");
   if (error) {
     throw new Error(`UAT launch verifier RPC failed: ${error.message}`);
   }
-  const rawBoundaries = Number(data?.raw_boundaries ?? -1);
-  const examples = normalizeArray(data?.examples);
-  const missingObjects = normalizeArray(data?.missing_objects);
-  if (rawBoundaries !== 0) {
-    const detail = examples.length > 0 ? `: ${examples.join(", ")}` : "";
-    throw new Error(
-      `${rawBoundaries} authenticated raw-cap certification-controlled RPC boundary/boundaries remain${detail}`,
-    );
-  }
+  const rawBoundaries = verifyBoundary(data);
+  const missingObjects = requiredArray(data.missing_objects, "missing_objects");
   if (missingObjects.length > 0) {
     throw new Error(
       `Critical launch objects are missing: ${missingObjects.join(", ")}`,
@@ -292,12 +296,21 @@ async function runCli() {
       `UAT launch read-contract verifier RPC failed: ${readContractError.message}`,
     );
   }
-  const missingGrants = normalizeArray(readContractData?.missing_grants);
+  const missingGrants = requiredArray(requiredRecord(readContractData, "read-contract").missing_grants, "missing_grants");
   if (missingGrants.length > 0) {
     throw new Error(
       `Critical launch grants are missing: ${missingGrants.join(", ")}`,
     );
   }
+  return { rawBoundaries, missingObjects, missingGrants };
+}
+
+async function runCli() {
+  const { url, serviceRoleKey } = resolveVerifierConfig();
+  const client = createClient(url, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { rawBoundaries, missingObjects, missingGrants } = await verifyLaunchRpcContracts(client);
   process.stdout.write(
     `Security/database launch-blocker verification passed: ${JSON.stringify({ rawBoundaries, missingObjects, missingGrants })}\n`,
   );

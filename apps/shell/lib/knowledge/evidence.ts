@@ -759,7 +759,7 @@ const ROLE_FEATURE_WALKTHROUGHS: RoleFeatureWalkthrough[] = [
     landmark: "Prepare close entry",
     label: "Prepare a Finance close entry",
     instruction:
-      "Select Prepare close entry after validating the source PO, receipt, return, adjustment, or event-settlement evidence.",
+      "When authorized, select Prepare close entry and choose a purchase order, warehouse receipt, or posted payment release by business reference in the live source picker. Returns and adjustments are not manual close sources; Event settlement follows its governed upstream workflow. This existing image identifies the entry control, not every current picker or correction control.",
     alt: "Unified Finance workspace with the Prepare close entry control identified",
     desktop: { x: 0.9161, y: 0.4471 },
     mobile: { x: 0.5, y: 0.3858 },
@@ -937,7 +937,7 @@ export const KNOWLEDGE_EVIDENCE: KnowledgeEvidence[] = executableNodes
             mobileY: 0.7649,
             label: "Investigate at the governed source",
             instruction:
-              "Open the governed source to investigate or correct a metric; Insights remains read-only.",
+              "Open the governed source to investigate or correct operational data. Authorized validation or escalation requests are tracked separately through open, acknowledged, and resolved follow-ups in My Work; this existing image identifies only the source control.",
           },
         ],
       },

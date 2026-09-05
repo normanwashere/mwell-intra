@@ -6,6 +6,10 @@ import { PGlite } from '@electric-sql/pglite';
 const actor = '11111111-1111-4111-8111-111111111111';
 const other = '22222222-2222-4222-8222-222222222222';
 const migration = await readFile(new URL('../supabase/migrations/20260828010344_receiving_saved_progress.sql', import.meta.url), 'utf8');
+const forwardMigration = await readFile(new URL('../supabase/migrations/20260905050820_receiving_draft_explicit_live_authority.sql', import.meta.url), 'utf8');
+const authority = await readFile(new URL('../supabase/migrations/20260812200000_learning_authority.sql', import.meta.url), 'utf8');
+const verifier = await readFile(new URL('./verify-security-database-launch-blockers.mjs', import.meta.url), 'utf8');
+const rawBoundaryQuery = verifier.match(/const RAW_BOUNDARY_QUERY = `([\s\S]*?)`;/)[1];
 const db = new PGlite();
 const snapshot = { version: 1, lines: [{ lineId: 'line-1', serials: ['S-1', 'unfinished-'], quantity: 2, expectedQuantity: 5 }], location: 'receiving' };
 
@@ -19,6 +23,10 @@ before(async () => {
     create schema private;
     create schema procurement;
     create schema warehouse;
+    create schema learning;
+    create function auth.role() returns text language sql stable as $$
+      select current_setting('request.jwt.claim.role', true)
+    $$;
     create function auth.uid() returns uuid language sql stable as $$
       select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
     $$;
@@ -26,9 +34,14 @@ before(async () => {
       select $1 = 'warehouse' and $2 = 'receive_stock'
         and coalesce(current_setting('test.has_cap', true), 'on') = 'on'
     $$;
-    create function core.has_live_cap(text, text) returns boolean language sql stable as $$
-      select $1 = 'warehouse' and $2 = 'receive_stock'
-        and coalesce(current_setting('test.has_live_cap', true), 'on') = 'on'
+    create table learning.mutation_capability_rules(module text, capability text);
+    insert into learning.mutation_capability_rules values ('warehouse','receive_stock');
+    create function learning.is_certification_required(text,text) returns boolean language sql as $$ select true $$;
+    create function learning.has_active_certification(uuid,text,text) returns boolean language sql stable as $$
+      select coalesce(current_setting('test.has_live_cap', true), 'on') = 'on'
+    $$;
+    create function learning.has_active_emergency_exception(uuid,text,text) returns boolean language sql stable as $$
+      select coalesce(current_setting('test.emergency', true), 'off') = 'on'
     $$;
     create table auth.users(id uuid primary key);
     insert into auth.users values ('${actor}'), ('${other}');
@@ -61,7 +74,19 @@ before(async () => {
     create table warehouse.movements(id text primary key);
     insert into warehouse.stock_levels values ('stock-1', 10);
   `);
+  // Load the real has_live_cap implementation, including its service shortcut.
+  const start = authority.indexOf('create or replace function core.has_live_cap(');
+  await db.exec(authority.slice(start, authority.indexOf('$$;', start) + 3));
   await db.exec(migration);
+  const oldFlags = (await db.query(rawBoundaryQuery)).rows[0];
+  assert.equal(oldFlags.raw_boundaries, 2);
+  const contracts = async () => (await db.query(`select p.proname,p.proacl,p.proowner,p.proargtypes::text,p.prorettype,
+    p.prosecdef,p.proconfig from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='private' and p.proname in ('receiving_draft_command','can_discard_closed_receiving_draft') order by p.proname`)).rows;
+  const beforeContracts = await contracts();
+  await db.exec(forwardMigration);
+  assert.deepEqual(await contracts(), beforeContracts);
+  assert.equal((await db.query(rawBoundaryQuery)).rows[0].raw_boundaries, 0);
 });
 
 after(async () => db.close());
@@ -70,7 +95,8 @@ async function asActor(id = actor, { live = 'on', cap = 'on', scope = 'on', role
   await db.exec('reset role');
   await db.query(`select set_config('request.jwt.claim.sub', $1, false),
     set_config('test.has_live_cap', $2, false), set_config('test.has_cap', $3, false),
-    set_config('test.read_scope', $4, false)`, [id, live, cap, scope]);
+    set_config('test.read_scope', $4, false), set_config('request.jwt.claim.role', $5, false),
+    set_config('test.emergency', 'off', false)`, [id, live, cap, scope, role]);
   await db.exec(`set role ${role}`);
 }
 
@@ -226,4 +252,53 @@ test('draft commands never mutate inventory or receipt authority and expose no a
   }
   const table = (await db.query("select relrowsecurity from pg_class where oid = 'warehouse.receiving_drafts'::regclass")).rows[0];
   assert.equal(table.relrowsecurity, true);
+});
+
+test('direct private command requires authenticated current capability and certification', async () => {
+  for (const options of [{ live: 'off' }, { cap: 'off' }]) {
+    await asActor(actor, options);
+    for (const operation of ['load', 'save', 'delete']) {
+      await assert.rejects(db.query('select private.receiving_draft_command($1,$2,$3::jsonb,$4)',
+        [operation, 'po-1', JSON.stringify(snapshot), 4]), { code: '42501' });
+    }
+  }
+  await asActor();
+  // Even if invoked through an authenticated SQL role, service JWT bypass is denied.
+  await db.exec("select set_config('request.jwt.claim.role','service_role',false)");
+  assert.equal((await db.query("select core.has_live_cap('warehouse','receive_stock') allowed")).rows[0].allowed, true);
+  await assert.rejects(db.exec("select private.receiving_draft_command('load','po-1',null,null)"), { code: '42501' });
+  await asActor();
+  assert.equal((await command('load')).version, 4);
+});
+
+test('approved emergency authority remains valid but cannot replace current RBAC', async () => {
+  await asActor(actor, { live: 'off' });
+  await db.exec("select set_config('test.emergency','on',false)");
+  assert.equal((await command('load')).version, 4);
+  await db.exec("select set_config('test.has_cap','off',false)");
+  await assert.rejects(command('load'), { code: '42501' });
+});
+
+test('closed cleanup helper and direct delete preserve actor, live authority and version gates', async () => {
+  await db.exec('reset role');
+  await db.exec("insert into procurement.purchase_orders values ('closed-contract','issued','goods')");
+  await asActor();
+  await command('save', 'closed-contract');
+  await db.exec('reset role');
+  await db.exec("update procurement.purchase_orders set status='closed' where id='closed-contract'");
+  for (const [id, options] of [[actor, { live: 'off' }], [actor, { cap: 'off' }], ['', {}]]) {
+    await asActor(id, options);
+    assert.equal((await db.query("select private.can_discard_closed_receiving_draft('closed-contract') allowed")).rows[0].allowed, false);
+  }
+  await asActor();
+  await db.exec("select set_config('request.jwt.claim.sub','22222222-2222-4222-8222-222222222222',false)");
+  assert.equal((await db.query("select private.can_discard_closed_receiving_draft('closed-contract') allowed")).rows[0].allowed, false);
+  await asActor();
+  assert.equal((await db.query("select private.can_discard_closed_receiving_draft('closed-contract') allowed")).rows[0].allowed, true);
+  for (const operation of ['load','save']) {
+    await assert.rejects(db.query('select private.receiving_draft_command($1,$2,$3::jsonb,$4)',
+      [operation,'closed-contract',JSON.stringify(snapshot),1]), { code: '42501' });
+  }
+  assert.deepEqual(await command('delete','closed-contract',0), { status:'conflict',current_version:1 });
+  assert.equal((await command('delete','closed-contract',1)).body, null);
 });

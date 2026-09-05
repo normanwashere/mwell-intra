@@ -32,6 +32,35 @@ async function createVarianceRequest({
 }
 
 describe('ApprovalsPage', () => {
+  it('keeps product and requester identity separate for two equal-value decisions', async () => {
+    const { repo, request } = await createVarianceRequest();
+    const data = await repo.getData();
+    const firstProduct = data.products.find(product => product.id === request.productId)!;
+    const otherProduct = data.products.find(product => product.id !== request.productId)!;
+    const source = data.cycleCounts.find(count => count.id === request.sourceId)!;
+    vi.spyOn(repo, 'getData').mockResolvedValue({ ...data, cycleCounts: [] });
+    vi.spyOn(repo, 'getCycleCount').mockResolvedValue({ ...source, lines: [
+      { productId: firstProduct.id, expected: 30, counted: 10 },
+      { productId: otherProduct.id, expected: 50, counted: 30 },
+    ] });
+    vi.spyOn(repo, 'listStockChangeRequests').mockResolvedValue({ rows: [
+      { ...request, canDecide: true, requestedByDisplayName: 'Ana Counter' },
+      { ...request, id: 'second-equal-value', productId: otherProduct.id, canDecide: true, requestedByDisplayName: 'Ben Counter' },
+    ] });
+    const user = userEvent.setup();
+    renderWithProviders(<ApprovalsPage />, { repo, role: 'logistics_supervisor' });
+    const queue = await screen.findByLabelText('Waiting on you approvals');
+    await user.click(within(queue).getAllByRole('button', { name: 'Review' })[0]!);
+    let dialog = await screen.findByRole('dialog', { name: 'Review stock change' });
+    expect(await within(dialog).findByText(firstProduct.name)).toBeInTheDocument();
+    expect(within(dialog).getByText('Ana Counter')).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    await user.click(within(queue).getAllByRole('button', { name: 'Review' })[1]!);
+    dialog = await screen.findByRole('dialog', { name: 'Review stock change' });
+    expect(await within(dialog).findByText(otherProduct.name)).toBeInTheDocument();
+    expect(within(dialog).getByText('Ben Counter')).toBeInTheDocument();
+    expect(within(dialog).queryByText('Ana Counter')).not.toBeInTheDocument();
+  });
   it('blocks approval when the referenced count is missing instead of approving without context', async () => {
     const { repo } = await createVarianceRequest();
     const data = await repo.getData();

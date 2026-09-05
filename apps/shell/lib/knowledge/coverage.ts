@@ -19,6 +19,12 @@ export interface KnowledgeCoverageReport {
   routeCoverage: Map<string, string[]>;
 }
 
+export function isCombinedControlName(featureId: string, name: string): boolean {
+  // This exact Finance button opens one versioned correction editor.
+  if (featureId === "warehouse-finance" && name === "Edit and resubmit") return false;
+  return /,|\band\b/i.test(name);
+}
+
 type RouteSource = Omit<LiveRouteManifestEntry, "administratorRoleIds"> & {
   administratorRoleIds?: string[];
 };
@@ -178,7 +184,7 @@ export function buildKnowledgeCoverage(
               `live feature ${feature.id} documents ${feature.fields?.length ?? 0} fields; route ${entry.route} requires at least ${entry.minimumFields}`,
             );
           for (const control of feature.controls)
-            if (/,|\band\b/i.test(control.name))
+            if (isCombinedControlName(feature.id, control.name))
               errors.push(
                 `live feature ${feature.id} has combined control name ${control.name}`,
               );

@@ -655,7 +655,6 @@ export function StorageAreasPage() {
         }
       >
         <div className="space-y-5">
-          {sourceId && <p className="break-words text-sm font-semibold">{sourceStatus?.message}</p>}
           {unconfirmed && <p role="status">{queued ? 'Putaway queued for sync, not yet committed. Capture is retained and locked until committed.' : 'Putaway was not committed. Capture is retained; review the error before retrying.'}</p>}
           {discardPutaway && <div role="alert" className="space-y-2">
             <p>Discard local putaway capture?</p>

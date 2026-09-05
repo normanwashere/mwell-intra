@@ -1,6 +1,6 @@
 # September 5 Platform and Finance Candidate
 
-**Candidate only: pending deployment and acceptance.** These changes are in the working tree. No production/UAT migration, deployment, role assignment, or live transaction was performed by this remediation task. Use the deployed manual until this candidate has passed integration and deployment approval.
+**UAT release candidate: deployed September 5; end-to-end acceptance pending.** These procedures describe the current UAT implementation at https://mwell-intra-uat.vercel.app. The matching migrations are installed. Main production has not been promoted, and deployment alone does not certify every transaction, role, or evidence-delivery path.
 
 ## Finance Review
 
@@ -22,6 +22,8 @@ Posting requires an independent Finance actor. Reconciliation excludes the prepa
 
 Read-only Finance users can request authorized evidence inspection without gaining preparation or posting rights. The server resolves the entry's registered evidence and checks its source. Supported private files are delivered with five-minute signed URLs; missing, expired, mismatched, or restricted evidence fails closed. Receipt/payment-release inspection can open its governed business record rather than invent a document file.
 
+Payment-read visibility follow-up, pending the next frontend deployment: on the owning Procurement PO, payment-document lookup requires an employee with effective Procurement `author_po`, `admin`, or `view_finance`. A restricted Operations PO/acceptance viewer keeps the existing acceptance workflow but sees **Payment evidence is not in your scope** without fetching private payment documents. Read-only Finance retains authorized previews without gaining mutation rights. Genuine authorized lookup failures remain visible; an access change discards pending old responses. This caller correction changes no SQL authority and requires no new migration. Parent will verify OpsLead at both viewports after deployment; no new screenshot capture is claimed here.
+
 ## Product and My Work
 
 Product readiness and pricing cards show the recorded decision reason, actor, and time. Approved readiness distinguishes pending Operations handoff from completed acknowledgement, with actor/time attribution. Record links anchor to the individual card. This is current-version readback, not a complete multi-event history viewer.
@@ -38,11 +40,11 @@ Admin directory search, status, user type, page counts, and complete role arrays
 
 ## Deployment and Verification Boundary
 
-- Apply `20260905091000_platform_finance.sql` before the separate `20260905091001_platform_work_union.sql`. The second timestamp avoids duplicate migration versions. The union preserves the installed prior My Work function and rebinds its view.
+- UAT already has the Finance migration followed by the separate My Work union migration. For a new environment, apply `20260905091000_platform_finance.sql` before `20260905091001_platform_work_union.sql`. Reconcile the installed names and definitions before replaying migrations. The union preserves the installed prior My Work function and rebinds its view.
 - Maxwell review corrections reject NULL/out-of-range page sizes and compare TEXT document IDs with UUID action-evidence IDs through explicit text casts.
 - Current evidence: isolated actual-migration PGlite regression passes, including posted payment-release reference search with direct table SELECT revoked; Finance 59 tests, Product 18, Work 9, Insights 24, shell navigation 26 and protected evidence API 3 tests passed. The shell typecheck passes after correcting Warehouse ownership to resolve_exceptions. See the remediation manifest for subsequent updates.
 - Latest Finance suite passes 60/60, including payment-release business-reference selection and submission-time reauthorization failure. Actual migration PGlite rerun passes.
 - Full prerequisite-schema migration replay, complete storage/certification/SoD chain, and authenticated desktop/mobile acceptance remain release gates. Local port 3017 demo UI was inspected at 1440x900 and 390x844 after normal profile sign-in and actual orientation completion, without auth injection or live transaction writes. Payment identity/aging and close drawer fit without page-level horizontal overflow; evidence images are in `outputs/sep05-remediation/platform-finance-*.png`. Demo manual fields do not verify the live canonical picker.
-- No claim is made that the candidate is deployed, every audit acceptance criterion is closed, or untested source kinds are supported.
+- UAT deployment does not mean every audit acceptance criterion is closed or untested source kinds are supported. Main production is not promoted.
 
 Canonical findings and current residuals: `outputs/sep05-remediation/platform-finance.md` (PF-01 through PF-12; PV-01, PV-02, PV-05; PV-03/PV-04 confirm PF-08/PF-11).

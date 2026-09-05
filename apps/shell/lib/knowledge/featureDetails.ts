@@ -2118,8 +2118,44 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
     "warehouse-finance": {
       controls: [
         control(
+          "Prepare close entry",
+          "Search by business reference and select a purchase order, warehouse receipt, or posted payment release. The live picker derives the canonical type, ID, module, and reference; inspect party, date, and amount before choosing source-bound evidence.",
+          "Effective capability and certification are required. Source links and restored drafts are reauthorized before saving. Returns and adjustments are not manual close sources; direct request/pack preparation is unavailable and Event settlements remain system-generated. Payment-release lookup also requires Procurement finance-read access.",
+          "An evidence-backed ready entry is prepared for an independent poster. Browser recovery retains source identity but not transient signed URLs; demo manual fields do not represent the live picker.",
+        ),
+        control(
+          "Open evidence",
+          "Previews authorized registered evidence or opens the governed receipt/payment-release record for inspection without performing a close mutation.",
+          "Source policy is checked independently of write authority. On the owning Procurement PO, payment-document lookup requires an employee with effective author_po, admin, or view_finance in Procurement. PO or acceptance access alone, including restricted Operations viewers, does not fetch payment documents and shows Payment evidence is not in your scope. Restricted, missing, expired, or mismatched evidence fails closed; inspect the reported error instead of substituting a raw storage path.",
+          "Permitted private-file previews use short-lived signed URLs that are not saved in browser drafts. Read-only inspection does not enable Prepare, Post, or Reconcile.",
+        ),
+        control(
+          "Flag",
+          "Enter a fresh required correction reason for a draft or ready entry.",
+          "Close authority is required; posted and reconciled entries cannot be flagged through this control.",
+          "The entry records the correction reason and reviewer attribution for follow-up.",
+        ),
+        control(
+          "Edit and resubmit",
+          "Open an eligible non-Event draft, ready, or exception entry, correct its values, and prepare it again under the same ID and expected version.",
+          "Posted and reconciled entries are immutable. Use the governed Event correction route for system-generated settlement entries; stale or rejected edits retain entered values for recovery.",
+          "The corrected entry returns to ready without creating a replacement lineage or overwriting a separate new-entry browser draft.",
+        ),
+        control(
+          "Post",
+          "Post a ready entry after inspecting its eligible source evidence.",
+          "The poster must have effective close capability and certification and must differ from the preparer and any Event settlement approver. Read the visible disabled reason when ineligible.",
+          "The posted entry records its actor and time and awaits independent reconciliation.",
+        ),
+        control(
+          "Reconcile",
+          "Reconcile an evidence-backed posted entry using a separate eligible Finance actor.",
+          "The reconciler must differ from the preparer, poster, and any Event settlement approver; source/evidence and effective authority checks remain mandatory.",
+          "The entry records reconciliation attribution and remains immutable.",
+        ),
+        control(
           "Review next payment pack",
-          "Opens the next procurement payment-readiness record awaiting Finance review.",
+          "Opens the same priority payment shown first in the queue: actionable ready or accepted-but-unpaid packs, ordered by due date, oldest preparation, and stable identity. Missing due dates are explicitly labeled.",
           "The user needs Procurement Finance scope and the purchase order must remain visible.",
           "The owning procurement record opens with its current evidence and decision state.",
         ),
@@ -2137,7 +2173,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         control(
           "Retry unavailable sources",
-          "Reloads the Finance read models when one or more sources report an error.",
+          "Reloads the Finance workspace sources together when a source reports an error; the retry is not limited to one source.",
           "Retry only after checking whether valid partial data is already visible.",
           "Available sources remain visible and recovered sources rejoin the combined view.",
         ),
@@ -2778,6 +2814,12 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
     "procurement-request-detail": {
       controls: [
         control(
+          "Edit draft / revise rejected request",
+          "Open the revision editor, correct the title, business need, vendor or lines, add governed attachments, and save under the same request ID.",
+          "Only the owner with current create_request authority may revise a draft or rejected request. Active sourcing or a non-cancelled PO blocks revision; a changed expected revision requires reload.",
+          "The request returns to draft. Prior signed approvals and exception references stay in protected audit history; prior routes and exceptions are invalidated and failed sourcing is cancelled without deleting its evidence. Confirm a new route and obtain fresh approvals before commitment.",
+        ),
+        control(
           "Confirm sourcing route",
           "Records the officer-selected route and risk facts.",
           "The actor needs manage_rfp and current request data.",
@@ -2846,13 +2888,13 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         control(
           "Open decision",
           "Loads the assigned approval step into the decision sheet.",
-          "The step must be pending for the current tier or user.",
+          "The step must be the next pending named assignment for this user, with current effective tier authority and certification; a tier label alone is insufficient.",
           "Request evidence and decision controls appear.",
         ),
         control(
           "Approve request",
           "Records approval for the current ladder step.",
-          "The actor needs approval capability or resolved tier authority.",
+          "The assigned actor needs an active profile and role, an effective unexpired tier grant, required capability and certification, and a fresh electronic signature. Requesters cannot decide their own request.",
           "The step closes and the next tier may activate.",
         ),
         control(
@@ -2947,9 +2989,15 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         control(
           "Prepare payment",
-          "Assembles receipt, acceptance, and invoice readiness evidence.",
-          "The actor needs author_po and required matching evidence.",
-          "A payment-readiness pack is prepared.",
+          "Upload and select invoice, acceptance and tax documents for this PO; supply foreign-vendor evidence when accreditation jurisdiction requires it. Submit the invoice identity and amounts for server matching.",
+          "Current preparation authority and document IDs bound to the same PO, vendor, purpose and acceptance version are required. Arbitrary paths, stale evidence and normalized duplicate vendor invoices are rejected.",
+          "A payment-readiness pack retains the selected document IDs and computed match; it is not a payment release.",
+        ),
+        control(
+          "Correct payment evidence",
+          "Refresh the latest pack and prepare its linked correction with current uploaded evidence, retaining the same invoice identity and PO.",
+          "Only a returned pack, or an accepted/released pack with stale evidence, can be corrected. A current accepted pack is not replaceable. Any released amount blocks replacement and requires Finance reconciliation; do not create another invoice identity to bypass the restriction.",
+          "An eligible correction retains its predecessor and requires a new Finance review; the previous decision and payment history are not erased.",
         ),
         control(
           "Review payment",
@@ -3049,9 +3097,15 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         control(
           "Request correction",
-          "Returns one requirement to the vendor with a specific issue.",
-          "A non-empty correction reason is required.",
-          "The item and case show correction required.",
+          "Record a specific issue against the submitted source version and request a corrected working copy from the vendor.",
+          "Current Legal review authority, an eligible case and a meaningful correction reason are required. Complete uploads do not prevent a factual correction request.",
+          "The case shows correction required, linked to the source version; the original submission remains unchanged and the vendor must sign the corrected revision afresh.",
+        ),
+        control(
+          "Record manual reminder",
+          "Record follow-up after contacting the vendor through the approved channel.",
+          "Retain an accurate activity note; this action does not send an email or establish delivery.",
+          "The case timeline retains a manual reminder record, not an automatic-delivery confirmation.",
         ),
         control(
           "Approve case",
@@ -3337,9 +3391,15 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
       controls: [
         control(
           "Save section",
-          "Persists the current vendor application section as a draft.",
-          "The case must belong to the vendor and entered values must validate.",
-          "Draft answers remain available after reload.",
+          "Use Save now to persist the vendor working copy against its retained draft version.",
+          "The case must belong to the vendor and remain editable. On a version conflict, review the latest saved content before reapplying changes; do not overwrite a newer draft or retry stale content blindly.",
+          "The saved draft and concurrency version remain available after reload; an ordinary submitted application stays read-only.",
+        ),
+        control(
+          "Discard draft",
+          "Confirm discarding the current working copy only when those unsent edits are no longer needed.",
+          "Discard is recorded and checks the current version. It does not delete the submitted source or reset the version to zero.",
+          "A later draft starts from the retained concurrency cursor; reload and review a conflict rather than recreating stale content.",
         ),
         control(
           "Previous section",
@@ -3355,9 +3415,9 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         control(
           "Submit application",
-          "Creates the immutable vendor submission snapshot.",
-          "All required sections, evidence, and declarations must pass.",
-          "The application becomes submitted for Legal review.",
+          "Review the working copy, capture a fresh signature, and use Sign and submit to create the immutable submission.",
+          "All required facts, evidence and declarations must pass. A correction must match Legal's source version and expected submission version; an old signature or stale draft is not reusable.",
+          "The next submission returns to Legal under the same case, retaining the original snapshot and linked version history.",
         ),
         control(
           "Back to case",
@@ -3411,9 +3471,9 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         field(
           "Submission version",
-          "Identifies the requirement policy used for the snapshot.",
+          "Identifies the saved application revision and the correction's submitted source, alongside the requirement policy.",
           true,
-          "The version is system-selected and immutable after submission.",
+          "The expected source and retained draft versions are system-managed. A mismatch requires review of the latest state; never reset or guess a version.",
         ),
       ],
     },
@@ -3579,7 +3639,25 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Request validation or escalation",
           "Routes an indicator reference and controlled reason to the accountable source owner.",
           "The metric must be visible to the caller; protected values, source paths, and free-text detail are never copied into the handoff.",
-          "An attributable follow-up reference is created for validation or escalation.",
+          "An open follow-up is created with a stable command identity across uncertain retries. Follow its tracking link to My Work instead of raising a duplicate request.",
+        ),
+        control(
+          "Track follow-ups in My Work",
+          "Read Leadership follow-ups as the requester or authorized owner, including open, acknowledged, and resolved states.",
+          "Unrelated users cannot read or transition the follow-up. Operational source details retain their separate access restrictions; a failed queue read offers Retry follow-ups rather than claiming no work.",
+          "Acknowledgement and resolution actor/time and the resolution record reference remain visible after reload.",
+        ),
+        control(
+          "Acknowledge",
+          "An authorized owner accepts an open Leadership follow-up in My Work.",
+          "Only the mapped owner capability permits this transition; requester visibility alone does not permit action. The item must still be open.",
+          "The status moves from open to acknowledged with actor/time attribution; resolution remains a separate action.",
+        ),
+        control(
+          "Resolve",
+          "An authorized owner enters a controlled Resolution record reference for an acknowledged follow-up, then selects Resolve.",
+          "Only the mapped owner capability permits resolution. The reference is required and must identify the governed resolution record, not copy protected source data.",
+          "The status moves from acknowledged to resolved with actor/time and reference attribution; resolved work leaves the actionable queue while tracking remains available.",
         ),
         control(
           "Retry",
@@ -3621,13 +3699,13 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Decide go-live",
           "Approves or rejects launch readiness as the Product-owned final decision.",
           "The Product Owner needs decide_go_live, complete criteria, and an attributable decision reason.",
-          "The named decision and timestamp are stored; approval enables the Operations handoff.",
+          "The current version displays the exact decision reason, actor, and time; approval leaves Operations handoff pending until acknowledged.",
         ),
         control(
           "Acknowledge Operations handoff",
           "Confirms that Operations accepted the approved launch conditions.",
           "Only an Operations Partner can acknowledge, and the Product decision must already be approved.",
-          "The handoff records the accepting actor and time once without changing Product's decision; repeated or stale acknowledgement attempts are rejected.",
+          "The handoff changes from pending to completed with accepting actor/time, without changing Product's decision; repeated or stale acknowledgement attempts are rejected.",
         ),
         control(
           "Submit pricing proposal",
@@ -3639,7 +3717,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Decide pricing proposal",
           "Lets a Product Owner approve or reject a submitted price proposal.",
           "The decision requires approve_pricing, a reason, and a different actor from the proposer.",
-          "The proposal keeps its independent decision, reason, and effective date; an approved price activates only when due.",
+          "The current proposal displays its independent decision reason, actor/time, and effective date; an approved price activates only when due. Current-version readback is not a complete historical timeline.",
         ),
       ],
       fields: [

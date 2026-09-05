@@ -5,6 +5,8 @@ import test from "node:test";
 import { PGlite } from "@electric-sql/pglite";
 
 import { verifySecurityDatabaseLaunchBlockers } from "./verify-security-database-launch-blockers.mjs";
+import { QUALITY_CHAIN_CONTRACT_SQL } from "./quality-inspection-chain-contract.mjs";
+import { installActualQualityChain, installPriorReadVerifier, verifierMigration } from "./quality-inspection-verifier-fixture.mjs";
 
 const MIGRATION = resolve(
   import.meta.dirname,
@@ -239,6 +241,47 @@ test("convergence migration executes and enforces critical launch contracts", as
     `);
 
     await db.exec(migrationSql);
+    await installActualQualityChain(db);
+    await installPriorReadVerifier(db);
+    assert(verifierMigration.includes(QUALITY_CHAIN_CONTRACT_SQL.trim()), "local and installed verifier pin exactly the same chain");
+    await db.exec("select set_config('request.jwt.claim.role','service_role',false)");
+    const priorSummary = (await db.query("select core.verify_security_database_launch_blockers() result")).rows[0].result;
+    assert((await db.query("select core.verify_launch_read_contracts() result")).rows[0].result.missing_grants.includes("warehouse.inspect_quality exact PO-line delegate"), "actual pre-repair validator falsely rejects current chain");
+    await db.exec(verifierMigration);
+    assert.deepEqual((await db.query("select core.verify_security_database_launch_blockers() result")).rows[0].result, priorSummary, "all existing security checks retained");
+    assert.deepEqual((await db.query("select core.verify_launch_read_contracts() result")).rows[0].result.missing_grants, []);
+    assert.equal((await db.query(`select (${QUALITY_CHAIN_CONTRACT_SQL}) ok`)).rows[0].ok, true, "actual migrated bodies match reviewed UAT fingerprints");
+
+    const definitions = (await db.query("select oid::regprocedure::text signature,pg_get_functiondef(oid) body from pg_proc where oid in ('warehouse.inspect_quality(jsonb)'::regprocedure,'private.warehouse_inspect_quality_v3(jsonb)'::regprocedure)")).rows;
+    const publicBody = definitions.find(row=>row.signature==='warehouse.inspect_quality(jsonb)').body;
+    const v3Body = definitions.find(row=>row.signature==='private.warehouse_inspect_quality_v3(jsonb)').body;
+    const rejectChain = async () => {
+      assert.equal((await db.query(`select (${QUALITY_CHAIN_CONTRACT_SQL}) ok`)).rows[0].ok, false);
+      assert((await db.query("select core.verify_security_database_launch_blockers() result")).rows[0].result.missing_objects.includes("warehouse.inspect_quality exact PO-line delegate"));
+      assert((await db.query("select core.verify_launch_read_contracts() result")).rows[0].result.missing_grants.includes("warehouse.inspect_quality exact PO-line delegate"));
+      await assert.rejects(verifySecurityDatabaseLaunchBlockers(sql=>db.query(sql)), /exact PO-line delegate/);
+    };
+    for (const changed of [
+      publicBody.replace('return private.warehouse_inspect_quality_v3(payload);','return private.warehouse_inspect_quality_v2(payload);'),
+      publicBody.replace('return private.warehouse_inspect_quality_v3(payload);','return private.warehouse_inspect_quality(payload);'),
+      publicBody.replace('then return private.inspect_return_intake(payload); end if;', 'then return private.warehouse_inspect_quality_v3(payload); end if;'),
+      publicBody.replace("not core.has_live_cap('warehouse', 'inspect_quality')", "false"),
+    ]) {
+      assert.notEqual(changed,publicBody);
+      await db.exec(changed); await rejectChain(); await db.exec(publicBody);
+    }
+    for (const marker of ['inspection.procurement_po_line_id = v_line_id','v_inspection.quantity <> v_quantity','v_receipt.received_by = auth.uid()']) {
+      const changed=v3Body.replace(marker,'false'); assert.notEqual(changed,v3Body);
+      await db.exec(changed); await rejectChain(); await db.exec(v3Body);
+    }
+    await db.exec('grant execute on function private.warehouse_inspect_quality_v3(jsonb) to authenticated');
+    await rejectChain();
+    await db.exec('revoke execute on function private.warehouse_inspect_quality_v3(jsonb) from authenticated');
+    await db.exec('grant execute on function private.inspect_return_intake(jsonb) to authenticated');
+    await rejectChain();
+    await db.exec('revoke execute on function private.inspect_return_intake(jsonb) from authenticated');
+    assert.equal((await db.query("select has_function_privilege('authenticated','core.verify_security_database_launch_blockers()','EXECUTE') ok")).rows[0].ok,false);
+    await db.exec("select set_config('request.jwt.claim.role','authenticated',false)");
 
     const verification = await verifySecurityDatabaseLaunchBlockers((sql) =>
       db.query(sql),

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSession } from '@intra/auth';
 import { PaymentDocumentField, PaymentDocumentLink, type PaymentDocument } from './PaymentDocumentField';
 import { Badge, Icon, money } from '@intra/ui';
@@ -86,7 +86,10 @@ export function PaymentReadinessPanel({
   onReview: (status: 'returned' | 'accepted', note: string) => Promise<void>;
   onRelease: (draft: PaymentReleaseDraft) => Promise<void>;
 }) {
-  const { mode, supabaseClient } = useSession();
+  const { mode, supabaseClient, profile, userCapabilities, loading } = useSession();
+  const canReadPaymentEvidence = !loading && Boolean(profile?.id) && profile?.kind === 'employee' &&
+    ['author_po', 'admin', 'view_finance'].some(cap => userCapabilities?.procurement?.includes(cap));
+  const evidenceRequest = useRef(0);
   const [documents, setDocuments] = useState<PaymentDocument[]>([]);
   const [packDocuments, setPackDocuments] = useState<PaymentDocument[]>([]);
   const [foreignVendor, setForeignVendor] = useState(suppliedForeignVendor);
@@ -94,13 +97,23 @@ export function PaymentReadinessPanel({
   const [prepareError, setPrepareError] = useState('');
   const [preparing, setPreparing] = useState(false);
   const refreshDocuments = useCallback(async () => {
-    if (mode !== 'supabase' || !supabaseClient || !purchaseOrderId) return;
-    setEvidenceReady(false);
-    const result = await supabaseClient.schema('procurement').rpc('payment_evidence_options', { payload: { purchase_order_id: purchaseOrderId, pack_id: pack?.id } });
-    if (result.error) { setPrepareError(result.error.message); return; }
-    setDocuments(result.data.documents); setPackDocuments(result.data.packDocuments ?? []); setForeignVendor(result.data.foreignVendor); setEvidenceReady(true);
-  }, [mode, supabaseClient, purchaseOrderId, pack?.id]);
-  useEffect(() => { void refreshDocuments().catch(cause => setPrepareError(String(cause))); }, [refreshDocuments, pack?.id]);
+    const request = ++evidenceRequest.current;
+    setDocuments([]); setPackDocuments([]); setPrepareError('');
+    setEvidenceReady(mode !== 'supabase');
+    if (mode !== 'supabase' || !supabaseClient || !purchaseOrderId || !canReadPaymentEvidence) return;
+    try {
+      const result = await supabaseClient.schema('procurement').rpc('payment_evidence_options', { payload: { purchase_order_id: purchaseOrderId, pack_id: pack?.id } });
+      if (request !== evidenceRequest.current) return;
+      if (result.error) { setPrepareError(result.error.message); return; }
+      setDocuments(result.data.documents); setPackDocuments(result.data.packDocuments ?? []); setForeignVendor(result.data.foreignVendor); setEvidenceReady(true);
+    } catch (cause) {
+      if (request === evidenceRequest.current) setPrepareError(cause instanceof Error ? cause.message : 'Payment evidence unavailable');
+    }
+  }, [mode, supabaseClient, purchaseOrderId, pack?.id, canReadPaymentEvidence, profile?.id]);
+  useEffect(() => {
+    void refreshDocuments();
+    return () => { evidenceRequest.current += 1; };
+  }, [refreshDocuments]);
   const [scope, setScope] = useState('Delivered scope matches the approved PO and request.');
   const [exceptionsText, setExceptionsText] = useState('');
   const [acceptedQuantities, setAcceptedQuantities] = useState<Record<string, number>>({});
@@ -203,7 +216,9 @@ export function PaymentReadinessPanel({
 
   return (
     <div className="space-y-4">
-      {packDocuments.length > 0 && <section aria-label="Payment pack documents" className="space-y-2">{packDocuments.map(document => <PaymentDocumentLink key={document.id} document={document} />)}</section>}
+      {canReadPaymentEvidence && packDocuments.length > 0 && <section aria-label="Payment pack documents" className="space-y-2">{packDocuments.map(document => <PaymentDocumentLink key={document.id} document={document} />)}</section>}
+      {mode === 'supabase' && !loading && !canReadPaymentEvidence && <p className="text-sm text-muted">Payment evidence is not in your scope.</p>}
+      {canReadPaymentEvidence && !canPrepare && prepareError && <p role="alert" className="text-sm text-rose-700 [overflow-wrap:anywhere]">{prepareError}</p>}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="font-semibold text-ink">Acceptance and payment readiness</h3>

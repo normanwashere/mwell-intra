@@ -1,8 +1,10 @@
 # Warehouse and Events Candidate
 
-Status: **Pending deployment. Not production acceptance.** Reviewed locally on 2026-09-05.
+Status: **Deployed to UAT on 2026-09-05; end-to-end acceptance pending. Not production acceptance.** These procedures describe https://mwell-intra-uat.vercel.app. Main production has not been promoted; physical devices, concurrency, and complete cross-role transactions still require their recorded acceptance results.
 
 ## Scope
+
+Additional security candidate pending parent application: `20260905095000_return_intake_certified_boundary.sql`. Read-only UAT metadata confirmed v2 already checks live certification before replay; the new wrapper makes the public governed boundary explicit while preserving the original implementation behind revoked direct client access. No validator weakening or applied migration edit. Return-intake tests: 37/37 passed. Separate launch-verifier PGlite fixture currently lacks inspect_quality; this is not a demonstrated v2 certification bypass.
 
 Candidate remediation covers WE01, WE02, WE05, WE10, WE13, WE14, LV06 and LV07. No deployment, live database changes, commits, or authorization bypasses were performed. Warehouse shared store and the parent-owned governed receipt editor were not changed by this work.
 
@@ -53,7 +55,7 @@ WE10 canonical single-cost mixed-purpose acceptance was rerun successfully (doma
 
 ## Migration Compatibility and Release Gates
 
-Candidate migration: `supabase/migrations/20260905092000_warehouse_integrity.sql`. It has not been applied to a live database.
+UAT migration: `supabase/migrations/20260905092000_warehouse_integrity.sql`, applied under installed version `20260905044928` and name `warehouse_integrity`. Reconcile installed names and definitions before replaying it. Application and migration deployment are not substitutes for transaction acceptance.
 
 - Repository DDL confirms text event/allocation identities, JSONB return lines and integer movement quantities. The new numeric valuation column is additive; JSONB composite-record inserts adapt to the table row type. Existing secure-evidence checks are not replaced.
 - The candidate preserves the `record_return_v2(jsonb)` authorization/idempotency implementation, changes normalized line identity, and moves allocation completion into cumulative accounting. Its guarded source replacements must match the installed function body.

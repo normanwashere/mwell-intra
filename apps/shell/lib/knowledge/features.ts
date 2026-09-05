@@ -763,13 +763,13 @@ const definitions: FeatureDefinition[] = [
     reads:
       "The governed core.v_insights_snapshot projection filtered by the caller's Insights capabilities.",
     writes:
-      "No operational data changes; users open the governed source when a metric requires action.",
+      "Source operational data remains unchanged. Authorized users request validation or escalation using an indicator reference and controlled reason, then track the follow-up in My Work; authorized owners acknowledge and resolve it with a resolution record reference.",
     statuses:
-      "Loading, ready, on target, review required, empty, source unavailable, or access denied.",
+      "Indicators: loading, ready, on target, review required, empty, source unavailable, or access denied. Follow-ups: open, acknowledged, or resolved.",
     exception:
       "Do not reconcile a metric by editing an export; open and correct the authoritative source workflow.",
     completionEvidence:
-      "The metric's source link opens the permitted operational record or queue with current data and ownership.",
+      "The metric's source link opens the permitted operational record or queue. My Work shows follow-up status, acknowledgement and resolution actor/time, and the resolution reference to the requester and authorized owner; source access remains independently restricted.",
   },
   {
     id: "product-governance",
@@ -788,11 +788,11 @@ const definitions: FeatureDefinition[] = [
     writes:
       "Contributors prepare evidence and proposals; Product Owners decide go-live and pricing; Operations Partners acknowledge the approved handoff through governed RPCs.",
     statuses:
-      "Readiness submitted, approved, rejected, or Operations acknowledged; pricing submitted, approved, activated, or rejected.",
+      "Readiness submitted, approved, or rejected; approved readiness separately shows Operations handoff pending or completed. Pricing submitted, approved, activated, or rejected.",
     exception:
       "Do not approve incomplete readiness, acknowledge an unapproved launch, or let the proposal author approve the same price change; return the record with a reason.",
     completionEvidence:
-      "The current record version shows required evidence references, a named Product decision and note, an attributable Operations acknowledgement when approved, and an independently decided effective price where applicable.",
+      "The current readiness or pricing version shows the exact decision reason, actor, and time. Approved readiness shows Operations handoff pending until acknowledgement, then completed with actor/time. Open the specific record from My Work; this readback is not a complete multi-event history viewer.",
   },
   {
     id: "admin-governance",
@@ -1231,11 +1231,11 @@ const definitions: FeatureDefinition[] = [
     reads:
       "Purchase orders, payment-readiness packs, receipt evidence, returns, stock valuation, and cross-module activity permitted by the user's scoped Finance roles.",
     writes:
-      "Finance opens the owning source record for payment decisions and prepares period-close entries for inventory valuation, COGS, merchandise expense, cost centers, write-offs, and event settlement. A second Finance user posts evidence-backed entries before reconciliation.",
+      "For live manual close preparation, select only a purchase order, warehouse receipt, or posted payment release by business reference. Entry categories do not create additional source types: returns and adjustments are not manual close sources, and Event settlement is system-generated through the governed Event workflow. Eligible non-Event draft, ready, or exception entries can be edited and resubmitted under the same ID/version. An independent poster posts a ready entry; a different independent reconciler reconciles the posted entry.",
     statuses:
-      "Ready for Finance, returned, accepted, issued, received, close entry ready, posted, reconciled, exception, unavailable, or partially available.",
+      "Payments distinguish ready, returned, accepted but unpaid, and released. Close entries distinguish draft, ready, posted, reconciled, and exception. Failed sources show Unavailable; unassigned sources show Not in your scope, not zero.",
     exception:
-      "When a source is unavailable or values disagree, retain the visible data, open the owning record, and resolve the discrepancy without duplicating or overriding source transactions.",
+      "Use Flag on a draft or ready entry with a fresh correction reason. Posted and reconciled entries are immutable; correct system-generated Event settlements upstream. Preparers cannot post or reconcile their own entries, posters cannot reconcile them, and Event settlement approvers are also excluded. Missing capability, certification, source access, or eligible evidence blocks the action; evidence preview never grants write authority.",
     completionEvidence:
       "The review links to attributable procurement, warehouse, return, event, and period-close source records with status, value, preparer, independent poster, evidence, and reconciliation timestamps.",
   },
@@ -1427,11 +1427,11 @@ const definitions: FeatureDefinition[] = [
     reads:
       "Request snapshot, lines, route, approvals, vendors, accreditation, attachments, comments, and activity.",
     writes:
-      "Authorized actions update sourcing artifacts, comments, approval decisions, award, or eligible conversion state.",
+      "The requester can edit an owned draft or revise a rejected request with current creation authority. Save the corrected need, vendor, lines and governed attachments under the same request ID and expected revision. Prior approval, exception, route and sourcing history stays archived; fresh routing and a new approval ladder are required. Other authorized actions update sourcing artifacts, comments, decisions or award readiness.",
     statuses:
       "Draft, submitted, sourcing, awaiting approval, returned, approved, rejected, awarded, or converted.",
     exception:
-      "Do not decide stale, incomplete, unassigned, conflicted, or out-of-authority requests; refresh and escalate.",
+      "Active sourcing or a non-cancelled PO blocks request revision. Reload a changed revision before continuing; do not reuse superseded exception approvals or prior decisions. Do not decide stale, incomplete, unassigned, conflicted, or out-of-authority requests.",
     completionEvidence:
       "Every material action shows named actor, reason, time, evidence, policy route, and resulting status.",
   },
@@ -1450,7 +1450,7 @@ const definitions: FeatureDefinition[] = [
       "legal_admin",
     ],
     purpose:
-      "Shows named approval steps assigned to the current user or eligible policy tier for a controlled decision.",
+      "Shows the next pending step assigned to the current user only when current tier authority and certification allow a controlled decision; tier membership alone is not an assignment.",
     reads:
       "Assigned steps, request snapshots, sourcing evidence, accreditation, amount, DOA authority, and prior decisions.",
     writes:
@@ -1458,7 +1458,7 @@ const definitions: FeatureDefinition[] = [
     statuses:
       "Pending, due, overdue, approved, rejected, returned, skipped by policy, or stale.",
     exception:
-      "Abstain for conflict, missing authority, incomplete evidence, or stale assignment and escalate to the process owner.",
+      "Do not decide your own request. An expired or future role grant, inactive role or profile, missing certification, or changed assignment blocks the decision. Refresh after denial; active Finance authority plus expired admin authority does not permit final approval.",
     completionEvidence:
       "The inbox item clears and decision history records tier, named actor, reason, time, and next state.",
   },
@@ -1507,7 +1507,7 @@ const definitions: FeatureDefinition[] = [
     statuses:
       "Draft, blocked, approved, issued, partially accepted, accepted, payment ready, returned, released, closed, or cancelled.",
     exception:
-      "Do not issue or mark ready when accreditation, approval, receipt, inspection, acceptance, invoice, or amount match fails.",
+      "Do not issue or mark ready when accreditation, approval, receipt, inspection, acceptance, invoice, or amount match fails. Correct only the latest same-PO invoice lineage: a returned pack, or an accepted/released pack whose evidence is stale and has no released amount. A current accepted pack is not replaceable; any paid amount requires Finance reconciliation. Never change invoice spelling or number to bypass duplicate controls.",
     completionEvidence:
       "Controlled PO, acceptance value, computed invoice match, Finance decision, payment reference, released amount, and closure state are linked.",
   },
@@ -1540,7 +1540,7 @@ const definitions: FeatureDefinition[] = [
     reads:
       "Case snapshot, vendor, application, documents, checklist, risk, instruments, signatures, decisions, and activity.",
     writes:
-      "Records evidence reviews, corrections, instruments, signatures, approval or rejection, and lifecycle events.",
+      "Records evidence reviews, source-version-bound corrections, instruments, signatures, decisions and lifecycle events. Request correction remains available for an eligible case even when uploads are complete. Record manual reminder records follow-up only; it does not send an email or prove delivery.",
     statuses:
       "Submitted, reviewing, correction required, instrument pending, approval ready, approved, rejected, expired, or suspended.",
     exception:
@@ -1671,11 +1671,11 @@ const definitions: FeatureDefinition[] = [
     reads:
       "Vendor-scoped draft, applicable requirement policy, prior corrections, and saved evidence references.",
     writes:
-      "Saves vendor-scoped draft answers and creates an immutable submitted snapshot when all gates pass.",
+      "Saves vendor-scoped answers against the retained draft version. A Legal correction opens a working copy of the matching submitted source; the original snapshot stays unchanged. Sign and submit requires a fresh signature and the expected source version before creating the next immutable submission.",
     statuses:
       "Not started, draft, incomplete, ready, submitting, submitted, correction required, or save failed.",
     exception:
-      "Preserve truthful facts, explain unavailable evidence, and ask Legal to correct an inapplicable or erroneous requirement.",
+      "On a stale-version or draft conflict, review the latest saved content before reapplying intended changes; do not retry a stale save or signature blindly. Discard is recorded and retains the concurrency version, not a reset to version zero. Ordinary submitted applications stay read-only until Legal opens a versioned correction.",
     completionEvidence:
       "Submitted snapshot contains policy version, all required facts, declarations, evidence links, vendor actor, and time.",
   },

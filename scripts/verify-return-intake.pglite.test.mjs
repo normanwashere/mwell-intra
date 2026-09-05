@@ -163,6 +163,7 @@ test('WE02 retires the actual legacy wrapper before raw writes while v2 retains 
     await db.exec("alter table warehouse.events add column status text not null default 'planned'");
     await db.exec(await readMigration('20260828060000_atomic_event_reservations.sql'));
     await db.exec(await readMigration('20260905092000_warehouse_integrity.sql'));
+    await db.exec(await readMigration('20260905095000_return_intake_certified_boundary.sql'));
     await db.exec("insert into warehouse.allocations(id,event_id,product_id,quantity,status) values('legacy-allocation','event','bulk',10,'issued')");
     const before = await snapshot();
     const raw = {
@@ -207,6 +208,37 @@ test('WE02 retires the actual legacy wrapper before raw writes while v2 retains 
       assert.deepEqual(await snapshot(), committed);
       await db.query('select set_config($1,$2,true)', [setting, setting === 'request.jwt.claim.sub' ? actor : 'on']);
     }
+  } finally { await db.exec('rollback'); }
+});
+
+test('v2 governed boundary removes authenticated raw checks without changing its implementation', async () => {
+  await db.exec('begin');
+  try {
+    const original = (await db.query("select prosrc from pg_proc where oid='warehouse.record_return_v2(jsonb)'::regprocedure")).rows[0].prosrc;
+    await db.exec(await readMigration('20260905095000_return_intake_certified_boundary.sql'));
+    const hidden = (await db.query("select prosrc from pg_proc where oid='warehouse.record_return_v2_certified_impl(jsonb)'::regprocedure")).rows[0].prosrc;
+    assert.equal(hidden, original);
+    const boundary = (await db.query("select prosrc from pg_proc where oid='warehouse.record_return_v2(jsonb)'::regprocedure")).rows[0].prosrc;
+    assert.doesNotMatch(boundary, /core\.has_cap\s*\(/i);
+    assert.match(boundary, /core\.has_live_cap\('warehouse', 'manage_returns'\) is distinct from true/);
+    for (const role of ['anon', 'authenticated', 'service_role']) {
+      const grants = (await db.query(`select has_function_privilege($1,'warehouse.record_return_v2_certified_impl(jsonb)','execute') hidden,
+        has_function_privilege($1,'warehouse.record_return_v2(jsonb)','execute') boundary`, [role])).rows[0];
+      assert.deepEqual(grants, { hidden: false, boundary: role !== 'anon' });
+    }
+    const before = await snapshot();
+    await db.exec("create or replace function auth.role() returns text language sql stable as $$ select 'service_role'::text $$");
+    await db.exec("select set_config('test.cap','off',true)");
+    await db.exec('savepoint service_gate');
+    await assert.rejects(rpc(payload()), /Not authorized/);
+    await db.exec('rollback to service_gate');
+    assert.deepEqual(await snapshot(), before);
+    await db.exec("select set_config('test.cap','on',true)");
+    await db.exec('create or replace function core.has_live_cap(text,text) returns boolean language sql stable as $$ select null::boolean $$');
+    await db.exec('savepoint null_gate');
+    await assert.rejects(rpc(payload()), /Not authorized/);
+    await db.exec('rollback to null_gate');
+    assert.deepEqual(await snapshot(), before);
   } finally { await db.exec('rollback'); }
 });
 

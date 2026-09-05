@@ -85,6 +85,7 @@ describe('StorageAreasPage', () => {
     renderWithProviders(<StorageAreasPage />, { repo, route: `/storage?source=${encodeURIComponent(unit.id)}` });
     const dialog = await screen.findByRole('dialog', { name: /put away stock/i });
     expect(within(dialog).getByText(/1 serialized unit: SMART-WATCH-SN0001/)).toBeVisible();
+    expect(within(dialog).queryByText(/Store watch/)).not.toBeInTheDocument();
     expect(within(dialog).getByLabelText('Enter stock code manually')).toBeDisabled();
     expect(tasks).toHaveBeenCalledWith(expect.objectContaining({ cursor: 'page-2' }));
     expect(relocate).not.toHaveBeenCalled();

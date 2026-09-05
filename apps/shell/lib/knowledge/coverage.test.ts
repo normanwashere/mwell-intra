@@ -6,7 +6,7 @@ import { PROCUREMENT_ROUTE_CONTRACTS } from "@intra/procurement";
 import { mountLegalRouteContracts } from "@intra/legal";
 import { SHELL_PAGE_ROUTE_CONTRACTS } from "../routes";
 import { KNOWLEDGE_CONTENT } from "./content";
-import { buildKnowledgeCoverage, LIVE_ROUTE_MANIFEST } from "./coverage";
+import { buildKnowledgeCoverage, isCombinedControlName, LIVE_ROUTE_MANIFEST } from "./coverage";
 import type { KnowledgeContent } from "./types";
 
 const cloneContent = (): KnowledgeContent => structuredClone(KNOWLEDGE_CONTENT);
@@ -89,7 +89,7 @@ describe("Knowledge Base live coverage", () => {
       );
       for (const control of feature.controls) {
         const controlId = `${feature.id}:${control.name}`;
-        expect(control.name, controlId).not.toMatch(/,|\band\b/i);
+        expect(isCombinedControlName(feature.id, control.name), controlId).toBe(false);
         expect(
           control.behavior.trim().split(/\s+/).length,
           controlId,
@@ -257,6 +257,22 @@ describe("Knowledge Base live coverage", () => {
 
     expect(buildKnowledgeCoverage(content).errors).toContain(
       `live feature ${content.features[0]!.id} has no documented controls`,
+    );
+  });
+
+  it("allows only the exact atomic Finance correction label", () => {
+    expect(isCombinedControlName("warehouse-finance", "Edit and resubmit")).toBe(false);
+    expect(isCombinedControlName("admin-doa", "Edit and resubmit")).toBe(true);
+    expect(isCombinedControlName("warehouse-finance", "Edit and resubmit, post")).toBe(true);
+    expect(isCombinedControlName("warehouse-finance", "Edit and resubmit everything")).toBe(true);
+    expect(isCombinedControlName("insights-workspace", "Acknowledge and resolve follow-up")).toBe(true);
+    const content = cloneContent();
+    const finance = content.features.find((feature) => feature.id === "warehouse-finance")!;
+    const correction = finance.controls.find((control) => control.name === "Edit and resubmit")!;
+    expect(buildKnowledgeCoverage(content).errors).toEqual([]);
+    correction.name = "Edit and resubmit, post";
+    expect(buildKnowledgeCoverage(content).errors).toContain(
+      "live feature warehouse-finance has combined control name Edit and resubmit, post",
     );
   });
 
