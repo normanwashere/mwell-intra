@@ -4,6 +4,12 @@
 
 ## Finance Review
 
+### Certification 153 Follow-up
+
+Certification 153 remains failed. Run-scoped request cleanup has a service-role-only UAT function that removes approval children before parent requests, preserving ordinary retention permissions. It rejects malformed markers and linked purchase orders. The 12 requests left by run 153 were removed; the other four requests retained their ID/revision fingerprint. This is not a full cross-entity residue certificate.
+
+Department actions are being rearranged below their details on narrow mobile screens. The DOA audit must wait for workspace loading to finish and Save draft to become enabled before tapping. These app and audit follow-ups remain pending deployment and full live rerun.
+
 Release maintenance also pins Browserslist to patched 4.28.7 following the September 5 CI dependency scan. The production dependency audit is clean after that change. This does not change user permissions or business procedures, and does not replace live journey acceptance.
 
 Payment cards show invoice identity, due date or an explicit unavailable label, and waiting age. The hero and queue use the same ordering: ready packs and accepted packs with an unpaid balance first, then due date, oldest preparation, and stable identity. Accepted is not the same as released. Ordering still requires business-owner confirmation.

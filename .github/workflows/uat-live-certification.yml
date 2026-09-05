@@ -76,6 +76,9 @@ jobs:
         run: |
           node --test --test-concurrency=1 \
             scripts/verify-sep05-procurement.pglite.test.mjs \
+            scripts/qa/request-cleanup.pglite.test.mjs \
+            scripts/qa/payment-cleanup.pglite.test.mjs \
+            scripts/verify-provisional-quality-hold-release.pglite.test.mjs \
             scripts/verify-sep05-procurement-integration.pglite.test.mjs \
             scripts/verify-putaway-tasks.pglite.test.mjs \
             scripts/verify-receiving-drafts.pglite.test.mjs \
@@ -91,6 +94,8 @@ jobs:
         run: pnpm verify:launch-artifacts
       - name: Verify live audit contracts
         run: pnpm test:intra-live-contract
+      - name: Verify evidence upload and cleanup contracts
+        run: node --test scripts/qa/payment-audit-evidence.test.mjs scripts/qa/payment-harness.integration.test.mjs scripts/qa/payment-storage-cleanup.test.mjs scripts/qa/payment-run-cleanup.test.mjs
       - name: Verify release documentation is synchronized
         run: |
           node scripts/qa/verify-release-documentation.mjs --manifest test-results/documentation-sync-source.json
@@ -312,6 +317,7 @@ jobs:
       PRODUCTION_SUPABASE_PROJECT_REF: abbfziukjalyqtcuskhi
       POLICY_ALLOW_TEST_MUTATIONS: "true"
       CLEANUP_OUTPUT_PATH: test-results/cleanup-${{ matrix.viewport }}.json
+      AUDIT_VENDOR_EMAIL: intra.test.admin+{marker}@mwell.com.ph
     steps:
       - uses: actions/checkout@v5
         with:

@@ -212,7 +212,7 @@ function DepartmentTreeNode({
   const { department, children } = item;
   return (
     <li>
-      <div className="grid min-h-16 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-line px-2 py-2 sm:px-3">
+      <div className="grid min-h-16 grid-cols-1 items-center gap-3 border-b border-line px-2 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:px-3">
         <div className="flex min-w-0 items-center gap-3">
           <span className="grid h-9 w-9 shrink-0 place-items-center bg-inset text-muted">
             <Icon

@@ -31,6 +31,20 @@ function HistoryControls() {
 }
 
 describe("FulfillmentPage", () => {
+  it("keeps Floor work touch-sized and navigates to its actionable queue", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<><FulfillmentPage /><LocationProbe /></>, {
+      role: "warehouse_operator",
+      repo: makeRepo(),
+    });
+    const link = await screen.findByRole("link", { name: "Floor work" });
+    expect(link).toHaveClass("inline-flex", "min-h-11", "min-w-11");
+    const destination = link.getAttribute("href");
+    expect(destination).toContain("filter=floor_work");
+    await user.click(link);
+    expect(screen.getByLabelText("Current route")).toHaveTextContent(destination!);
+  });
+
   it("defers an entire item line with zero fulfill-now quantity", async () => {
     const repo = makeRepo();
     const order = await repo.createFulfillmentOrder({

@@ -21,6 +21,8 @@ import {
   verifyCheckpoint,
 } from "./live-e2e-db-verify.mjs";
 import { cleanupRun } from "./live-e2e-cleanup.mjs";
+import { createPaymentAuditEvidence, evidencePdf } from "./payment-audit-evidence.mjs";
+import { cleanupPaymentEvidenceStorage, cleanupExcessCustodyStorage } from "./cleanup-uat-live-run.mjs";
 import { resolveSharedUatPassword } from "./provision-uat-intra-test-users.mjs";
 
 const require = createRequire(path.resolve("apps/shell/package.json"));
@@ -1157,6 +1159,20 @@ async function auditKeyboardAndHotspots(page) {
         .trim()
         .replace(/\s+/g, " ")
         .slice(0, 80);
+    const diagnosticIdentity = (element) => {
+      if (!element) return null;
+      const labels = [...(element.labels ?? [])].map((label) => {
+        const copy = label.cloneNode(true);
+        copy.querySelectorAll("input,textarea,select,[contenteditable]").forEach((control) => control.remove());
+        return copy.textContent.trim().replace(/\s+/g, " ").slice(0, 80);
+      });
+      return {
+        tag: element.tagName.toLowerCase(),
+        id: element.id || null,
+        type: element.getAttribute("type"),
+        labels,
+      };
+    };
     const samplePoints = (element) => {
       const rect = element.getBoundingClientRect();
       const left = Math.max(0, rect.left);
@@ -1194,6 +1210,26 @@ async function auditKeyboardAndHotspots(page) {
           samples
             .map(({ hit }) => hit)
             .find((hit) => hit && !hitActivates(element, hit)) ?? null,
+        diagnostics: {
+          reason: samples.some(({ hit }) => hitActivates(element, hit))
+            ? "reachable"
+            : samples.length === 0
+              ? "no-visible-samples"
+              : samples.every(({ hit }) => !hit)
+                ? "no-hit"
+                : "blocked",
+          rect: element.getBoundingClientRect().toJSON(),
+          viewport: { width: innerWidth, height: innerHeight },
+          scroll: { left: scrollX, top: scrollY },
+          scrollContainers: scrollContainers(element).map((container) => ({
+            identity: diagnosticIdentity(container.element),
+            left: container.left,
+            top: container.top,
+          })),
+          samples: samples.map(({ x, y, hit }) => ({
+            x, y, hit: diagnosticIdentity(hit), activatesTarget: hitActivates(element, hit),
+          })),
+        },
       };
     };
     const nextPaint = () =>
@@ -1258,6 +1294,9 @@ async function auditKeyboardAndHotspots(page) {
         target: describe(element),
         blocker: describe(reachability.blocker ?? reachability.initialBlocker),
         recheckedAfterScroll: reachability.recheckedAfterScroll,
+        targetIdentity: diagnosticIdentity(element),
+        initialProbe: initial.diagnostics,
+        recheckProbe: reachability.diagnostics,
       });
       if (interceptedTargets.length >= 12) break;
     }
@@ -1609,7 +1648,7 @@ async function procurementCreateRequestWorkflow(page, marker) {
   await attachmentInput.setInputFiles({
     name: `${marker}-spec.pdf`,
     mimeType: "application/pdf",
-    buffer: Buffer.from("UAT technical specification evidence"),
+    buffer: evidencePdf(marker, "technical specification", title),
   });
   await page
     .getByLabel(`Document type for ${marker}-spec.pdf`)
@@ -1617,7 +1656,7 @@ async function procurementCreateRequestWorkflow(page, marker) {
   await attachmentInput.setInputFiles({
     name: `${marker}-budget.pdf`,
     mimeType: "application/pdf",
-    buffer: Buffer.from("UAT approved budget evidence"),
+    buffer: evidencePdf(marker, "approved budget", title),
   });
   await page
     .getByLabel(`Document type for ${marker}-budget.pdf`)
@@ -1625,7 +1664,7 @@ async function procurementCreateRequestWorkflow(page, marker) {
   await attachmentInput.setInputFiles({
     name: `${marker}-previous-cost.pdf`,
     mimeType: "application/pdf",
-    buffer: Buffer.from("UAT previous purchase cost evidence"),
+    buffer: evidencePdf(marker, "previous purchase cost", title),
   });
   await page
     .getByLabel(`Document type for ${marker}-previous-cost.pdf`)
@@ -1633,7 +1672,7 @@ async function procurementCreateRequestWorkflow(page, marker) {
   await attachmentInput.setInputFiles({
     name: `${marker}-quote.pdf`,
     mimeType: "application/pdf",
-    buffer: Buffer.from("UAT vendor quotation evidence"),
+    buffer: evidencePdf(marker, "vendor quotation", title),
   });
   await page
     .getByLabel(`Document type for ${marker}-quote.pdf`)
@@ -1957,6 +1996,7 @@ async function legalInviteVendorWorkflow(page, marker) {
     checkpoint,
     inviteCheckpoint,
     deliveryStatus,
+    deliveryError: delivery?.delivery_error ?? null,
     acceptanceCheckpoint,
     replayStatus,
     acceptanceEvidenceScreenshot,
@@ -2139,6 +2179,9 @@ async function adminCreateDoaWorkflow(
     exact: true,
   });
   const clickSaveDraft = async () => {
+    await page.waitForFunction(() => [...document.querySelectorAll("button")].some(
+      button => button.textContent.trim() === "Save draft" && !button.disabled && button.getBoundingClientRect().width > 0,
+    ), undefined, { timeout: 12_000 });
     const mobileNavigation = page.getByRole("navigation", {
       name: "Primary mobile",
     });
@@ -2483,7 +2526,7 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
     serializedIssueUnit: `${marker}-serialized-issue-unit`,
     serializedIssueSerial: `${marker}-SERIAL-HELD`,
     serializedIssueReceipt: `${marker}-serialized-issue-receipt`,
-    request: `${marker}-receipt-request`,
+    request: `req_${marker}-receipt-request`,
     cleanPo: `${marker}-po-clean`,
     partialPo: `${marker}-po-partial`,
     exceptionPo: `${marker}-po-exception`,
@@ -5213,9 +5256,13 @@ async function task3SupervisorExcessFinalDisposition(page, fixture) {
   await custodyDialog
     .getByLabel("Decision reason")
     .fill(`${fixture.marker} Supervisor excess custody final disposition`);
-  await custodyDialog
-    .getByLabel("Evidence URL")
-    .fill(`audit/${fixture.marker}/accepted-excess-amendment.jpg`);
+  await custodyDialog.getByLabel("Upload evidence", { exact: true }).setInputFiles({
+    name: `${fixture.marker}-QA-excess-custody.png`,
+    mimeType: "image/png",
+    buffer: await custodyDialog.screenshot(),
+  });
+  await custodyDialog.getByText(`${fixture.marker}-QA-excess-custody.png`, { exact: true })
+    .waitFor({ state: "visible" });
   await custodyDialog
     .getByRole("button", { name: "Record final disposition" })
     .click();
@@ -5434,7 +5481,55 @@ async function task3PolicyNegativeTransactions(page, fixture) {
   };
 }
 
+async function task3UploadPaymentEvidence(page, fixture, purchaseOrderId) {
+  const accessToken = await browserAccessToken(page);
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
+  if (!accessToken || !anonKey || !url) throw new Error("Browser payment evidence authentication required");
+  const headers = { apikey: anonKey, authorization: `Bearer ${accessToken}` };
+  const response = await fetch(`${url}/auth/v1/user`, { headers });
+  if (!response.ok) throw new Error(`Browser payment user verification failed (${response.status})`);
+  const user = await response.json();
+  if (!user.id || user.role !== "authenticated") throw new Error("Authenticated browser payment user required");
+  const assertSameSession = async () => {
+    if (await browserAccessToken(page) !== accessToken) throw new Error("Browser payment session changed; retry with current evidence");
+  };
+  try {
+    const evidence = await createPaymentAuditEvidence({
+      page, purchaseOrderId, marker: fixture.marker, browserUser: user,
+      readPurchaseOrderAsBrowserUser: async (_page, id) => {
+        await assertSameSession();
+        const query = new URLSearchParams({ id: `eq.${id}`, select: "id,request_id,status,core_vendor_id,acceptance_evidence_version" });
+        const result = await fetch(`${url}/rest/v1/purchase_orders?${query}`, {
+          headers: { ...headers, "accept-profile": "procurement" },
+        });
+        if (!result.ok) throw new Error(`Browser PO lookup failed (${result.status})`);
+        const rows = await result.json();
+        if (!Array.isArray(rows) || rows.length !== 1) throw new Error("Exactly one browser-visible PO required");
+        return rows[0];
+      },
+      uploadAsBrowserUser: async (_page, { bucket, path, bytes, contentType, upsert }) => {
+        await assertSameSession();
+        const result = await fetch(`${url}/storage/v1/object/${bucket}/${path.split("/").map(encodeURIComponent).join("/")}`, {
+          method: "POST", headers: { ...headers, "content-type": contentType, "x-upsert": String(upsert) }, body: bytes,
+        });
+        return { ok: result.ok, status: result.status, body: await result.text() };
+      },
+      callRpcAsBrowserUser: async (...args) => {
+        await assertSameSession();
+        return callRpcAsBrowserUser(...args);
+      },
+    });
+    (fixture.paymentEvidenceCleanup ??= []).push(evidence.cleanup);
+    return evidence.references;
+  } catch (error) {
+    if (error.cleanup) (fixture.paymentEvidenceCleanup ??= []).push(error.cleanup);
+    throw error;
+  }
+}
+
 async function task3PaymentReadinessWithoutAcceptance(page, fixture) {
+  const references = await task3UploadPaymentEvidence(page, fixture, fixture.ids.cleanPo);
   requireRpcFailure(
     await callRpcAsBrowserUser(
       page,
@@ -5442,14 +5537,14 @@ async function task3PaymentReadinessWithoutAcceptance(page, fixture) {
       "prepare_payment_readiness",
       {
         purchase_order_id: fixture.ids.cleanPo,
-        acceptance_pack_id: crypto.randomUUID(),
         po_match: true,
-        invoice_or_si_storage_path: `audit/${fixture.marker}/invoice.pdf`,
-        milestone_support_storage_path: `audit/${fixture.marker}/receipt.pdf`,
-        tax_withholding_support_storage_path: `audit/${fixture.marker}/tax.pdf`,
+        ...references,
+        invoice_number: `${fixture.marker}-NO-ACCEPTANCE-INVOICE`,
+        invoice_date: new Date().toISOString().slice(0, 10),
+        invoice_amount: 100,
       },
     ),
-    /acceptance|invalid input|foreign key/i,
+    /accepted receipt|service acceptance|acceptance pack|acceptance evidence/i,
     "payment readiness without accepted receipt or service acceptance",
   );
   return {
@@ -5628,6 +5723,7 @@ async function task3CumulativePartialAcceptance(page, fixture) {
 }
 
 async function task3CumulativePaymentAcceptanceBinding(page, fixture) {
+  const references = await task3UploadPaymentEvidence(page, fixture, fixture.ids.partialPo);
   const readiness = await callRpcAsBrowserUser(
     page,
     "procurement",
@@ -5637,9 +5733,8 @@ async function task3CumulativePaymentAcceptanceBinding(page, fixture) {
       po_match: true,
       invoice_number: `${fixture.marker}-CUMULATIVE-INVOICE`,
       invoice_amount: 300,
-      invoice_or_si_storage_path: `audit/${fixture.marker}/cumulative-invoice.pdf`,
-      milestone_support_storage_path: `audit/${fixture.marker}/cumulative-receipts.pdf`,
-      tax_withholding_support_storage_path: `audit/${fixture.marker}/cumulative-tax.pdf`,
+      ...references,
+      invoice_date: new Date().toISOString().slice(0, 10),
       tax_amount: 0,
       withholding_amount: 0,
     },
@@ -5837,6 +5932,11 @@ async function assertTask3ZeroResidualRows(fixture) {
         .from("requests")
         .select("id", { count: "exact", head: true })
         .like("id", `${marker}%`),
+    ],
+    [
+      "procurement.requests:receipt",
+      client.schema("procurement").from("requests")
+        .select("id", { count: "exact", head: true }).eq("id", ids.request),
     ],
     [
       "procurement.purchase_orders",
@@ -6347,6 +6447,10 @@ async function cleanupTask3ReceiptFixture(fixture) {
   ];
 
   if (decisionIds.length) {
+    const { data: custodyRows, error: custodyError } = await client.schema("warehouse")
+      .from("procurement_receipt_excess_custody").select("id").in("decision_id", decisionIds);
+    if (custodyError) throw new Error(`Custody evidence discovery failed: ${custodyError.message}`);
+    await cleanupExcessCustodyStorage(client, custodyRows.map(row => row.id));
     await remove("warehouse", "procurement_receipt_excess_custody", (query) =>
       query.in("decision_id", decisionIds),
     );
@@ -6424,9 +6528,20 @@ async function cleanupTask3ReceiptFixture(fixture) {
   await remove("procurement", "payment_readiness_staleness_events", (query) =>
     query.in("purchase_order_id", poIds),
   );
+  const { data: paymentRows, error: paymentError } = await client.schema("procurement")
+    .from("payment_readiness_packs").select("id").in("purchase_order_id", poIds);
+  if (paymentError) throw new Error(`Payment cleanup discovery failed: ${paymentError.message}`);
+  if (paymentRows.length) await remove("procurement", "vendor_invoice_identities", query =>
+    query.in("current_pack_id", paymentRows.map(row => row.id)));
   await remove("procurement", "payment_readiness_packs", (query) =>
     query.in("purchase_order_id", poIds),
   );
+  const { data: attachmentRows, error: attachmentError } = await client.schema("procurement")
+    .from("request_attachments").select("id,request_id,storage_path").eq("request_id", ids.request);
+  if (attachmentError) throw new Error(`Payment storage discovery failed: ${attachmentError.message}`);
+  await cleanupPaymentEvidenceStorage(client, [ids.request], attachmentRows,
+    (fixture.paymentEvidenceCleanup ?? []).flatMap(plan => plan.storagePaths));
+  await remove("procurement", "request_attachments", query => query.eq("request_id", ids.request));
   await remove("procurement", "acceptance_packs", (query) =>
     query.in("purchase_order_id", poIds),
   );
@@ -6461,9 +6576,10 @@ async function cleanupTask3ReceiptFixture(fixture) {
   await remove("legal", "accreditation_cases", (query) =>
     query.eq("id", ids.accreditationCase),
   );
-  await remove("procurement", "requests", (query) =>
-    query.like("id", `${marker}%`),
-  );
+  const { data: requestCleanup, error: requestCleanupError } = await client.schema("procurement")
+    .rpc("cleanup_certification_requests", { p_marker: marker });
+  if (requestCleanupError || requestCleanup?.marker !== marker || requestCleanup?.remaining !== 0)
+    throw new Error(`Task 3 request cleanup failed: ${requestCleanupError?.message ?? "scope not certified"}`);
   const { data: departmentMatrices, error: departmentMatrixError } =
     await client
       .schema("procurement")
@@ -7024,7 +7140,7 @@ async function warehouseReturnValidationWorkflow(page, { captureState }) {
   });
   await waitForMeaningfulRoute(page);
   await page.getByLabel("Related event (optional)").selectOption({ index: 1 });
-  await page.getByLabel("Product").selectOption({ index: 1 });
+  await page.getByRole("combobox", { name: "Product", exact: true }).selectOption({ index: 1 });
   const serialInput = page.getByLabel("Enter barcode manually");
   if (await serialInput.count()) {
     await serialInput.fill("QA-UNKNOWN-RETURN");
@@ -7286,7 +7402,10 @@ async function warehouseEventHandoffWorkflow(page, state) {
   if (!/pending|approval|department request/i.test(text))
     throw new Error("Warehouse handoff does not expose the approval state.");
   const requestCard = request.locator("xpath=ancestor::li[1]");
-  await requestCard
+  await requestCard.getByRole("button", { name: "View request", exact: true }).click();
+  const review = page.getByRole("dialog", { name: "Review request", exact: true });
+  await review.getByText(state.fulfillmentPurpose, { exact: true }).waitFor({ state: "visible" });
+  await review
     .getByRole("button", { name: "Approve", exact: true })
     .click();
   await requestCard.getByText("Approved", { exact: true }).waitFor({

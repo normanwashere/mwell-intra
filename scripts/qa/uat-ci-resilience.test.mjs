@@ -136,6 +136,11 @@ test("independent cleanup guards UAT and covers governed residue plus Auth", asy
   assert.match(source, /product[\s\S]*cleanup_certification_records/);
   assert.match(source, /product\.certification-records/);
   assert.match(source, /remaining === 0/);
+  assert.match(source, /query\.in\("name", scope\.departments\)/);
+  assert.match(source, /organizationRows\.map\(row => row\.code\)/);
+  assert.match(source, /query\.in\("department", departmentKeys\)/);
+  assert.ok(source.indexOf('await removeWhen(organizationIds, "core", "department_cost_centers"') <
+    source.indexOf('await removeWhen(organizationIds, "core", "departments"'));
 });
 
 test("UAT certification workflow gates deployment and always certifies cleanup", async () => {
@@ -197,11 +202,14 @@ test("prepare runs only reviewed Sep05 SQL suites before persona provisioning", 
   const step = prepare.split(`      - name: ${stepName}\n`)[1]?.split("      - name:")[0];
   assert.ok(step, "dedicated SQL gate exists in prepare");
   assert.match(step, /^        run: \|\n/);
-  assert.doesNotMatch(step, /continue-on-error|if:|\|\||\*|\$\{|provision|fetch/);
+  assert.doesNotMatch(step, /continue-on-error|if:|\|\||\*|\$\{|\bprovision\b|fetch/);
   const command = step.replace(/^        run: \|\n/, "").replace(/\\\r?\n/g, " ").trim().split(/\s+/);
   assert.deepEqual(command, [
     "node", "--test", "--test-concurrency=1",
     "scripts/verify-sep05-procurement.pglite.test.mjs",
+    "scripts/qa/request-cleanup.pglite.test.mjs",
+    "scripts/qa/payment-cleanup.pglite.test.mjs",
+    "scripts/verify-provisional-quality-hold-release.pglite.test.mjs",
     "scripts/verify-sep05-procurement-integration.pglite.test.mjs",
     "scripts/verify-putaway-tasks.pglite.test.mjs",
     "scripts/verify-receiving-drafts.pglite.test.mjs",
@@ -213,6 +221,14 @@ test("prepare runs only reviewed Sep05 SQL suites before persona provisioning", 
   assert.ok(prepare.indexOf(stepName) > prepare.indexOf("Install locked dependencies"));
   assert.ok(prepare.indexOf(stepName) < prepare.indexOf("Reconcile guarded UAT personas"));
   assert.match(prepare, /timeout-minutes: 40\b/);
+});
+
+test("controlled vendor cleanup uses the same exact run mailbox and refuses a shared account", () => {
+  const id = "QA-20260722-00000AEF";
+  assert.equal(buildRunScope(id, "mobile-390", { vendorEmailTemplate: "intra.test.admin+{marker}@mwell.com.ph" }).authEmail,
+    "intra.test.admin+qa-20260722-00000aef-mobile-390@mwell.com.ph");
+  assert.throws(() => buildRunScope(id, "mobile-390", { vendorEmailTemplate: "intra.test.admin@mwell.com.ph" }), /placeholder/);
+  assert.throws(() => buildRunScope(id, "mobile-390", { vendorEmailTemplate: "{marker}" }), /Invalid/);
 });
 
 test("UAT runs disclosure and actual Quality workflow browser regressions after Chromium installation", async () => {

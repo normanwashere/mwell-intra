@@ -373,6 +373,8 @@ describe("configurable organization administration", () => {
     expect(departments).toContain("<ul");
     expect(departments).toContain("<li");
     expect(departments).toContain("DepartmentTreeNode");
+    expect(departments).toContain("grid-cols-1 items-center");
+    expect(departments).toContain("sm:grid-cols-[minmax(0,1fr)_auto]");
     expect(departments).toContain("Reports to");
     expect(departments).toContain("Confirm deactivation");
     expect(departments).toContain("Historical assignments remain available");

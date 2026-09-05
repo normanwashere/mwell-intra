@@ -95,6 +95,7 @@ export function PolicyProfileSection({
   const [openConflicts, setOpenConflicts] = useState<PolicyConflict[]>([]);
   const [events, setEvents] = useState<PolicyEvent[]>([]);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(mode === 'supabase' && Boolean(client));
   const [reloadKey, setReloadKey] = useState(0);
   const [activeMapping, setActiveMapping] = useState({ code: MWELL_OPERATING_PROFILE.code, version: MWELL_OPERATING_PROFILE.version, effectiveFrom: MWELL_OPERATING_PROFILE.effectiveFrom, sourceFilename: MWELL_OPERATING_PROFILE.sourceFilename, controlSources: MWELL_OPERATING_PROFILE.controlSources });
   const controlEntries = useMemo(
@@ -135,7 +136,14 @@ export function PolicyProfileSection({
         setActiveMapping({ code: String(raw.code ?? MWELL_OPERATING_PROFILE.code), version: String(raw.version ?? MWELL_OPERATING_PROFILE.version), effectiveFrom: governedEffectiveDate, sourceFilename: String(raw.source_filename ?? MWELL_OPERATING_PROFILE.sourceFilename), controlSources: raw.control_sources && typeof raw.control_sources === 'object' ? raw.control_sources as typeof MWELL_OPERATING_PROFILE.controlSources : MWELL_OPERATING_PROFILE.controlSources });
       }
     };
-    void loadHistory();
+    setHistoryLoading(true);
+    void loadHistory()
+      .catch((error: unknown) => {
+        if (active) setHistoryError(error instanceof Error ? error.message : 'Unable to load policy profiles.');
+      })
+      .finally(() => {
+        if (active) setHistoryLoading(false);
+      });
     return () => { active = false; };
   }, [client, mode, reloadKey]);
 
@@ -205,7 +213,7 @@ export function PolicyProfileSection({
   };
 
   return (
-    <section aria-labelledby="procurement-policy-heading" className="space-y-4">
+    <section aria-labelledby="procurement-policy-heading" aria-busy={historyLoading} className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 id="procurement-policy-heading" className="text-lg font-semibold text-ink">Procurement policy profiles</h2>

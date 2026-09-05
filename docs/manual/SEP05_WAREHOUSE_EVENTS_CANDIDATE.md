@@ -4,6 +4,12 @@ Status: **Deployed to UAT on 2026-09-05; end-to-end acceptance pending. Not prod
 
 ## Scope
 
+### Certification 153 Follow-up
+
+The full run did not pass. A forward UAT database correction now permits release of a provisional receipt hold only after matching independent acceptance has been recorded. The receipt owner cannot inspect their own receipt, and pending holds cannot be released directly. Custody identity and release attribution remain checked. Local SQL regressions passed; a complete live transaction rerun is still required.
+
+The audit now opens **View request** before approving an event-related stock request in **Review request**. Excess-custody decisions use the actual **Upload document** control; a made-up evidence path is not an acceptable substitute. The Floor work touch-target improvement is local pending deployment and live visual verification.
+
 Additional security candidate pending parent application: `20260905095000_return_intake_certified_boundary.sql`. Read-only UAT metadata confirmed v2 already checks live certification before replay; the new wrapper makes the public governed boundary explicit while preserving the original implementation behind revoked direct client access. No validator weakening or applied migration edit. Return-intake tests: 37/37 passed. Separate launch-verifier PGlite fixture currently lacks inspect_quality; this is not a demonstrated v2 certification bypass.
 
 Candidate remediation covers WE01, WE02, WE05, WE10, WE13, WE14, LV06 and LV07. No deployment, live database changes, commits, or authorization bypasses were performed. Warehouse shared store and the parent-owned governed receipt editor were not changed by this work.

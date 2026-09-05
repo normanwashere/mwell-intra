@@ -8,6 +8,63 @@ import { assertDeterministicAuditRunId } from "./uat-ci-run-id.mjs";
 
 const TRANSACTION_VIEWPORTS = new Set(["desktop-1440", "mobile-390"]);
 
+// List all pages before deleting; offsets must not shift during discovery.
+async function listFlatStorageFolder(storage, folder, validName) {
+  const paths = [];
+  for (let offset = 0; ; offset += 100) {
+    const { data, error } = await storage.list(folder, {
+      limit: 100, offset, sortBy: { column: "name", order: "asc" },
+    });
+    if (error || !Array.isArray(data)) throw new Error(`Storage discovery failed for ${folder}: ${error?.message ?? "missing list"}`);
+    for (const object of data) {
+      if (!object.id || typeof object.name !== "string" || !validName.test(object.name))
+        throw new Error(`Unexpected nested or unsafe storage path in ${folder}`);
+      paths.push(`${folder}/${object.name}`);
+    }
+    if (data.length < 100) return paths;
+  }
+}
+
+async function cleanupStorageFolders(database, bucket, folders, validName, exactPaths = []) {
+  const storage = database.storage.from(bucket);
+  const listed = [];
+  for (const folder of folders) listed.push(...await listFlatStorageFolder(storage, folder, validName));
+  for (const path of exactPaths) {
+    if (typeof path !== "string" || !folders.some(folder => path.startsWith(`${folder}/`) && validName.test(path.slice(folder.length + 1))))
+      throw new Error(`Storage cleanup path outside exact scope: ${path}`);
+  }
+  const paths = [...new Set([...listed, ...exactPaths])];
+  for (let offset = 0; offset < paths.length; offset += 100) {
+    const { error } = await storage.remove(paths.slice(offset, offset + 100));
+    if (error) throw new Error(`Storage cleanup failed: ${error.message}`);
+  }
+  for (const folder of folders) {
+    if ((await listFlatStorageFolder(storage, folder, validName)).length)
+      throw new Error(`Storage cleanup left objects in ${folder}`);
+  }
+  return { entity: `storage.${bucket}`, storagePaths: paths, removed: paths.length, remaining: 0 };
+}
+
+export async function cleanupPaymentEvidenceStorage(database, requestIds, attachments, attemptedPaths = []) {
+  for (const id of requestIds) {
+    if (!/^req_[A-Za-z0-9_-]{8,}$/.test(id)) throw new Error("Unsafe payment storage request ID");
+  }
+  for (const row of attachments) {
+    if (!requestIds.includes(row.request_id) || !row.storage_path?.startsWith(`request/${row.request_id}/`))
+      throw new Error("Payment attachment outside exact request scope");
+  }
+  return cleanupStorageFolders(database, "procurement-requests", [...new Set(requestIds)].map(id => `request/${id}`),
+    /^att_[A-Za-z0-9_-]+-[A-Za-z0-9][A-Za-z0-9._-]*$/, [...attachments.map(row => row.storage_path), ...attemptedPaths]);
+}
+
+export async function cleanupExcessCustodyStorage(database, custodyIds) {
+  for (const id of custodyIds) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) throw new Error("Unsafe custody ID");
+  }
+  return cleanupStorageFolders(database, "evidence", [...new Set(custodyIds)].map(id => `excess-custody/${id}`),
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.png$/i);
+}
+
 function unique(values) {
   return [
     ...new Set(values.filter((value) => value !== null && value !== undefined)),
@@ -18,16 +75,23 @@ function apply(query, configure) {
   return configure(query);
 }
 
-export function buildRunScope(runId, viewport) {
+export function buildRunScope(runId, viewport, { vendorEmailTemplate } = {}) {
   assertDeterministicAuditRunId(runId);
   if (!TRANSACTION_VIEWPORTS.has(viewport))
     throw new Error(`Unsupported transaction viewport: ${viewport}.`);
   const marker = `${runId}-${viewport}`;
+  if (vendorEmailTemplate && !vendorEmailTemplate.includes("{marker}"))
+    throw new Error("Vendor cleanup mailbox must contain the run marker placeholder.");
+  const authEmail = vendorEmailTemplate
+    ? vendorEmailTemplate.replaceAll("{marker}", marker.toLowerCase()).trim().toLowerCase()
+    : `audit.vendor.${marker.toLowerCase()}@example.com`;
+  if (!authEmail.includes(marker.toLowerCase()) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(authEmail))
+    throw new Error("Invalid run-scoped vendor cleanup mailbox.");
   return {
     runId,
     viewport,
     marker,
-    authEmail: `audit.vendor.${marker.toLowerCase()}@example.com`,
+    authEmail,
     eventNames: [
       `${marker} Event`,
       `${marker} Intra Event`,
@@ -72,7 +136,7 @@ export async function cleanupAndVerifyRun({
     mutationsRequested: true,
     mutationsApproved: env.POLICY_ALLOW_TEST_MUTATIONS === "true",
   });
-  const scope = buildRunScope(runId, viewport);
+  const scope = buildRunScope(runId, viewport, { vendorEmailTemplate: env.AUDIT_VENDOR_EMAIL });
   const database = client ?? createAuditDatabaseClient(env);
   const results = [];
   const discovered = {};
@@ -161,6 +225,7 @@ export async function cleanupAndVerifyRun({
     vendorRows,
     requestById,
     requestByTitle,
+    receiptRequest,
   ] = await Promise.all([
     find("invites", "legal", "vendor_invites", "id,company_name", (query) =>
       query.eq("company_name", `${scope.marker} Vendor`),
@@ -183,21 +248,29 @@ export async function cleanupAndVerifyRun({
       query.in("legal_name", scope.vendorNames),
     ),
     find("requestsById", "procurement", "requests", "id,title", (query) =>
-      query.like("id", `${scope.marker}%`),
+      query.like("id", `${scope.marker}-%`),
     ),
     find("requestsByTitle", "procurement", "requests", "id,title", (query) =>
       query.eq("title", `${scope.marker} Procurement draft`),
     ),
+    find("receiptRequest", "procurement", "requests", "id,title", (query) =>
+      query.eq("id", `req_${scope.marker}-receipt-request`),
+    ),
   ]);
   const caseRows = unionRows(caseByName, caseById);
   const inviteIds = unique(inviteRows.map((row) => row.id));
-  const requestRows = unionRows(requestById, requestByTitle);
+  const requestRows = unionRows(requestById, requestByTitle, receiptRequest);
   const caseIds = unique(caseRows.map((row) => row.id));
   const vendorIds = unique([
     ...vendorRows.map((row) => row.id),
     ...caseRows.map((row) => row.vendor_id),
   ]);
   const requestIds = unique(requestRows.map((row) => row.id));
+  const organizationRows = await find("auditDepartments", "core", "departments", "id,code,name", (query) =>
+    query.in("name", scope.departments),
+  );
+  const organizationIds = unique(organizationRows.map(row => row.id));
+  const departmentKeys = unique([...scope.departments, ...organizationRows.map(row => row.code)]);
 
   const [
     matrixRows,
@@ -209,7 +282,7 @@ export async function cleanupAndVerifyRun({
     profileRows,
   ] = await Promise.all([
     find("matrices", "procurement", "doa_matrices", "id,department", (query) =>
-      query.in("department", scope.departments),
+      query.in("department", departmentKeys),
     ),
     find(
       "purchaseOrders",
@@ -328,6 +401,20 @@ export async function cleanupAndVerifyRun({
   ]);
   const qualityIds = unique(qualityRows.map((row) => row.id));
   const decisionIds = unique(decisionRows.map((row) => row.id));
+  const custodyRows = decisionIds.length ? await find("excessCustody", "warehouse",
+    "procurement_receipt_excess_custody", "id,decision_id", query => query.in("decision_id", decisionIds)) : [];
+  const paymentRows = poIds.length ? await find("paymentPacks", "procurement",
+    "payment_readiness_packs", "id,purchase_order_id", query => query.in("purchase_order_id", poIds)) : [];
+  const paymentPackIds = unique(paymentRows.map(row => row.id));
+  const attachmentRows = requestIds.length ? await find("requestAttachments", "procurement",
+    "request_attachments", "id,request_id,storage_path", query => query.in("request_id", requestIds)) : [];
+  // Fail closed before removing discoverability rows, including on a failed lookup.
+  if (results.some(item => item.error)) throw new Error("Cleanup discovery failed; evidence and parent rows retained");
+  results.push(await cleanupExcessCustodyStorage(database, custodyRows.map(row => row.id)));
+  const storageRequestIds = requestIds.filter(id => /^req_[A-Za-z0-9_-]{8,}$/.test(id));
+  // The exact synthetic ID also discovers uploads whose registration never committed.
+  storageRequestIds.push(`req_${scope.marker}-receipt-request`);
+  results.push(await cleanupPaymentEvidenceStorage(database, storageRequestIds, attachmentRows));
   const holdRows = qualityIds.length
     ? await find(
         "holds",
@@ -450,6 +537,8 @@ export async function cleanupAndVerifyRun({
     "purchase_order_id",
     (query) => query.in("purchase_order_id", poIds),
   );
+  await removeWhen(paymentPackIds, "procurement", "vendor_invoice_identities", "current_pack_id",
+    query => query.in("current_pack_id", paymentPackIds));
   await removeWhen(
     poIds,
     "procurement",
@@ -457,6 +546,8 @@ export async function cleanupAndVerifyRun({
     "purchase_order_id",
     (query) => query.in("purchase_order_id", poIds),
   );
+  await removeWhen(requestIds, "procurement", "request_attachments", "id",
+    query => query.in("request_id", requestIds));
   await removeWhen(
     poIds,
     "procurement",
@@ -724,11 +815,26 @@ export async function cleanupAndVerifyRun({
       vendorIds.map((id) => `proc-${id}`),
     ),
   );
-  await removeWhen(requestIds, "procurement", "requests", "id", (query) =>
-    query.in("id", requestIds),
-  );
+  try {
+    const { data, error } = await database.schema("procurement").rpc(
+      "cleanup_certification_requests", { p_marker: scope.marker },
+    );
+    if (error) throw new Error(error.message);
+    if (data?.marker !== scope.marker || data?.remaining !== 0)
+      throw new Error("Request cleanup did not certify the exact run scope.");
+    results.push({ entity: "procurement.requests", removed: data.removed, remaining: data.remaining });
+  } catch (error) {
+    results.push({ entity: "procurement.requests", removed: 0, remaining: null,
+      error: error instanceof Error ? error.message : String(error) });
+  }
   await removeWhen(matrixIds, "procurement", "doa_matrices", "id", (query) =>
     query.in("id", matrixIds),
+  );
+  await removeWhen(organizationIds, "core", "department_cost_centers", "id", (query) =>
+    query.in("department_id", organizationIds),
+  );
+  await removeWhen(organizationIds, "core", "departments", "id", (query) =>
+    query.in("id", organizationIds),
   );
   await removeWhen(activityEntityIds, "core", "activity_log", "id", (query) =>
     query.in("entity_id", activityEntityIds),

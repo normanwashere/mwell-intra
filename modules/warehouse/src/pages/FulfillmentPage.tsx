@@ -599,7 +599,7 @@ function OrdersWorkspace({
           >
             Orders and event demand
           </h2>
-          <Link to={FLOOR_WORK_PATH} className="text-sm text-brand-600 underline">Floor work</Link>
+          <Link to={FLOOR_WORK_PATH} className="inline-flex min-h-11 min-w-11 items-center text-sm text-brand-600 underline">Floor work</Link>
           <p className="text-sm text-muted">
             Ecommerce, event, and third-party demand through pick, pack,
             release, and settlement.

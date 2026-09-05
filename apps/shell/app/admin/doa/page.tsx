@@ -362,7 +362,7 @@ function DoaWorkspace({ canManagePolicy }: { canManagePolicy: boolean }) {
   };
 
   return (
-    <div className="space-y-6 pb-44 md:pb-8">
+    <div aria-busy={workspaceLoading} className="space-y-6 pb-44 md:pb-8">
       <ModuleHero
         eyebrow="Intra governance"
         title="Delegation of Authority"
