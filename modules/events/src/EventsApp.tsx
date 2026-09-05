@@ -580,7 +580,11 @@ export function EventsApp({
           </div>
           {reconciliation && (
             <>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <div
+                aria-label="Event outcome totals"
+                className="grid gap-2"
+                style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, max(7rem, calc((100% - 1rem) / 3))), 1fr))" }}
+              >
                 {[
                   ["Sold", reconciliation.soldUnits],
                   ["Giveaway", reconciliation.giveawayUnits],
@@ -594,7 +598,7 @@ export function EventsApp({
                 ].map(([label, value]) => (
                   <div
                     key={String(label)}
-                    className="rounded-lg bg-surface-2 p-3"
+                    className="min-w-0 rounded-lg bg-surface-2 p-3 [overflow-wrap:anywhere]"
                   >
                     <p className="text-xs text-muted">{label}</p>
                     <p className="font-display text-lg font-bold text-ink">

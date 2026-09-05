@@ -126,6 +126,10 @@ describe("event reconciliation handoff", () => {
       expect(term.closest("dt")?.nextElementSibling).toHaveClass("break-all");
     }
     expect(totals.querySelectorAll("dd")).toHaveLength(3);
+    const outcomes = screen.getByLabelText("Event outcome totals");
+    expect(outcomes.style.gridTemplateColumns).toBe("repeat(auto-fit, minmax(min(100%, max(7rem, calc((100% - 1rem) / 3))), 1fr))");
+    expect(outcomes.children).toHaveLength(6);
+    for (const tile of outcomes.children) expect(tile).toHaveClass("min-w-0", "[overflow-wrap:anywhere]");
     expect(screen.getByRole("heading", { name: "Event reconciliation" })).toHaveClass("[overflow-wrap:anywhere]");
     expect(state.saveReconciliation).not.toHaveBeenCalled();
   });

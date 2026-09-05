@@ -156,6 +156,7 @@ export function ModuleHero({
         </div>
       )}
       <div
+        data-module-hero-content="true"
         className={clsx(
           "relative z-10 grid min-w-0 gap-5 md:grid-cols-[minmax(0,1fr)_auto] md:items-end",
           icon && "pr-14 sm:pr-16",

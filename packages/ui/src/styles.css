@@ -375,9 +375,21 @@ select.input {
 /* App-wide workspace hierarchy. These classes are consumed by the shared
    primitives so every module receives the same visual rhythm. */
 .workspace-hero {
+  container-type: inline-size;
+  container-name: module-hero;
   position: relative;
   isolation: isolate;
   border-radius: 0.5rem;
+}
+@container module-hero (max-width: 12rem) {
+  .workspace-hero [data-module-hero-watermark] {
+    position: static;
+    margin-inline-start: auto;
+    margin-block-end: 1rem;
+  }
+  .workspace-hero [data-module-hero-content] {
+    padding-inline-end: 0;
+  }
 }
 .workspace-hero::before {
   content: "";
