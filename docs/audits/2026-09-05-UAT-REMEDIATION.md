@@ -1,6 +1,6 @@
 # September 5 UAT Audit Remediation
 
-Status: seven reviewed migrations applied to UAT; matching application deployment and live journey acceptance pending. Target is mwell-intra-uat.vercel.app and Supabase kkoitlvydytdhlpxhuah only. Main production is untouched.
+Status: seven reviewed migrations and application commit 08cb2215eba6f26f976d407596e4e608e0806070 deployed to UAT; live journey acceptance in progress. Target is mwell-intra-uat.vercel.app and Supabase kkoitlvydytdhlpxhuah only. Main production is untouched.
 
 ## Scope
 
@@ -43,6 +43,10 @@ The Supabase migration tool assigned the following installed versions. Repositor
 Readback confirmed authenticated TRUNCATE=false and service-role TRUNCATE=true for all four targeted custody tables; the legacy return entry point contains the retirement guard. Security-invoker task and event-custody views remain enabled. Read-only projections returned 102 tasks, 3 event-custody rows, and 0 lineage-audit issues at verification time. These counts are not transaction certification.
 
 The latest combined selected SQL suite passed 54 tests. A production application build passed. The service-key security check was not run locally because the CI-only vaulted credential is absent; it must run through the guarded UAT certification workflow.
+
+Public UAT health verified the exact deployed commit, APP_ENV=uat, Supabase kkoitlvydytdhlpxhuah reachable, real Supabase client authentication, accessible static assets, and configured notification, vendor-invite, legal-document and service-worker features. Live vendor workspace and case detail were visually reviewed without modifying its seeded case.
+
+The first CI certification run 33945783269 correctly stopped at two high-severity Browserslist advisories (GHSA-c83g-rgw3-j3cx and GHSA-73wf-gq98-2v4g), before persona or transaction changes. The follow-up pins the transitive dependency to patched 4.28.7; the updated production dependency audit reports zero advisories at every severity. This security follow-up requires its own build/deployment and renewed certification; no security gate was disabled.
 
 ## Documentation Verification
 

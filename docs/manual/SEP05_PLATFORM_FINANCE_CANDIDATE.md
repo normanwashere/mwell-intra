@@ -4,6 +4,8 @@
 
 ## Finance Review
 
+Release maintenance also pins Browserslist to patched 4.28.7 following the September 5 CI dependency scan. The production dependency audit is clean after that change. This does not change user permissions or business procedures, and does not replace live journey acceptance.
+
 Payment cards show invoice identity, due date or an explicit unavailable label, and waiting age. The hero and queue use the same ordering: ready packs and accepted packs with an unpaid balance first, then due date, oldest preparation, and stable identity. Accepted is not the same as released. Ordering still requires business-owner confirmation.
 
 Activity totals are calculated on the server for the displayed month-to-date period. Detail records are retrieved in stable server pages. Unauthorized sources say **Not in your scope**; failed sources say **Unavailable** and offer retry instead of claiming zero or an empty operational queue. Retry currently refreshes the Finance workspace sources together.
