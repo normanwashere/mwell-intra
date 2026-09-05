@@ -28,6 +28,9 @@ const contentSecurityPolicy = [
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  ...(isDev && process.env.MWELL_MEMORY_SIMULATION_TEST === '1'
+    ? { distDir: '.next/memory-simulations' }
+    : {}),
   reactStrictMode: true,
   env: {
     NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA:

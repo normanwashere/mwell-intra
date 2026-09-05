@@ -4,6 +4,8 @@ import {
   ROLE_CURRICULA,
 } from "../../../../modules/learning/src/catalog";
 import type { SimulationStepDefinition } from "../../../../modules/learning/src/types";
+import { evaluateSimulationChoice } from "../../../../modules/learning/src/simulationChoiceAuthority.server";
+import { DEMO_PROFILES } from "../../lib/demoProfiles";
 
 interface RoleSimulationCase {
   personaId: string;
@@ -134,7 +136,7 @@ function practiceFor(roleCase: RoleSimulationCase) {
   if (!requirement || !simulation?.embeddedSteps?.length) {
     throw new Error(`Missing embedded practice for ${roleCase.personaId}.`);
   }
-  return { requirement, steps: simulation.embeddedSteps };
+  return { requirement, simulationId: simulation.id, steps: simulation.embeddedSteps };
 }
 
 function assignedRequirementIds(roleCase: RoleSimulationCase) {
@@ -155,8 +157,10 @@ async function installPreparedSession(
   roleCase: RoleSimulationCase,
   targetRequirementId: string,
 ) {
+  const targetSimulationId = LEARNING_CATALOG.requirements.find(item => item.id === targetRequirementId)?.simulationId;
   const completedProgress = [...assignedRequirementIds(roleCase)]
-    .filter((id) => id !== targetRequirementId)
+    // Equivalent role requirements share completion; keep the entire target practice fresh.
+    .filter((id) => LEARNING_CATALOG.requirements.find(item => item.id === id)?.simulationId !== targetSimulationId)
     .map((requirementId) => {
       const requirement = LEARNING_CATALOG.requirements.find(
         (item) => item.id === requirementId,
@@ -197,18 +201,20 @@ async function installPreparedSession(
   );
 }
 
-function correctChoice(step: SimulationStepDefinition) {
-  const result = step.choices?.find((item) => item.correct);
+function correctChoice(step: SimulationStepDefinition, simulationId: string) {
+  const result = step.choices?.find((item) => evaluateSimulationChoice({ simulationId, checkpointId: step.checkpointId, choiceId: item.id }).accepted);
   if (!result)
     throw new Error(`Missing correct choice for ${step.checkpointId}.`);
   return result;
 }
 
-function incorrectChoice(step: SimulationStepDefinition) {
-  const result = step.choices?.find((item) => !item.correct);
+function incorrectChoice(step: SimulationStepDefinition, simulationId: string) {
+  const result = step.choices?.find((item) => !evaluateSimulationChoice({ simulationId, checkpointId: step.checkpointId, choiceId: item.id }).accepted);
   if (!result)
     throw new Error(`Missing incorrect choice for ${step.checkpointId}.`);
-  return result;
+  const evaluation = evaluateSimulationChoice({ simulationId, checkpointId: step.checkpointId, choiceId: result.id });
+  if (evaluation.accepted) throw new Error("Expected rejected choice");
+  return { ...result, feedback: evaluation.feedback };
 }
 
 test.describe("role-specific guided simulations", () => {
@@ -216,14 +222,18 @@ test.describe("role-specific guided simulations", () => {
     test(`${roleCase.personaId} rejects unsafe choices and completes its governed practice`, async ({
       page,
     }, testInfo) => {
-      const { requirement, steps } = practiceFor(roleCase);
-      await installPreparedSession(page, roleCase, requirement.id);
+      const profile = DEMO_PROFILES.find(item => item.id === roleCase.profileId);
+      if (!profile) throw new Error(`Missing canonical demo profile ${roleCase.profileId}`);
+      const canonicalCase = { ...roleCase, roles: profile.roles };
+      const { requirement, simulationId, steps } = practiceFor(canonicalCase);
+      await installPreparedSession(page, canonicalCase, requirement.id);
       await page.goto(roleCase.route ?? "/onboarding");
 
-      await page
-        .getByRole("button", { name: `Start ${requirement.title}` })
-        .click();
+      const start = page.locator("button:enabled").filter({ hasText: /^Start / });
+      await expect(start).toHaveCount(1);
+      await start.click();
       const dialog = page.getByRole("dialog");
+      await expect(dialog.getByRole("heading", { name: steps[0]!.title, exact: true })).toBeVisible();
       await expect(
         dialog.getByText("Practice case", { exact: true }),
       ).toBeVisible();
@@ -235,7 +245,7 @@ test.describe("role-specific guided simulations", () => {
       });
 
       const first = steps[0]!;
-      const firstUnsafe = incorrectChoice(first);
+      const firstUnsafe = incorrectChoice(first, simulationId);
       await dialog.getByRole("button", { name: firstUnsafe.label }).click();
       await expect(dialog.getByRole("alert")).toContainText(
         firstUnsafe.feedback,
@@ -243,6 +253,8 @@ test.describe("role-specific guided simulations", () => {
       await expect(
         dialog.getByRole("heading", { name: first.title }),
       ).toBeVisible();
+      await dialog.getByRole("alert").scrollIntoViewIfNeeded();
+      await expect(dialog.getByRole("alert")).toBeInViewport();
       await page.screenshot({
         path: testInfo.outputPath(
           `guided-simulation-correction-${roleCase.personaId}-${testInfo.project.name}.png`,
@@ -251,15 +263,12 @@ test.describe("role-specific guided simulations", () => {
       });
 
       await dialog
-        .getByRole("button", { name: correctChoice(first).label })
+        .getByRole("button", { name: correctChoice(first, simulationId).label })
         .click();
-      const second = steps[1]!;
-      await expect(
-        dialog.getByRole("heading", { name: second.title }),
-      ).toBeVisible();
-      await dialog
-        .getByRole("button", { name: correctChoice(second).label })
-        .click();
+      for (const step of steps.slice(1)) {
+        await expect(dialog.getByRole("heading", { name: step.title, exact: true })).toBeVisible();
+        await dialog.getByRole("button", { name: correctChoice(step, simulationId).label, exact: true }).click();
+      }
       await expect(
         dialog.getByRole("heading", { name: "Guided practice complete" }),
       ).toBeVisible();

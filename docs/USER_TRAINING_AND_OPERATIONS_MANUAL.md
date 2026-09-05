@@ -1,5 +1,11 @@
 # User Training And Operations Manual
 
+## Reading PO Counts and Closure
+
+**Received** is the physical count from the matching normalized PO line. **Unknown** means that count could not be read; refresh or escalate without assuming zero, full receipt or a payment entitlement. **Not yet QC accepted (outstanding)** is separate: delivered stock can still await inspection. A known receipt with no Quality acceptance shows **Awaiting QC acceptance**.
+
+PO **Closed** is not proof of acceptance, payment or governed file closure. **Package closed** requires confirmed governed closure; **PO closed; lifecycle review required** retains unresolved evidence and recovery requirements. Review current control gaps and the separate acceptance/Finance records. Never alter source quantities, add an outstanding line, reopen a PO or broaden permissions merely to remove a status warning. This clarity correction is a candidate until verified on its matching deployment.
+
 ## September 5 Candidate Training Delta
 
 Use these scenarios with the matching UAT release only. September 5 changes through `7dd30cb` are deployed and targeted read-only checks have passed; full transaction certification remains pending. The subsequent enlarged-title and outcome-layout correction requires its own deployed check. Live navigation is not transaction certification.

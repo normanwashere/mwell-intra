@@ -46,6 +46,7 @@ export function CommitmentReadinessPanel({
   const [acknowledgementReference, setAcknowledgementReference] = useState('');
   const [deliveryReference, setDeliveryReference] = useState('');
   const acknowledgementOverdue = lifecycle?.acknowledgementStatus === 'overdue';
+  const governedClosed = lifecycle?.closureStatus === 'closed';
 
   return (
     <section className="space-y-3" aria-label="PO commitment readiness">
@@ -54,8 +55,9 @@ export function CommitmentReadinessPanel({
           <h3 className="font-semibold text-ink">PO commitment and delivery control</h3>
           <p className="text-xs text-muted">The server owns issue, acceptance, quality recovery, and closure decisions.</p>
         </div>
-        <Badge tone={terminal || readiness.ready ? 'emerald' : 'amber'}>{terminal ? 'Package closed' : readiness.ready ? 'Package ready' : `${readiness.blockers.length} package blocker${readiness.blockers.length === 1 ? '' : 's'}`}</Badge>
+        <Badge tone={(terminal ? governedClosed : readiness.ready) ? 'emerald' : 'amber'}>{terminal ? governedClosed ? 'Package closed' : 'PO closed; lifecycle review required' : readiness.ready ? 'Package ready' : `${readiness.blockers.length} package blocker${readiness.blockers.length === 1 ? '' : 's'}`}</Badge>
       </div>
+      {terminal && !governedClosed && <p className="text-sm text-amber-800 dark:text-amber-200">PO status is closed. Governed closure is not confirmed; current evidence and recovery requirements remain below.</p>}
 
       <div className="grid gap-2 sm:grid-cols-2">
         {readiness.requiredEvidence.map((item) => (
@@ -72,7 +74,7 @@ export function CommitmentReadinessPanel({
         <p><span className="font-semibold text-ink">48-hour acknowledgement threshold</span><br /><span className="text-muted">{lifecycle.acknowledgementDueAt ? new Date(lifecycle.acknowledgementDueAt).toLocaleString() : 'Starts only after governed issue.'}</span></p>
         <p><span className="font-semibold text-ink">Quality recovery</span><br /><span className="text-muted">{lifecycle.qualityRecoveryStatus.replaceAll('_', ' ')}</span>{lifecycle.qualityRecoveryStatus === 'payment_hold' ? <span className="ml-2"><Badge tone="rose">Payment hold</Badge></span> : null}</p>
         <p><span className="font-semibold text-ink">Delivery notice</span><br /><span className="text-muted">{lifecycle.deliveryNoticeStatus}</span></p>
-        <p><span className="font-semibold text-ink">Closure</span><br /><span className="text-muted">{lifecycle.closureStatus}</span></p>
+        <p><span className="font-semibold text-ink">Governed closure</span><br /><span className="text-muted">{lifecycle.closureStatus}</span></p>
       </div>}
 
       {(canAcknowledge || canRecordDeliveryNotice) && <div className="grid gap-3 rounded-lg border border-line p-3 sm:grid-cols-2">

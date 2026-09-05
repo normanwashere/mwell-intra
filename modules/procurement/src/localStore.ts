@@ -17,6 +17,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useCan, useSession } from '@intra/auth';
+import { governedReceivedQuantity } from './evidencePresentation';
 import type {
   ApprovalDecision,
   ApprovalSignature,
@@ -413,7 +414,7 @@ function mapPaymentReadinessPack(row: LiveRow): PaymentReadinessPack {
   } as unknown as PaymentReadinessPack;
 }
 
-function mapPurchaseOrder(
+export function mapPurchaseOrder(
   row: LiveRow,
   receiptStatus?: PurchaseOrderReceiptStatus,
   acceptancePacks: AcceptancePack[] = [],
@@ -422,6 +423,7 @@ function mapPurchaseOrder(
   paymentReadinessStalenessEvents: PaymentReadinessStalenessEvent[] = [],
   lifecycle?: PurchaseOrderLifecycle,
   openMonitoringItems: OpenPurchaseOrderMonitoringItem[] = [],
+  normalizedLines?: LiveRow[],
 ): PurchaseOrder {
   return {
     id: row.id,
@@ -434,7 +436,11 @@ function mapPurchaseOrder(
     expectedDate: row.expected_date ?? undefined,
     notes: row.notes ?? undefined,
     origin: row.origin ?? 'procurement',
-    lines: row.lines ?? [],
+    // Receipt writes update normalized lines, not the embedded PO snapshot.
+    lines: normalizedLines ? (row.lines ?? []).map((line: PurchaseOrderLine) => ({
+      ...line,
+      receivedQuantity: governedReceivedQuantity(row.id, line.id, normalizedLines),
+    })) : row.lines ?? [],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     cancellationVersion: Number(row.cancellation_version ?? 1),
@@ -1218,6 +1224,10 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
       'purchase_order_receipt_status',
       mapReceiptStatus,
     );
+  const [livePoLines, livePoLinesLoading, refreshPoLines] = useLiveRows<LiveRow>(
+    live, 'procurement', 'purchase_order_lines', (row) => row,
+    { column: 'id', ascending: true },
+  );
   const [liveAcceptances, liveAcceptancesLoading, refreshAcceptances] = useLiveRows<AcceptancePack>(
     live,
     'procurement',
@@ -1350,11 +1360,13 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
       liveStalenessEvents.filter((event) => event.purchaseOrderId === row.id),
       liveLifecycle.find((item) => item.purchaseOrderId === row.id),
       liveMonitoring.filter((item) => (item as { purchaseOrderId?: string }).purchaseOrderId === row.id),
+      livePoLines,
     ),
   );
   const rows = isLive(live) ? liveRows : localRows;
   const loading = isLive(live)
     ? liveRowsLoading ||
+      livePoLinesLoading ||
       liveReceiptStatusesLoading ||
       liveAcceptancesLoading ||
       livePaymentPacksLoading ||
@@ -1364,6 +1376,7 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
   const refreshLive = useCallback(async () => {
     await Promise.all([
       refreshPos(),
+      refreshPoLines(),
       refreshReceiptStatuses(),
       refreshAcceptances(),
       refreshPaymentPacks(),
@@ -1374,6 +1387,7 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
     ]);
   }, [
     refreshPos,
+    refreshPoLines,
     refreshReceiptStatuses,
     refreshAcceptances,
     refreshPaymentPacks,

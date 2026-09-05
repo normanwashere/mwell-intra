@@ -6,6 +6,7 @@ import { PGlite } from '@electric-sql/pglite';
 const prior = readFileSync(new URL('../../supabase/migrations/20260905175131_uat_request_cleanup_retained_history.sql', import.meta.url), 'utf8');
 const forward = readFileSync(new URL('../../supabase/migrations/20260905181632_certification_payment_evidence_cleanup.sql', import.meta.url), 'utf8');
 const retention = readFileSync(new URL('../../supabase/migrations/20260905090000_procurement_remediation.sql', import.meta.url), 'utf8');
+const invoiceAcl = readFileSync(new URL('../../supabase/migrations/20260905225538_authorize_service_invoice_identity_cleanup.sql', import.meta.url), 'utf8');
 const marker = 'QA-20260905-00003C1F-desktop-1440';
 const requestId = `req_${marker}-receipt-request`;
 async function fixture() {
@@ -74,5 +75,63 @@ test('forward cleanup rejects roles, invalid scope and linked POs atomically', a
     await assert.rejects(cleanup(db), /Linked purchase orders remain/);
     for (const table of ['requests', 'approval_steps', 'approval_step_audit', 'request_revisions', 'request_attachments'])
       assert.equal((await db.query(`select count(*)::int n from procurement.${table}`)).rows[0].n, 5);
+  } finally { await db.close(); }
+});
+
+test('actual invoice identity ACL reproduces cleanup failure then permits only service scoped read/delete', async () => {
+  const db = await fixture();
+  const desktop = 'QA-20260905-00003DAF-desktop-1440';
+  const mobile = 'QA-20260905-00003DB0-mobile-390';
+  try {
+    await db.exec(forward);
+    await db.exec(`alter role service_role bypassrls;
+      create table procurement.payment_readiness_packs(id uuid primary key, purchase_order_id text references procurement.purchase_orders);
+      grant select,delete on procurement.payment_readiness_packs,procurement.purchase_orders to service_role;`);
+    const start = retention.indexOf('create table procurement.vendor_invoice_identities (');
+    const end = retention.indexOf('insert into procurement.vendor_invoice_identities', start);
+    assert.ok(start >= 0 && end > start);
+    await db.exec(retention.slice(start, end));
+    const scopes = [desktop, mobile, desktop + '-lookalike', 'ordinary'];
+    const packs = [];
+    for (const scope of scopes) {
+      const id = (await db.query('select gen_random_uuid() id')).rows[0].id;
+      packs.push(id);
+      await db.query('insert into procurement.requests(id,title) values($1,$2)', [`req_${scope}-receipt-request`, 'Retained']);
+      await db.query('insert into procurement.purchase_orders values($1,$2)', [`${scope}-po`, `req_${scope}-receipt-request`]);
+      await db.query('insert into procurement.payment_readiness_packs values($1,$2)', [id, `${scope}-po`]);
+      await db.query(`insert into procurement.vendor_invoice_identities values(gen_random_uuid(),$1,$2)`, [scope, id]);
+    }
+    const removeIdentity = id => db.query('delete from procurement.vendor_invoice_identities where current_pack_id=$1', [id]);
+    await db.exec("set test.role='service_role'; set role service_role");
+    await assert.rejects(db.query('select current_pack_id from procurement.vendor_invoice_identities'), /permission denied/);
+    await assert.rejects(removeIdentity(packs[0]), /permission denied/);
+    await assert.rejects(db.query('delete from procurement.payment_readiness_packs where id=$1', [packs[0]]), /vendor_invoice_identities_current_pack_id_fkey/);
+    await db.exec('reset role');
+    await db.exec(invoiceAcl);
+    await db.exec(invoiceAcl);
+    for (const role of ['anon', 'authenticated']) {
+      await db.exec(`set role ${role}`);
+      await assert.rejects(db.query('select current_pack_id from procurement.vendor_invoice_identities'), /permission denied/);
+      await assert.rejects(removeIdentity(packs[0]), /permission denied/);
+      await db.exec('reset role');
+    }
+    await db.exec('set role service_role');
+    await assert.rejects(db.query('select invoice_identity from procurement.vendor_invoice_identities'), /permission denied/);
+    await assert.rejects(db.query('update procurement.vendor_invoice_identities set current_pack_id=$1', [packs[0]]), /permission denied/);
+    await assert.rejects(db.query(`insert into procurement.vendor_invoice_identities values(gen_random_uuid(),'new',$1)`, [packs[0]]), /permission denied/);
+    for (const [index, scope] of [desktop, mobile].entries()) {
+      // Same exact-pack filter and identity -> pack -> PO -> retained-request ordering as cleanup.
+      assert.equal((await db.query('select current_pack_id from procurement.vendor_invoice_identities where current_pack_id=$1', [packs[index]])).rows.length, 1);
+      await removeIdentity(packs[index]);
+      await removeIdentity(packs[index]);
+      assert.equal((await db.query('select current_pack_id from procurement.vendor_invoice_identities where current_pack_id=$1', [packs[index]])).rows.length, 0);
+      await db.query('delete from procurement.payment_readiness_packs where id=$1', [packs[index]]);
+      await db.query('delete from procurement.purchase_orders where id=$1', [`${scope}-po`]);
+      assert.equal((await cleanup(db, scope)).removed, 1);
+    }
+    await db.exec('reset role');
+    assert.deepEqual((await db.query('select invoice_identity from procurement.vendor_invoice_identities order by invoice_identity')).rows.map(row => row.invoice_identity), [desktop + '-lookalike', 'ordinary']);
+    assert.equal((await db.query('select count(*)::int n from procurement.payment_readiness_packs')).rows[0].n, 2);
+    assert.equal((await db.query("select relrowsecurity from pg_class where oid='procurement.vendor_invoice_identities'::regclass")).rows[0].relrowsecurity, true);
   } finally { await db.close(); }
 });

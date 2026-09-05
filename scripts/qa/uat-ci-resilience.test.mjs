@@ -212,6 +212,7 @@ test("prepare runs only reviewed Sep05 SQL suites before persona provisioning", 
     "scripts/verify-provisional-quality-hold-release.pglite.test.mjs",
     "scripts/qa/serialized-hold-fixture.pglite.test.mjs",
     "scripts/qa/closed-po-payment.pglite.test.mjs",
+    "scripts/qa/excess-custody-resolution.pglite.test.mjs",
     "scripts/verify-sep05-procurement-integration.pglite.test.mjs",
     "scripts/verify-putaway-tasks.pglite.test.mjs",
     "scripts/verify-receiving-drafts.pglite.test.mjs",
@@ -233,12 +234,23 @@ test("controlled vendor cleanup uses the same exact run mailbox and refuses a sh
   assert.throws(() => buildRunScope(id, "mobile-390", { vendorEmailTemplate: "{marker}" }), /Invalid/);
 });
 
-test("UAT runs disclosure and actual Quality workflow browser regressions after Chromium installation", async () => {
+test("UAT runs explicit browser and receipt-quality helper contracts after Chromium installation", async () => {
   const workflow = await readFile(new URL("../../.github/workflows/uat-live-certification.yml", import.meta.url), "utf8");
   const installed = workflow.indexOf("Install Chromium for first-login certification");
   const contract = workflow.indexOf("run: node --test scripts/qa/audit-disclosure.browser.test.mjs scripts/qa/quality-validation-workflow.browser.test.mjs");
   const orientation = workflow.indexOf("Complete first-login role orientations on desktop");
   assert.ok(installed >= 0 && contract > installed && orientation > contract);
+  const step = workflow.split("      - name: Verify browser audit visibility and readiness contracts\n")[1]?.split("      - name:")[0];
+  assert.ok(step, "dedicated browser/helper contract step exists");
+  assert.deepEqual(step.trim().split(/\s+/), [
+    "run:", "node", "--test",
+    "scripts/qa/audit-disclosure.browser.test.mjs",
+    "scripts/qa/quality-validation-workflow.browser.test.mjs",
+    "scripts/qa/route-evidence.browser.test.mjs",
+    "scripts/qa/evidence-upload.browser.test.mjs",
+    "scripts/qa/receipt-quality-probes.test.mjs",
+    "scripts/qa/excess-save-outcome.browser.test.mjs",
+  ]);
 });
 
 test("production certification is read-only and covers every supported viewport", async () => {

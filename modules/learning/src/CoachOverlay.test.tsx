@@ -39,6 +39,18 @@ function visible(element: HTMLElement, rect: Partial<DOMRect> = {}) {
 }
 
 describe("CoachOverlay", () => {
+  it("bounds a desktop coach to the viewport and scrolls long feedback", () => {
+    const anchor = document.createElement("button");
+    anchor.dataset.onboardingAnchor = "purchase-order";
+    document.body.append(anchor);
+    visible(anchor, { top: 700, bottom: 760 });
+    render(<CoachOverlay step={step} canGoBack={false} onBack={vi.fn()} onExit={vi.fn()} onResumeLater={vi.fn()} />);
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveClass("overflow-y-auto");
+    expect(Number.parseFloat(dialog.style.maxHeight)).toBeGreaterThan(0);
+    expect(Number.parseFloat(dialog.style.top) + Number.parseFloat(dialog.style.maxHeight)).toBe(window.innerHeight - 16);
+  });
+
   it("stops safely when the anchor is missing or ambiguous", () => {
     const { rerender } = render(
       <CoachOverlay step={step} canGoBack={false} onBack={vi.fn()} onExit={vi.fn()} onResumeLater={vi.fn()} />,

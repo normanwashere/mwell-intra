@@ -333,6 +333,38 @@ describe("PurchaseOrdersPage", () => {
   });
   afterEach(() => vi.restoreAllMocks());
 
+  it("shows excess RPC rejection inside the open dialog and closes after successful retry", async () => {
+    liveDrafts.enabled = true;
+    const resolve = vi.fn()
+      .mockResolvedValueOnce({ error: { message: "Approved amendment does not cover this excess custody" } })
+      .mockResolvedValueOnce({ error: null });
+    liveDrafts.rpc.mockImplementation(async (name: string, args: unknown) => {
+      if (name === "resolve_procurement_receipt_excess") return resolve(args);
+      if (name === "procurement_receipt_excess_work_items") return { error: null, data: [{
+        custody_id: "custody-1", receipt_id: "receipt-1", purchase_order_id: "live-po-1",
+        po_line_id: "live-line-1", po_number: "PO-LIVE-001", product_name: "Smart watches",
+        ordered_quantity: 2, excess_quantity: 1, status: "held", eligible_approved_amendments: [],
+      }] };
+      return { error: null, data: [] };
+    });
+    renderWithProviders(<PurchaseOrdersPage />, {
+      role: "logistics_supervisor", repo: new LiveProcurementRepository(), source: "supabase",
+      capabilities: ["release_quality_hold", "resolve_exceptions"],
+    });
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: /review excess custody/i }));
+    const dialog = screen.getByRole("dialog", { name: /final excess custody disposition/i });
+    await user.type(within(dialog).getByLabelText(/decision reason/i), "Return excess stock");
+    await user.type(within(dialog).getByLabelText(/evidence url/i), "https://example.com/evidence.pdf");
+    await user.click(within(dialog).getByRole("button", { name: /record final disposition/i }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("Approved amendment does not cover this excess custody");
+    expect(dialog).toBeVisible();
+    expect(within(dialog).getByRole("button", { name: /record final disposition/i })).toBeEnabled();
+    await user.click(within(dialog).getByRole("button", { name: /record final disposition/i }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: /final excess custody disposition/i })).not.toBeInTheDocument());
+    expect(resolve).toHaveBeenCalledTimes(2);
+  });
+
   it.each(["another PO", "the same PO"])(
     "ignores a late evidence upload after closing and reopening %s",
     async (destination) => {

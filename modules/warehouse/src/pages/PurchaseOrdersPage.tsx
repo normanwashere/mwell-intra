@@ -537,7 +537,7 @@ export function PurchaseOrdersPage() {
   };
 
   const decideExcessCustody = async (input: ExcessCustodyDecisionInput) => {
-    if (!supabaseClient) return false;
+    if (!supabaseClient) throw new Error("A signed-in connection is required to record the disposition.");
     const { error: rpcError } = await supabaseClient
       .schema("warehouse")
       .rpc("resolve_procurement_receipt_excess", {
@@ -551,8 +551,8 @@ export function PurchaseOrdersPage() {
         },
       });
     if (rpcError) {
-      toast.error(rpcError.message);
-      return false;
+      // Let the open decision dialog retain and announce the server rejection.
+      throw new Error(rpcError.message);
     }
     if (!(await refreshReceiptAuthorityQueues())) return false;
     toast.success("Excess custody disposition recorded");

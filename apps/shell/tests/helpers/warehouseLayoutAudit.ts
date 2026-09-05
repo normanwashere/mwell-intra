@@ -66,7 +66,21 @@ export async function auditWarehouseLayout(
         const style = getComputedStyle(parent);
         if (/hidden|clip/.test(`${style.overflow}${style.overflowX}${style.overflowY}`)) {
           const bounds = parent.getBoundingClientRect();
-          if (rect.left < bounds.left - 2 || rect.right > bounds.right + 2) return true;
+          if (rect.left < bounds.left - 2 || rect.right > bounds.right + 2) {
+            // Viewport-fixed descendants can escape an overflow ancestor. Check
+            // the rendered control edges, not only the DOM ancestry.
+            const centerX = (rect.left + rect.right) / 2;
+            const centerY = (Math.max(0, rect.top) + Math.min(viewportHeight, rect.bottom)) / 2;
+            const exposed = [
+              [rect.left + 2, centerY], [rect.right - 2, centerY],
+              [centerX, Math.max(0, rect.top) + 2],
+              [centerX, Math.min(viewportHeight, rect.bottom) - 2],
+            ].every(([x, y]) => {
+                const hit = document.elementFromPoint(x, y);
+                return hit === element || (hit !== null && element.contains(hit));
+            });
+            if (!exposed) return true;
+          }
         }
         parent = parent.parentElement;
       }

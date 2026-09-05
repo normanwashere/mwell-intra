@@ -73,6 +73,7 @@ export function ExcessCustodyDecisionPanel({
         evidenceUrls: [attachment.reference.trim()],
       });
       if (ok) setSelected(null);
+      else setSubmitError('The disposition could not be confirmed. Review the record before trying again.');
     } catch (cause) {
       setSubmitError(cause instanceof Error ? cause.message : 'The disposition could not be recorded. Try again.');
     } finally {
@@ -103,8 +104,11 @@ export function ExcessCustodyDecisionPanel({
       </ul>
       <Sheet open={Boolean(selected)} onOpenChange={(open) => { if (!open && !submittingRef.current) setSelected(null); }}
         title="Final excess custody disposition" description={selected ? `${selected.poNumber} · line ${selected.poLineId}` : undefined}
-        footer={<button type="button" className="btn-primary w-full justify-center" disabled={invalid || submitting}
-          onClick={() => void submit()}>{submitting ? 'Recording...' : 'Record final disposition'}</button>}>
+        footer={<div className="w-full space-y-3">
+          {submitError && <p role="alert" className="break-words text-sm text-rose-700">{submitError}</p>}
+          <button type="button" className="btn-primary w-full justify-center" disabled={invalid || submitting}
+            onClick={() => void submit()}>{submitting ? 'Recording...' : 'Record final disposition'}</button>
+        </div>}>
         {selected && <div className="space-y-4">
           <dl className="grid grid-cols-2 gap-3 rounded-lg bg-inset p-3 text-sm">
             <div><dt className="text-xs text-faint">Ordered at receipt</dt><dd className="font-semibold text-ink">{selected.orderedQuantity}</dd></div>
@@ -144,7 +148,6 @@ export function ExcessCustodyDecisionPanel({
                 return url;
               } };
             }} />
-          {submitError && <p role="alert" className="text-sm text-rose-700">{submitError}</p>}
         </div>}
       </Sheet>
     </section>

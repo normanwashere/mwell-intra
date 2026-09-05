@@ -24,6 +24,7 @@ import { cleanupRun } from "./live-e2e-cleanup.mjs";
 import { createPaymentAuditEvidence, evidencePdf } from "./payment-audit-evidence.mjs";
 import { cleanupCertificationRequestEvidence, cleanupExcessCustodyStorage, gateCertificationRequestCleanup } from "./cleanup-uat-live-run.mjs";
 import { resolveSharedUatPassword } from "./provision-uat-intra-test-users.mjs";
+import { certifyPoLineIdentity, certifyControlledExceptionDenial } from "./receipt-quality-probes.mjs";
 
 const require = createRequire(path.resolve("apps/shell/package.json"));
 const { chromium } = require("@playwright/test");
@@ -1563,8 +1564,9 @@ async function captureRouteEvidence(
     page,
     screenshotPath,
     70,
-    // Mask even revealed passwords and other populated form fields without editing them.
-    [page.locator("input, textarea, [contenteditable='true']")],
+    // Retain choice/button states; text-entry fields include revealed passwords.
+    // Excluding non-text types also keeps missing/invalid types (text) private.
+    [page.locator("input:not([type='checkbox' i], [type='radio' i], [type='button' i], [type='submit' i], [type='reset' i], [type='image' i], [type='hidden' i], [type='range' i], [type='color' i], [type='file' i]), textarea, [contenteditable]:not([contenteditable='false' i])")],
   );
   if (!screenshots.length) throw new Error("No route screenshot evidence captured.");
   return screenshots;
@@ -3529,6 +3531,7 @@ async function task3OperatorReceiptTransactions(page, fixture) {
   const qualityProbe = JSON.parse(qualityProbeReceipt.body);
   fixture.ids.qualityProbeReceipt = qualityProbe.receipt.id;
   fixture.ids.qualityProbeDecision = qualityProbe.decision.id;
+  fixture.ids.qualityProbeException = qualityProbe.exception.id;
   fixture.cleanupDecisionIds.push(qualityProbe.decision.id);
   fixture.cleanupExceptionIds.push(qualityProbe.exception.id);
 
@@ -3993,6 +3996,21 @@ async function task3ApproveExcessAmendment(page, fixture) {
 }
 
 async function task3SupervisorTransactions(page, fixture) {
+  const readQualityState = async (receiptId, exceptionId) => {
+    const read = async query => {
+      const { data, error } = await query;
+      if (error) throw new Error(`Quality probe readback failed: ${error.message}`);
+      return data;
+    };
+    const warehouse = fixture.client.schema("warehouse");
+    const receipt = await read(warehouse.from("receipts").select("*").eq("id", receiptId).single());
+    const inspections = await read(warehouse.from("quality_inspections").select("*")
+      .eq("source_type", "receipt").eq("source_id", receiptId).order("id"));
+    const holds = inspections.length ? await read(warehouse.from("inventory_holds").select("*")
+      .in("inspection_id", inspections.map(row => row.id)).order("id")) : [];
+    const exception = exceptionId ? await read(warehouse.from("exceptions").select("*").eq("id", exceptionId).single()) : null;
+    return { receipt, inspections, holds, exception };
+  };
   const inventoryQuantity = async () => {
     const { data, error } = await fixture.client
       .schema("warehouse")
@@ -4011,21 +4029,21 @@ async function task3SupervisorTransactions(page, fixture) {
     [fixture.ids.cleanReceipt, fixture.ids.cleanLine, "clean"],
     [fixture.ids.partialReceipt, fixture.ids.partialLine, "partial"],
   ]) {
-    const accepted = await callRpcAsBrowserUser(
-      page,
-      "warehouse",
-      "inspect_quality",
-      {
-        idempotency_key: `${fixture.marker}-${suffix}-independent-qc`,
-        source_type: "receipt",
-        source_id: receiptId,
-        product_id: fixture.ids.product,
-        procurement_po_line_id: lineId,
-        quantity: 1,
-        disposition: "accepted",
-        evidence_urls: [`audit/${fixture.marker}/${suffix}-independent-qc.jpg`],
-      },
-    );
+    const payload = {
+      idempotency_key: `${fixture.marker}-${suffix}-independent-qc`,
+      source_type: "receipt",
+      source_id: receiptId,
+      product_id: fixture.ids.product,
+      procurement_po_line_id: lineId,
+      quantity: 1,
+      disposition: "accepted",
+      evidence_urls: [`audit/${fixture.marker}/${suffix}-independent-qc.jpg`],
+    };
+    const call = payload => callRpcAsBrowserUser(page, "warehouse", "inspect_quality", payload);
+    const accepted = suffix === "clean"
+      ? await certifyPoLineIdentity({ payload, wrongLine: fixture.ids.quarantineLine,
+          readState: () => readQualityState(receiptId), call })
+      : await call(payload);
     if (!accepted.ok)
       throw new Error(
         `Independent ${suffix} receipt inspection failed: ${accepted.body}`,
@@ -4188,23 +4206,8 @@ async function task3SupervisorTransactions(page, fixture) {
     /permission|denied|schema|not found|could not find/i,
     "private quality inspection direct denial",
   );
-  requireRpcFailure(
-    await callRpcAsBrowserUser(page, "warehouse", "inspect_quality", {
-      idempotency_key: `${fixture.marker}-wrong-receipt-line`,
-      source_type: "receipt",
-      source_id: fixture.ids.quarantineReceipt,
-      product_id: fixture.ids.product,
-      procurement_po_line_id: fixture.ids.cleanLine,
-      quantity: 1,
-      disposition: "hold",
-      reason: "caller line must belong to receipt",
-      evidence_urls: [`audit/${fixture.marker}/wrong-line.jpg`],
-    }),
-    /does not belong to the receipt/i,
-    "receipt quality PO-line identity",
-  );
-  requireRpcFailure(
-    await callRpcAsBrowserUser(page, "warehouse", "inspect_quality", {
+  await certifyControlledExceptionDenial({
+    payload: {
       idempotency_key: `${fixture.marker}-active-exception-public-quality-denial`,
       source_type: "receipt",
       source_id: fixture.ids.qualityProbeReceipt,
@@ -4213,10 +4216,10 @@ async function task3SupervisorTransactions(page, fixture) {
       quantity: 1,
       disposition: "accepted",
       evidence_urls: [`audit/${fixture.marker}/active-exception-qc-denial.jpg`],
-    }),
-    /active controlled receipt exception|controlled exception resolver/i,
-    "active exception public quality denial",
-  );
+    },
+    readState: () => readQualityState(fixture.ids.qualityProbeReceipt, fixture.ids.qualityProbeException),
+    call: payload => callRpcAsBrowserUser(page, "warehouse", "inspect_quality", payload),
+  });
   // Deterministic hold creation versus reservation: both browser-role transactions
   // share the product lock, so exactly one concurrent hold or reservation may consume availability.
   const atpBeforeRaceResult = await callRpcArgsAsBrowserUser(
@@ -5220,6 +5223,8 @@ async function task3SupervisorTransactions(page, fixture) {
   return {
     name: "Task 3 supervisor quarantine and variance transactions",
     ok: true,
+    poLineIdentityVerified: true,
+    controlledExceptionCustodyPreserved: true,
     varianceRequestId: fixture.cycleRequestId,
     selfApprovalDenied: true,
   };
@@ -5283,6 +5288,27 @@ async function waitForUploadedEvidence(dialog, filename) {
   await uploaded.waitFor({ state: "visible" });
 }
 
+async function waitForExcessSaveOutcome(page, dialog, timeout = 30_000) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    const errors = await dialog.locator('[role="alert"]').evaluateAll((alerts) =>
+      alerts.filter((alert) => {
+        if (!alert.getClientRects().length) return false;
+        for (let node = alert; node instanceof HTMLElement; node = node.parentElement) {
+          const style = getComputedStyle(node);
+          if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return false;
+        }
+        return true;
+      }).map((alert) => alert.innerText.trim()).filter(Boolean),
+    );
+    if (errors.length) throw new Error(`Excess custody disposition failed: ${errors.join('; ')}`);
+    // Preserve the previous success condition; a hidden but attached dialog is not success.
+    if (await dialog.count() === 0) return;
+    await page.waitForTimeout(100);
+  }
+  throw new Error('Excess custody disposition did not close the dialog or report an inline error before timeout.');
+}
+
 async function task3SupervisorExcessFinalDisposition(page, fixture) {
   const workItems = await callRpcAsBrowserUser(
     page,
@@ -5315,6 +5341,7 @@ async function task3SupervisorExcessFinalDisposition(page, fixture) {
     .click();
   const custodyDialog = page.getByRole("dialog", {
     name: "Final excess custody disposition",
+    includeHidden: true,
   });
   await custodyDialog
     .getByLabel("Governed outcome")
@@ -5334,7 +5361,7 @@ async function task3SupervisorExcessFinalDisposition(page, fixture) {
   await custodyDialog
     .getByRole("button", { name: "Record final disposition" })
     .click();
-  await custodyDialog.waitFor({ state: "detached" });
+  await waitForExcessSaveOutcome(page, custodyDialog);
   await verifyCheckpoint(
     {
       schema: "warehouse",

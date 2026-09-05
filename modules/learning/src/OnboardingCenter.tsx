@@ -52,13 +52,54 @@ const capabilityLabel = (value: string) =>
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
 
+// Published role_curricula verified on UAT, 2026-09-06. These are presentation
+// aliases only, not curriculum replacements or additional capability grants.
+const publishedRoles = [
+  "core.platform_admin",
+  "events.admin",
+  "events.coordinator",
+  "events.finance_reviewer",
+  "events.requester",
+  "legal.admin",
+  "legal.compliance",
+  "legal.legal_reviewer",
+  "procurement.admin",
+  "procurement.approver",
+  "procurement.finance",
+  "procurement.procurement_officer",
+  "procurement.requester",
+  "product.contributor",
+  "product.operations_partner",
+  "product.product_owner",
+  "warehouse.business_unit",
+  "warehouse.finance",
+  "warehouse.logistics_supervisor",
+  "warehouse.marketing",
+  "warehouse.operations",
+  "warehouse.procurement",
+  "warehouse.warehouse_supervisor",
+  "core.vendor_portal",
+];
+
 function certificationContext(certification: Certification): string {
   const module = MODULES[certification.capability.module];
   const curriculum = ROLE_CURRICULA.find(
     (item) =>
-      item.id === certification.curriculumId &&
-      item.version === certification.curriculumVersion &&
-      item.module === certification.capability.module,
+      item.module === certification.capability.module &&
+      ((item.id === certification.curriculumId &&
+        item.version === certification.curriculumVersion) ||
+        (publishedRoles.includes(`${item.module}.${item.role}`) &&
+          certification.curriculumId ===
+            `${item.audience}.role.${item.module}.${item.role}.capability-practice.v1.curriculum` &&
+          (certification.curriculumVersion === 1 ||
+            (item.module === "warehouse" &&
+              item.role === "marketing" &&
+              certification.curriculumVersion === 2))) ||
+        (item.module === "warehouse" &&
+          item.role === "warehouse_operator" &&
+          certification.curriculumId ===
+            "internal.warehouse.warehouse_operator.receiving-certification.v1" &&
+          certification.curriculumVersion === 1)),
   );
   const role = curriculum
     ? Object.entries(module.roles).find(([key]) => key === curriculum.role)?.[1]

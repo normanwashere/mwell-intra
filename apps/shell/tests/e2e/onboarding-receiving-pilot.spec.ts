@@ -251,14 +251,15 @@ test.describe("Warehouse receiving onboarding pilot", () => {
       ),
     ).toEqual([]);
 
-    const layout = await auditWarehouseLayout(page);
-    expect(layout.overflowElements).toEqual([]);
-    expect(layout.clippedControls).toEqual([]);
-    expect(layout.overlaps).toEqual([]);
-    expect(layout.deadEnds).toEqual([]);
     await page.screenshot({
       path: testInfo.outputPath(`receiving-pilot-${testInfo.project.name}.png`),
       fullPage: true,
     });
+    const layout = await auditWarehouseLayout(page);
+    await testInfo.attach("layout-audit", { body: JSON.stringify(layout), contentType: "application/json" });
+    expect(layout.overflowElements).toEqual([]);
+    expect(layout.clippedControls).toEqual([]);
+    expect(layout.overlaps).toEqual([]);
+    expect(layout.deadEnds).toEqual([]);
   });
 });

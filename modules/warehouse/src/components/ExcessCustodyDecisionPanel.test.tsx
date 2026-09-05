@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { useSession } from '@intra/auth';
@@ -114,4 +114,29 @@ it('preserves the storage error message and permits retry without recording disp
   await user.click(screen.getByRole('button', { name: 'Retry upload' }));
   expect(await screen.findByText('proof.png', { exact: true })).toBeVisible();
   expect(upload).toHaveBeenCalledTimes(2);
+});
+
+it.each([false, new Error('Approved amendment does not cover this excess custody')])('keeps failed disposition visible in the open dialog and closes only after successful retry (%s)', async (failure) => {
+  const user = userEvent.setup();
+  const onDecision = vi.fn();
+  if (failure instanceof Error) onDecision.mockRejectedValueOnce(failure);
+  else onDecision.mockResolvedValueOnce(false);
+  onDecision.mockResolvedValueOnce(true);
+  render(<ExcessCustodyDecisionPanel items={[item]} onDecision={onDecision} />);
+  await user.click(screen.getByRole('button', { name: /review excess custody/i }));
+  const dialog = screen.getByRole('dialog', { name: /final excess custody disposition/i });
+  await user.type(within(dialog).getByLabelText(/decision reason/i), 'Return excess stock');
+  await user.upload(within(dialog).getByLabelText('Upload evidence'), new File(['png'], 'proof.png', { type: 'image/png' }));
+  await screen.findByText('proof.png', { exact: true });
+  await user.click(within(dialog).getByRole('button', { name: /record final disposition/i }));
+  expect(await within(dialog).findByRole('alert')).toHaveTextContent(failure instanceof Error ? failure.message : 'The disposition could not be confirmed. Review the record before trying again.');
+  expect(dialog).toBeVisible();
+  expect(within(dialog).getByLabelText(/decision reason/i)).toHaveValue('Return excess stock');
+  expect(within(dialog).getByText('proof.png', { exact: true })).toBeVisible();
+  expect(within(dialog).getByRole('button', { name: /record final disposition/i })).toBeEnabled();
+  await user.click(within(dialog).getByRole('button', { name: /record final disposition/i }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  expect(onDecision).toHaveBeenCalledTimes(2);
+  expect(onDecision.mock.calls[1]).toEqual(onDecision.mock.calls[0]);
+  expect(upload).toHaveBeenCalledTimes(1);
 });

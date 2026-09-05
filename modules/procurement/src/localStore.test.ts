@@ -1,6 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { applyLocalPaymentRelease, mapProcurementRequest } from './localStore';
+import { applyLocalPaymentRelease, mapProcurementRequest, mapPurchaseOrder } from './localStore';
 import type { PurchaseOrder } from './types';
+
+it('maps live normalized physical receipts without inferring QC or changing PO state', () => {
+  const row = { id: 'po1', status: 'closed', lines: [{ id: 'line1', quantity: 100, receivedQuantity: 0 }], total: 1800 };
+  const receipt = { acceptedQuantity: 0, outstandingQuantity: 100, latestQcStatus: 'not_received' };
+  const mapped = mapPurchaseOrder(row as never, receipt as never, [], undefined, undefined, [], undefined, [], [
+    { id: 'line1', purchase_order_id: 'po1', received_quantity: 100 } as never,
+  ]);
+  expect(mapped.lines[0]?.receivedQuantity).toBe(100);
+  expect(mapped.status).toBe('closed');
+  expect(mapped.receiptStatus).toEqual(receipt);
+  expect(mapped.paymentReadiness).toBeUndefined();
+  expect(row.lines[0]?.receivedQuantity).toBe(0);
+  const unavailable = mapPurchaseOrder(row as never, receipt as never, [], undefined, undefined, [], undefined, [], []);
+  expect(unavailable.lines[0]?.receivedQuantity).toBeNaN();
+});
 
 describe('mapProcurementRequest', () => {
   it('maps governed route axes while retaining the legacy projection for old consumers', () => {

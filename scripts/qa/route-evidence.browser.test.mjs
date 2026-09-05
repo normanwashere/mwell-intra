@@ -78,6 +78,58 @@ for (const nested of [false, true]) {
   }
 }
 
+for (const width of [390, 1440]) {
+  test(`choice labels and states survive masking, including sticky controls (${width})`, async () => {
+    const context = await browser.newContext({ viewport: { width, height: 600 } });
+    await context.route("**/*", route => route.abort());
+    const page = await context.newPage();
+    try {
+      await page.setContent(`<style>
+        body{margin:0;font:16px Arial}main{padding:12px}
+        .choice{position:relative;display:inline-block;padding:16px;background:#def}
+        .choice input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0}
+        .choice:has(:checked){background:#8d8}input,textarea{height:24px}
+        footer{position:fixed;bottom:0;background:#eee;padding:12px;width:100%}
+      </style><main><h1>Choice evidence</h1>
+        <label class="choice"><input id="check" type="checkbox" checked>Office category</label>
+        <label class="choice"><input id="radio" type="radio" name="category" checked>Equipment category</label>
+        <p><input id="password" data-secret type="password" value="SECRET-A"></p>
+        <p><input id="revealed" data-secret type="text" autocomplete="current-password" value="REVEALED-A"></p>
+        <p><input id="default" data-secret value="TEXT-A"></p>
+        <textarea data-secret>PRIVATE-NOTE</textarea>
+        <div data-secret contenteditable="plaintext-only">PRIVATE-EDIT</div>
+        <div contenteditable="false">Public explanation</div>
+        <footer><label><input id="sticky" type="checkbox" checked>Include category</label>
+        <input type="button" value="Review category"><button>Continue</button></footer>
+      </main>`);
+      const capture = async state => {
+        const files = await helpers.captureRouteEvidence(page, { viewport: String(width), role: 'fixture', route: '/choice-masking', state });
+        assert.equal(files.length, 1);
+        return readFile(files[0]);
+      };
+      const original = await capture('original');
+      const explicitMask = await page.screenshot({ type: 'jpeg', quality: 70, fullPage: false, mask: [page.locator('[data-secret]')] });
+      assert.deepEqual(original, explicitMask, 'choice labels, transparent input overlays, buttons and fixed footer are not masked');
+      await page.locator('#password').fill('DIFFERENT-PASSWORD-LONG');
+      await page.locator('#password').evaluate(input => { input.type = 'text'; });
+      await page.locator('#revealed').fill('DIFFERENT-REVEALED-PASSWORD');
+      await page.locator('#default').fill('DIFFERENT-TEXT');
+      await page.locator('textarea').fill('DIFFERENT-NOTE');
+      await page.locator('[contenteditable="plaintext-only"]').fill('DIFFERENT-EDIT');
+      await page.locator('h1').click();
+      assert.deepEqual(await capture('secrets-changed'), original, 'all text entry stays masked, including revealed passwords without autocomplete');
+      await page.locator('#check').uncheck();
+      await page.locator('#sticky').uncheck();
+      await page.locator('#radio').evaluate(input => { input.checked = false; });
+      await page.locator('h1').click();
+      assert.notDeepEqual(await capture('choices-changed'), original, 'changed choice states remain visible in screenshot pixels');
+      assert.equal(await page.locator('#password').inputValue(), 'DIFFERENT-PASSWORD-LONG', 'capture does not mutate values');
+    } finally {
+      await context.close();
+    }
+  });
+}
+
 test("expected denial and failed visual gates both retain screenshot evidence", async () => {
   await fixture(false, 390, async page => {
     await page.setContent("<main><h1>Access denied</h1><p>This role cannot access Finance.</p></main>");

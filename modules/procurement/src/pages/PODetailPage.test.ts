@@ -1,4 +1,5 @@
 import { createElement, type ReactNode } from 'react';
+import { writeFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -141,6 +142,41 @@ function renderPage() {
 }
 
 describe('PODetailPage Warehouse handoff', () => {
+  it('shows Unknown for unavailable receipt authority and missing normalized counts', () => {
+    const priorReceipt = po.receiptStatus;
+    const priorLines = po.lines;
+    try {
+      po.receiptStatus = undefined;
+      po.lines = po.lines.map(line => ({ ...line, receivedQuantity: Number.NaN }));
+      const html = renderPage();
+      expect(html).not.toContain('NaN');
+      expect(html).toMatch(/Accepted<\/p>[^]*?>Unknown<\/p>/);
+      expect(html).toMatch(/Not yet QC accepted \(outstanding\)<\/p>[^]*?>Unknown<\/p>/);
+      expect(html).toMatch(/QC:[^]*?>Unknown<\/strong>/);
+    } finally {
+      po.receiptStatus = priorReceipt;
+      po.lines = priorLines;
+    }
+  });
+  it('does not infer satisfied issue controls or completed QC from closed PO status', () => {
+    const priorStatus = po.status;
+    const priorReceipt = po.receiptStatus;
+    try {
+      po.status = 'closed';
+      po.receiptStatus = { ...priorReceipt!, acceptedQuantity: 0, outstandingQuantity: 10, latestQcStatus: 'not_received' };
+      const html = renderPage();
+      expect(html).not.toContain('Issue controls satisfied before closure');
+      expect(html).toContain('Closed PO: current control gaps');
+      expect(html).toContain('approved policy evidence RFQ_COMMERCIAL_COMPARISON');
+      expect(html).toContain('Not yet QC accepted');
+      expect(html).toContain('Awaiting QC acceptance');
+      expect(html).not.toContain('not_received');
+      if (process.env.QA_PO_STATUS_HTML) writeFileSync(process.env.QA_PO_STATUS_HTML, html);
+    } finally {
+      po.status = priorStatus;
+      po.receiptStatus = priorReceipt;
+    }
+  });
   beforeEach(() => {
     warehouseAccess = true;
     procurementAccess = true;

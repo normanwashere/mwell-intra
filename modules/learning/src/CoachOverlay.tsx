@@ -76,11 +76,12 @@ function locate(anchor: string): AnchorLayout {
       : placement === "top"
         ? Math.max(GAP, rect.top - COACH_HEIGHT - GAP)
         : top;
+  const boundedTop = Math.max(GAP, Math.min(verticalTop, window.innerHeight - COACH_HEIGHT - GAP));
   return {
     target,
     placement,
     valid: true,
-    style: { left, top: verticalTop, width: COACH_WIDTH },
+    style: { left, top: boundedTop, width: COACH_WIDTH, maxHeight: window.innerHeight - boundedTop - GAP },
   };
 }
 
@@ -205,7 +206,7 @@ export function CoachOverlay({
       className={
         sheet
           ? "fixed inset-x-0 bottom-0 z-[80] max-h-[70dvh] overflow-y-auto border-t border-line bg-surface p-5 shadow-2xl"
-          : "fixed z-[80] rounded-lg border border-line bg-surface p-5 shadow-2xl"
+          : "fixed z-[80] overflow-y-auto rounded-lg border border-line bg-surface p-5 shadow-2xl"
       }
       style={sheet ? undefined : layout.style}
     >

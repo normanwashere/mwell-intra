@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import test from "node:test";
 import { PGlite } from "@electric-sql/pglite";
 import { functionDefinition, installActualQualityChain } from "../quality-inspection-verifier-fixture.mjs";
+import { certifyPoLineIdentity, certifyControlledExceptionDenial } from "./receipt-quality-probes.mjs";
 
 const require = createRequire(new URL("../../apps/shell/package.json", import.meta.url));
 const ts = require("typescript");
@@ -389,5 +390,45 @@ test("PO v3 still requires exact line, serial and bin and denies self inspection
     const { rows: [{ result }] } = await inspect(db, { ...payload, procurement_po_line_id: "line", serial_number: payload.serial_number.toLowerCase() });
     assert.equal(result.inspection.disposition, "hold");
     assert.equal(result.hold.status, "active");
+  } finally { await db.close(); }
+});
+
+test("live PO-line helper proves actual SQL denial without mutations then accepts identical correct custody", async () => {
+  const db = await database();
+  try {
+    await db.exec(fix);
+    const payload = { ...await seed(db, "Mixed-Case-Identity"), procurement_po_line_id: "line", disposition: "accepted" };
+    await db.exec("update warehouse.receipts set procurement_po_id='po'");
+    await db.query(`insert into warehouse.quality_inspections(source_type,source_id,product_id,quantity,
+      disposition,reason,serial_number,location_id,procurement_po_line_id)
+      values('receipt','receipt','product',1,'pending','Awaiting independent quality inspection',$1,'warehouse','line')`, [payload.serial_number]);
+    await db.exec(`insert into warehouse.inventory_holds(inspection_id,product_id,location_id,quantity,serial_number,status,reason)
+      select id,product_id,location_id,quantity,serial_number,'active','Awaiting independent quality inspection' from warehouse.quality_inspections`);
+    const readState = async () => ({
+      receipt: (await db.query("select * from warehouse.receipts")).rows[0],
+      inspections: (await db.query("select * from warehouse.quality_inspections order by id")).rows,
+      holds: (await db.query("select * from warehouse.inventory_holds order by id")).rows,
+    });
+    await db.exec(`update warehouse.inventory_holds set created_by='${receiver}'`);
+    const call = async value => {
+      try { return { ok: true, status: 200, body: JSON.stringify((await inspect(db, value)).rows[0].result) }; }
+      catch (error) { return { ok: false, status: 400, body: JSON.stringify({ code: error.code, message: error.message }) }; }
+    };
+    await assert.rejects(certifyPoLineIdentity({ payload, wrongLine: "line", readState, call }));
+    await certifyPoLineIdentity({ payload, wrongLine: "foreign-line", readState, call });
+    assert.equal((await readState()).receipt.quality_status, "accepted");
+    // A resolved target must not masquerade as a passing wrong-line test.
+    await assert.rejects(certifyPoLineIdentity({ payload, wrongLine: "foreign-line", readState, call }), /actionable correct-line/);
+
+    // Controlled exception receipts have no routine pending inspection; the v3 boundary is intentional.
+    await db.exec(`update warehouse.quality_inspections set disposition='hold',reason='Damaged on receipt';
+      update warehouse.receipts set quality_status='hold';
+      update warehouse.inventory_holds set status='active',reason='Damaged on receipt';
+      insert into warehouse.exceptions(exception_type,source_type,source_id,status) values('po_receipt','receipt','receipt','open')`);
+    const readExceptionState = async () => ({ ...await readState(),
+      exception: (await db.query("select * from warehouse.exceptions")).rows[0] });
+    await certifyControlledExceptionDenial({ payload, readState: readExceptionState, call });
+    await assert.rejects(certifyControlledExceptionDenial({ payload, readState: readExceptionState,
+      call: async () => ({ ok: false, status: 400, body: JSON.stringify({ code: "P0001", message: "Not authorized" }) }) }), /Not authorized/);
   } finally { await db.close(); }
 });

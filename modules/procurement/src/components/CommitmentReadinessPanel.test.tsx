@@ -4,6 +4,35 @@ import { expect, it, vi } from 'vitest';
 
 import { CommitmentReadinessPanel } from './CommitmentReadinessPanel';
 
+it.each(['blocked', 'open', 'ready', undefined] as const)('does not certify a closed PO package when governed closure is %s', (closureStatus) => {
+  const html = renderToStaticMarkup(createElement(CommitmentReadinessPanel, {
+    terminal: true,
+    readiness: { ready: false, blockers: ['Missing approved evidence'], requiredEvidence: [] },
+    lifecycle: closureStatus ? { revision: 1, acknowledgementStatus: 'pending', deliveryNoticeStatus: 'pending', qualityRecoveryStatus: 'payment_hold', closureStatus } : undefined,
+    canAcknowledge: false, canRecordDeliveryNotice: false,
+    onAcknowledge: vi.fn(), onRecordDeliveryNotice: vi.fn(),
+  }));
+  expect(html).not.toContain('Package closed');
+  expect(html).toContain('PO closed; lifecycle review required');
+  expect(html).toContain('Missing approved evidence');
+  if (closureStatus) {
+    expect(html).toContain('Governed closure');
+    expect(html).toContain('Payment hold');
+  }
+});
+
+it('certifies package closure only from the governed lifecycle', () => {
+  const html = renderToStaticMarkup(createElement(CommitmentReadinessPanel, {
+    terminal: true,
+    readiness: { ready: true, blockers: [], requiredEvidence: [] },
+    lifecycle: { revision: 2, acknowledgementStatus: 'acknowledged', deliveryNoticeStatus: 'recorded', qualityRecoveryStatus: 'resolved', closureStatus: 'closed' },
+    canAcknowledge: false, canRecordDeliveryNotice: false,
+    onAcknowledge: vi.fn(), onRecordDeliveryNotice: vi.fn(),
+  }));
+  expect(html).toContain('Package closed');
+  expect(html).not.toContain('lifecycle review required');
+});
+
 it('shows the 48-hour vendor acknowledgement threshold and quality recovery handoff', () => {
   const html = renderToStaticMarkup(createElement(CommitmentReadinessPanel, {
     readiness: {

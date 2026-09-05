@@ -1,6 +1,6 @@
 import type { AssessmentQuestion } from "./AssessmentRunner";
 import type { ControlledPolicyDocument } from "./PolicyAcknowledgment";
-import marketingReservationAssessment from "./marketing-reservation-assessment.json";
+import marketingReservationAssessment from "./marketing-reservation-assessment.json" with { type: "json" };
 
 export const MARKETING_RESERVATION_ASSESSMENT = marketingReservationAssessment;
 

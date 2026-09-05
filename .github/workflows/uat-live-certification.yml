@@ -81,6 +81,7 @@ jobs:
             scripts/verify-provisional-quality-hold-release.pglite.test.mjs \
             scripts/qa/serialized-hold-fixture.pglite.test.mjs \
             scripts/qa/closed-po-payment.pglite.test.mjs \
+            scripts/qa/excess-custody-resolution.pglite.test.mjs \
             scripts/verify-sep05-procurement-integration.pglite.test.mjs \
             scripts/verify-putaway-tasks.pglite.test.mjs \
             scripts/verify-receiving-drafts.pglite.test.mjs \
@@ -115,7 +116,7 @@ jobs:
       - name: Install Chromium for first-login certification
         run: pnpm --filter @intra/shell exec playwright install --with-deps chromium
       - name: Verify browser audit visibility and readiness contracts
-        run: node --test scripts/qa/audit-disclosure.browser.test.mjs scripts/qa/quality-validation-workflow.browser.test.mjs scripts/qa/route-evidence.browser.test.mjs scripts/qa/evidence-upload.browser.test.mjs
+        run: node --test scripts/qa/audit-disclosure.browser.test.mjs scripts/qa/quality-validation-workflow.browser.test.mjs scripts/qa/route-evidence.browser.test.mjs scripts/qa/evidence-upload.browser.test.mjs scripts/qa/receipt-quality-probes.test.mjs scripts/qa/excess-save-outcome.browser.test.mjs
       - name: Complete first-login role orientations on desktop
         env:
           AUDIT_VIEWPORT: desktop-1440

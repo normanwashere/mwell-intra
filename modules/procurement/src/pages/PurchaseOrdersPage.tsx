@@ -27,6 +27,7 @@ import type { PurchaseOrder, PurchaseOrderStatus } from '../types';
 import { usePurchaseOrders } from '../localStore';
 import { downloadCsv, purchaseOrdersToCsv } from '../export';
 import { formatDate, poStatusLabel } from '../labels';
+import { poReceiptSummary } from '../evidencePresentation';
 import { ProcurementAccessDenied } from '../components/ProcurementAccessDenied';
 import { makeTypedSignature } from '../signature';
 import { createGovernedAttachmentUrl, type GovernedAccessClient } from '../attachments';
@@ -115,8 +116,7 @@ const columns: Column<PurchaseOrder>[] = [
   {
     key: 'lines',
     header: 'Lines',
-    render: (r) =>
-      `${r.lines.length} · ${r.lines.reduce((s, l) => s + l.receivedQuantity, 0)}/${r.lines.reduce((s, l) => s + l.quantity, 0)} received`,
+    render: (r) => poReceiptSummary(r.lines),
   },
   {
     key: 'updatedAt',

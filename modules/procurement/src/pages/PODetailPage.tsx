@@ -43,7 +43,7 @@ import { ProcurementAccessDenied } from '../components/ProcurementAccessDenied';
 import { accreditationLabel, formatDate, formatDateTime, poStatusLabel } from '../labels';
 import { makeTypedSignature } from '../signature';
 import { MWELL_OPERATING_PROFILE } from '../policyProfile';
-import { receiptQuantityLabel } from '../evidencePresentation';
+import { receiptQuantityLabel, quantityLabel } from '../evidencePresentation';
 
 const PO_TONE: Record<PurchaseOrderStatus, 'slate' | 'cyan' | 'amber' | 'emerald' | 'rose'> = {
   draft: 'slate',
@@ -631,11 +631,11 @@ export function PODetailPage() {
           <Card>
             <div className="flex items-center justify-between gap-3">
               <span className="font-semibold text-ink">
-                {po.status === 'closed' ? 'Issue controls satisfied before closure' : po.commitmentReadiness.ready ? 'Ready to commit' : 'Commitment blocked'}
+                {po.status === 'closed' ? po.commitmentReadiness.ready ? 'Closed PO: current controls satisfied' : 'Closed PO: current control gaps' : po.commitmentReadiness.ready ? 'Ready to commit' : 'Commitment blocked'}
               </span>
               <span
                 className={
-                  po.status === 'closed' || po.commitmentReadiness.ready
+                  po.commitmentReadiness.ready
                     ? 'chip bg-emerald-500/15 text-emerald-700'
                     : 'chip bg-rose-500/15 text-rose-700'
                 }
@@ -903,7 +903,7 @@ export function PODetailPage() {
               <div>
                 <p className="text-xs font-semibold uppercase text-faint">Accepted</p>
                 <p className="tnum mt-1 text-xl font-bold text-ink">
-                  {po.receiptStatus?.acceptedQuantity ?? 0}
+                  {quantityLabel(po.receiptStatus?.acceptedQuantity)}
                 </p>
               </div>
               <div>
@@ -911,17 +911,13 @@ export function PODetailPage() {
                   Rejected or quarantined
                 </p>
                 <p className="tnum mt-1 text-xl font-bold text-ink">
-                  {po.receiptStatus?.rejectedOrQuarantinedQuantity ?? 0}
+                  {quantityLabel(po.receiptStatus?.rejectedOrQuarantinedQuantity)}
                 </p>
               </div>
               <div>
-                <p className="text-xs font-semibold uppercase text-faint">Outstanding</p>
+                <p className="text-xs font-semibold uppercase text-faint">Not yet QC accepted (outstanding)</p>
                 <p className="tnum mt-1 text-xl font-bold text-ink">
-                  {po.receiptStatus?.outstandingQuantity ??
-                    po.lines.reduce(
-                      (sum, line) => sum + Math.max(line.quantity - line.receivedQuantity, 0),
-                      0,
-                    )}
+                  {quantityLabel(po.receiptStatus?.outstandingQuantity)}
                 </p>
               </div>
             </div>
@@ -929,7 +925,9 @@ export function PODetailPage() {
               <span>
                 QC:{' '}
                 <strong className="text-ink">
-                  {po.receiptStatus?.latestQcStatus ?? 'not_received'}
+                  {po.receiptStatus?.latestQcStatus === 'not_received' && po.receiptStatus.latestReceiptReference
+                    ? 'Awaiting QC acceptance'
+                    : (po.receiptStatus?.latestQcStatus ?? 'Unknown').replaceAll('_', ' ')}
                 </strong>
                 {po.receiptStatus?.latestReceiptReference
                   ? ` · Latest receipt ${po.receiptStatus.latestReceiptReference}`

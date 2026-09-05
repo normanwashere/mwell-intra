@@ -1,6 +1,7 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { LearningSnapshot } from "./types";
+import { MODULES } from "@intra/rbac";
 import { OnboardingCenter } from "./OnboardingCenter";
 import { OnboardingStatusBand } from "./OnboardingStatusBand";
 import { LearningContext, type LearningContextValue } from "./LearningProvider";
@@ -450,7 +451,7 @@ describe("OnboardingCenter", () => {
       id: `cert-scope-${index}`,
       sourceRoleAssignmentId: `assignment-${index}`,
       capability: { module, capability: "manage_documents" },
-      curriculumId: `internal.role.${module}.${role}.v1`,
+      curriculumId: `internal.role.${module}.${role}.capability-practice.v1.curriculum`,
     }));
     renderCenter({ snapshot: { ...snapshot, certifications } });
 
@@ -470,6 +471,59 @@ describe("OnboardingCenter", () => {
   });
 
   it.each([
+    ["core", "platform_admin"],
+    ["events", "admin"],
+    ["events", "coordinator"],
+    ["events", "finance_reviewer"],
+    ["events", "requester"],
+    ["legal", "admin"],
+    ["legal", "compliance"],
+    ["legal", "legal_reviewer"],
+    ["procurement", "admin"],
+    ["procurement", "approver"],
+    ["procurement", "finance"],
+    ["procurement", "procurement_officer"],
+    ["procurement", "requester"],
+    ["product", "contributor"],
+    ["product", "operations_partner"],
+    ["product", "product_owner"],
+    ["warehouse", "business_unit"],
+    ["warehouse", "finance"],
+    ["warehouse", "logistics_supervisor"],
+    ["warehouse", "marketing"],
+    ["warehouse", "operations"],
+    ["warehouse", "procurement"],
+    ["warehouse", "warehouse_supervisor"],
+    ["core", "vendor_portal"],
+  ] as const)(
+    "labels provisioned v1 %s / %s certificates using canonical roles",
+    (module, role) => {
+      const audience = role === "vendor_portal" ? "vendor" : "internal";
+      renderCenter({
+        snapshot: {
+          ...snapshot,
+          certifications: [
+            {
+              ...snapshot.certifications[0]!,
+              curriculumId: `${audience}.role.${module}.${role}.capability-practice.v1.curriculum`,
+              curriculumVersion: 1,
+              capability: { module, capability: "manage_documents" },
+            },
+          ],
+        },
+      });
+      const definition = MODULES[module];
+      const roleLabel = Object.entries(definition.roles).find(
+        ([key]) => key === role,
+      )![1].label;
+      expect(
+        screen.getByText(`${definition.label} / ${roleLabel}`),
+      ).toBeInTheDocument();
+      expect(screen.getAllByText("Certification active")).toHaveLength(1);
+    },
+  );
+
+  it.each([
     { revokedAt: "2026-01-01T00:00:00.000Z", status: "revoked" },
     { supersededAt: "2026-01-01T00:00:00.000Z", status: "superseded" },
     { expiresAt: "2026-01-01T00:00:00.000Z", status: "expired" },
@@ -483,7 +537,8 @@ describe("OnboardingCenter", () => {
             {
               ...snapshot.certifications[0]!,
               capability: { module: "legal", capability: "manage_documents" },
-              curriculumId: "internal.role.legal.compliance.v1",
+              curriculumId:
+                "internal.role.legal.compliance.capability-practice.v1.curriculum",
               ...dates,
             },
           ],
@@ -494,6 +549,71 @@ describe("OnboardingCenter", () => {
       expect(
         screen.queryByText("Certification active"),
       ).not.toBeInTheDocument();
+    },
+  );
+
+  it.each([
+    [
+      "internal.role.warehouse.marketing.capability-practice.v1.curriculum",
+      1,
+      "warehouse",
+      "Warehouse / Marketing",
+    ],
+    [
+      "internal.role.warehouse.marketing.capability-practice.v1.curriculum",
+      2,
+      "warehouse",
+      "Warehouse / Marketing",
+    ],
+    [
+      "internal.warehouse.warehouse_operator.receiving-certification.v1",
+      1,
+      "warehouse",
+      "Warehouse / Warehouse Operator",
+    ],
+    [
+      "vendor.role.core.vendor_portal.capability-practice.v1.curriculum",
+      1,
+      "core",
+      "Core / Vendor Portal User",
+    ],
+    ["internal.role.legal.compliance.v1", 1, "legal", "Legal / Compliance"],
+    [
+      "internal.role.legal.compliance.capability-practice.v1.curriculum",
+      2,
+      "legal",
+      "Legal / Role context unavailable",
+    ],
+    [
+      "internal.role.warehouse.marketing.capability-practice.v1.curriculum",
+      3,
+      "warehouse",
+      "Warehouse / Role context unavailable",
+    ],
+    [
+      "internal.role.legal.compliance.capability-practice.v1.curriculum",
+      1,
+      "warehouse",
+      "Warehouse / Role context unavailable",
+    ],
+  ] as const)(
+    "resolves only verified curriculum identity %s version %s in %s",
+    (curriculumId, curriculumVersion, module, label) => {
+      renderCenter({
+        snapshot: {
+          ...snapshot,
+          certifications: [
+            {
+              ...snapshot.certifications[0]!,
+              curriculumId,
+              curriculumVersion,
+              capability: { module, capability: "manage_documents" },
+            },
+          ],
+        },
+      });
+      expect(screen.getByText(label)).toBeInTheDocument();
+      expect(screen.getByText("Certification active")).toBeInTheDocument();
     },
   );
 

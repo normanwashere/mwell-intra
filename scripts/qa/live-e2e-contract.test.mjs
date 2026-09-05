@@ -1098,7 +1098,20 @@ test("Task 3 uses browser-role exception receipts and proves transactional clean
   assert.match(source, /all-capability admin wrong-step denial/i);
   assert.match(source, /cleanupHoldIds[\s\S]*core\.activity_log/);
   assert.match(source, /private quality inspection direct denial/i);
-  assert.match(source, /active exception public quality denial/i);
+  assert.match(source, /import \{ certifyPoLineIdentity, certifyControlledExceptionDenial \} from "\.\/receipt-quality-probes\.mjs"/);
+  assert.match(source, /await certifyPoLineIdentity\(\{ payload, wrongLine: fixture\.ids\.quarantineLine/);
+  assert.match(source, /await certifyControlledExceptionDenial\(\{[\s\S]*?source_id: fixture\.ids\.qualityProbeReceipt[\s\S]*?procurement_po_line_id: fixture\.ids\.qualityProbeLine[\s\S]*?readState: \(\) => readQualityState\(fixture\.ids\.qualityProbeReceipt, fixture\.ids\.qualityProbeException\)[\s\S]*?call: payload => callRpcAsBrowserUser\(page, "warehouse", "inspect_quality", payload\)/);
+  const qualityProbes = await readFile(new URL("./receipt-quality-probes.mjs", import.meta.url), "utf8");
+  assert.match(qualityProbes, /assert\.equal\(error\.code, "P0001"\)/);
+  assert.match(qualityProbes, /assert\.equal\(error\.message, message\)/);
+  assert.match(qualityProbes, /"missing-line"[\s\S]*"foreign-line"/);
+  assert.match(qualityProbes, /assert\.equal\(accepted\.ok, true/);
+  const controlledProbe = qualityProbes.slice(qualityProbes.indexOf("export async function certifyControlledExceptionDenial"));
+  assert.match(controlledProbe, /before\.exception\.status === "open"/);
+  assert.match(controlledProbe, /row\.procurement_po_line_id === payload\.procurement_po_line_id/);
+  assert.match(controlledProbe, /assert\.equal\(actionable\(before, payload\)\.length, 0/);
+  assert.match(controlledProbe, /denial\(await call\(payload\), "Actionable provisional receipt inspection not found"\)/);
+  assert.match(controlledProbe, /assert\.deepEqual\(await readState\(\), before/);
   assert.match(source, /approved amendment quantity growth/i);
   assert.match(source, /unidentified excess custody/i);
   assert.match(source, /authenticated excess custody work items/i);
@@ -1542,7 +1555,7 @@ test("Warehouse excess E2E selects the exact governed amendment", async () => {
   assert.doesNotMatch(harness, /getByLabel\("Approved amendment ID"\)\.fill/);
   assert.match(
     harness,
-    /getByRole\("dialog", \{\s*name: "Final excess custody disposition",\s*\}\)/,
+    /getByRole\("dialog", \{\s*name: "Final excess custody disposition",\s*includeHidden: true,\s*\}\)/,
   );
 });
 
@@ -1856,8 +1869,14 @@ test("excess-custody readback waits for the governed dialog mutation", async () 
   );
   assert.match(
     audit,
-    /const custodyDialog = page\.getByRole\("dialog", \{[\s\S]*name: "Final excess custody disposition"[\s\S]*custodyDialog\.waitFor\(\{ state: "detached" \}\)[\s\S]*procurement_receipt_excess_custody/,
+    /const custodyDialog = page\.getByRole\("dialog", \{[\s\S]*name: "Final excess custody disposition"[\s\S]*await waitForExcessSaveOutcome\(page, custodyDialog\);[\s\S]*await verifyCheckpoint\([\s\S]*procurement_receipt_excess_custody/,
   );
+  const outcomeHelper = audit.slice(audit.indexOf("async function waitForExcessSaveOutcome("),
+    audit.indexOf("async function task3SupervisorExcessFinalDisposition("));
+  assert.match(outcomeHelper, /dialog\.locator\('\[role="alert"\]'\)/);
+  assert.match(outcomeHelper, /if \(errors\.length\) throw new Error/);
+  assert.match(outcomeHelper, /if \(await dialog\.count\(\) === 0\) return/);
+  assert.match(outcomeHelper, /throw new Error\('Excess custody disposition did not close/);
 });
 
 test("quality hold navigation follows the segmented-control tab contract", async () => {

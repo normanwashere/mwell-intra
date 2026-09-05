@@ -1,5 +1,11 @@
 # Mwell Intra Training and Handover Content
 
+## PO Count and Closure Clarity Practice
+
+Using the matching deployed candidate, distinguish physical **Received** from **Not yet QC accepted (outstanding)**. A Closed PO with 100 physically received and pending QC must not be taught as accepted or paid. Explain **Awaiting QC acceptance**, retain the actual acceptance/payment blockers, and distinguish **PO closed; lifecycle review required** from confirmed **Package closed**. Current control gaps are not evidence that historical issue controls were satisfied.
+
+In an isolated test, compare a stale embedded count with the matching normalized PO-line count. Simulate an initial and refresh permission denial, network failure, missing/hidden line and wrong-PO result: each must display **Unknown**, not zero, completion or an earlier successful count. Restore the authorized read and verify the actual count returns. Never grant extra roles, edit receipt history, reopen a PO, or add phantom balances to make this demonstration pass. Retain local results separately from exact-commit live certification.
+
 ## September 5 Candidate Handover Gate
 
 For multi-role users, explain certification module/role context alongside the capability name. Repeated names are not proof of duplicate authority. Test active and historical entries separately, preserving expiry and revocation status. Existing-completion screenshots are not evidence of fresh onboarding completion; retain that distinction in handover sign-off.
