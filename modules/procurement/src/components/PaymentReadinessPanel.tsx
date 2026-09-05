@@ -1,6 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSession } from '@intra/auth';
+import { PaymentDocumentField, PaymentDocumentLink, type PaymentDocument } from './PaymentDocumentField';
 import { Badge, Icon, money } from '@intra/ui';
 import type {
   AcceptancePack,
@@ -38,6 +40,8 @@ export interface AcceptanceLineDraft {
 }
 
 export function PaymentReadinessPanel({
+  purchaseOrderId,
+  requestId,
   acceptance,
   acceptances,
   acceptanceLines = [],
@@ -50,12 +54,14 @@ export function PaymentReadinessPanel({
   purchaseOrderAmount,
   acceptanceType,
   policyProfile,
-  foreignVendor = false,
+  foreignVendor: suppliedForeignVendor = false,
   onAccept,
   onPrepare,
   onReview,
   onRelease,
 }: {
+  purchaseOrderId?: string;
+  requestId?: string;
   acceptance?: AcceptancePack;
   acceptances?: AcceptancePack[];
   acceptanceLines?: AcceptanceLineDraft[];
@@ -80,6 +86,21 @@ export function PaymentReadinessPanel({
   onReview: (status: 'returned' | 'accepted', note: string) => Promise<void>;
   onRelease: (draft: PaymentReleaseDraft) => Promise<void>;
 }) {
+  const { mode, supabaseClient } = useSession();
+  const [documents, setDocuments] = useState<PaymentDocument[]>([]);
+  const [packDocuments, setPackDocuments] = useState<PaymentDocument[]>([]);
+  const [foreignVendor, setForeignVendor] = useState(suppliedForeignVendor);
+  const [evidenceReady, setEvidenceReady] = useState(mode !== 'supabase');
+  const [prepareError, setPrepareError] = useState('');
+  const [preparing, setPreparing] = useState(false);
+  const refreshDocuments = useCallback(async () => {
+    if (mode !== 'supabase' || !supabaseClient || !purchaseOrderId) return;
+    setEvidenceReady(false);
+    const result = await supabaseClient.schema('procurement').rpc('payment_evidence_options', { payload: { purchase_order_id: purchaseOrderId, pack_id: pack?.id } });
+    if (result.error) { setPrepareError(result.error.message); return; }
+    setDocuments(result.data.documents); setPackDocuments(result.data.packDocuments ?? []); setForeignVendor(result.data.foreignVendor); setEvidenceReady(true);
+  }, [mode, supabaseClient, purchaseOrderId, pack?.id]);
+  useEffect(() => { void refreshDocuments().catch(cause => setPrepareError(String(cause))); }, [refreshDocuments, pack?.id]);
   const [scope, setScope] = useState('Delivered scope matches the approved PO and request.');
   const [exceptionsText, setExceptionsText] = useState('');
   const [acceptedQuantities, setAcceptedQuantities] = useState<Record<string, number>>({});
@@ -104,6 +125,10 @@ export function PaymentReadinessPanel({
     foreignVendorEvidenceReference: '',
   });
   useEffect(() => {
+    if (pack && ['accepted','released'].includes(pack.status) && !pack.evidenceStale) {
+      setDraft({ invoiceNumber: '', invoiceDate: '', dueDate: '', invoiceAmount: 0, taxAmount: 0, withholdingAmount: 0, invoiceOrSiReference: '', milestoneSupportReference: '', taxWithholdingSupportReference: '', foreignVendorEvidenceReference: '' });
+      return;
+    }
     setDraft({
       invoiceNumber: pack?.invoiceNumber ?? '',
       invoiceDate: pack?.invoiceDate ?? '',
@@ -178,6 +203,7 @@ export function PaymentReadinessPanel({
 
   return (
     <div className="space-y-4">
+      {packDocuments.length > 0 && <section aria-label="Payment pack documents" className="space-y-2">{packDocuments.map(document => <PaymentDocumentLink key={document.id} document={document} />)}</section>}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="font-semibold text-ink">Acceptance and payment readiness</h3>
@@ -465,7 +491,12 @@ export function PaymentReadinessPanel({
                 : []),
             ] as const
           ).map(([key, label]) => (
-            <label key={key} className="block text-sm font-semibold text-ink">
+            mode === 'supabase' && purchaseOrderId && requestId ? <PaymentDocumentField
+              key={key} label={label.replace('private reference','document').replace('reference','document')}
+              purpose={key === 'invoiceOrSiReference' ? 'invoice' : key === 'milestoneSupportReference' ? 'acceptance' : key === 'taxWithholdingSupportReference' ? 'tax' : 'foreign'}
+              value={draft[key] ?? ''} documents={documents} poId={purchaseOrderId} requestId={requestId}
+              onChange={value => setDraft(current => ({ ...current, [key]: value }))} refresh={refreshDocuments}
+            /> : <label key={key} className="block text-sm font-semibold text-ink">
               {label}
               <input
                 className="input mt-1.5"
@@ -474,10 +505,12 @@ export function PaymentReadinessPanel({
               />
             </label>
           ))}
+          {prepareError && <p role="alert" className="text-sm text-rose-700 [overflow-wrap:anywhere]">{prepareError}</p>}
           <button
             type="button"
             className="btn-primary w-full sm:w-auto"
             disabled={
+              !evidenceReady || preparing ||
               !draft.invoiceNumber.trim() ||
               !draft.invoiceDate ||
               draft.invoiceAmount <= 0 ||
@@ -486,7 +519,12 @@ export function PaymentReadinessPanel({
               !draft.taxWithholdingSupportReference.trim() ||
               (foreignVendor && !draft.foreignVendorEvidenceReference?.trim())
             }
-            onClick={() => void onPrepare(draft)}
+            onClick={async () => {
+              setPreparing(true); setPrepareError('');
+              try { await onPrepare(draft); }
+              catch (cause) { setPrepareError(cause instanceof Error ? cause.message : 'Payment preparation failed. Review the evidence.'); }
+              finally { setPreparing(false); }
+            }}
           >
             <Icon name="check" className="h-4 w-4" />
             Validate match and send to Finance

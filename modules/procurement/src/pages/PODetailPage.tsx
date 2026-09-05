@@ -43,6 +43,7 @@ import { ProcurementAccessDenied } from '../components/ProcurementAccessDenied';
 import { accreditationLabel, formatDate, formatDateTime, poStatusLabel } from '../labels';
 import { makeTypedSignature } from '../signature';
 import { MWELL_OPERATING_PROFILE } from '../policyProfile';
+import { receiptQuantityLabel } from '../evidencePresentation';
 
 const PO_TONE: Record<PurchaseOrderStatus, 'slate' | 'cyan' | 'amber' | 'emerald' | 'rose'> = {
   draft: 'slate',
@@ -63,7 +64,7 @@ const lineColumns: Column<PurchaseOrderLine>[] = [
   {
     key: 'received',
     header: 'Received',
-    render: (r) => `${r.receivedQuantity} / ${r.quantity}`,
+    render: (r) => receiptQuantityLabel(r.receivedQuantity, r.quantity),
   },
   {
     key: 'unitPrice',
@@ -971,7 +972,8 @@ export function PODetailPage() {
                   ? MWELL_OPERATING_PROFILE
                   : undefined
               }
-              foreignVendor={Boolean(sourceRequest?.importationPlan)}
+              purchaseOrderId={po.id}
+              requestId={po.requestId}
               purchaseOrderAmount={po.total}
               acceptanceType={acceptanceType}
               canAccept={

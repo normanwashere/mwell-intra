@@ -29,7 +29,8 @@ describe("EventDetailPage", () => {
       await screen.findByRole("heading", { name: /Makati Corporate/i }),
     ).toBeInTheDocument();
     expect(screen.getByText(/event costing/i)).toBeInTheDocument();
-    expect(screen.getByText("Units consumed")).toBeInTheDocument();
+    expect(screen.getByText("Outstanding custody")).toBeInTheDocument();
+    expect(screen.queryByText("Sold / used")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Event allocations")).toBeInTheDocument();
   });
 

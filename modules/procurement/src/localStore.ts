@@ -255,6 +255,9 @@ function mapVendor(row: LiveRow): ProcurementVendor {
 
 function mapStep(row: LiveRow): ApprovalStep {
   return {
+    assignedUserId: row.assigned_user_id ?? undefined,
+    requestVersion: row.request_version ?? undefined,
+    matrixVersion: row.matrix_version ?? undefined,
     id: row.id,
     order: Number(row.step_order),
     tier: row.tier,
@@ -270,6 +273,7 @@ function mapStep(row: LiveRow): ApprovalStep {
 export function mapProcurementRequest(row: LiveRow, steps: ApprovalStep[] = []): ProcurementRequest {
   const route = mapRoute(row);
   return {
+    revision: row.revision ?? 0,
     id: row.id,
     title: row.title,
     description: row.description ?? undefined,

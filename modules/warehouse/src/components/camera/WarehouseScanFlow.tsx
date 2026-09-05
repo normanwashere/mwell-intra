@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { WarehouseData } from '@intra/data-kit';
 import { BarcodeScanner } from './BarcodeScanner';
 
@@ -86,16 +86,20 @@ interface WarehouseScanFlowProps extends Omit<ResolveWarehouseScanInput, 'code' 
   label?: string;
   manualLabel?: string;
   manualActionLabel?: string;
+  batch?: boolean;
+  complete?: boolean;
 }
 
-export function WarehouseScanFlow({ scannedCodes = [], onResolved, onCancel, label, manualLabel, manualActionLabel, ...rules }: WarehouseScanFlowProps) {
+export function WarehouseScanFlow({ scannedCodes = [], onResolved, onCancel, label, manualLabel, manualActionLabel, batch, complete = false, ...rules }: WarehouseScanFlowProps) {
   const [accepted, setAccepted] = useState<string[]>([]);
+  const acceptedRef = useRef<string[]>([]);
   const [result, setResult] = useState<ScanResolution | null>(null);
   const detect = (code: string) => {
-    const resolution = resolveWarehouseScan({ ...rules, code, scannedCodes: [...scannedCodes, ...accepted] });
+    const resolution = resolveWarehouseScan({ ...rules, code, scannedCodes: [...scannedCodes, ...acceptedRef.current] });
     setResult(resolution);
     if (!resolution.ok) return;
-    setAccepted((current) => [...current, resolution.code]);
+    acceptedRef.current = [...acceptedRef.current, resolution.code];
+    setAccepted(acceptedRef.current);
     onResolved(resolution);
   };
   return (
@@ -105,6 +109,8 @@ export function WarehouseScanFlow({ scannedCodes = [], onResolved, onCancel, lab
         label={label ?? `Scan for ${rules.context}`}
         manualLabel={manualLabel}
         manualActionLabel={manualActionLabel}
+        mode={(batch ?? ['receive', 'issue', 'return', 'count'].includes(rules.context)) ? 'batch' : 'single'}
+        disabled={complete}
       />
       {result && (result.ok
         ? <p role="status" className="rounded-lg bg-emerald-500/10 px-3 py-2 text-sm font-medium text-emerald-700 dark:text-emerald-300">Scan accepted: {result.code}</p>

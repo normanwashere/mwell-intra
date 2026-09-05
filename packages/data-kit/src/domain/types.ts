@@ -152,6 +152,7 @@ export type MovementType =
 
 /** Immutable ledger entry — the audit trail backbone. */
 export interface Movement {
+  unitCostAtMovement?: number;
   id: Id;
   type: MovementType;
   productId: Id;
@@ -181,6 +182,7 @@ export type ReturnDisposition =
   | "vendor_return";
 
 export interface ReturnLine {
+  allocationId?: Id;
   productId: Id;
   quantity: number;
   reason: string;
@@ -218,6 +220,7 @@ export interface Allocation {
 }
 
 export interface WarehouseEvent {
+  status?: "planned" | "active" | "closed" | "cancelled";
   id: Id;
   name: string;
   type: EventType;
@@ -228,6 +231,8 @@ export interface WarehouseEvent {
 
 export interface ReceiptLine {
   productId: Id;
+  /** Original procurement line, preserved by governed PO receiving. */
+  procurementLineId?: Id;
   quantity: number;
   lotCode?: string;
   /** Supplier/manufacturer batch identifier, distinct from the internal lot. */

@@ -1,8 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useSession } from "@intra/auth";
-import { can } from "@intra/rbac";
+import { useSession, useCan } from "@intra/auth";
 import {
   Badge,
   Card,
@@ -69,7 +68,14 @@ function actionIssue(cause: unknown, action: string): ActionIssue {
 }
 
 export function ProductApp() {
-  const { profile, userRoles, loading: sessionLoading } = useSession();
+  const { profile, mode, roleCapabilities, loading: sessionLoading } = useSession();
+  const viewReadiness = useCan('product', 'view_readiness');
+  const prepareReadiness = useCan('product', 'prepare_readiness');
+  const decideGoLive = useCan('product', 'decide_go_live');
+  const acknowledgeHandoff = useCan('product', 'acknowledge_operations_handoff');
+  const viewPricing = useCan('product', 'view_pricing');
+  const proposePricing = useCan('product', 'propose_pricing');
+  const approvePricing = useCan('product', 'approve_pricing');
   const workspace = useProductWorkspace();
   const [readinessDecision, setReadinessDecision] = useState<{
     item: ReadinessPackage;
@@ -100,7 +106,6 @@ export function ProductApp() {
   }
   if (!profile) return <SignInPrompt module="Product" basename="/product" />;
 
-  const viewReadiness = can(userRoles, "product", "view_readiness");
   if (!viewReadiness) {
     return (
       <div
@@ -124,16 +129,6 @@ export function ProductApp() {
     );
   }
 
-  const prepareReadiness = can(userRoles, "product", "prepare_readiness");
-  const decideGoLive = can(userRoles, "product", "decide_go_live");
-  const acknowledgeHandoff = can(
-    userRoles,
-    "product",
-    "acknowledge_operations_handoff",
-  );
-  const viewPricing = can(userRoles, "product", "view_pricing");
-  const proposePricing = can(userRoles, "product", "propose_pricing");
-  const approvePricing = can(userRoles, "product", "approve_pricing");
 
   const closeDecision = () => {
     setReadinessDecision(null);
@@ -207,6 +202,7 @@ export function ProductApp() {
 
   return (
     <div className="space-y-6">
+      {mode === 'supabase' && Object.entries({prepare_readiness: prepareReadiness, decide_go_live: decideGoLive, acknowledge_operations_handoff: acknowledgeHandoff, propose_pricing: proposePricing, approve_pricing: approvePricing}).some(([cap, allowed]) => !allowed && roleCapabilities?.product?.includes(cap)) && <p role="status">Some assigned Product actions require certification. <a className="underline" href="/onboarding">Complete Product onboarding</a></p>}
       <ModuleHero
         eyebrow="Product governance"
         title="Product readiness"
@@ -487,7 +483,7 @@ function ReadinessCard({
 }) {
   const handoffReady = canAcknowledge && canAcknowledgeOperationsHandoff(item);
   return (
-    <article aria-label={`${item.title} readiness package`}>
+    <article id={`readiness-${item.id}`} aria-label={`${item.title} readiness package`}>
       <Card className="space-y-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -501,6 +497,13 @@ function ReadinessCard({
           </div>
           <Badge tone={statusTone(item.status)}>{item.status}</Badge>
         </div>
+        <DecisionReadback item={item} />
+        <p className="text-sm break-words text-muted">
+          Operations handoff: {item.operationsAcknowledgedAt
+            ? `Completed by ${item.operationsAcknowledgedBy ?? 'Actor unavailable'} at ${item.operationsAcknowledgedAt}`
+            : item.status === 'approved' ? 'Pending - Operations partner is next' : 'Awaiting go-live approval'}
+        </p>
+        <a className="text-sm underline" href={`#readiness-${item.id}`}>Record and decision history</a>
         <ul className="space-y-2" aria-label="Readiness evidence">
           {item.evidence.map((evidenceItem) => (
             <li
@@ -576,7 +579,7 @@ function PriceCard({
   onDecide: (decision: Decision) => void;
 }) {
   return (
-    <article aria-label={`${item.reason} price proposal`}>
+    <article id={`pricing-${item.id}`} aria-label={`${item.reason} price proposal`}>
       <Card className="space-y-4">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -602,6 +605,8 @@ function PriceCard({
           </div>
         </dl>
         <p className="text-sm text-muted">{item.reason}</p>
+        <DecisionReadback item={item} />
+        <a className="text-sm underline" href={`#pricing-${item.id}`}>Record and decision history</a>
         {canDecide && (
           <div className="flex flex-wrap gap-2">
             <button
@@ -623,6 +628,13 @@ function PriceCard({
       </Card>
     </article>
   );
+}
+
+export function DecisionReadback({ item }: { item: Pick<ReadinessPackage, 'status' | 'decisionNote' | 'decidedBy' | 'decidedAt'> }) {
+  return <div className="border-t border-line pt-2 text-sm [overflow-wrap:anywhere]">
+    <p>{item.decidedAt ? `Decision by ${item.decidedBy ?? 'Actor unavailable'} at ${item.decidedAt}` : 'Decision pending - Product Owner is next'}</p>
+    {(item.decidedAt || item.status === 'rejected') && <p>Decision reason: {item.decisionNote || 'No reason recorded'}</p>}
+  </div>;
 }
 
 function ActionFeedback({ issue }: { issue: ActionIssue }) {

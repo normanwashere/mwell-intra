@@ -1,4 +1,5 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { isFloorWork, FLOOR_WORK_PATH } from "@/domain/workQueues";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { clsx } from "clsx";
 import { Logo } from "./Logo";
@@ -263,7 +264,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         ).length ?? 0,
       fulfillment:
         data?.fulfillmentOrders.filter(
-          (item) => !["completed", "cancelled"].includes(item.status),
+          isFloorWork,
         ).length ?? 0,
     }),
     [data],
@@ -359,7 +360,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   {section.modules.map((module) => (
                     <SideLink
                       key={module.id}
-                      to={module.path}
+                      to={module.id === "fulfillment" ? FLOOR_WORK_PATH : module.path}
                       icon={module.icon as IconName}
                       label={module.label}
                       count={

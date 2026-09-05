@@ -53,6 +53,7 @@ function activityHref(item: FinanceActivity): string | null {
 
 function activityColumns(
   onInspect: (item: FinanceActivity) => void,
+  canPrepare: boolean,
 ): Column<FinanceActivity>[] {
   return [
   {
@@ -86,7 +87,7 @@ function activityColumns(
     key: 'source',
     header: 'Source',
     render: (row) => (
-      <Badge tone={SOURCE_TONE[row.source]}>{SOURCE_LABEL[row.source]}</Badge>
+      <span><Badge tone={SOURCE_TONE[row.source]}>{SOURCE_LABEL[row.source]}</Badge>{canPrepare && row.source !== 'warehouse_return' && <a className="block min-h-11 py-2 text-sm underline" href={`/finance?${new URLSearchParams({close_source_type:row.source === 'procurement_po' ? 'purchase_order' : 'warehouse_receipt',close_source_id:row.referenceId})}`}>Prepare source close entry</a>}</span>
     ),
   },
   {
@@ -124,10 +125,10 @@ const FILTERS: Array<{ value: FinanceActivityFilter; label: string }> = [
   { value: 'returns', label: 'Returns' },
 ];
 
-export function FinanceActivityTable({ activity }: { activity: FinanceActivity[] }) {
+export function FinanceActivityTable({ activity, canPrepare = false }: { activity: FinanceActivity[]; canPrepare?: boolean }) {
   const [filter, setFilter] = useState<FinanceActivityFilter>('all');
   const [selected, setSelected] = useState<FinanceActivity | null>(null);
-  const columns = useMemo(() => activityColumns(setSelected), []);
+  const columns = useMemo(() => activityColumns(setSelected, canPrepare), [canPrepare]);
   const visible = useMemo(
     () => filterFinanceActivity(activity, filter),
     [activity, filter],

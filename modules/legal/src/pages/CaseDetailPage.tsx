@@ -372,9 +372,13 @@ export function CaseDetailPage() {
   }
 
   async function handleReminder() {
-    const ok = await sendReminder(kase!.id, profile?.email);
-    if (ok) success(`Reminder sent to ${ok.contactEmail ?? ok.vendorName}`);
-    else error('Could not record the reminder.');
+    try {
+      const ok = await sendReminder(kase!.id, profile?.email);
+      if (ok) success('Manual reminder recorded. No email or notification was sent.');
+      else error('Could not record the reminder.');
+    } catch (cause) {
+      error(cause instanceof Error ? cause.message : 'Could not record the reminder.');
+    }
   }
 
   async function handleRequestCorrection() {
@@ -634,7 +638,7 @@ export function CaseDetailPage() {
             <div className="min-w-0 flex-1">
               <p className="font-semibold text-ink">
                 {outstandingCount > 0
-                  ? `You still owe ${outstandingCount} document${outstandingCount === 1 ? '' : 's'}`
+                  ? `You still owe ${outstandingCount} requirement${outstandingCount === 1 ? '' : 's'}`
                   : 'Everything is in — ready to submit'}
               </p>
               <p className="mt-0.5 text-sm text-muted">
@@ -702,23 +706,19 @@ export function CaseDetailPage() {
               <Guard module="legal" cap="review_accreditation" fallback={null}>
                 <button type="button" onClick={handleReminder} className="btn-outline btn-sm">
                   <Icon name="bell" className="h-4 w-4" />
-                  Send reminder
+                  Record manual reminder
                 </button>
               </Guard>
-              {canReview && canRequestCorrection(kase.status) && (
-                <button
-                  type="button"
-                  onClick={() => setCorrectionOpen((open) => !open)}
-                  className="btn-outline btn-sm"
-                >
-                  <Icon name="rotate" className="h-4 w-4" /> Request correction
-                </button>
-              )}
             </div>
           </Card>
         )}
 
-      {!isVendor && correctionOpen && (
+      {!isVendor && canReview && canRequestCorrection(kase.status) && (
+        <button type="button" onClick={() => setCorrectionOpen((open) => !open)} className="btn-outline btn-sm">
+          <Icon name="rotate" className="h-4 w-4" /> Request correction
+        </button>
+      )}
+      {!isVendor && canReview && correctionOpen && (
         <Card className="border-amber-500/30 bg-amber-500/5">
           <label className="block text-sm font-semibold text-ink" htmlFor="correction-note">
             Correction required
@@ -1109,7 +1109,9 @@ export function CaseDetailPage() {
                     <div className="min-w-0 flex-1">
                       <p className={`text-sm ${latest ? 'font-semibold text-ink' : 'text-ink/85'}`}>
                         <span className="font-semibold">{timelineActionLabel(entry.action)}</span>
-                        {entry.detail ? ` \u2014 ${entry.detail}` : ''}
+                        {entry.action === 'reminder_sent'
+                          ? ' - Manual follow-up recorded; automatic delivery is not confirmed.'
+                          : entry.detail ? ` \u2014 ${entry.detail}` : ''}
                       </p>
                       <p className="text-xs text-faint" title={formatDateTime(entry.at)}>
                         {relativeTime(entry.at)}

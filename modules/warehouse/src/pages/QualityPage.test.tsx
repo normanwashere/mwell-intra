@@ -25,6 +25,29 @@ async function repositoryWithPendingReceipt() {
 }
 
 describe("QualityPage", () => {
+  it("opens the exact task inspection from a later queue page", async () => {
+    const { repo, receipt } = await repositoryWithPendingReceipt();
+    const staged = {
+      sourceType: 'receipt' as const, sourceId: receipt.id, productId: 'shirt-l', quantity: 1,
+      disposition: 'pending' as const, inspectedAt: '2026-09-01T00:00:00Z', inspectedBy: 'receiver', evidenceUrls: [],
+    };
+    vi.spyOn(repo, 'listQualityInspections')
+      .mockResolvedValueOnce({ rows: [{ ...staged, id: 'first', serialNumber: 'FIRST' }], nextCursor: 'older' })
+      .mockResolvedValueOnce({ rows: [{ ...staged, id: 'target', serialNumber: 'TARGET-UNIT' }] });
+    renderWithProviders(<QualityPage />, { repo, route: '/quality?source=target', role: 'warehouse_operator' });
+    const dialog = await screen.findByRole('dialog', { name: 'Inspect stock' });
+    expect(within(dialog).getByText(/TARGET-UNIT/)).toBeInTheDocument();
+    expect(within(dialog).queryByText(/FIRST/)).not.toBeInTheDocument();
+    expect(repo.listQualityInspections).toHaveBeenCalledWith({ limit: 100, cursor: 'older' });
+  });
+
+  it("does not substitute an unrelated inspection when a source is unavailable", async () => {
+    const { repo } = await repositoryWithPendingReceipt();
+    renderWithProviders(<QualityPage />, { repo, route: '/quality?source=missing', role: 'warehouse_operator' });
+    expect(await screen.findByText(/No different item was selected/)).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
   it("separates live inspection and hold-release capabilities", async () => {
     const { repo, receipt } = await repositoryWithPendingReceipt();
     await repo.inspectQuality({
@@ -198,7 +221,7 @@ describe("QualityPage", () => {
     const sourceText = within(queue).getByText((content) =>
       content.includes(receipt.id),
     );
-    const sourceRow = sourceText.closest("li");
+    const sourceRow = sourceText.closest("details");
     expect(sourceRow).not.toBeNull();
     const inspect = within(sourceRow!).getByRole("button", { name: "Inspect" });
     await user.click(inspect);

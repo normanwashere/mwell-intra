@@ -148,9 +148,9 @@ const TABLE_PROJECTIONS: Record<string, string> = {
     "id,product_id,serial_number,lot_id,location_id,bin_id,status,assigned_to,event_id",
   stock_levels: "product_id,location_id,bin_id,lot_id,quantity",
   movements:
-    "id,type,product_id,quantity,from_location_id,to_location_id,from_bin_id,to_bin_id,lot_id,serial_number,event_id,reason,reference,evidence_urls,actor,created_at",
+    "id,type,product_id,quantity,unit_cost_at_movement,from_location_id,to_location_id,from_bin_id,to_bin_id,lot_id,serial_number,event_id,reason,reference,evidence_urls,actor,created_at",
   allocations: "id,event_id,product_id,quantity,status,promotional,created_at",
-  events: "id,name,type,site_location_id,start_date,end_date",
+  events: "id,name,type,site_location_id,start_date,end_date,status",
   returns: "id,source,event_id,lines,evidence_urls,actor,created_at",
   cycle_counts:
     "id,location_id,bin_id,category,lines,status,requested_by,submitted_at,actor,created_at",
@@ -316,6 +316,17 @@ export class SupabaseRepository implements WarehouseControlRepository {
     return this.select("profiles", rowToProfile);
   }
 
+  async getCycleCount(id: string): Promise<CycleCount | null> {
+    if (!id.trim()) return null;
+    const { data, error } = await this.db
+      .from("cycle_counts")
+      .select(TABLE_PROJECTIONS.cycle_counts)
+      .eq("id", id)
+      .maybeSingle();
+    if (error) throw new Error(`cycle_counts: ${error.message}`);
+    return data ? rowToCycleCount(data) : null;
+  }
+
   /**
    * Invokes a transactional Postgres RPC (see the `transactional_rpcs`
    * migration). The whole multi-step mutation commits or rolls back atomically,
@@ -422,8 +433,28 @@ export class SupabaseRepository implements WarehouseControlRepository {
       ...(normalized.cursor ? { cursor: normalized.cursor } : {}),
     });
     const rows = Array.isArray(response.rows) ? (response.rows as Row[]) : [];
+    const requesterIds = [...new Set(rows.map((row) => row.requested_by)
+      .filter((id): id is string => typeof id === "string" && id.length > 0))];
+    const names = new Map<string, string>();
+    if (requesterIds.length) {
+      try {
+        const { data, error } = await this.db.schema("core").from("profiles")
+          .select("id,full_name").in("id", requesterIds).limit(requesterIds.length);
+        if (!error) {
+          for (const profile of data ?? []) {
+            if (typeof profile.full_name === "string" && profile.full_name.trim()) {
+              names.set(profile.id, profile.full_name.trim());
+            }
+          }
+        }
+      } catch {
+        // Optional RLS-bound names must not hide an otherwise authorized queue.
+      }
+    }
     return {
-      rows: rows.map(rowToStockChangeRequest),
+      rows: rows.map((row) => rowToStockChangeRequest({
+        ...row, requested_by_name: names.get(row.requested_by as string) ?? null,
+      })),
       ...(typeof response.next_cursor === "string"
         ? { nextCursor: response.next_cursor }
         : {}),
@@ -951,6 +982,13 @@ export class SupabaseRepository implements WarehouseControlRepository {
   }
 
   async issue(input: IssueInput): Promise<Allocation> {
+    const { actor: _actor, idempotencyKey, ...commandInput } = input;
+    if (idempotencyKey) {
+      const replay = await this.callRpc("issue", {
+        idempotency_key: idempotencyKey, command_input: commandInput, replay_only: true,
+      });
+      if (replay) return rowToAllocation(replay);
+    }
     const data = await this.getData();
     const allocation = data.allocations.find(
       (a) => a.id === input.allocationId,
@@ -1123,6 +1161,8 @@ export class SupabaseRepository implements WarehouseControlRepository {
     });
 
     const row = await this.callRpc("issue", {
+      idempotency_key: idempotencyKey,
+      command_input: commandInput,
       unit_ids: unitIds,
       assigned_to: input.assignedTo ?? null,
       event_id: allocation.eventId,
@@ -1217,6 +1257,13 @@ export class SupabaseRepository implements WarehouseControlRepository {
   }
 
   async transfer(input: TransferInput): Promise<Movement[]> {
+    const { actor: _actor, idempotencyKey, ...commandInput } = input;
+    if (idempotencyKey) {
+      const replay = await this.callRpc("transfer", {
+        idempotency_key: idempotencyKey, command_input: commandInput, replay_only: true,
+      });
+      if (replay) return [rowToMovement(replay)];
+    }
     const data = await this.getData();
     const result = validateTransfer(
       toStockState(data),
@@ -1298,6 +1345,8 @@ export class SupabaseRepository implements WarehouseControlRepository {
       createdAt,
     };
     const row = await this.callRpc("transfer", {
+      idempotency_key: idempotencyKey,
+      command_input: commandInput,
       unit_ids: unitIds,
       from_location_id: input.fromLocationId,
       to_location_id: input.toLocationId,
@@ -1856,6 +1905,13 @@ export class SupabaseRepository implements WarehouseControlRepository {
   }
 
   async relocate(input: RelocateInput): Promise<Movement[]> {
+    const { actor: _actor, idempotencyKey, ...commandInput } = input;
+    if (idempotencyKey) {
+      const replay = await this.callRpc("transfer", {
+        idempotency_key: idempotencyKey, command_input: commandInput, replay_only: true,
+      });
+      if (replay) return [rowToMovement(replay)];
+    }
     if (input.quantity <= 0)
       throw new Error("Quantity must be greater than zero.");
     if ((input.fromBinId ?? undefined) === (input.toBinId ?? undefined)) {
@@ -1932,6 +1988,8 @@ export class SupabaseRepository implements WarehouseControlRepository {
       createdAt,
     };
     const row = await this.callRpc("transfer", {
+      idempotency_key: idempotencyKey,
+      command_input: commandInput,
       unit_ids: unitIds,
       from_location_id: input.locationId,
       to_location_id: input.locationId,

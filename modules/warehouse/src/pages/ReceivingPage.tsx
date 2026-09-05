@@ -226,7 +226,8 @@ export function ReceivingPageSurface({
 }: {
   training?: ReceivingTraining;
 }) {
-  const { data, receiveStock, canOpenRoute } = useWarehouse();
+  const warehouse = useWarehouse();
+  const { data, receiveStock, canOpenRoute } = warehouse;
   const toast = useToast();
   const warehouses = useMemo(
     () => data?.locations.filter((l) => l.type === "warehouse") ?? [],
@@ -276,6 +277,10 @@ export function ReceivingPageSurface({
   const [validationError, setValidationError] = useState("");
   const [evidenceBusy, setEvidenceBusy] = useState(false);
   const [lastReceiptStaged, setLastReceiptStaged] = useState(false);
+  const [unconfirmed, setUnconfirmed] = useState(false);
+  const [queued, setQueued] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const submitting = useRef(false);
   const receiptCommand = useRef<PendingReceiptCommand | null>(
     readPendingReceiptCommand(),
   );
@@ -450,7 +455,7 @@ export function ReceivingPageSurface({
     setLines((prev) => prev.filter((l) => l.productId !== productId));
 
   const submit = async () => {
-    if (evidenceBusy) return;
+    if (submitting.current || evidenceBusy) return;
     if (training) {
       await training
         .dispatch({ type: "submit-receipt" })
@@ -527,17 +532,33 @@ export function ReceivingPageSurface({
       };
       persistPendingReceiptCommand(receiptCommand.current);
     }
-    const ok = await receiveStock({
+    submitting.current = true;
+    setSaving(true);
+    setUnconfirmed(false);
+    let ok = false;
+    try {
+    ok = await receiveStock({
       ...receiptInput,
       idempotencyKey: receiptCommand.current.key,
     });
+    } catch {
+      setValidationError("Receipt confirmation was not acknowledged. Your draft is retained; verify the receipt before retrying.");
+      return;
+    } finally {
+      submitting.current = false;
+      setSaving(false);
+    }
     if (!ok) {
+      const wasQueued = warehouse.lastActionStatus === "queued";
+      setQueued((current) => current || wasQueued);
+      setUnconfirmed(true);
       setValidationError(
         "The receipt was not saved. Review the error message and correct the highlighted receiving details before retrying.",
       );
       return;
     }
     receiptCommand.current = null;
+    setQueued(false);
     persistPendingReceiptCommand(null);
     toast.success(`Received ${totalItems} item(s) into inspection staging`);
     setLastReceiptStaged(true);
@@ -608,6 +629,7 @@ export function ReceivingPageSurface({
             >
               <select
                 id="receipt-exception-type"
+                disabled={saving || queued}
                 className="input"
                 value={exceptionType}
                 onChange={(event) =>
@@ -621,6 +643,7 @@ export function ReceivingPageSurface({
             <Field label="Exception reason" htmlFor="receipt-exception-reason">
               <input
                 id="receipt-exception-reason"
+                disabled={saving || queued}
                 className="input"
                 value={exceptionReason}
                 onChange={(event) => setExceptionReason(event.target.value)}
@@ -707,6 +730,7 @@ export function ReceivingPageSurface({
         </p>
       )}
 
+      <fieldset disabled={saving || queued} className="min-w-0">
       <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(22rem,0.8fr)_minmax(0,1.45fr)] xl:items-start">
         {/* Left: capture controls — scan-first (WH-11): the scanner card
             leads; where/who selects collapse into a summary chip on mobile. */}
@@ -793,6 +817,8 @@ export function ReceivingPageSurface({
               }
             >
               <BarcodeScanner
+                mode="batch"
+                disabled={saving || queued || evidenceBusy || Boolean(training?.busy)}
                 onDetected={handleScan}
                 label="Scan to receive"
                 manualLabel={
@@ -1238,7 +1264,10 @@ export function ReceivingPageSurface({
       </div>
 
       {/* Sticky action bar */}
-      {validationError && (
+      </fieldset>
+      {unconfirmed && queued ? (
+        <p role="status" className="mx-auto w-full max-w-3xl text-sm">Receipt queued for sync, not yet received into stock. Your draft and evidence are retained.</p>
+      ) : validationError && (
         <p
           role="alert"
           className="mx-auto w-full max-w-3xl rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-800 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-200"
@@ -1267,7 +1296,7 @@ export function ReceivingPageSurface({
                   type="button"
                   className="btn-primary min-h-12 w-full shadow-pop"
                   onClick={() => void execute(submit)}
-                  disabled={pending || evidenceBusy}
+                  disabled={pending || saving || evidenceBusy}
                 >
                   Receive {totalItems} item(s)
                 </button>

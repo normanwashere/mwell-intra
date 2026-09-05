@@ -159,6 +159,10 @@ export function validateEventReconciliationTransition(
   issuedUnits: number,
 ): Record<string, string> {
   const errors: Record<string, string> = {};
+  const outcomes = [input.soldUnits, input.giveawayUnits, input.returnedUnits, input.lostUnits, input.damagedUnits, input.rekitUnits];
+  if (outcomes.some(quantity => !Number.isSafeInteger(quantity) || quantity < 0)) {
+    errors.outcomes = "Event outcomes must be nonnegative whole numbers.";
+  }
   if (input.action === "save") return errors;
 
   const accountedUnits =
@@ -437,8 +441,8 @@ export async function loadLiveEvents(
         .limit(1000),
       client
         .schema("warehouse")
-        .from("allocations")
-        .select("event_id,quantity,status")
+        .from("event_custody_totals")
+        .select("event_id,reserved_units,issued_units,returned_units,outstanding_units")
         .limit(10000),
       client
         .schema("warehouse")
@@ -471,9 +475,8 @@ export async function loadLiveEvents(
         .limit(1000),
     ]);
   const warnings: string[] = [];
+  if (allocationResult.error) throw new Error(`Event custody unavailable: ${allocationResult.error.message}`);
   if (eventResult.error) warnings.push(`Events: ${eventResult.error.message}`);
-  if (allocationResult.error)
-    warnings.push(`Fulfillment: ${allocationResult.error.message}`);
   if (productResult.error)
     warnings.push("Products: " + productResult.error.message);
   if (reconciliationResult.error)
@@ -493,18 +496,11 @@ export async function loadLiveEvents(
   >();
   for (const row of allocations) {
     const eventId = text(row.event_id);
-    const current = totals.get(eventId) ?? {
-      reserved: 0,
-      issued: 0,
-      returned: 0,
-    };
-    const quantity = count(row.quantity);
-    const status = text(row.status);
-    if (status === "reserved" || status === "allocated")
-      current.reserved += quantity;
-    if (status === "issued") current.issued += quantity;
-    if (status === "returned") current.returned += quantity;
-    totals.set(eventId, current);
+    totals.set(eventId, {
+      reserved: count(row.reserved_units),
+      issued: count(row.issued_units),
+      returned: count(row.returned_units),
+    });
   }
   const rows = Array.isArray(eventResult.data)
     ? (eventResult.data as UnknownRow[])

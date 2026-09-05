@@ -19,7 +19,7 @@ type SheetSize = 'default' | 'wide';
 const CONTENT_CLASS: Record<SheetSide, string> = {
   adaptive:
     'adaptive-content fixed inset-x-0 bottom-0 z-50 max-h-[92dvh] rounded-t-2xl bg-surface shadow-e3 ring-1 ring-line ' +
-    'flex flex-col pb-safe md:inset-x-auto md:bottom-auto md:left-1/2 md:top-1/2 md:w-[min(92vw,36rem)] ' +
+    'flex flex-col pb-safe md:inset-x-auto md:bottom-auto md:left-1/2 md:top-1/2 ' +
     'md:max-h-[min(46rem,88dvh)] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-lg md:pb-0',
   bottom:
     'sheet-content fixed inset-x-0 bottom-0 z-50 max-h-[92dvh] rounded-t-2xl bg-surface shadow-e3 ring-1 ring-line ' +
@@ -127,6 +127,7 @@ export function Sheet({
         <Dialog.Content
           className={clsx(
             CONTENT_CLASS[side],
+            side === 'adaptive' && (size === 'wide' ? 'md:w-[min(94vw,72rem)]' : 'md:w-[min(92vw,36rem)]'),
             side === 'right' && (size === 'wide' ? 'md:max-w-3xl' : 'max-w-sm'),
           )}
           {...(description ? {} : { 'aria-describedby': undefined })}

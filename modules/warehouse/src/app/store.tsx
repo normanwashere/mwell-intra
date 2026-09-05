@@ -57,6 +57,7 @@ import type {
   CreateStorageAreaInput,
   CreateSupplierInput,
   CycleCountInput,
+  CycleCount,
   DataSource,
   DecideDepartmentStockRequestInput,
   DecideStockChangeInput,
@@ -127,6 +128,9 @@ interface WarehouseContextValue {
   actor: string;
   identityId: string;
   refresh: () => Promise<void>;
+  getCycleCount: (id: string) => Promise<CycleCount | null>;
+  /** Boolean actions return true only on commit; queued drafts must be retained. */
+  lastActionStatus: 'committed' | 'queued' | 'failed' | null;
   /** Number of floor-op mutations queued offline, awaiting sync. */
   pendingSync: number;
   /** Conflicted outbox entries the user can retry or discard. */
@@ -336,6 +340,8 @@ export function WarehouseProvider({
     loadInitialRole(initialRole),
   );
   const [pendingSync, setPendingSync] = useState(0);
+  const [lastActionStatus, setLastActionStatus] = useState<'committed' | 'queued' | 'failed' | null>(null);
+  const lastActionStatusRef = useRef(lastActionStatus);
   const [conflicts, setConflicts] = useState<OutboxEntry[]>([]);
   const hasLoadedData = useRef(false);
   const refreshSequence = useRef(0);
@@ -458,19 +464,23 @@ export function WarehouseProvider({
 
   /**
    * Runs a mutation via the data-kit pipeline. Queueable floor ops that fail
-   * with a network error while in Supabase mode are enqueued + optimistically
-   * overlaid (call resolves `true`); other failures toast + resolve `false`.
+   * with a network error are retained as queued, never completed stock.
    */
   const runAction = useCallback(
     (
       method: QueueableMethod | "other",
-      fn: () => Promise<unknown>,
+      fn: (input?: Record<string, unknown>) => Promise<unknown>,
       overlay?: WarehousePatch,
       queueInput?: Record<string, unknown>,
     ): Promise<boolean> =>
       dkRunAction(
         {
           source,
+          onStatus: (status) => {
+            lastActionStatusRef.current = status;
+            setLastActionStatus(status);
+          },
+          notifyRefreshError: (m) => toast.toast(m, "info"),
           applyOptimistic: (o) =>
             setData((prev) => (prev ? applyOverlay(prev, o) : prev)),
           refresh,
@@ -481,16 +491,16 @@ export function WarehouseProvider({
         method,
         fn,
         overlay,
-        queueInput,
+        queueInput ? { ...queueInput, actor } : undefined,
       ),
-    [source, refresh, refreshPending, toast],
+    [source, actor, refresh, refreshPending, toast],
   );
 
   const runAuthorizedAction = useCallback(
     (
       required: Capability | readonly Capability[],
       method: QueueableMethod | "other",
-      fn: () => Promise<unknown>,
+      fn: (input?: Record<string, unknown>) => Promise<unknown>,
       overlay?: WarehousePatch,
       queueInput?: Record<string, unknown>,
     ): Promise<boolean> => {
@@ -498,6 +508,8 @@ export function WarehouseProvider({
         ? required
         : [required];
       if (source === "supabase" && !requiredCapabilities.some(can)) {
+        lastActionStatusRef.current = 'failed';
+        setLastActionStatus('failed');
         toast.error(
           `Not authorized: warehouse.${requiredCapabilities.join("|")}`,
         );
@@ -523,7 +535,10 @@ export function WarehouseProvider({
     [can, canOpenDestination],
   );
 
+  const getCycleCount = useCallback((id: string) => repo.getCycleCount(id), [repo]);
+
   const value: WarehouseContextValue = {
+    getCycleCount,
     data,
     loading,
     error,
@@ -541,6 +556,7 @@ export function WarehouseProvider({
     identityId,
     refresh,
     pendingSync,
+    get lastActionStatus() { return lastActionStatusRef.current; },
     conflicts,
     discardConflict,
     syncNow,
@@ -548,7 +564,7 @@ export function WarehouseProvider({
       runAuthorizedAction(
         "receive_stock",
         "receiveStock",
-        () => repo.receiveStock({ ...input, actor }),
+        (command) => repo.receiveStock({ ...input, ...command, actor }),
         receiveOverlay(input, actor),
         input as Record<string, unknown>,
       ),
@@ -566,21 +582,24 @@ export function WarehouseProvider({
       runAuthorizedAction(
         "issue_items",
         "issue",
-        () => repo.issue({ ...input, actor }),
+        (command) => repo.issue({ ...input, ...command, actor }),
         issueOverlay(input, data),
         input as Record<string, unknown>,
       ),
     recordReturn: (input) => {
+      const hasReturnIdentity = Boolean(input.allocationId) || (
+        input.source === "event" && input.lines.length > 0 && input.lines.every((line) => Boolean(line.allocationId))
+      );
       const command = {
         ...input,
-        idempotencyKey: input.idempotencyKey ?? `return-${crypto.randomUUID()}`,
+        idempotencyKey: input.idempotencyKey,
       };
       return runAuthorizedAction(
         "manage_returns",
-        input.allocationId ? "recordReturn" : "other",
-        () => repo.recordReturn({ ...command, actor }),
-        input.allocationId ? returnOverlay(command, actor, data) : undefined,
-        input.allocationId ? (command as Record<string, unknown>) : undefined,
+        hasReturnIdentity ? "recordReturn" : "other",
+        (prepared) => repo.recordReturn({ ...command, ...prepared, actor }),
+        hasReturnIdentity ? returnOverlay(command, actor, data) : undefined,
+        hasReturnIdentity ? (command as Record<string, unknown>) : undefined,
       );
     },
     recordReturnOutcome: async (input) => {
@@ -623,7 +642,7 @@ export function WarehouseProvider({
       runAuthorizedAction(
         "transfer_stock",
         "transfer",
-        () => repo.transfer({ ...input, actor }),
+        (command) => repo.transfer({ ...input, ...command, actor }),
         transferOverlay(input, actor),
         input as Record<string, unknown>,
       ),
@@ -683,7 +702,7 @@ export function WarehouseProvider({
       runAuthorizedAction(
         WAREHOUSE_MUTATION_CAPABILITIES.relocate,
         "relocate",
-        () => repo.relocate({ ...input, actor }),
+        (command) => repo.relocate({ ...input, ...command, actor }),
         relocateOverlay(input, actor),
         input as Record<string, unknown>,
       ),

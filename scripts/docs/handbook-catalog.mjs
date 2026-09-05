@@ -13,6 +13,20 @@ export const HANDBOOK_TABS = Object.freeze([
 ]);
 
 const CATALOG = [
+  ...[
+    ['procurement-legal', 'Procurement and Legal', 'SEP05_PROCUREMENT_LEGAL_CANDIDATE.md'],
+    ['platform-finance', 'Platform and Finance', 'SEP05_PLATFORM_FINANCE_CANDIDATE.md'],
+    ['warehouse-events', 'Warehouse and Events', 'SEP05_WAREHOUSE_EVENTS_CANDIDATE.md'],
+  ].map(([key, label, file]) => ({
+    source: `docs/manual/${file}`,
+    id: `sep05-${key}-candidate`,
+    title: `September 5 candidate: ${label}`,
+    primaryTab: 'release', relatedTabs: ['workflows'], contentType: 'release-note',
+    audience: ['trainer', 'release-reviewer', 'operator'],
+    summary: `${label} remediation procedures and verification limits. Confirm the deployment manifest before treating these as live.`,
+    keywords: ['uat', 'candidate', 'september', 'remediation'], sortOrder: 5,
+    collapse: 'reference', relatedSources: ['docs/manual/MWELL_INTRA_USER_MANUAL.md'],
+  })),
   {
     source: "docs/manual/MWELL_INTRA_USER_MANUAL.md",
     id: "user-manual",

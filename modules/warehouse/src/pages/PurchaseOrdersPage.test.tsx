@@ -200,6 +200,19 @@ class LiveProcurementRepository extends InMemoryRepository {
 }
 
 describe("PurchaseOrdersPage", () => {
+  it("links sticky receipt requirements to the missing field without submitting", async () => {
+    const user = userEvent.setup();
+    renderReceiving();
+    const dialog = await openReceiving(user);
+    const scroll = vi.fn();
+    const input = within(dialog).getByLabelText('Delivery evidence URL');
+    input.scrollIntoView = scroll;
+    await user.click(within(dialog).getByRole('button', { name: 'Attach delivery evidence' }));
+    expect(input).toHaveFocus();
+    expect(scroll).toHaveBeenCalled();
+    expect(within(dialog).getByRole('button', { name: 'Confirm governed receipt' })).toBeDisabled();
+    expect(dialog.className).toContain('72rem');
+  });
   beforeEach(() => {
     liveDrafts.enabled = false;
     liveDrafts.rpc.mockReset();

@@ -2,12 +2,13 @@
 
 import { Badge, DataTable, EmptyState, SectionTitle, money, type Column } from '@intra/ui';
 import type { FinancePaymentItem, PaymentReadinessStatus } from '../types';
+import { paymentAge, paymentUrgency } from '../paymentUrgency';
 
 const STATUS_LABEL: Record<PaymentReadinessStatus, string> = {
   draft: 'Draft',
   ready_for_finance: 'Ready for Finance',
   returned: 'Correction required',
-  accepted: 'Accepted',
+  accepted: 'Accepted - awaiting release',
   released: 'Released',
   superseded: 'Superseded',
 };
@@ -50,9 +51,10 @@ const columns: Column<FinancePaymentItem>[] = [
         >
           {row.poNumber}
         </a>
-        <span className="block truncate text-xs font-normal text-muted">
+        <span className="block whitespace-normal break-all text-xs font-normal text-muted">
           {row.vendorName}{row.invoiceNumber ? ` / ${row.invoiceNumber}` : ''}
         </span>
+        <span className="block whitespace-normal text-xs text-muted">{paymentAge(row)}</span>
       </span>
     ),
   },
@@ -90,17 +92,8 @@ const columns: Column<FinancePaymentItem>[] = [
   },
 ];
 
-function priority(item: FinancePaymentItem): number {
-  if (item.status === 'ready_for_finance') return 0;
-  if (item.status === 'returned') return 1;
-  if (item.status === 'draft') return 2;
-  return 3;
-}
-
 export function FinanceReviewQueue({ items }: { items: FinancePaymentItem[] }) {
-  const visible = [...items]
-    .filter((item) => item.status !== 'superseded')
-    .sort((a, b) => priority(a) - priority(b) || b.preparedAt.localeCompare(a.preparedAt));
+  const visible = paymentUrgency(items);
 
   return (
     <section aria-label="Payment readiness" className="min-w-0 max-w-full overflow-hidden">

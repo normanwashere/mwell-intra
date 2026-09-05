@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useWarehouse } from "@/app/store";
 import { toStockState } from "@/data/repository";
 import { eventCosting, eventSummary } from "@/domain/events";
+import { useEventIntegrity } from "@/data/eventIntegrity";
 import { formatDate, statusLabel } from "@/domain/format";
 import { primaryStockLocation, stockByLocation } from "@/domain/transfers";
 import { stockByBin } from "@/domain/storage";
@@ -41,6 +42,7 @@ export function EventDetailPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
   const { data, issue, cancelAllocation, can } = useWarehouse();
+  const integrity = useEventIntegrity(id, data);
   const toast = useToast();
   const canReserve = can("reserve_allocate");
   const canIssue = can("issue_items");
@@ -110,7 +112,8 @@ export function EventDetailPage() {
   }
 
   const summary = eventSummary(data.allocations, data.movements, event.id);
-  const costing = eventCosting(data.movements, data.products, event.id);
+  const costing = eventCosting(data.movements, data.products, event.id, integrity.outcomes);
+  const valuationComplete = !integrity.live || (integrity.custody && summary.issued === integrity.custody.issued && summary.returned === integrity.custody.returned);
   const allocations = data.allocations.filter((a) => a.eventId === event.id);
   const productName = (pid: string) =>
     data.products.find((p) => p.id === pid)?.name ?? pid;
@@ -238,7 +241,7 @@ export function EventDetailPage() {
               {event.endDate ? ` – ${formatDate(event.endDate)}` : ""}
             </p>
           </div>
-          {canReserve && (
+          {canReserve && !["closed", "cancelled"].includes(event.status ?? "planned") && (
             <button
               type="button"
               className="btn-accent btn-sm shrink-0"
@@ -248,13 +251,14 @@ export function EventDetailPage() {
             </button>
           )}
         </div>
+        {canReserve && ["closed", "cancelled"].includes(event.status ?? "planned") && <p className="mt-3 text-sm text-muted">Reservations are closed. Ask the event owner to reopen this event.</p>}
       </div>
 
       <StaggerGrid className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StaggerItem>
           <StatCard
             label="Reserved"
-            value={summary.reserved}
+            value={integrity.live ? integrity.custody?.reserved ?? "Unavailable" : summary.reserved}
             icon="tag"
             tone="amber"
             hint="Units"
@@ -263,7 +267,7 @@ export function EventDetailPage() {
         <StaggerItem>
           <StatCard
             label="Issued"
-            value={summary.issued}
+            value={integrity.live ? integrity.custody?.issued ?? "Unavailable" : summary.issued}
             icon="truck"
             tone="brand"
             hint="Units"
@@ -272,7 +276,7 @@ export function EventDetailPage() {
         <StaggerItem>
           <StatCard
             label="Returned"
-            value={summary.returned}
+            value={integrity.live ? integrity.custody?.returned ?? "Unavailable" : summary.returned}
             icon="rotate"
             tone="slate"
             hint="Units"
@@ -280,8 +284,8 @@ export function EventDetailPage() {
         </StaggerItem>
         <StaggerItem>
           <StatCard
-            label="Units consumed"
-            value={summary.consumed}
+            label="Outstanding custody"
+            value={integrity.live ? integrity.custody?.outstanding ?? "Unavailable" : summary.consumed}
             icon="check"
             tone="emerald"
             hint="Units"
@@ -292,31 +296,39 @@ export function EventDetailPage() {
       <Card>
         <SectionTitle
           title="Event costing"
-          subtitle="Sold/used vs promotional give-aways"
+          subtitle="Provisional custody valuation. Confirmed outcomes are recorded in Event reconciliation."
         />
+        {integrity.error && <p role="alert" className="text-sm text-rose-700">{integrity.error}</p>}
+        <p className="mb-3 text-sm">{integrity.outcomes?.status === 'approved' ? 'Approved outcomes' : 'Provisional: settlement not approved'}</p>
+        <dl className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {(['sold', 'giveaway', 'returned', 'lost', 'damaged', 'rekit'] as const).map(key => (
+            <div key={key}><dt className="capitalize text-sm">{key} units</dt><dd>{integrity.error ? 'Unavailable' : integrity.outcomes?.[key] ?? 0}</dd></div>
+          ))}
+        </dl>
+        <a className="mb-3 inline-flex min-h-11 items-center text-sm underline" href={`/events/${encodeURIComponent(event.id)}`}>Open event reconciliation</a>
         <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div className="rounded-xl bg-inset p-3">
-            <dt className="text-xs text-faint">Consumed value</dt>
+            <dt className="text-xs text-faint">Outstanding custody value</dt>
             <dd className="tnum text-lg font-extrabold text-ink">
-              {money(costing.consumedValue)}
+              {valuationComplete && costing.valuationAvailable ? money(costing.consumedValue) : "Historical cost unavailable"}
             </dd>
           </div>
           <div className="rounded-xl bg-inset p-3">
-            <dt className="text-xs text-faint">Promo give-aways</dt>
+            <dt className="text-xs text-faint">Confirmed giveaways</dt>
             <dd className="tnum text-lg font-extrabold text-amber-800 dark:text-amber-300">
-              {money(costing.promoValue)}
+              {valuationComplete && costing.outcomeValuationAvailable ? money(costing.promoValue) : "Outcome valuation unavailable"}
             </dd>
           </div>
           <div className="rounded-xl bg-inset p-3">
-            <dt className="text-xs text-faint">Sold / used</dt>
+            <dt className="text-xs text-faint">Confirmed sold</dt>
             <dd className="tnum text-lg font-extrabold text-ink">
-              {money(costing.soldValue)}
+              {valuationComplete && costing.outcomeValuationAvailable ? money(costing.soldValue) : "Outcome valuation unavailable"}
             </dd>
           </div>
           <div className="rounded-xl bg-inset p-3">
             <dt className="text-xs text-faint">Returned value</dt>
             <dd className="tnum text-lg font-extrabold text-ink">
-              {money(costing.returnedValue)}
+              {valuationComplete && costing.valuationAvailable ? money(costing.returnedValue) : "Historical cost unavailable"}
             </dd>
           </div>
         </dl>

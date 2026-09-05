@@ -1,9 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { useSession } from '@intra/auth';
-import { can } from '@intra/rbac';
+import { useSession, useCan } from '@intra/auth';
 import { FINANCE_DEMO_DATA } from './seed';
+import type { SearchCloseSources, LoadCloseEvidence, CloseSource, CloseEvidenceOption } from './sourceSelection';
+import { closeSourceBlocker } from './sourceSelection';
 import type {
   FinanceActivity,
   FinanceActivityFilter,
@@ -71,10 +72,10 @@ export function summarizeFinanceData(data: FinanceData): FinanceSummary {
   );
   return {
     inventoryValue: data.inventoryValue,
-    committedValue,
-    receivedValue,
-    returnedValue,
-    netWarehouseValue: receivedValue - returnedValue,
+    committedValue: data.totals?.committedValue ?? committedValue,
+    receivedValue: data.totals?.receivedValue ?? receivedValue,
+    returnedValue: data.totals?.returnedValue ?? returnedValue,
+    netWarehouseValue: (data.totals?.receivedValue ?? receivedValue) - (data.totals?.returnedValue ?? returnedValue),
     reviewCount: data.payments.filter((item) => item.status === 'ready_for_finance').length,
     returnedCount: data.payments.filter((item) => item.status === 'returned').length,
     acceptedCount: data.payments.filter(
@@ -141,6 +142,10 @@ export function applyMemoryFinanceCloseEntry(
   if (errors.length) throw new Error(errors[0]);
   const now = new Date().toISOString();
   if (input.action === 'save') {
+    const existing = input.id ? data.closeEntries.find(item => item.id === input.id) : undefined;
+    if (input.id && !existing) throw new Error('Finance close entry not found');
+    if (existing && (!input.expectedUpdatedAt || existing.updatedAt !== input.expectedUpdatedAt)) throw new Error('Finance close entry changed; refresh and try again');
+    if (existing && (['posted','reconciled'].includes(existing.status) || existing.sourceRecordType === 'event_reconciliation')) throw new Error('This entry cannot be manually rewritten');
     if (
       input.sourceRecordType === 'event_reconciliation' &&
       data.closeEntries.some(
@@ -172,10 +177,11 @@ export function applyMemoryFinanceCloseEntry(
       preparedAt: now,
       updatedAt: now,
     };
-    return { ...data, closeEntries: [entry, ...data.closeEntries] };
+    return { ...data, closeEntries: [{...existing,...entry}, ...data.closeEntries.filter(item => item.id !== entry.id)] };
   }
   const entry = data.closeEntries.find((item) => item.id === input.id);
   if (!entry) throw new Error('Finance close entry was not found. Refresh before retrying.');
+  if (input.expectedUpdatedAt && input.expectedUpdatedAt !== entry.updatedAt) throw new Error('Finance close entry changed; refresh and try again');
   if (input.action === 'post' && entry.status !== 'ready') {
     throw new Error('Only a ready entry can be posted.');
   }
@@ -225,6 +231,8 @@ export function applyMemoryFinanceCloseEntry(
             ...item,
             status,
             reconciliationNote: input.reconciliationNote ?? item.reconciliationNote,
+            correctionBy: input.action === 'exception' ? actor : item.correctionBy,
+            correctionAt: input.action === 'exception' ? now : item.correctionAt,
             postedBy: input.action === 'post' ? actor : item.postedBy,
             postedAt: input.action === 'post' ? now : item.postedAt,
             reconciledBy: input.action === 'reconcile' ? actor : item.reconciledBy,
@@ -238,6 +246,7 @@ export function applyMemoryFinanceCloseEntry(
 
 export function scopeFinanceData(data: FinanceData, access: FinanceSourceAccess): FinanceData {
   return {
+    ...data,
     activity: data.activity.filter((item) =>
       item.source === 'procurement_po' ? access.procurement : access.warehouse,
     ),
@@ -327,6 +336,8 @@ function mapCloseEntry(row: UnknownRow): FinanceCloseEntry | null {
     reconciledBy: optionalText(row.reconciled_by),
     reconciledAt: optionalText(row.reconciled_at),
     settlementApprovedBy: optionalText(row.settlement_approved_by),
+    correctionBy: optionalText(row.correction_by),
+    correctionAt: optionalText(row.correction_at),
     preparedActor: optionalText(row.prepared_by)
       ? {
           id: text(row.prepared_by),
@@ -388,6 +399,14 @@ export async function openLiveFinanceCloseEvidence(
   client: FinanceClient,
   entry: FinanceCloseEntry,
 ): Promise<string> {
+  if (entry.id && !entry.evidenceUrl?.startsWith('evidence://') && entry.sourceRecordType !== 'event_reconciliation') {
+    const response = await fetch('/api/finance/evidence',{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify({entryId:entry.id})});
+    const result = await response.json();
+    if (!response.ok || typeof result.url !== 'string') throw new Error(result.error || 'Evidence access restricted or unavailable.');
+    const url = new URL(result.url);
+    if (url.protocol !== 'https:' || url.username || url.password) throw new Error('Invalid protected evidence URL');
+    return result.url;
+  }
   if (entry.evidenceUrl?.startsWith('evidence://')) {
     const response = await fetch('/api/evidence', { method: 'POST', credentials: 'same-origin', cache: 'no-store',
       headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'open', reference: entry.evidenceUrl }) });
@@ -415,6 +434,30 @@ export async function openLiveFinanceCloseEvidence(
   }
   return evidenceUrl;
 }
+export async function loadFinancePages(client: FinanceClient, source: string): Promise<{ data: UnknownRow[]; error: { message: string } | null }> {
+  const result: UnknownRow[] = [];
+  let after = '';
+  let total: number | undefined;
+  try {
+    for (;;) {
+      const response = await client.schema('core').rpc('platform_finance_page', { p_source: source, p_after: after, p_size: 200 });
+      if (response.error) throw response.error;
+      const page = response.data as { rows: UnknownRow[]; next: string | null; total: number };
+      if (!Array.isArray(page?.rows) || !Number.isFinite(page.total)) throw new Error('Incomplete Finance page');
+      if (total !== undefined && total !== page.total) throw new Error('Finance population changed during paging. Retry to load a complete population.');
+      total = page.total;
+      result.push(...page.rows);
+      if (!page.rows.length || !page.next) {
+        if (result.length !== total) throw new Error('Incomplete Finance population. Retry this source.');
+        break;
+      }
+      if (page.next <= after) throw new Error('Finance paging did not advance');
+      after = page.next;
+    }
+    return { data: result, error: null };
+  } catch (cause) { return { data: [], error: { message: cause instanceof Error ? cause.message : String((cause as {message?: string})?.message ?? 'Finance source unavailable') } }; }
+}
+
 export async function loadLiveFinanceData(
   client: FinanceClient,
   access: FinanceSourceAccess = { procurement: true, warehouse: true },
@@ -433,55 +476,29 @@ export async function loadLiveFinanceData(
     closeEntryResult,
   ] = await Promise.all([
     access.procurement || access.warehouse
-      ? client
-          .schema('core')
-          .from('v_finance_activity')
-          .select('source,ref_id,po_id,vendor_id,amount,status,occurred_at')
-          .order('occurred_at', { ascending: false })
-          .limit(1000)
+      ? loadFinancePages(client, 'activity')
       : emptyResult(),
     access.procurement
-      ? client
-          .schema('procurement')
-          .from('purchase_orders')
-          .select('id,po_number,vendor_name,total,status,updated_at')
-          .order('updated_at', { ascending: false })
-          .limit(1000)
+      ? loadFinancePages(client, 'orders')
       : emptyResult(),
     access.procurement
-      ? client
-          .schema('procurement')
-          .from('payment_readiness_packs')
-          .select(
-            'id,purchase_order_id,status,po_match,invoice_or_si_storage_path,invoice_number,due_date,invoice_amount,released_amount,prepared_by,prepared_at,finance_reviewed_by,finance_reviewed_at,finance_note',
-          )
-          .neq('status', 'superseded')
-          .order('prepared_at', { ascending: false })
-          .limit(1000)
+      ? loadFinancePages(client, 'payments')
       : emptyResult(),
     access.warehouse
-      ? client
-          .schema('warehouse')
-          .from('inventory_position_v1')
-          .select('product_id,on_hand')
-          .limit(100000)
+      ? loadFinancePages(client, 'inventory')
       : emptyResult(),
     access.warehouse
-      ? client.schema('warehouse').from('products').select('id,unit_cost').limit(10000)
+      ? loadFinancePages(client, 'products')
       : emptyResult(),
     access.procurement || access.warehouse
-      ? client
-          .schema('core')
-          .from('finance_close_entry_authority')
-          .select(
-            'id,period_start,period_end,entry_type,source_module,source_reference,source_record_type,source_record_id,evidence_record_type,evidence_record_id,cost_center,amount,status,evidence_url,reconciliation_note,prepared_by,prepared_by_name,prepared_by_email,prepared_at,posted_by,posted_by_name,posted_by_email,posted_at,reconciled_by,reconciled_by_name,reconciled_by_email,reconciled_at,settlement_approved_by,updated_at',
-          )
-          .order('period_end', { ascending: false })
-          .limit(1000)
+      ? loadFinancePages(client, 'close')
       : emptyResult(),
   ]);
 
   const warnings: string[] = [];
+  const end = new Date().toISOString().slice(0,10);
+  const totalsResult = await client.schema('core').rpc('platform_finance_totals', { p_start: end.slice(0,8) + '01', p_end: end });
+  if (totalsResult.error) warnings.push(`Period totals: ${totalsResult.error.message}`);
   if (activityResult.error) warnings.push(`Financial activity: ${activityResult.error.message}`);
   if (purchaseOrderResult.error)
     warnings.push(`Purchase orders: ${purchaseOrderResult.error.message}`);
@@ -494,15 +511,24 @@ export async function loadLiveFinanceData(
 
   const purchaseOrders = new Map(rows(purchaseOrderResult.data).map((row) => [text(row.id), row]));
   const unitCostByProduct = new Map(
-    rows(productResult.data).map((row) => [text(row.id), amount(row.unit_cost)]),
+    rows(productResult.data).filter(row => row.unit_cost !== null && row.unit_cost !== undefined && Number.isFinite(Number(row.unit_cost))).map((row) => [text(row.id), amount(row.unit_cost)]),
   );
   const inventoryValue = rows(inventoryResult.data).reduce(
     (sum, row) => sum + amount(row.on_hand) * (unitCostByProduct.get(text(row.product_id)) ?? 0),
     0,
   );
 
+  const missingCosts = rows(inventoryResult.data).some(row => !unitCostByProduct.has(text(row.product_id)) || row.on_hand == null || !Number.isFinite(Number(row.on_hand)));
+  if (missingCosts) warnings.push('Inventory valuation: product cost unavailable');
   return scopeFinanceData(
     {
+      totals: totalsResult.error ? undefined : totalsResult.data as FinanceData['totals'],
+      sourceStates: {
+        activity: !access.procurement && !access.warehouse ? 'not_authorized' : activityResult.error || totalsResult.error ? 'error' : 'complete',
+        payments: !access.procurement ? 'not_authorized' : paymentResult.error || purchaseOrderResult.error ? 'error' : 'complete',
+        inventory: !access.warehouse ? 'not_authorized' : inventoryResult.error || productResult.error || missingCosts ? 'error' : 'complete',
+        close: !access.procurement && !access.warehouse ? 'not_authorized' : closeEntryResult.error ? 'error' : 'complete',
+      },
       activity: rows(activityResult.data)
         .map(mapActivity)
         .filter((item): item is FinanceActivity => item !== null),
@@ -527,11 +553,28 @@ export function useFinanceData(): {
   manageCloseEntry: (input: ManageFinanceCloseEntryInput) => Promise<FinanceCloseEntry>;
   openCloseEvidence: (entry: FinanceCloseEntry) => Promise<string>;
   isDemo: boolean;
+  searchSources?: SearchCloseSources;
+  loadEvidenceOptions?: LoadCloseEvidence;
 } {
-  const { mode, supabaseClient, userRoles, profile } = useSession();
+  const { mode, supabaseClient, profile } = useSession();
   const live = mode === 'supabase' ? supabaseClient : null;
-  const procurementAccess = can(userRoles, 'procurement', 'view_finance');
-  const warehouseAccess = can(userRoles, 'warehouse', 'view_finance');
+  const procurementAccess = useCan('procurement', 'view_finance');
+  const warehouseAccess = useCan('warehouse', 'view_finance');
+  const searchSources = useCallback<SearchCloseSources>(async (query, type, id) => {
+    if (!live) return [];
+    if (type && closeSourceBlocker(type)) throw new Error(closeSourceBlocker(type));
+    const result = await live.schema('core').rpc('platform_close_sources', { p_query: query, p_type: type ?? null, p_id: id ?? null });
+    if (result.error) throw result.error;
+    if (!Array.isArray(result.data)) throw new Error('Source lookup unavailable');
+    return result.data as CloseSource[];
+  }, [live]);
+  const loadEvidenceOptions = useCallback<LoadCloseEvidence>(async (type, id) => {
+    if (!live) return [];
+    const result = await live.schema('core').rpc('platform_close_evidence_options', { p_type: type, p_id: id });
+    if (result.error) throw result.error;
+    if (!Array.isArray(result.data)) throw new Error('Evidence lookup unavailable');
+    return result.data as CloseEvidenceOption[];
+  }, [live]);
   const [data, setData] = useState<FinanceData>(
     live
       ? {
@@ -573,24 +616,17 @@ export function useFinanceData(): {
   const manageCloseEntry = useCallback(
     async (input: ManageFinanceCloseEntryInput) => {
       if (!live) {
-        let result: FinanceCloseEntry | undefined;
-        setData((current) => {
-          const next = applyMemoryFinanceCloseEntry(
-            current,
-            input,
-            profile?.email ?? 'finance@mwell.demo',
-          );
-          result = next.closeEntries.find((entry) => entry.id === input.id) ?? next.closeEntries[0];
-          return next;
-        });
+        const next = applyMemoryFinanceCloseEntry(data, input, profile?.id ?? 'finance-demo');
+        const result = next.closeEntries.find((entry) => entry.id === input.id) ?? next.closeEntries[0];
         if (!result) throw new Error('Finance close entry could not be recorded.');
+        setData(next);
         return result;
       }
       const result = await manageLiveFinanceCloseEntry(live, input);
       await refresh();
       return result;
     },
-    [live, refresh, profile?.email],
+    [live, refresh, profile?.id, data],
   );
   const openCloseEvidence = useCallback(
     async (entry: FinanceCloseEntry) => {
@@ -606,5 +642,5 @@ export function useFinanceData(): {
     void refresh();
   }, [refresh]);
 
-  return { data, loading, error, refresh, manageCloseEntry, openCloseEvidence, isDemo: !live };
+  return { data, loading, error, refresh, manageCloseEntry, openCloseEvidence, isDemo: !live, searchSources: live ? searchSources : undefined, loadEvidenceOptions: live ? loadEvidenceOptions : undefined };
 }

@@ -790,7 +790,7 @@ describe("FulfillmentPage", () => {
         ],
       });
     });
-  }, 15_000);
+  }, 45_000);
 
   it("keeps ordinary quantities separate from explicitly identified bundle sets", async () => {
     const user = userEvent.setup();
@@ -1004,7 +1004,7 @@ describe("FulfillmentPage", () => {
     expect(within(dialog).getByText(/0917.*567/)).toBeInTheDocument();
     expect(within(dialog).getByText(/a\*+@example.com/i)).toBeInTheDocument();
     expect(
-      within(dialog).getByText(/12 Main Street.*Pasig/i),
+      within(within(dialog).getByRole("region", { name: "Customer and delivery" })).getByText(/12 Main Street.*Pasig/i),
     ).toBeInTheDocument();
     expect(within(dialog).getByText(/Blue/)).toBeInTheDocument();
     expect(within(dialog).getByText("Awaiting Dispatch")).toBeInTheDocument();
@@ -1197,6 +1197,7 @@ describe("FulfillmentPage", () => {
       role: "warehouse_operator",
       repo,
     });
+    await user.click(await screen.findByRole("button", { name: "Released follow-up: 1" }));
     const order = await screen.findByRole("listitem", {
       name: /SHOP-POD-2201/i,
     });

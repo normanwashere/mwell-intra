@@ -1,4 +1,5 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useSession } from "@intra/auth";
 import { useWarehouse } from "@/app/store";
 import { allConflicts, allPending } from "@/data/outbox";
 import type { Allocation } from "@/domain/types";
@@ -41,8 +42,32 @@ function AllocationReturnForm({
   allocation: Allocation;
 }) {
   const { data, recordReturn, can, source } = useWarehouse();
+  const { mode, supabaseClient } = useSession();
   const toast = useToast();
-  const [quantity, setQuantity] = useState(allocation.quantity);
+  const returnedQuantity = (data?.returns ?? []).flatMap(record => record.lines)
+    .filter(line => line.allocationId === allocation.id)
+    .reduce((sum, line) => sum + line.quantity, 0);
+  const [liveRemaining, setLiveRemaining] = useState<number | null>(null);
+  const [custodyError, setCustodyError] = useState<string | null>(null);
+  const remainingQuantity = mode === 'supabase' ? liveRemaining ?? 0 : Math.max(0, allocation.quantity - returnedQuantity);
+  const [quantity, setQuantity] = useState(remainingQuantity);
+  useEffect(() => { setQuantity(current => Math.min(current, remainingQuantity)); }, [remainingQuantity]);
+  useEffect(() => {
+    if (mode !== 'supabase') return;
+    let active = true;
+    if (!supabaseClient) { setCustodyError('Event custody is unavailable. Reconnect and reopen this return.'); return; }
+    void supabaseClient.schema('warehouse').from('allocation_return_totals')
+      .select('remaining_units').eq('allocation_id', allocation.id).single().then(({ data: row, error: cause }) => {
+        if (!active) return;
+        const remaining = Number(row?.remaining_units);
+        if (cause || !row || !Number.isSafeInteger(remaining) || remaining < 0) {
+          setCustodyError('Event custody is unavailable. Refresh and reopen this return.');
+        } else { setLiveRemaining(remaining); setQuantity(remaining); }
+      }, () => {
+        if (active) setCustodyError('Event custody is unavailable. Refresh and reopen this return.');
+      });
+    return () => { active = false; };
+  }, [mode, supabaseClient, allocation.id]);
   const [reason, setReason] = useState("");
   const [locationId, setLocationId] = useState("");
   const [binId, setBinId] = useState("");
@@ -72,7 +97,7 @@ function AllocationReturnForm({
     .sort((a, b) => a.code.localeCompare(b.code));
   const serialsReady =
     selectedSerials.length > 0 &&
-    selectedSerials.length <= allocation.quantity &&
+    selectedSerials.length <= remainingQuantity &&
     selectedSerials.every(
       (serialNumber) =>
         data &&
@@ -86,6 +111,8 @@ function AllocationReturnForm({
     );
   const ready = Boolean(
     product &&
+    !custodyError &&
+    (mode !== 'supabase' || liveRemaining !== null) &&
     can("manage_returns") &&
     allocation.status === "issued" &&
     quarantineLocations.some((location) => location.id === locationId) &&
@@ -94,7 +121,7 @@ function AllocationReturnForm({
       ? serialsReady
       : Number.isSafeInteger(quantity) &&
         quantity > 0 &&
-        quantity <= allocation.quantity),
+        quantity <= remainingQuantity),
   );
 
   const toggleSerial = (serialNumber: string) =>
@@ -201,7 +228,7 @@ function AllocationReturnForm({
         {serialized ? (
           <Field
             label="Units to return"
-            hint={`${selectedSerials.length} of ${allocation.quantity} selected`}
+            hint={custodyError ?? `${selectedSerials.length} selected; ${remainingQuantity} remaining of ${allocation.quantity} issued`}
             error={
               issuedUnits.length === 0
                 ? "No issued units found for this allocation."
@@ -221,7 +248,7 @@ function AllocationReturnForm({
                       checked={selectedSerials.includes(unit.serialNumber)}
                       disabled={
                         !selectedSerials.includes(unit.serialNumber) &&
-                        selectedSerials.length >= allocation.quantity
+                        selectedSerials.length >= remainingQuantity
                       }
                       onChange={() => toggleSerial(unit.serialNumber)}
                     />
@@ -249,7 +276,7 @@ function AllocationReturnForm({
                   onResolved={(resolution) => {
                     const serial = resolution.serialNumber;
                     if (!serial) return;
-                    if (selectedSerials.length >= allocation.quantity) {
+                    if (selectedSerials.length >= remainingQuantity) {
                       setError(
                         "Selected units exceed the allocation quantity.",
                       );
@@ -265,14 +292,14 @@ function AllocationReturnForm({
             )}
           </Field>
         ) : (
-          <Field label="Quantity returned" htmlFor="alloc-return-qty">
+          <Field label="Quantity returned" htmlFor="alloc-return-qty" hint={custodyError ?? (mode === 'supabase' && liveRemaining === null ? 'Loading outstanding custody' : `${remainingQuantity} remaining of ${allocation.quantity} issued`)}>
             <QuantityStepper
               id="alloc-return-qty"
               aria-label="Quantity returned"
               value={quantity}
               onChange={setQuantity}
               min={1}
-              max={allocation.quantity}
+              max={remainingQuantity}
             />
           </Field>
         )}

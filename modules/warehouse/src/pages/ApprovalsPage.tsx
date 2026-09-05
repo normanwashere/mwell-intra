@@ -4,6 +4,8 @@ import type { StockChangeRequest } from '@intra/data-kit';
 import { useWarehouse } from '@/app/store';
 import { Badge, EmptyState, PageHeader, SegmentedControl } from '@/components/ui';
 import { StockChangeDecisionSheet } from '@/components/approvals/StockChangeDecisionSheet';
+import { loadCompleteControlQueue } from '@/domain/controlQueues';
+import { useCycleCountRecord } from '@/domain/useCycleCountRecord';
 
 type ApprovalTab = 'waiting' | 'review' | 'decided';
 
@@ -25,13 +27,19 @@ export function ApprovalsPage() {
   const [requests, setRequests] = useState<StockChangeRequest[]>([]);
   const [selected, setSelected] = useState<StockChangeRequest | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [searchParams] = useSearchParams();
   const openedSource = useRef<string | null>(null);
+  const sourceCount = useCycleCountRecord(selected?.sourceType === 'cycle_count' ? selected.sourceId : null);
 
   const reload = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
-      setRequests((await loadStockChangeRequests({ limit: 100 })).rows);
+      setRequests(await loadCompleteControlQueue(loadStockChangeRequests));
+    } catch (e) {
+      setSelected(null);
+      setLoadError(e instanceof Error ? e.message : 'Approvals could not be loaded.');
     } finally {
       setLoading(false);
     }
@@ -41,7 +49,7 @@ export function ApprovalsPage() {
 
   useEffect(() => {
     const requestedId = searchParams.get('request');
-    if (!requestedId || loading || openedSource.current === requestedId) return;
+    if (!requestedId || loading || loadError || openedSource.current === requestedId) return;
     const requested = requests.find((request) => request.id === requestedId);
     if (!requested) return;
     openedSource.current = requestedId;
@@ -50,7 +58,7 @@ export function ApprovalsPage() {
       setTab('waiting');
       setSelected(requested);
     } else setTab('review');
-  }, [loading, requests, searchParams]);
+  }, [loading, loadError, requests, searchParams]);
 
   const rows = useMemo(() => {
     if (tab === 'waiting') return requests.filter((request) =>
@@ -68,6 +76,9 @@ export function ApprovalsPage() {
     return ok;
   };
   const online = source !== 'supabase' || navigator.onLine;
+  const selectedProduct = data.products.find(p => p.id === selected?.productId);
+  const selectedLocation = data.locations.find(l => l.id === selected?.locationId);
+  const countLine = sourceCount.record?.lines.find(l => l.productId === selected?.productId);
 
   return (
     <div className="space-y-4">
@@ -87,7 +98,7 @@ export function ApprovalsPage() {
         ]}
       />
 
-      {loading ? (
+      {loadError ? <div role="alert"><p>{loadError}</p><button type="button" className="btn-ghost mt-2" onClick={() => void reload()}>Retry approvals</button></div> : loading ? (
         <p className="text-sm text-muted">Loading approvals...</p>
       ) : rows.length === 0 ? (
         <EmptyState icon="check" title="No approvals in this view" />
@@ -112,7 +123,7 @@ export function ApprovalsPage() {
                 <p className="mt-1 text-sm text-muted">
                   {request.quantityDelta > 0 ? '+' : ''}{request.quantityDelta} units · {money(request.financialImpact)}
                 </p>
-                <p className="mt-1 break-all text-xs text-faint">Requested by {request.requestedBy} · {request.reason}</p>
+                <p className="mt-1 break-all text-xs text-faint">Requested by {request.requestedByDisplayName ?? `Name unavailable (${request.requestedBy})`} · {request.reason}</p>
               </div>
               {request.canDecide && (
                 <button type="button" className="btn-primary btn-sm justify-center" onClick={() => setSelected(request)}>
@@ -128,6 +139,15 @@ export function ApprovalsPage() {
         request={selected}
         actor={identityId}
         online={online}
+        contextLoading={sourceCount.loading}
+        contextError={sourceCount.error}
+        onRetryContext={sourceCount.retry}
+        context={selected && selectedProduct && selectedLocation && (selected.sourceType !== 'cycle_count' || countLine) ? {
+          product: selectedProduct.name, sku: selectedProduct.sku, location: selectedLocation.name,
+          bin: data.storageAreas.find(b => b.id === selected.binId)?.code,
+          expected: countLine?.expected, counted: countLine?.counted,
+          requester: selected.requestedByDisplayName ?? `Name unavailable (${selected.requestedBy})`,
+        } : undefined}
         onOpenChange={(open) => { if (!open) setSelected(null); }}
         onDecision={decide}
       />

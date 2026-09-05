@@ -303,6 +303,10 @@ describe("dashboard areas", () => {
 });
 
 describe("My Work sources", () => {
+  it('uses the real Warehouse exception-owner capability for follow-up filters', () => {
+    expect(workSources({mode:'supabase',userRoles:{},userCapabilities:{warehouse:['resolve_exceptions']}})).toContain('insights');
+    expect(workSources({mode:'supabase',userRoles:{},userCapabilities:{warehouse:['view_exceptions']}})).not.toContain('insights');
+  });
   it("shows only assigned operational areas, with Finance derived from finance access", () => {
     expect(
       workSources(
@@ -316,7 +320,7 @@ describe("My Work sources", () => {
 
     expect(
       workSources(memoryAccess({ core: ["staff"], warehouse: ["finance"] })),
-    ).toEqual(["warehouse", "finance"]);
+    ).toEqual(["warehouse", "finance", "insights"]);
   });
 });
 

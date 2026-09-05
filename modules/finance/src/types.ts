@@ -90,6 +90,8 @@ export interface FinanceCloseEntry {
   reconciledBy?: string;
   reconciledAt?: string;
   settlementApprovedBy?: string;
+  correctionBy?: string;
+  correctionAt?: string;
   preparedActor?: FinanceActorLineage;
   postedActor?: FinanceActorLineage;
   reconciledActor?: FinanceActorLineage;
@@ -115,6 +117,8 @@ export interface ManageFinanceCloseEntryInput {
   expectedUpdatedAt?: string;
 }
 export interface FinanceData {
+  sourceStates?: Record<'activity' | 'payments' | 'inventory' | 'close', 'not_authorized' | 'loading' | 'error' | 'complete'>;
+  totals?: { committedValue: number; receivedValue: number; returnedValue: number; periodStart: string; periodEnd: string };
   activity: FinanceActivity[];
   payments: FinancePaymentItem[];
   closeEntries: FinanceCloseEntry[];

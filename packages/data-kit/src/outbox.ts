@@ -2,12 +2,12 @@
  * Offline outbox for floor operations.
  *
  * When a queued mutation can't reach the backend (offline or a network error)
- * the store enqueues a serializable intent here and applies an optimistic
- * overlay to the cached read model so the user sees their change immediately.
+ * the store retains a serializable intent here, without changing committed stock.
  * On reconnect (or app start) the queue replays in FIFO order against the live
  * repo; the v2 delta/guard RPCs make replay order-safe, and a true conflict
  * (e.g. issuing an allocation someone else already issued) surfaces as a
- * conflict the user can retry or discard.
+ * conflict for review. Committed replay receipts remain outside pending counts
+ * so resuming the original draft cannot create another mutation.
  *
  * Persistence: IndexedDB (single object store `outbox`, keyPath `id`). Falls
  * back to an in-memory array when IndexedDB is unavailable (SSR / very old
@@ -35,7 +35,9 @@ export interface OutboxEntry {
   /** optimistic client-side patch to apply to the cached read model */
   overlay?: WarehousePatch;
   createdAt: string;
-  status: 'pending' | 'conflict';
+  status: 'pending' | 'conflict' | 'committed';
+  /** Stable identity of the original draft, including its actor. */
+  intent?: string;
   /** last replay error message, surfaced when status === 'conflict' */
   error?: string;
 }
@@ -138,10 +140,38 @@ function uid(): string {
   return `oq-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+export function intentIdentity(method: QueueableMethod, input: Record<string, unknown>): string {
+  const canonical = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(canonical);
+    if (value && typeof value === 'object') return Object.fromEntries(
+      Object.entries(value).filter(([, v]) => v !== undefined).sort(([a], [b]) => a.localeCompare(b))
+        .map(([k, v]) => [k, canonical(v)]),
+    );
+    return value;
+  };
+  return JSON.stringify([method, canonical(input)]);
+}
+
+export async function findIntent(intent: string): Promise<OutboxEntry | undefined> {
+  const db = await openDb();
+  const entries = db ? await new Promise<OutboxEntry[]>((resolve, reject) => {
+    const request = db.transaction(STORE, 'readonly').objectStore(STORE).getAll();
+    request.onsuccess = () => resolve(request.result as OutboxEntry[]);
+    request.onerror = () => reject(request.error);
+  }) : memoryQueue;
+  return entries.find((entry) => entry.intent === intent || intentIdentity(entry.method, entry.input) === intent);
+}
+
+/** Retain a receipt so resuming an offline draft cannot create a second intent. */
+export async function markCommitted(id: string): Promise<void> {
+  await updateEntry(id, (entry) => { entry.status = 'committed'; delete entry.overlay; });
+}
+
 export async function enqueue(
   method: QueueableMethod,
   input: Record<string, unknown>,
   overlay?: WarehousePatch,
+  intent?: string,
 ): Promise<OutboxEntry> {
   const entry: OutboxEntry = {
     id: uid(),
@@ -150,6 +180,7 @@ export async function enqueue(
     overlay,
     createdAt: new Date().toISOString(),
     status: 'pending',
+    intent,
   };
   await tx('readwrite', (store) => store.add(entry));
   return entry;

@@ -32,6 +32,33 @@ async function createVarianceRequest({
 }
 
 describe('ApprovalsPage', () => {
+  it('blocks approval when the referenced count is missing instead of approving without context', async () => {
+    const { repo } = await createVarianceRequest();
+    const data = await repo.getData();
+    vi.spyOn(repo, 'getData').mockResolvedValue({ ...data, cycleCounts: [] });
+    vi.spyOn(repo, 'getCycleCount').mockResolvedValue(null);
+    renderWithProviders(<ApprovalsPage />, { repo, role: 'logistics_supervisor' });
+    await userEvent.click(within(await screen.findByLabelText('Waiting on you approvals')).getByRole('button', { name: 'Review' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Review stock change' });
+    expect(within(dialog).getByRole('button', { name: 'Approve change' })).toBeDisabled();
+    expect(await within(dialog).findByText(/source-count context is unavailable/i)).toBeInTheDocument();
+  });
+  it('loads an older count by exact ID and recovers a failed source read without opening a new count', async () => {
+    const { repo, request } = await createVarianceRequest();
+    const data = await repo.getData();
+    const count = data.cycleCounts.find(row => row.id === request.sourceId)!;
+    vi.spyOn(repo, 'getData').mockResolvedValue({ ...data, cycleCounts: [] });
+    const read = vi.spyOn(repo, 'getCycleCount').mockRejectedValueOnce(new Error('Count service unavailable')).mockResolvedValue(count);
+    renderWithProviders(<ApprovalsPage />, { repo, role: 'logistics_supervisor' });
+    await userEvent.click(within(await screen.findByLabelText('Waiting on you approvals')).getByRole('button', { name: 'Review' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Review stock change' });
+    expect(await within(dialog).findByText('Count service unavailable')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Approve change' })).toBeDisabled();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Retry source count' }));
+    await within(dialog).findByLabelText('Stock change identity');
+    expect(within(dialog).getByRole('button', { name: 'Approve change' })).toBeEnabled();
+    expect(read).toHaveBeenLastCalledWith(request.sourceId);
+  });
   it('renders decisions from server eligibility for a custom live bundle', async () => {
     const { repo, request } = await createVarianceRequest();
     vi.spyOn(repo, 'listStockChangeRequests').mockResolvedValue({

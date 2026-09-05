@@ -6,6 +6,49 @@ import { stockByLocation } from "./domain/transfers";
 import { poTotalReceived } from "./domain/purchaseOrders";
 import { toStockState, type WarehouseData } from "./repository";
 
+describe("remaining staging putaway tasks", () => {
+  it("hands accepted inspections to one staging task without historical duplicates", async () => {
+    const repo = new InMemoryRepository(miniData());
+    const returned = await repo.recordReturn({ source: "customer", actor: "test", lines: [
+      { productId: "shirt", quantity: 4, reason: "Surplus", locationId: "loc-cebu" },
+    ] });
+    const sourceId = 'staging:["shirt","loc-cebu"]';
+    const task = async () => (await repo.listWarehouseTasks({ limit: 100 })).rows.filter(row => row.sourceId === sourceId);
+    expect(await task()).toEqual([]);
+    await repo.inspectQuality({ idempotencyKey: "putaway-inspect-001", sourceType: "return", sourceId: returned.id, productId: "shirt", quantity: 2, disposition: "accepted" });
+    expect(await task()).toEqual([expect.objectContaining({ title: "Put away Shirt / 2 units" })]);
+    await repo.inspectQuality({ idempotencyKey: "putaway-inspect-002", sourceType: "return", sourceId: returned.id, productId: "shirt", quantity: 2, disposition: "accepted" });
+    expect(await task()).toEqual([expect.objectContaining({ title: "Put away Shirt / 4 units" })]);
+    await repo.relocate({ productId: "shirt", locationId: "loc-cebu", toBinId: "bin-cebu", quantity: 4, actor: "test" });
+    expect(await task()).toEqual([]);
+  });
+  it("deduplicates bulk work and removes tasks only as stock leaves staging", async () => {
+    const repo = new InMemoryRepository(miniData());
+    const putaway = async () => (await repo.listWarehouseTasks({ limit: 200 })).rows.filter(row => row.type === "putaway");
+    const initial = await putaway();
+    expect(initial).toHaveLength(2);
+    const bulk = initial.find(row => row.sourceId.startsWith("staging:"))!;
+    expect(JSON.parse(bulk.sourceId.slice(8))).toEqual(["shirt", "loc-wh"]);
+    await repo.relocate({ productId: "shirt", locationId: "loc-wh", toBinId: "bin-a", quantity: 5, actor: "test" });
+    expect((await putaway()).find(row => row.id === bulk.id)?.title).toContain("15 units");
+    await repo.relocate({ productId: "shirt", locationId: "loc-wh", toBinId: "bin-a", quantity: 15, actor: "test" });
+    expect((await putaway()).some(row => row.id === bulk.id)).toBe(false);
+    await repo.relocate({ productId: "ring", locationId: "loc-wh", toBinId: "bin-a", quantity: 1, serialNumbers: ["SN1"], actor: "test" });
+    expect(await putaway()).toEqual([]);
+  });
+
+  it("excludes pending stock, binned units and non-warehouse custody", async () => {
+    const data = miniData();
+    data.stockLevels[0]!.unavailable = 20;
+    data.units[0]!.status = "pending_inspection";
+    data.units.push({ ...data.units[0]!, id: "binned", serialNumber: "BINNED", status: "in_stock", binId: "bin-a" });
+    data.locations.push({ id: "event", name: "Event", type: "event_site" });
+    data.stockLevels.push({ productId: "shirt", locationId: "event", quantity: 10 });
+    const repo = new InMemoryRepository(data);
+    expect((await repo.listWarehouseTasks({})).rows.filter(row => row.type === "putaway")).toEqual([]);
+  });
+});
+
 function miniData(): WarehouseData {
   return {
     products: [

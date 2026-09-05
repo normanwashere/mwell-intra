@@ -215,6 +215,7 @@ export function storageAreaToRow(a: StorageArea): Row {
 
 export function rowToMovement(r: Row): Movement {
   return {
+    unitCostAtMovement: r.unit_cost_at_movement == null ? undefined : Number(r.unit_cost_at_movement),
     id: r.id,
     type: r.type,
     productId: r.product_id,
@@ -281,6 +282,7 @@ export function allocationToRow(a: Allocation): Row {
 
 export function rowToEvent(r: Row): WarehouseEvent {
   return {
+    status: r.status ?? undefined,
     id: r.id,
     name: r.name,
     type: r.type,
@@ -668,6 +670,8 @@ export function rowToStockChangeRequest(r: Row): StockChangeRequest {
     requestedBy: r.requested_by,
     requestedAt: r.requested_at,
     supervisorApprovedBy: r.supervisor_approved_by ?? undefined,
+    requestedByDisplayName: typeof r.requested_by_name === "string" && r.requested_by_name.trim()
+      ? r.requested_by_name.trim() : `Name unavailable (${r.requested_by})`,
     canDecide: r.can_decide === true,
   };
 }

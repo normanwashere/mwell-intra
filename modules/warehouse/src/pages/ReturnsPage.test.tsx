@@ -230,7 +230,7 @@ describe("ReturnsPage", () => {
     const pending = await screen.findByRole("list", {
       name: "Pending inspections",
     });
-    expect(within(pending).getAllByRole("listitem")).toHaveLength(1);
+    expect(within(pending).getAllByRole("button", { name: "Inspect" })).toHaveLength(1);
     expect(within(pending).getByText(/ECG-RING-10-SN0002/)).toBeInTheDocument();
   });
 

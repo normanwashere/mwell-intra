@@ -5,6 +5,7 @@ import { expect, it, vi } from 'vitest';
 import { PaymentReadinessPanel } from './PaymentReadinessPanel';
 import type { AcceptancePack, PaymentReadinessPack } from '../types';
 import { MWELL_OPERATING_PROFILE } from '../policyProfile';
+vi.mock('@intra/auth', () => ({ useSession: () => ({ mode: 'memory' }) }));
 
 it('enables Finance preparation when the preview binds every active acceptance and aggregate quantity', () => {
   const acceptances: AcceptancePack[] = [

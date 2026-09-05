@@ -1064,6 +1064,9 @@ function roleGuide(definition) {
 }
 
 const SOURCE_ROOT_HEADINGS = {
+  "sep05-procurement-legal-candidate": "Procurement And Legal - September 05 Candidate",
+  "sep05-platform-finance-candidate": "September 5 Platform and Finance Candidate",
+  "sep05-warehouse-events-candidate": "Warehouse and Events Candidate",
   "user-manual": "Mwell Intra Standalone Operating Handbook",
   "process-reference-library": "Mwell Intra Process Reference Library",
   "migration-cutover-hypercare": "Migration, Cutover And Hypercare Runbook",

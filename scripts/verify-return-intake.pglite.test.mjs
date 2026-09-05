@@ -154,6 +154,156 @@ beforeEach(async () => {
 });
 after(() => db.close());
 
+test('WE02 retires the actual legacy wrapper before raw writes while v2 retains its safety chain', async () => {
+  await db.exec('begin');
+  try {
+    const legacy = functionSql(await readMigration('20260707110000_warehouse_actor_identity.sql'), 'warehouse.record_return');
+    await db.exec(legacy.replace('function warehouse.record_return(', 'function warehouse.record_return_uncertified_impl('));
+    await db.exec(functionSql(await readMigration('20260813203240_task_1_database_authority_remediation.sql'), 'warehouse.record_return'));
+    await db.exec("alter table warehouse.events add column status text not null default 'planned'");
+    await db.exec(await readMigration('20260828060000_atomic_event_reservations.sql'));
+    await db.exec(await readMigration('20260905092000_warehouse_integrity.sql'));
+    await db.exec("insert into warehouse.allocations(id,event_id,product_id,quantity,status) values('legacy-allocation','event','bulk',10,'issued')");
+    const before = await snapshot();
+    const raw = {
+      allocation_id: 'legacy-allocation',
+      unit_updates: [{ serial_number: 'SERIAL-1', status: 'available', location_id: 'wh', bin_id: 'bin' }],
+      stock_deltas: [{ product_id: 'bulk', location_id: 'wh', bin_id: 'bin', delta: 99 }],
+      movements: [{ id: 'legacy-movement', type: 'return', product_id: 'bulk', quantity: 99, event_id: 'event', actor: 'spoofed' }],
+      return: { id: 'legacy-return', source: 'event', event_id: 'event', actor: 'spoofed', lines: [{ productId: 'bulk', quantity: 99 }] },
+    };
+    for (const input of [raw, {}, null]) {
+      await db.exec('savepoint legacy_rejection');
+      await assert.rejects(rpc(input, 'record_return'), error => {
+        assert.equal(error.code, '0A000');
+        assert.match(error.message, /Reload or upgrade the app.*record_return_v2/);
+        return true;
+      });
+      await db.exec('rollback to legacy_rejection');
+      assert.deepEqual(await snapshot(), before);
+    }
+    const grants = (await db.query(`select
+      has_function_privilege('authenticated','warehouse.record_return(jsonb)','execute') legacy,
+      has_function_privilege('anon','warehouse.record_return(jsonb)','execute') anon,
+      has_function_privilege('authenticated','warehouse.record_return_uncertified_impl(jsonb)','execute') hidden`)).rows[0];
+    assert.deepEqual(grants, { legacy: true, anon: false, hidden: false });
+    const value = payload();
+    value.allocation_id = 'legacy-allocation';
+    value.return.lines = [value.return.lines[0]];
+    const result = await rpc(value);
+    assert.equal(result.lines[0].allocationId, 'legacy-allocation');
+    const committed = await snapshot();
+    assert.equal(committed.returns.length, 1);
+    assert.equal(committed.movements.length, 1);
+    assert.equal(committed.quality[0].disposition, 'pending');
+    assert.equal(committed.holds[0].status, 'active');
+    assert.deepEqual(await rpc(value), result);
+    assert.deepEqual(await snapshot(), committed);
+    for (const setting of ['test.cap', 'test.live', 'request.jwt.claim.sub']) {
+      await db.query('select set_config($1,$2,true)', [setting, setting === 'request.jwt.claim.sub' ? '' : 'off']);
+      await db.exec('savepoint v2_auth');
+      await assert.rejects(rpc(value), /authorized|Authentication|authenticated/i);
+      await db.exec('rollback to v2_auth');
+      assert.deepEqual(await snapshot(), committed);
+      await db.query('select set_config($1,$2,true)', [setting, setting === 'request.jwt.claim.sub' ? actor : 'on']);
+    }
+  } finally { await db.exec('rollback'); }
+});
+
+test('WE02 migration preserves empty historical return lines allowed by the deployed DDL', async () => {
+  await db.exec('begin');
+  try {
+    await db.exec("insert into warehouse.returns(id,source,event_id,actor) values('empty-legacy','event','event','legacy')");
+    await db.exec("alter table warehouse.events add column status text not null default 'planned'");
+    await db.exec(await readMigration('20260828060000_atomic_event_reservations.sql'));
+    await db.exec(await readMigration('20260905092000_warehouse_integrity.sql'));
+    assert.deepEqual((await db.query("select lines from warehouse.returns where id='empty-legacy'")).rows[0].lines, []);
+  } finally { await db.exec('rollback'); }
+});
+
+test('WE02 cumulative bulk returns preserve identity, reject excess atomically and replay after closure', async () => {
+  await db.exec('begin');
+  try {
+    await db.exec("alter table warehouse.events add column status text not null default 'planned'");
+    await db.exec(await readMigration('20260828060000_atomic_event_reservations.sql'));
+    await db.exec(await readMigration('20260905092000_warehouse_integrity.sql'));
+    await db.exec("insert into warehouse.allocations(id,event_id,product_id,quantity,status) values('bulk-allocation','event','bulk',10,'issued')");
+    const value = payload();
+    value.allocation_id = 'bulk-allocation';
+    value.return.lines = [{ ...value.return.lines[0], quantity: 6 }];
+    const first = await rpc(value);
+    assert.equal(first.lines[0].allocationId, 'bulk-allocation');
+    const unchanged = await snapshot();
+    await db.exec('savepoint excessive');
+    await assert.rejects(rpc({ ...value, idempotency_key: 'second-return-excess' }), /outstanding allocation custody/);
+    await db.exec('rollback to excessive');
+    assert.deepEqual(await snapshot(), unchanged);
+    const final = { ...value, idempotency_key: 'final-return-balanced', return: { ...value.return, lines: [{ ...value.return.lines[0], quantity: 4 }] } };
+    const last = await rpc(final);
+    assert.equal((await snapshot()).allocations[0].status, 'returned');
+    assert.deepEqual(await rpc(value), first);
+    assert.deepEqual(await rpc(final), last);
+    assert.equal((await snapshot()).movements.reduce((sum, row) => sum + row.quantity, 0), 10);
+  } finally { await db.exec('rollback'); }
+});
+
+test('WE05 terminal event reservations reject fresh intents but committed replay survives close', async () => {
+  await db.exec('begin');
+  try {
+    await db.exec("alter table warehouse.events add column status text not null default 'planned'");
+    await db.exec(await readMigration('20260828060000_atomic_event_reservations.sql'));
+    await db.exec(await readMigration('20260905092000_warehouse_integrity.sql'));
+    const value = { event_id: 'event', idempotency_key: 'reserve-open-event', lines: [{ product_id: 'bulk', quantity: 2 }] };
+    const first = await rpc(value, 'reserve_batch');
+    assert.equal(first.status, 'committed');
+    for (const status of ['closed', 'cancelled']) {
+      await db.query('update warehouse.events set status=$1 where id=\'event\'', [status]);
+      const rejected = await rpc({ ...value, idempotency_key: `reserve-${status}-event` }, 'reserve_batch');
+      assert.equal(rejected.status, 'rejected');
+      assert.equal((await snapshot()).allocations.length, 1);
+      assert.deepEqual(await rpc(value, 'reserve_batch'), first);
+    }
+    await db.exec("update warehouse.allocations set status='returned'; insert into warehouse.movements(id,type,product_id,quantity,event_id,actor) values('returned-movement','return','bulk',2,'event','test')");
+    const totals = (await db.query("select * from warehouse.event_custody_totals where event_id='event'")).rows[0];
+    assert.equal(Number(totals.issued_units), 2);
+    assert.equal(Number(totals.returned_units), 2);
+    assert.equal(Number(totals.outstanding_units), 0);
+  } finally { await db.exec('rollback'); }
+});
+
+test('WE10 issue valuation survives catalogue edits; ambiguous mixed-cost returns remain unknown', async () => {
+  await db.exec('begin');
+  try {
+    await db.exec("alter table warehouse.events add column status text not null default 'planned'");
+    await db.exec(await readMigration('20260828060000_atomic_event_reservations.sql'));
+    await db.exec(await readMigration('20260905092000_warehouse_integrity.sql'));
+    await db.exec("update warehouse.products set unit_cost=100 where id='bulk'; insert into warehouse.movements(id,type,product_id,quantity,event_id,actor) values('issue-history','issue','bulk',10,'event','test'); update warehouse.products set unit_cost=999 where id='bulk'; insert into warehouse.movements(id,type,product_id,quantity,event_id,actor) values('return-history','return','bulk',2,'event','test')");
+    const first = (await db.query("select unit_cost_at_movement from warehouse.movements order by id")).rows;
+    assert.deepEqual(first.map(row => Number(row.unit_cost_at_movement)), [100,100]);
+    await db.exec("insert into warehouse.movements(id,type,product_id,quantity,event_id,actor) values('issue-mixed','issue','bulk',2,'event','test'),('return-mixed','return','bulk',1,'event','test')");
+    assert.equal((await db.query("select unit_cost_at_movement from warehouse.movements where id='return-mixed'")).rows[0].unit_cost_at_movement, null);
+  } finally { await db.exec('rollback'); }
+});
+
+test('WE02 ambiguous historical return identity is audited and blocks fresh intake without side effects', async () => {
+  await db.exec('begin');
+  try {
+    await db.exec("insert into warehouse.allocations(id,event_id,product_id,quantity,status) values('a','event','bulk',10,'issued'),('b','event','bulk',10,'issued')");
+    const historical = payload();
+    historical.return.lines = [historical.return.lines[0]];
+    await rpc(historical);
+    await db.exec("alter table warehouse.events add column status text not null default 'planned'");
+    await db.exec(await readMigration('20260828060000_atomic_event_reservations.sql'));
+    await db.exec(await readMigration('20260905092000_warehouse_integrity.sql'));
+    assert.equal((await db.query('select * from warehouse.return_lineage_audit')).rows.length, 1);
+    const before = await snapshot();
+    await db.exec('savepoint ambiguous');
+    await assert.rejects(rpc({ ...historical, allocation_id: 'a', idempotency_key: 'ambiguous-fresh-return' }), /lineage needs reconciliation/);
+    await db.exec('rollback to ambiguous');
+    assert.deepEqual(await snapshot(), before);
+  } finally { await db.exec('rollback'); }
+});
+
 test("one multi-product command quarantines every line and exact replay writes nothing", async () => {
   const first = await rpc(payload());
   assert.equal(first.actor, "receiver@test.invalid");
@@ -411,7 +561,7 @@ test("quality accepts one serial without releasing another and retains partial b
   );
 });
 
-test("v2 is restricted while legacy intake and receipt routing remain unchanged", async () => {
+test("pre-integrity baseline v2 grants and receipt routing remain unchanged", async () => {
   const grants = (
     await db.query(`select has_function_privilege('anon','warehouse.record_return_v2(jsonb)','execute') anon,
     has_function_privilege('authenticated','warehouse.record_return_v2(jsonb)','execute') authenticated,

@@ -63,6 +63,23 @@ type ReconciliationWorkflowModule = {
 const reconciliationWorkflow = eventData as ReconciliationWorkflowModule;
 
 describe('event lifecycle rules', () => {
+  it('WE01 rejects 9/11 outcomes for ten lifetime issued, and rejects negative balanced outcomes', () => {
+    const input = { action: 'submit' as const, soldUnits: 0, giveawayUnits: 0, returnedUnits: 10, lostUnits: 0, damagedUnits: 0, rekitUnits: 0, grossSalesAmount: 0, evidenceUrl: 'https://example.com/event-evidence' };
+    expect(eventData.validateEventReconciliationTransition(input, 10).outcomes).toBeUndefined();
+    for (const returnedUnits of [9, 11]) expect(eventData.validateEventReconciliationTransition({ ...input, returnedUnits }, 10).outcomes).toBeTruthy();
+    expect(eventData.validateEventReconciliationTransition({ ...input, soldUnits: -1, returnedUnits: 11 }, 10).outcomes).toBeTruthy();
+  });
+  it('WE01 reads lifetime issued and actual partial returns from the server custody projection', async () => {
+    let returned = 4;
+    const client = { schema: () => ({ from: (table: string) => {
+      const query = { select: () => query, order: () => query, in: () => query, eq: () => query,
+        limit: async () => ({ error: null, data: table === 'events' ? [{ id: 'e1', name: 'Event', start_date: '2026-09-05', status: 'active' }] : table === 'event_custody_totals' ? [{ event_id: 'e1', issued_units: 10, returned_units: returned, reserved_units: 0 }] : [] }) };
+      return query;
+    } }) };
+    expect((await loadLiveEvents(client as never)).events[0]).toMatchObject({ issuedUnits: 10, returnedUnits: 4 });
+    returned = 10;
+    expect((await loadLiveEvents(client as never)).events[0]).toMatchObject({ issuedUnits: 10, returnedUnits: 10 });
+  });
   it('loads fulfillment products without filtering on a non-existent active column', async () => {
     const filters: Array<[string, unknown]> = [];
     const query = {

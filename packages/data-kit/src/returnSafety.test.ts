@@ -30,6 +30,27 @@ const input: ReturnInput = {
 };
 
 describe("return intake safety", () => {
+  it('WE02 memory cumulative returns stamp identity, reject over-return atomically, and close at 3+7 with replay', async () => {
+    const data = buildSeed();
+    data.allocations.push({ id: 'cumulative-test', eventId: 'evt-makati', productId: 'shirt-l', quantity: 10, status: 'issued', createdAt: '2026-09-05T00:00:00Z' });
+    const repo = new InMemoryRepository(data);
+    const command: ReturnInput = { ...input, allocationId: 'cumulative-test', lines: [{ ...input.lines[0]!, quantity: 3 }], idempotencyKey: 'cumulative-return-three' };
+    const first = await repo.recordReturn(command);
+    expect(first.lines[0]?.allocationId).toBe('cumulative-test');
+    const partial = await repo.getData();
+    expect(partial.allocations.find(row => row.id === 'cumulative-test')?.status).toBe('issued');
+    await expect(repo.recordReturn({ ...command, idempotencyKey: 'cumulative-return-excess', lines: [{ ...command.lines[0]!, quantity: 8 }] })).rejects.toThrow(/outstanding allocation custody/);
+    expect(await repo.getData()).toEqual(partial);
+    const final: ReturnInput = { ...command, idempotencyKey: 'cumulative-return-seven', lines: [{ ...command.lines[0]!, quantity: 7 }] };
+    const last = await repo.recordReturn(final);
+    const completed = await repo.getData();
+    expect(completed.allocations.find(row => row.id === 'cumulative-test')?.status).toBe('returned');
+    expect(await repo.recordReturn(command)).toEqual(first);
+    expect(await repo.recordReturn(final)).toEqual(last);
+    expect(await repo.getData()).toEqual(completed);
+    await expect(repo.recordReturn({ ...command, lines: [{ ...command.lines[0]!, quantity: 4 }] })).rejects.toThrow(/different payload/);
+    expect(completed.returns.flatMap(row => row.lines).filter(line => line.allocationId === 'cumulative-test').reduce((sum, line) => sum + line.quantity, 0)).toBe(10);
+  });
   it.each(["P0001", "23514", "42501"])("preserves confirmed return transaction rejection %s at the RPC boundary", async (code) => {
     const rpc = vi.fn().mockResolvedValue({ data: null, error: { code, message: "Quarantine bin is inactive" } });
     const repo = new SupabaseRepository({ rpc } as unknown as SupabaseClient);

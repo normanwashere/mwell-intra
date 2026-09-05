@@ -223,3 +223,40 @@ export function useProcurementPOs(
 
   return pos;
 }
+
+/** Source state is explicit: a failed read is never an authoritative empty queue. */
+export function useInboundProcurementPOs(
+  source: DataSource,
+  loadLive: () => Promise<ProcurementPOHandoff[]>,
+  reloadKey = 0,
+) {
+  const [rows, setRows] = useState<BridgedPO[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    let generation = 0;
+    const refresh = () => {
+      const request = ++generation;
+      setLoading(true);
+      setError(null);
+      void loadProcurementPOs(source, loadLive).then(next => {
+        if (active && request === generation) setRows(next);
+      }).catch(cause => {
+        if (active && request === generation) setError(cause instanceof Error ? cause.message : 'Inbound work unavailable');
+      }).finally(() => { if (active && request === generation) setLoading(false); });
+    };
+    const storage = (event: StorageEvent) => { if (!event.key || event.key === PROCUREMENT_PO_KEY) refresh(); };
+    refresh();
+    window.addEventListener('focus', refresh);
+    window.addEventListener(PROCUREMENT_CHANGE_EVENT, refresh);
+    window.addEventListener('storage', storage);
+    return () => {
+      active = false;
+      window.removeEventListener('focus', refresh);
+      window.removeEventListener(PROCUREMENT_CHANGE_EVENT, refresh);
+      window.removeEventListener('storage', storage);
+    };
+  }, [source, loadLive, reloadKey]);
+  return { rows, loading, error };
+}

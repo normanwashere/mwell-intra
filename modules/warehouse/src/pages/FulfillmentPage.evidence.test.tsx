@@ -61,6 +61,7 @@ async function openAction(kind: "pick" | "pack" | "delivery") {
     repo,
     role: "warehouse_operator",
   });
+  if (kind === "delivery") fireEvent.click(await screen.findByRole("button", { name: "Released follow-up: 1" }));
   fireEvent.click(
     await screen.findByRole("button", {
       name:
@@ -98,6 +99,30 @@ function upload(dialog: HTMLElement, label: string) {
 
 describe("Fulfillment evidence commit gates", () => {
   beforeEach(() => vi.mocked(uploadEvidence).mockReset());
+
+  it("retains dirty packing details on close and locks dismissal during submission", async () => {
+    const { dialog, advance } = await openAction("pack");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+    expect(within(dialog).getByRole("button", { name: "Keep capturing" })).toBeVisible();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Keep capturing" }));
+    let reject!: (error: Error) => void;
+    advance.mockImplementationOnce(() => new Promise((_resolve, rej) => { reject = rej; }));
+    const form = dialog.querySelector("form")!;
+    act(() => { fireEvent.submit(form); fireEvent.submit(form); });
+    await waitFor(() => expect(advance).toHaveBeenCalledOnce());
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+    expect(dialog).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "Discard capture" })).not.toBeInTheDocument();
+    await act(async () => reject(new Error("Lost response")));
+    expect(within(dialog).getByLabelText("Recipient name")).toHaveValue("Maya Santos");
+    expect(within(dialog).getByLabelText("Recipient name")).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: "Confirm packing" })).toBeEnabled();
+    const firstCommand = structuredClone(advance.mock.calls[0]![0]);
+    fireEvent.submit(form);
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    expect(advance).toHaveBeenCalledTimes(2);
+    expect(advance.mock.calls[1]![0]).toEqual(firstCommand);
+  });
 
   it("waits for every pick-line upload, including direct form submission", async () => {
     const first = deferred();

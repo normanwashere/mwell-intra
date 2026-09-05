@@ -30,6 +30,9 @@
 import {
   enqueue as outboxEnqueue,
   markConflict as outboxMarkConflict,
+  findIntent,
+  intentIdentity,
+  markCommitted,
   removeEntry as outboxRemove,
   type OutboxEntry,
   type QueueableMethod,
@@ -133,11 +136,12 @@ export function applyOverlay(
  * callback so this module stays runtime-agnostic (see file header).
  */
 export interface RunActionContext {
+  onStatus?: (status: 'committed' | 'queued' | 'failed') => void;
+  notifyRefreshError?: (message: string) => void;
   /** Active data source; offline queuing only happens in `'supabase'` mode. */
   source: DataSource;
   /**
-   * Apply an optimistic overlay to the cached read model. React seam:
-   * `setData(prev => prev ? applyOverlay(prev, overlay) : prev)`.
+   * Compatibility callback. Queued actions no longer apply this to committed stock.
    */
   applyOptimistic: (overlay: WarehousePatch | undefined) => void;
   /** Re-pull the read model after every action (success or failure). */
@@ -149,6 +153,7 @@ export interface RunActionContext {
     method: QueueableMethod,
     input: Record<string, unknown>,
     overlay?: WarehousePatch,
+    intent?: string,
   ) => Promise<OutboxEntry>;
   /** Notify the user their change was saved offline (e.g. an info toast). */
   notifyQueuedOffline?: (message: string) => void;
@@ -161,19 +166,36 @@ export interface RunActionContext {
 }
 
 /**
- * Runs a mutation. For queueable floor ops that fail with a network error while
- * in Supabase mode, the intent is enqueued and an optimistic overlay is applied
- * to the cached read model — the call resolves `true` so the user's success UI
- * runs and they see their change immediately. Other failures notify an error
- * and resolve `false`.
- *
- * Behaviour is identical to the source `store.tsx#runAction`; only the side
- * effects are injected instead of closed-over React state.
+ * True means server committed, never merely queued. Retain queued drafts and
+ * use onStatus to distinguish queued from failed. New identical work following
+ * an offline receipt must supply a new explicit idempotencyKey.
  */
-export async function runAction(
+const runningIntents = new Map<string, Promise<boolean>>();
+const sendingKeys = new Set<string>();
+
+export function runAction(
   ctx: RunActionContext,
   method: QueueableMethod | 'other',
-  fn: () => Promise<unknown>,
+  fn: (input?: Record<string, unknown>) => Promise<unknown>,
+  overlay?: WarehousePatch,
+  queueInput?: Record<string, unknown>,
+): Promise<boolean> {
+  if (ctx.source !== 'supabase' || method === 'other' || !queueInput) {
+    return executeAction(ctx, method, fn, overlay, queueInput);
+  }
+  const identity = intentIdentity(method, queueInput);
+  const running = runningIntents.get(identity);
+  if (running) return running;
+  const result = executeAction(ctx, method, fn, overlay, queueInput)
+    .finally(() => runningIntents.delete(identity));
+  runningIntents.set(identity, result);
+  return result;
+}
+
+async function executeAction(
+  ctx: RunActionContext,
+  method: QueueableMethod | 'other',
+  fn: (input?: Record<string, unknown>) => Promise<unknown>,
   overlay?: WarehousePatch,
   queueInput?: Record<string, unknown>,
 ): Promise<boolean> {
@@ -181,30 +203,64 @@ export async function runAction(
   const queueable = ctx.isQueueable ?? ((m) => QUEUEABLE.has(m as QueueableMethod));
   const networkError = ctx.isNetworkError ?? isNetworkError;
 
-  let ok = true;
+  const eligible = ctx.source === 'supabase' && queueable(method) && queueInput;
+  const intent = eligible ? intentIdentity(method as QueueableMethod, queueInput) : undefined;
+  const command = eligible ? { ...queueInput, idempotencyKey: queueInput.idempotencyKey ?? `offline-${crypto.randomUUID()}` } : queueInput;
+  const sendingKey = command?.idempotencyKey as string | undefined;
+  let status: 'committed' | 'queued' | 'failed' = 'failed';
+  let retainedEntry: OutboxEntry | undefined;
+  let attempted = false;
   try {
-    await fn();
+    const retained = intent ? await findIntent(intent) : undefined;
+    if (retained) {
+      status = retained.status === 'committed' ? 'committed' : retained.status === 'pending' ? 'queued' : 'failed';
+      if (status === 'failed') ctx.notifyError?.(retained.error ?? 'Queued action needs review.');
+    } else {
+      // Persist the exact key before sending: a closed tab or lost response
+      // must not leave a committed server mutation without a replay identity.
+      if (intent) retainedEntry = await enqueue(method as QueueableMethod, command!, overlay, intent);
+      if (sendingKey) sendingKeys.add(sendingKey);
+      attempted = true;
+      await fn(command);
+      status = 'committed';
+      if (retainedEntry) {
+        try { await outboxRemove(retainedEntry.id); } catch {
+          ctx.notifyRefreshError?.('Committed. The retained intent will be reconciled on sync.');
+        }
+      }
+    }
   } catch (e) {
-    ok = false;
     if (
       ctx.source === 'supabase' &&
+      attempted &&
       queueable(method) &&
       networkError(e) &&
       queueInput
     ) {
-      await enqueue(method as QueueableMethod, queueInput, overlay);
-      ctx.notifyQueuedOffline?.('Saved offline — will sync when you reconnect.');
-      // Optimistically reflect the change on the cached snapshot.
-      ctx.applyOptimistic(overlay);
-      ok = true;
+      try {
+        if (!retainedEntry) await enqueue(method as QueueableMethod, command!, overlay, intent);
+        status = 'queued';
+      } catch {
+        ctx.notifyError?.('Could not retain the pending action. Keep this draft and retry with the same key.');
+      }
     } else {
+      if (retainedEntry) {
+        try { await outboxMarkConflict(retainedEntry.id, e instanceof Error ? e.message : 'Action failed.'); }
+        catch { status = 'queued'; }
+      }
       ctx.notifyError?.(e instanceof Error ? e.message : 'Action failed.');
     }
   } finally {
-    await ctx.refresh();
-    await ctx.refreshPending();
+    if (sendingKey) sendingKeys.delete(sendingKey);
+    ctx.onStatus?.(status);
+    if (status === 'queued') ctx.notifyQueuedOffline?.('Queued offline. Not completed; keep this draft until sync confirms it.');
+    for (const refresh of [ctx.refresh, ctx.refreshPending]) {
+      try { await refresh(); } catch {
+        ctx.notifyRefreshError?.('Could not refresh warehouse data. The action result is unchanged.');
+      }
+    }
   }
-  return ok;
+  return status === 'committed';
 }
 
 /**
@@ -228,7 +284,13 @@ export async function replayEntry(
 ): Promise<boolean> {
   const networkError = ctx.isNetworkError ?? isNetworkError;
   const markConflict = ctx.markConflict ?? outboxMarkConflict;
-  const removeEntry = ctx.removeEntry ?? outboxRemove;
+  const removeEntry = ctx.removeEntry ?? markCommitted;
+  if (!entry.input.actor || !entry.input.idempotencyKey) {
+    await markConflict(entry.id, 'Legacy queued action has no original actor or replay key. Ask a Warehouse lead to reconcile this payload against server receipts and movements before any retry or discard.');
+    return false;
+  }
+  if (entry.input.actor && entry.input.actor !== ctx.actor) return false;
+  if (typeof entry.input.idempotencyKey === 'string' && sendingKeys.has(entry.input.idempotencyKey)) return false;
   const input = { ...entry.input, actor: ctx.actor } as never;
   try {
     switch (entry.method) {
@@ -279,6 +341,7 @@ export async function syncNow(
 ): Promise<void> {
   if (ctx.pending.length === 0) return;
   for (const entry of ctx.pending) {
+    if (entry.input.actor && entry.input.actor !== ctx.actor) continue;
     const okOne = await replayEntry(ctx, entry);
     if (!okOne) break; // stop on the first conflict; remaining stay queued
   }
@@ -287,11 +350,8 @@ export async function syncNow(
 }
 
 // --- optimistic overlay builders (kept pure + side-effect free) ---
-// These approximate the server-side effect so the UI updates instantly when a
-// floor op is queued offline. They are intentionally best-effort; the replayed
-// RPC commit is the source of truth and a `refresh()` corrects any drift once
-// back online. Exported so the React store wrappers can build overlays without
-// re-implementing them.
+// Retained as draft metadata and for compatibility. These must never be merged
+// into authoritative stock or used as evidence that custody was committed.
 
 let mvSeq = 0;
 function tmpId(prefix: string): string {

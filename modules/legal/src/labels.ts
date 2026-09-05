@@ -95,7 +95,7 @@ export const TIMELINE_ACTION_LABEL: Record<string, string> = {
   doc_reviewed: 'Document reviewed',
   checklist_decided: 'Checklist decided',
   instrument_signed: 'Agreement signed',
-  reminder_sent: 'Reminder sent',
+  reminder_sent: 'Manual reminder recorded',
   correction_requested: 'Correction requested',
   resubmitted: 'Correction resubmitted',
 };

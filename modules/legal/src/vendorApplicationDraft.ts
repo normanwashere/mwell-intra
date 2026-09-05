@@ -58,19 +58,24 @@ function browserStorage(): DraftStorage | undefined {
   return typeof window === 'undefined' ? undefined : window.localStorage;
 }
 
-function readMemory(storage: DraftStorage | undefined): Record<string, VendorApplicationSnapshot> {
+function readMemory(storage: DraftStorage | undefined): Record<string, VendorApplicationSnapshot | VendorApplicationDraftRecord> {
   if (!storage) return {};
   try {
-    return JSON.parse(storage.getItem(LOCAL_KEY) ?? '{}') as Record<string, VendorApplicationSnapshot>;
+    return JSON.parse(storage.getItem(LOCAL_KEY) ?? '{}');
   } catch {
     return {};
   }
 }
 
+function memoryRecord(value?: VendorApplicationSnapshot | VendorApplicationDraftRecord): VendorApplicationDraftRecord | null {
+  if (!value) return null;
+  return 'version' in value ? value : { application: value, version: 1, status: 'draft' };
+}
+
 function mapRow(row: DraftRow | null): VendorApplicationDraftRecord | null {
   if (!row) return null;
   return {
-    application: row.payload,
+    application: row.status === 'superseded' ? undefined : row.payload,
     version: Number(row.version ?? 0),
     status: row.status,
   };
@@ -98,15 +103,13 @@ export function createVendorApplicationDraftRepository(options: {
   return {
     async load(caseId) {
       if (options.mode === 'memory') {
-        const application = readMemory(storage)[caseId];
-        return application ? { application, version: 1, status: 'draft' } : null;
+        return memoryRecord(readMemory(storage)[caseId]);
       }
       const { data, error } = await client!
         .schema('legal')
         .from('vendor_application_snapshots')
         .select('case_id,payload,version,status,updated_at')
         .eq('case_id', caseId)
-        .in('status', ['draft', 'submitted', 'correction_requested'])
         .order('version', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -119,7 +122,8 @@ export function createVendorApplicationDraftRepository(options: {
       if (options.mode === 'memory') {
         if (!storage) throw new Error('Browser storage is unavailable.');
         const rows = readMemory(storage);
-        storage.setItem(LOCAL_KEY, JSON.stringify({ ...rows, [caseId]: application }));
+        if ((memoryRecord(rows[caseId])?.version ?? 0) !== expectedVersion) throw new Error('Draft version changed; reload before saving.');
+        storage.setItem(LOCAL_KEY, JSON.stringify({ ...rows, [caseId]: { application, version: expectedVersion + 1, status: 'draft' } }));
         return {
           application,
           version: Math.max(expectedVersion + 1, 1),
@@ -145,7 +149,9 @@ export function createVendorApplicationDraftRepository(options: {
       if (options.mode === 'memory') {
         if (!storage) return;
         const rows = readMemory(storage);
-        delete rows[caseId];
+        const current = memoryRecord(rows[caseId]);
+        if ((current?.version ?? 0) !== expectedVersion) throw new Error('Draft version changed; reload before discarding.');
+        rows[caseId] = { version: expectedVersion, status: 'superseded' };
         storage.setItem(LOCAL_KEY, JSON.stringify(rows));
         return;
       }

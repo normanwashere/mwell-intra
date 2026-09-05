@@ -147,6 +147,7 @@ export type ReserveBatchResult =
   | { status: "rejected"; error: string };
 
 export interface IssueInput {
+  idempotencyKey?: string;
   allocationId: string;
   actor: string;
   assignedTo?: string;
@@ -165,6 +166,8 @@ export interface ReturnInput {
   /** When set, the matching allocation is closed out (status -> 'returned'). */
   allocationId?: string;
   lines: {
+    /** Explicit custody identity for cumulative event-return accounting. */
+    allocationId?: string;
     productId: string;
     quantity: number;
     reason: string;
@@ -196,6 +199,7 @@ export interface CreateAndSubmitCycleCountInput extends CycleCountInput {
 }
 
 export interface TransferInput {
+  idempotencyKey?: string;
   productId: string;
   fromLocationId: string;
   toLocationId: string;
@@ -209,6 +213,7 @@ export interface TransferInput {
 
 /** Move stock between storage areas within a single warehouse. */
 export interface RelocateInput {
+  idempotencyKey?: string;
   productId: string;
   locationId: string;
   fromBinId?: string;
@@ -487,6 +492,7 @@ export interface CompleteReKitWorkOrderInput {
  */
 export interface WarehouseRepository {
   getData(): Promise<WarehouseData>;
+  getCycleCount(id: string): Promise<CycleCount | null>;
   getStockState(): Promise<StockState>;
   /** Demo staff accounts shown on the role-tile login screen. */
   getProfiles(): Promise<Profile[]>;

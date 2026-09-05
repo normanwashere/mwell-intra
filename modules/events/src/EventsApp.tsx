@@ -157,6 +157,7 @@ export function EventsApp({
   const [fulfillmentErrors, setFulfillmentErrors] = useState<
     Record<string, string>
   >({});
+  const reconciliationAccounted = reconciliationDraft.soldUnits + reconciliationDraft.giveawayUnits + reconciliationDraft.returnedUnits + reconciliationDraft.lostUnits + reconciliationDraft.damagedUnits + reconciliationDraft.rekitUnits;
   const [fulfillment, setFulfillment] = useState({
     department: "marketing",
     purpose: "",
@@ -380,6 +381,10 @@ export function EventsApp({
   };
 
   const submitReconciliation = async () => {
+    if (error || loading) {
+      setReconciliationErrors({ outcomes: "Refresh the event custody data before saving or submitting outcomes." });
+      return;
+    }
     if (!selectedEvent || saving || reconciliationSaving.current || !reconciliationAttachment.canSubmit(reconciliationAction !== 'save')) return;
     const validation = validateEventReconciliationTransition(
       { action: reconciliationAction, ...reconciliationDraft, evidenceUrl: reconciliationAttachment.reference },
@@ -474,7 +479,7 @@ export function EventsApp({
         <ModuleHero
           eyebrow="Event lifecycle"
           title={selectedEvent.name}
-          description={`${formatDate(selectedEvent.startDate)}${selectedEvent.endDate ? ` to ${formatDate(selectedEvent.endDate)}` : ""}. Event intent is managed here; Warehouse remains accountable for physical stock.`}
+          description={`${formatDate(selectedEvent.startDate)}${selectedEvent.endDate ? ` to ${formatDate(selectedEvent.endDate)}` : ""}`}
           icon="calendar"
           action={
             mayRequest &&
@@ -529,14 +534,14 @@ export function EventsApp({
               ] as const
             ).map(([label, value, icon]) => (
               <div key={label} className="min-w-0 px-3 py-3 sm:px-5 sm:py-4">
-                <dt className="flex min-w-0 items-center gap-2 text-xs font-semibold text-muted">
+                <dt className="flex min-w-0 flex-col items-start gap-2 text-xs font-semibold text-muted sm:flex-row sm:items-center">
                   <Icon
                     name={icon}
                     className="h-4 w-4 shrink-0 text-brand-600"
                   />
-                  <span className="truncate">{label}</span>
+                  <span className="break-words">{label}</span>
                 </dt>
-                <dd className="tnum mt-2 font-display text-2xl font-extrabold leading-none text-ink">
+                <dd className="tnum mt-2 break-all font-display text-lg font-extrabold leading-tight text-ink sm:text-2xl">
                   {value}
                 </dd>
               </div>
@@ -790,6 +795,11 @@ export function EventsApp({
           }
         >
           <div className="space-y-4">
+            <div className="sticky top-0 z-10 border-b border-line bg-surface py-3" role="status" aria-live="polite">
+              <p className="font-semibold break-words">{selectedEvent?.name}</p>
+              <p>Issued: {selectedEvent?.issuedUnits ?? 0} / Accounted: {reconciliationAccounted} / Remaining: {(selectedEvent?.issuedUnits ?? 0) - reconciliationAccounted}</p>
+              <p className="text-sm text-muted">{reconciliationAccounted > (selectedEvent?.issuedUnits ?? 0) ? 'Excess outcomes' : reconciliationAccounted < (selectedEvent?.issuedUnits ?? 0) ? 'Incomplete draft balance' : 'Balanced'}</p>
+            </div>
             {reconciliationErrors.outcomes && (
               <p
                 role="alert"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSession } from "@intra/auth";
 import {
   Badge,
@@ -80,6 +80,8 @@ export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
   const [followupReason, setFollowupReason] =
     useState<FollowupReasonCode>("stale_source");
   const [submittingFollowup, setSubmittingFollowup] = useState(false);
+  const followupLock = useRef(false);
+  const followupKeys = useRef<Record<string,string>>({});
 
   useEffect(() => {
     setArea((current) =>
@@ -119,18 +121,28 @@ export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
   }
 
   async function submitFollowup() {
+    if (followupLock.current) return;
     if (!selectedMetric || !supabaseClient) {
       setCommandMessage("A connected governed session is required.");
       return;
     }
+    followupLock.current = true;
     setSubmittingFollowup(true);
     setCommandMessage(null);
+    const command = `${profile?.id}:${selectedMetric.id}:${followupType}:${followupReason}`;
+    const storageKey = `intra.insight-followup.${command}`;
+    let key = followupKeys.current[command];
+    try { key ??= sessionStorage.getItem(storageKey) ?? undefined; } catch { /* Memory key still protects retries. */ }
+    key ??= crypto.randomUUID();
+    followupKeys.current[command] = key;
+    try { sessionStorage.setItem(storageKey,key); } catch { /* Storage may be disabled. */ }
     const payload = safeInsightFollowupPayload(
       selectedMetric,
       followupType,
       followupReason,
-      `INS-${Date.now()}-${selectedMetric.id}`,
+      key,
     );
+    try {
     const { data: result, error: followupError } = await supabaseClient
       .schema("core")
       .rpc("request_insight_followup", { payload });
@@ -145,8 +157,11 @@ export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
         `Follow-up ${handoff.id ?? "created"} routed to ${handoff.assigned_module ?? "the accountable owner"}.`,
       );
       setSelectedMetric(null);
+      delete followupKeys.current[command];
+      try { sessionStorage.removeItem(storageKey); } catch { /* No sensitive payload is stored. */ }
     }
-    setSubmittingFollowup(false);
+    } catch (cause) { setCommandMessage((cause as Error).message || 'Follow-up response unavailable. Retry uses the same request.'); }
+    finally { followupLock.current = false; setSubmittingFollowup(false); }
   }
   if (sessionLoading || (profile && loading))
     return (
@@ -232,7 +247,7 @@ export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
             name="info"
             className="mt-0.5 h-4 w-4 shrink-0 text-brand-700"
           />
-          <span>{commandMessage}</span>
+          <span>{commandMessage} <a className="underline" href="/work">Track follow-ups in My Work</a></span>
         </div>
       )}
       {!online && (
@@ -341,7 +356,7 @@ export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
         >
           {visible.map((metric) => {
             const presentation = metricStatusPresentation(metric.status);
-            const source = resolveGovernedSource(metric, userRoles);
+            const source = resolveGovernedSource(metric, userRoles, mode === 'supabase' ? userCapabilities ?? {} : undefined);
             return (
               <Card
                 key={metric.id}

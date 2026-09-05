@@ -1,4 +1,6 @@
 import { useState, type ReactNode } from "react";
+import { isFloorWork, FLOOR_WORK_PATH, inboundQueue } from "@/domain/workQueues";
+import { useInboundProcurementPOs } from "@/data/procurementBridge";
 import { Link, useNavigate } from "react-router-dom";
 import { useWarehouse } from "@/app/store";
 import { toStockState } from "@/data/repository";
@@ -292,9 +294,9 @@ function OperatorDashboard({
   canOpenRoute: (routeId: WarehouseRouteId) => boolean;
   data: WarehouseData;
 }) {
-  const openPurchaseOrders = data.purchaseOrders.filter((order) =>
-    ["ordered", "partially_received"].includes(order.status),
-  ).length;
+  const { source, loadReceivableProcurementPOs } = useWarehouse();
+  const inbound = useInboundProcurementPOs(source, loadReceivableProcurementPOs);
+  const openPurchaseOrders = inbound.loading || inbound.error ? 0 : inboundQueue(inbound.rows, data.purchaseOrders, source).count;
   const putawayLines = data.receipts.reduce(
     (total, receipt) =>
       total +
@@ -303,9 +305,7 @@ function OperatorDashboard({
         : 0),
     0,
   );
-  const fulfillmentWork = data.fulfillmentOrders.filter((order) =>
-    ["allocated", "picking", "packing", "ready"].includes(order.status),
-  ).length;
+  const fulfillmentWork = data.fulfillmentOrders.filter(isFloorWork).length;
   const openReturns = data.customerReturnCases.filter(
     (record) => !["resolved", "closed"].includes(record.status),
   ).length;
@@ -341,7 +341,7 @@ function OperatorDashboard({
     },
     {
       label: "Pick & Pack",
-      to: "/fulfillment",
+      to: FLOOR_WORK_PATH,
       icon: "list" as const,
       description: "Scan locations, items, bundle sets, and packaging.",
       value: fulfillmentWork,
@@ -455,8 +455,8 @@ function OperatorDashboard({
           <EmptyState
             compact
             icon="check"
-            title="No queued floor work"
-            message="The shift queues are clear. Use an available tool below for scanning, review, or preventive inventory work."
+            title={inbound.loading || inbound.error ? "Inbound queue not confirmed" : "No queued floor work"}
+            message={inbound.loading ? "Loading inbound work." : inbound.error ? "Inbound work is unavailable. Open Receive and inspect to retry." : "The shift queues are clear."}
           />
         )}
         {quietActions.length > 0 && (
@@ -479,7 +479,7 @@ function OperatorDashboard({
                     <span className="block truncate text-sm font-semibold text-ink">
                       {action.label}
                     </span>
-                    <span className="block text-xs text-faint">Queue clear</span>
+                    <span className="block text-xs text-faint">{action.label === "Receive and inspect" && (inbound.loading || inbound.error) ? (inbound.loading ? "Loading inbound work" : "Inbound unavailable - open to retry") : "Queue clear"}</span>
                   </span>
                   <Icon
                     name="chevron"
@@ -1331,7 +1331,7 @@ export function DashboardPage() {
                       </p>
                     </div>
                     <span className="tnum text-sm font-semibold text-ink">
-                      {money(c.consumedValue)}
+                      {source === "memory" && c.valuationAvailable ? money(c.consumedValue) : "Open custody valuation"}
                     </span>
                   </button>
                 </li>

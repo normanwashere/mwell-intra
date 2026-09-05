@@ -33,9 +33,11 @@ function makeMockClient(
   options: {
     inventoryHolds?: Record<string, unknown>[];
     commitReceiveThenFail?: boolean;
+    commitFloorThenFail?: boolean;
   } = {},
 ) {
   const calls: { fn: string; payload: Record<string, unknown> }[] = [];
+  const floorReceipts = new Map<string, Record<string, unknown>>();
   const queries: {
     table: string;
     projection: string;
@@ -382,6 +384,10 @@ function makeMockClient(
     }),
     rpc: (fn: string, args: { payload: Record<string, unknown> }) => {
       calls.push({ fn, payload: args.payload });
+      const floorKey = `${fn}:${args.payload.idempotency_key}`;
+      if (args.payload.replay_only) {
+        return Promise.resolve({ data: floorReceipts.get(floorKey) ?? null, error: null });
+      }
       if (
         fn === "receive_stock" &&
         options.commitReceiveThenFail &&
@@ -579,6 +585,13 @@ function makeMockClient(
                             : fn === "resolve_customer_return_case"
                               ? wmsRows.create_customer_return_case
                               : (wmsRows[fn] ?? row);
+      if (options.commitFloorThenFail && (fn === "issue" || fn === "transfer")) {
+        floorReceipts.set(floorKey, response ?? row);
+        tables.allocations = [];
+        tables.stock_levels = [];
+        tables.inventory_units = [];
+        return Promise.resolve({ data: null, error: { message: "Failed to fetch after commit" } });
+      }
       return Promise.resolve({ data: response, error: null });
     },
   };
@@ -1151,6 +1164,29 @@ describe("SupabaseRepository concurrency-safe payloads (warehouse.* v8 RPCs)", (
   const seed = buildSeed();
   // Pick a non-serialized product with stock at loc-wh for delta assertions.
   const token = seed.products.find((p) => p.sku === "TOKEN-DOC")!;
+
+  for (const method of ['issue', 'transfer', 'relocate'] as const) {
+    it(`${method} recovers a lost commit response before stale stock/status validation`, async () => {
+      const { client, calls, queries } = makeMockClient(seed, { commitFloorThenFail: true });
+      const repo = new SupabaseRepository(client);
+      const key = `offline-${method}-test-0001`;
+      const allocation = seed.allocations.find((a) => a.productId === token.id && a.status === 'reserved')!;
+      const send = () => method === 'issue'
+        ? repo.issue({ allocationId: allocation.id, actor: 'test', idempotencyKey: key })
+        : method === 'transfer'
+          ? repo.transfer({ productId: token.id, fromLocationId: 'loc-wh', toLocationId: 'loc-cebu', quantity: 1, actor: 'test', idempotencyKey: key })
+          : repo.relocate({ productId: token.id, locationId: 'loc-wh', toBinId: 'bin-pasig-c1', quantity: 1, actor: 'test', idempotencyKey: key });
+      await expect(send()).rejects.toThrow('Failed to fetch after commit');
+      const reads = queries.length;
+      await expect(send()).resolves.toBeTruthy();
+      expect(queries).toHaveLength(reads);
+      const mutations = calls.filter((c) => !c.payload.replay_only);
+      expect(mutations).toHaveLength(1);
+      expect(mutations[0]!.payload.idempotency_key).toBe(key);
+      expect(mutations[0]!.payload.command_input).not.toHaveProperty('actor');
+      expect(calls.at(-1)!.payload.command_input).toEqual(mutations[0]!.payload.command_input);
+    });
+  }
 
   it("issue sends stock DELTAS (negative) across bins, not an absolute quantity", async () => {
     const { client, calls } = makeMockClient(seed);

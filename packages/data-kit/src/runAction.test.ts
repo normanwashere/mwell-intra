@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   _resetMemoryQueue,
   allPending,
+  allConflicts,
+  enqueue,
   pendingCount,
   type OutboxEntry,
 } from "./outbox";
@@ -125,7 +127,7 @@ describe("runAction offline queuing (supabase mode)", () => {
     };
   }
 
-  it("queues a failed floor op, applies the overlay, and resolves true", async () => {
+  it("queues a failed floor op without committed stock or success", async () => {
     const applyOptimistic = vi.fn();
     const notifyQueuedOffline = vi.fn();
     const overlay = transferOverlay(
@@ -151,8 +153,8 @@ describe("runAction offline queuing (supabase mode)", () => {
         quantity: 4,
       },
     );
-    expect(ok).toBe(true);
-    expect(applyOptimistic).toHaveBeenCalledWith(overlay);
+    expect(ok).toBe(false);
+    expect(applyOptimistic).not.toHaveBeenCalled();
     expect(notifyQueuedOffline).toHaveBeenCalledOnce();
     expect(await pendingCount()).toBe(1);
     const pending = await allPending();
@@ -219,15 +221,92 @@ describe("runAction offline queuing (supabase mode)", () => {
     expect(refresh).toHaveBeenCalledOnce();
     expect(refreshPending).toHaveBeenCalledOnce();
   });
+
+  it("retains the same queued intent across resubmit and successful replay", async () => {
+    const input = { productId: "shirt", quantity: 1, actor: "operator" };
+    const send = vi.fn(async () => { throw new Error("Failed to fetch"); });
+    expect(await runAction(ctx(), "receiveStock", send, undefined, input)).toBe(false);
+    expect(await runAction(ctx(), "receiveStock", send, undefined, { ...input })).toBe(false);
+    expect(send).toHaveBeenCalledTimes(1);
+    const entries = await allPending();
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.input.idempotencyKey).toBeTruthy();
+    const receiveStock = vi.fn(async () => ({}));
+    await replayEntry({ repo: { receiveStock } as never, actor: "operator" }, entries[0]!);
+    expect(await pendingCount()).toBe(0);
+    expect(await runAction(ctx(), "receiveStock", send, undefined, { ...input })).toBe(true);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(receiveStock.mock.calls[0]).toEqual([entries[0]!.input]);
+    expect(await runAction(ctx(), "receiveStock", send, undefined, { ...input, idempotencyKey: 'new-intent-key-0001' })).toBe(false);
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(await pendingCount()).toBe(1);
+  });
+
+  it("does not turn a commit into failure when refresh or counters fail", async () => {
+    const notifyError = vi.fn();
+    const refreshPending = vi.fn(async () => { throw new Error("counter failure"); });
+    expect(await runAction(ctx({
+      notifyError, refreshPending,
+      refresh: async () => { throw new Error("Failed to fetch"); },
+    }), "other", async () => {})).toBe(true);
+    expect(refreshPending).toHaveBeenCalledOnce();
+    expect(notifyError).not.toHaveBeenCalled();
+    expect(await pendingCount()).toBe(0);
+  });
+
+  it("persists the command before sending and coalesces simultaneous submits", async () => {
+    let finish!: () => void;
+    const send = vi.fn(async (command) => {
+      expect((await allPending())[0]!.input.idempotencyKey).toBe(command!.idempotencyKey);
+      await new Promise<void>((resolve) => { finish = resolve; });
+    });
+    const input = { actor: 'operator', quantity: 9 };
+    const first = runAction(ctx(), 'transfer', send, undefined, input);
+    const second = runAction(ctx(), 'transfer', send, undefined, { ...input });
+    await vi.waitFor(() => expect(finish).toBeDefined());
+    finish();
+    expect(await Promise.all([first, second])).toEqual([true, true]);
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not send when persistence fails, and reports failed status", async () => {
+    const send = vi.fn();
+    const onStatus = vi.fn();
+    expect(await runAction(ctx({ onStatus, enqueue: async () => { throw new Error('Storage unavailable'); } }),
+      'receiveStock', send, undefined, { quantity: 2 })).toBe(false);
+    expect(send).not.toHaveBeenCalled();
+    expect(onStatus).toHaveBeenCalledWith('failed');
+  });
+
+  it("reports queued status and refuses replay under a different actor", async () => {
+    const onStatus = vi.fn();
+    await runAction(ctx({ onStatus }), 'receiveStock', async () => { throw new Error('offline'); },
+      undefined, { actor: 'first', quantity: 2 });
+    expect(onStatus).toHaveBeenCalledWith('queued');
+    const receiveStock = vi.fn();
+    expect(await replayEntry({ repo: { receiveStock } as never, actor: 'second' }, (await allPending())[0]!)).toBe(false);
+    expect(receiveStock).not.toHaveBeenCalled();
+    expect(await pendingCount()).toBe(1);
+  });
 });
 
 describe("replay + sync", () => {
+  it.each([{}, { actor: 'current' }, { idempotencyKey: 'legacy-command-0001' }])('holds legacy unowned/unkeyed intents for reconciliation: %j', async (identity) => {
+    const transfer = vi.fn();
+    const payload = { productId: 'shirt', quantity: 2, fromLocationId: 'loc-wh', toLocationId: 'loc-cebu', ...identity };
+    const entry = await enqueue('transfer', payload);
+    expect(await replayEntry({ repo: { transfer } as never, actor: 'current' }, entry)).toBe(false);
+    expect(transfer).not.toHaveBeenCalled();
+    expect(await allPending()).toHaveLength(0);
+    expect(await allConflicts()).toEqual([expect.objectContaining({ id: entry.id, input: payload, error: expect.stringContaining('reconcile') })]);
+  });
   it("replays a queued entry against the repo and removes it on success", async () => {
     const repo = new InMemoryRepository(emptyData());
     const entry: OutboxEntry = {
       id: "oq-1",
       method: "transfer",
       input: {
+        actor: 'actor@mwell', idempotencyKey: 'replay-transfer-1',
         productId: "shirt",
         fromLocationId: "loc-wh",
         toLocationId: "loc-cebu",
@@ -258,6 +337,7 @@ describe("replay + sync", () => {
       id: "oq-2",
       method: "transfer",
       input: {
+        actor: 'actor@mwell', idempotencyKey: 'replay-transfer-2',
         productId: "shirt",
         fromLocationId: "loc-wh",
         toLocationId: "loc-cebu",
@@ -292,7 +372,7 @@ describe("replay + sync", () => {
     const entry: OutboxEntry = {
       id: "oq-3",
       method: "transfer",
-      input: {},
+      input: { actor: 'actor@mwell', idempotencyKey: 'replay-transfer-3' },
       createdAt: new Date().toISOString(),
       status: "pending",
     };
@@ -325,6 +405,7 @@ describe("replay + sync", () => {
         id: "oq-a",
         method: "transfer",
         input: {
+          actor: 'actor@mwell', idempotencyKey: 'replay-transfer-a',
           productId: "shirt",
           fromLocationId: "loc-wh",
           toLocationId: "loc-cebu",
@@ -337,6 +418,7 @@ describe("replay + sync", () => {
         id: "oq-b",
         method: "transfer",
         input: {
+          actor: 'actor@mwell', idempotencyKey: 'replay-transfer-b',
           productId: "shirt",
           fromLocationId: "loc-wh",
           toLocationId: "loc-cebu",
@@ -349,6 +431,7 @@ describe("replay + sync", () => {
         id: "oq-c",
         method: "transfer",
         input: {
+          actor: 'actor@mwell', idempotencyKey: 'replay-transfer-c',
           productId: "shirt",
           fromLocationId: "loc-wh",
           toLocationId: "loc-cebu",

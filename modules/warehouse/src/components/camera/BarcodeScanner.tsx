@@ -10,6 +10,8 @@ interface BarcodeScannerProps {
   label?: string;
   manualLabel?: string;
   manualActionLabel?: string;
+  mode?: "single" | "batch";
+  disabled?: boolean;
 }
 
 /**
@@ -22,21 +24,40 @@ export function BarcodeScanner({
   label = "Scan barcode",
   manualLabel = "Enter barcode manually",
   manualActionLabel = "Add",
+  mode = "single",
+  disabled = false,
 }: BarcodeScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const engineRef = useRef<ScanEngine | null>(null);
   const handledRef = useRef(false);
+  const latest = useRef({ onDetected, mode, disabled });
+  latest.current = { onDetected, mode, disabled };
+  const lastCode = useRef<{ code: string; at: number } | null>(null);
   const [scanning, setScanning] = useState(false);
   const [manual, setManual] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    return () => engineRef.current?.stop();
+    return () => {
+      const engine = engineRef.current;
+      engineRef.current = null;
+      engine?.stop();
+    };
   }, []);
 
+  useEffect(() => {
+    if (!disabled) return;
+    const engine = engineRef.current;
+    engineRef.current = null;
+    engine?.stop();
+    setScanning(false);
+  }, [disabled]);
+
   const start = async () => {
+    if (latest.current.disabled || engineRef.current) return;
     setError(null);
     handledRef.current = false;
+    lastCode.current = null;
     const engine = engineFactory();
     engineRef.current = engine;
     setScanning(true);
@@ -44,20 +65,31 @@ export function BarcodeScanner({
       await engine.start(
         videoRef.current as HTMLVideoElement,
         (code) => {
+          if (engineRef.current !== engine || latest.current.disabled) return;
           // Guard against the engine firing multiple results before stop().
           if (handledRef.current) return;
-          handledRef.current = true;
-          onDetected(code);
-          stop();
+          const normalized = code.trim().toLowerCase();
+          const now = Date.now();
+          const repeated = lastCode.current?.code === normalized && now - lastCode.current.at < 1500;
+          lastCode.current = { code: normalized, at: now };
+          if (!normalized || repeated) return;
+          const single = latest.current.mode === "single";
+          if (single) handledRef.current = true;
+          latest.current.onDetected(code);
+          if (single) stop();
         },
         () => {
+          if (engineRef.current !== engine) return;
           setError(
             "Scanning needs camera access. Allow the camera in your browser settings, or type the code manually below.",
           );
-          setScanning(false);
+          stop();
         },
       );
+      // Permission acquisition can finish after cancellation or unmount.
+      if (engineRef.current !== engine) engine.stop();
     } catch {
+      if (engineRef.current !== engine) return;
       setError(
         "Scanning needs camera access. Allow the camera in your browser settings, or type the code manually below.",
       );
@@ -66,12 +98,14 @@ export function BarcodeScanner({
   };
 
   const stop = () => {
-    engineRef.current?.stop();
+    const engine = engineRef.current;
     engineRef.current = null;
+    engine?.stop();
     setScanning(false);
   };
 
   const submitManual = () => {
+    if (latest.current.disabled) return;
     const code = manual.trim();
     if (!code) return;
     onDetected(code);
@@ -117,6 +151,7 @@ export function BarcodeScanner({
           type="button"
           className="btn-accent w-full"
           onClick={() => void start()}
+          disabled={disabled}
         >
           <Icon name="scan" />
           {label}
@@ -135,6 +170,7 @@ export function BarcodeScanner({
           placeholder="Barcode / serial"
           aria-label={manualLabel}
           value={manual}
+          disabled={disabled}
           onChange={(e) => setManual(e.target.value)}
           onKeyDown={(event) => {
             if (event.key !== "Enter") return;
@@ -145,7 +181,7 @@ export function BarcodeScanner({
         <button
           type="button"
           className="btn-primary shrink-0"
-          disabled={!manual.trim()}
+          disabled={disabled || !manual.trim()}
           onClick={submitManual}
         >
           {manualActionLabel}

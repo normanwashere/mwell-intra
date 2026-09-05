@@ -1,9 +1,19 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import userEvent from '@testing-library/user-event';
 import { screen } from '@testing-library/react';
 import { TasksPage } from './TasksPage';
 import { makeRepo, renderWithProviders } from '@/test/renderWithProviders';
 
 describe('TasksPage', () => {
+  it('offers retry after a failed queue read without claiming the queue is empty', async () => {
+    const repo = makeRepo();
+    vi.spyOn(repo, 'listWarehouseTasks').mockRejectedValueOnce(new Error('Connection interrupted')).mockResolvedValue({ rows: [] });
+    renderWithProviders(<TasksPage />, { repo, role: 'logistics_supervisor' });
+    expect(await screen.findByRole('alert')).toHaveTextContent('Connection interrupted');
+    expect(screen.queryByText('No due tasks')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Retry task queue' }));
+    expect(await screen.findByText('No due tasks')).toBeInTheDocument();
+  });
   it('links a quality task to its source queue', async () => {
     const repo = makeRepo();
     const data = await repo.getData();

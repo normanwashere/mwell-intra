@@ -139,8 +139,8 @@ function ReservationEditor({
     setSubmissionAttempt((attempt) => attempt + 1);
     setError(null);
     if (!pending) {
-      if (!data.events.some((event) => event.id === eventId)) {
-        setError("Select an event.");
+      if (!data.events.some((event) => event.id === eventId && !["closed", "cancelled"].includes(event.status ?? "planned"))) {
+        setError("Select an open event. Ask the event owner to reopen closed or cancelled events.");
         return;
       }
       const totals = new Map<string, number>();
@@ -302,7 +302,7 @@ function ReservationEditor({
           >
             <option value="">Select event</option>
             {data.events.map((event) => (
-              <option key={event.id} value={event.id}>
+              <option key={event.id} value={event.id} disabled={!pending && ["closed", "cancelled"].includes(event.status ?? "planned")}>
                 {event.name}
               </option>
             ))}

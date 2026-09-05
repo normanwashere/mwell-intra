@@ -59,6 +59,8 @@ import {
   stepStatusLabel,
 } from '../labels';
 import { createGovernedAttachmentUrl, type GovernedAccessClient } from '../attachments';
+import { attachmentSizeLabel } from '../evidencePresentation';
+import { RequestRevisionEditor } from '../components/RequestRevisionEditor';
 
 /** Compose a blocking message from an unmet submit-readiness result. */
 function readinessMessage(r: SubmitReadiness): string {
@@ -768,6 +770,9 @@ export function RequestDetailPage() {
         </div>
       )}
 
+      {isRequester && (req.status === 'draft' || req.status === 'rejected') && (
+        <RequestRevisionEditor request={req} onSaved={async () => { setReturnedRoute(null); await refresh(); }} />
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2">
           {req.status === 'draft' && isRequester && (
@@ -947,7 +952,7 @@ const STEP_STATUS: Record<
 };
 
 function AttachmentRow({ att }: { att: RequestAttachment }) {
-  const sizeKb = (att.sizeBytes / 1024).toFixed(1);
+  const sizeLabel = attachmentSizeLabel(att.sizeBytes);
   const { mode, supabaseClient } = useSession();
   const { error } = useToast();
   const [downloading, setDownloading] = useState(false);
@@ -981,7 +986,7 @@ function AttachmentRow({ att }: { att: RequestAttachment }) {
           {att.filename} <Badge tone="slate">{attachmentKindLabel(att.kind)}</Badge>
         </p>
         <p className="text-xs text-muted">
-          {sizeKb} KB · {att.mimeType}
+          {sizeLabel} · {att.mimeType || 'Type unavailable'}
           {att.uploadedByEmail ? ` · ${att.uploadedByEmail}` : ''}
           {' · '}
           {formatDateTime(att.uploadedAt)}
@@ -1038,7 +1043,7 @@ function TimelineItem({
         <Icon name={icon} className="h-4 w-4" />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-sm text-ink">{label}</p>
+        <p className="text-sm text-ink [overflow-wrap:anywhere]">{label}</p>
         <p className="text-xs text-faint">{formatDateTime(at)}</p>
       </div>
     </li>

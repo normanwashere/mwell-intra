@@ -276,10 +276,10 @@ async function callProductRpc(
 }
 
 export function useProductWorkspace() {
-  const { supabaseClient, userRoles, profile } = useSession();
+  const { supabaseClient, userRoles, profile, mode, userCapabilities } = useSession();
   const sourceAccess = {
-    readiness: can(userRoles, "product", "view_readiness"),
-    pricing: can(userRoles, "product", "view_pricing"),
+    readiness: mode === 'supabase' ? userCapabilities?.product?.includes('view_readiness') === true : can(userRoles, "product", "view_readiness"),
+    pricing: mode === 'supabase' ? userCapabilities?.product?.includes('view_pricing') === true : can(userRoles, "product", "view_pricing"),
   };
   const [data, setData] = useState<ProductWorkspaceData>(supabaseClient ? EMPTY_DATA : MEMORY_DEMO_DATA);
   const [loading, setLoading] = useState(Boolean(supabaseClient));

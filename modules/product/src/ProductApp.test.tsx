@@ -20,7 +20,8 @@ const state = vi.hoisted(() => ({
 
 vi.mock("@intra/auth", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@intra/auth")>();
-  return { ...actual, useSession: () => state.session };
+  const { can } = await import('@intra/rbac');
+  return { ...actual, useSession: () => state.session, useCan: (module: keyof SessionValue['userRoles'], cap: string) => state.session.mode === 'supabase' ? state.session.userCapabilities?.[module]?.includes(cap) === true : can(state.session.userRoles, module, cap as never) };
 });
 
 vi.mock("./data", async (importOriginal) => {
@@ -134,6 +135,24 @@ describe("ProductApp", () => {
     expect(screen.getByRole("button", { name: "Approve price" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "New readiness package" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Propose price" })).not.toBeInTheDocument();
+  });
+
+  it('renders exact rejected reasons and completed Operations attribution after reload', () => {
+    state.workspace.data = {...DATA,readiness:[{...DATA.readiness[0]!,status:'rejected',decidedBy:'owner-A',decidedAt:'2026-09-05T01:00:00Z',decisionNote:'Replace the expired evidence'}]};
+    const view=render(<ProductApp />);
+    expect(screen.getByText('Decision reason: Replace the expired evidence')).toBeInTheDocument();
+    expect(screen.getByText(/Decision by owner-A/)).toBeInTheDocument();
+    state.workspace.data={...DATA,readiness:[{...DATA.readiness[0]!,status:'approved',operationsAcknowledgedBy:'ops-B',operationsAcknowledgedAt:'2026-09-05T02:00:00Z'}]};
+    view.rerender(<ProductApp />);
+    expect(screen.getByText(/Operations handoff: Completed by ops-B/)).toBeInTheDocument();
+  });
+
+  it('admits effective Product reads while withholding uncertified decisions', () => {
+    state.session={...state.session,mode:'supabase',userCapabilities:{product:['view_readiness','view_pricing']},roleCapabilities:{product:['view_readiness','decide_go_live']}};
+    render(<ProductApp />);
+    expect(screen.getByText('Remote care launch')).toBeInTheDocument();
+    expect(screen.queryByRole('button',{name:'Approve go-live'})).not.toBeInTheDocument();
+    expect(screen.getByRole('link',{name:'Complete Product onboarding'})).toBeInTheDocument();
   });
 
   it("gives Operations only the approved handoff acknowledgement", () => {

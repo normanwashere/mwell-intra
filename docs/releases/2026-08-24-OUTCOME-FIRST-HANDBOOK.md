@@ -14,7 +14,7 @@ The certified source lineage begins with Task 7 evidence remediation at `27eb9b9
 
 - Four public modes: Home, Tasks, Roles, and System.
 - Canonical five-field route state: mode, guide, heading, query, and scope.
-- Exhaustive migration from all 331 maintained legacy tab, article, and heading routes. The original August 24 certification covered 313; eighteen source-registry routes were added with the August 28 feedback and recovery documentation updates.
+- Exhaustive migration from all 335 maintained legacy tab, article, and heading routes. The original August 24 certification covered 313; eighteen source-registry routes were added on August 28 and four candidate routes on September 5. Later routes require their own verification and do not inherit the historical browser certification.
 - Separate governed source registry and user-facing guide model.
 - Typed, ranked search for tasks, steps, decisions, roles, troubleshooting, and System references.
 - One self-contained HTML artifact with embedded styles, runtime, Mermaid diagrams, search data, and responsive screenshots.

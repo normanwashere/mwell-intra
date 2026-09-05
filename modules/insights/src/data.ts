@@ -147,26 +147,28 @@ export function mapInsightRow(row: UnknownRow): InsightMetric {
 export function resolveGovernedSource(
   metric: Pick<InsightMetric, "id" | "sourceHref" | "drillDownContext">,
   roles: Partial<UserRoles>,
+  effective?: Readonly<Record<string, readonly string[]>>,
 ) {
+  const canRead: typeof can = (assigned, module, capability) => effective ? effective[module]?.includes(capability) === true : can(assigned, module, capability);
   const href = metric.sourceHref;
   const accessible =
     href === "/work" ||
-    (href === "/warehouse/data" && can(roles, "warehouse", "view_analytics")) ||
+    (href === "/warehouse/data" && canRead(roles, "warehouse", "view_analytics")) ||
     (href === "/warehouse/cycle-counts" &&
-      (can(roles, "warehouse", "cycle_count") ||
-        can(roles, "warehouse", "approve_stock_adjustment"))) ||
+      (canRead(roles, "warehouse", "cycle_count") ||
+        canRead(roles, "warehouse", "approve_stock_adjustment"))) ||
     (href === "/warehouse/exceptions" &&
-      can(roles, "warehouse", "view_exceptions")) ||
+      canRead(roles, "warehouse", "view_exceptions")) ||
     (href === "/procurement/purchase-orders" &&
-      (can(roles, "procurement", "author_po") ||
-        can(roles, "procurement", "view_finance"))) ||
+      (canRead(roles, "procurement", "author_po") ||
+        canRead(roles, "procurement", "view_finance"))) ||
     (href === "/procurement/approvals" &&
-      can(roles, "procurement", "approve_request")) ||
+      canRead(roles, "procurement", "approve_request")) ||
     (href === "/legal/accreditation" &&
-      can(roles, "legal", "review_accreditation")) ||
+      canRead(roles, "legal", "review_accreditation")) ||
     (href === "/finance" &&
-      (can(roles, "warehouse", "view_finance") ||
-        can(roles, "procurement", "view_finance")));
+      (canRead(roles, "warehouse", "view_finance") ||
+        canRead(roles, "procurement", "view_finance")));
   const contextualHref = metric.drillDownContext
     ? `${href}${href.includes("?") ? "&" : "?"}${new URLSearchParams({ insight: metric.id, context: metric.drillDownContext }).toString()}`
     : href;
@@ -242,9 +244,9 @@ export function scopeInsights(
 }
 
 export function useInsightsData() {
-  const { mode, supabaseClient, userRoles } = useSession();
+  const { mode, supabaseClient, userRoles, userCapabilities } = useSession();
   const live = mode === "supabase" ? supabaseClient : null;
-  const areas = visibleInsightAreas(userRoles);
+  const areas = mode === 'supabase' ? AREAS.filter(area => userCapabilities?.insights?.includes(`view_${area}`)) : visibleInsightAreas(userRoles);
   const [data, setData] = useState<InsightsData>(
     live
       ? { metrics: [], extractedAt: "", warnings: [] }

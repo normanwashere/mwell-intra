@@ -11,8 +11,8 @@ import {
   SkeletonStats,
 } from "@intra/ui";
 import { useSession } from "@intra/auth";
-import { can } from "@intra/rbac";
-import { canAccessFinanceRoles, canManageFinanceCloseRoles } from "./access";
+import { useCan } from "@intra/auth";
+import { paymentUrgency } from './paymentUrgency';
 import { summarizeFinanceData, useFinanceData } from "./data";
 import { FinanceActivityTable } from "./components/FinanceActivityTable";
 import { FinanceOverview } from "./components/FinanceOverview";
@@ -20,8 +20,11 @@ import { FinanceReviewQueue } from "./components/FinanceReviewQueue";
 import { FinanceClosePanel } from "./components/FinanceClosePanel";
 
 export function FinanceApp() {
-  const { profile, userRoles, loading: sessionLoading } = useSession();
-  const { data, loading, error, refresh, manageCloseEntry, openCloseEvidence, isDemo } =
+  const { profile, mode, roleCapabilities, loading: sessionLoading } = useSession();
+  const warehouseFinance = useCan('warehouse', 'view_finance');
+  const procurementFinance = useCan('procurement', 'view_finance');
+  const mayManageClose = useCan('warehouse', 'manage_finance_close');
+  const { data, loading, error, refresh, manageCloseEntry, openCloseEvidence, isDemo, searchSources, loadEvidenceOptions } =
     useFinanceData();
 
   if (sessionLoading || (profile && loading)) {
@@ -35,7 +38,7 @@ export function FinanceApp() {
 
   if (!profile) return <SignInPrompt module="Finance" basename="/finance" />;
 
-  if (!canAccessFinanceRoles(userRoles)) {
+  if (!warehouseFinance && !procurementFinance) {
     return (
       <div
         role="alert"
@@ -58,12 +61,9 @@ export function FinanceApp() {
     );
   }
 
-  const warehouseFinance = can(userRoles, "warehouse", "view_finance");
-  const procurementFinance = can(userRoles, "procurement", "view_finance");
-  const mayManageClose = canManageFinanceCloseRoles(userRoles);
   const summary = summarizeFinanceData(data);
-  const nextReview = data.payments.find(
-    (item) => item.status === "ready_for_finance",
+  const nextReview = paymentUrgency(data.payments).find(
+    (item) => item.status === "ready_for_finance" || (item.status === 'accepted' && item.remainingAmount > 0),
   );
 
   return (
@@ -125,10 +125,11 @@ export function FinanceApp() {
         </div>
       )}
 
-      <FinanceOverview summary={summary} />
+      {data.totals && <p className="text-sm text-muted">Activity period: {data.totals.periodStart} to {data.totals.periodEnd}</p>}
+      <FinanceOverview summary={summary} states={data.sourceStates} procurement={procurementFinance} warehouse={warehouseFinance} />
 
       <div className="grid min-w-0 max-w-full gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)] xl:items-start">
-        <FinanceReviewQueue items={data.payments} />
+        {procurementFinance && (data.sourceStates?.payments === 'error' ? <p role="status">Payment queue unavailable. <button className="btn-outline" onClick={() => void refresh()}>Retry payment source</button></p> : <FinanceReviewQueue items={data.payments} />)}
         <Card className="space-y-4">
           <div>
             <p className="text-xs font-semibold uppercase text-faint">
@@ -175,15 +176,18 @@ export function FinanceApp() {
         </Card>
       </div>
 
-      <FinanceClosePanel
+      {mode === 'supabase' && !mayManageClose && roleCapabilities?.warehouse?.includes('manage_finance_close') && <p role="status">Close actions require certification. <a className="underline" href="/onboarding">Complete Finance onboarding</a></p>}
+      {data.sourceStates?.close === 'error' ? <p role="status">Close queue unavailable. <button className="btn-outline" onClick={() => void refresh()}>Retry close source</button></p> : <FinanceClosePanel
         entries={data.closeEntries}
+        searchSources={searchSources}
+        loadEvidenceOptions={loadEvidenceOptions}
         manage={manageCloseEntry}
         openEvidence={openCloseEvidence}
         canManage={mayManageClose}
         currentActorId={profile.id}
-      />
+      />}
 
-      <FinanceActivityTable activity={data.activity} />
+      {data.sourceStates?.activity === 'error' ? <p role="status">Financial activity unavailable. <button className="btn-outline" onClick={() => void refresh()}>Retry activity source</button></p> : <FinanceActivityTable activity={data.activity} canPrepare={mayManageClose} />}
     </div>
   );
 }

@@ -81,7 +81,15 @@ describe('eventSummary', () => {
 });
 
 describe('eventCosting', () => {
-  it('values issued/returned/consumed and splits promo from sold', () => {
+  it('values actual approved mixed-purpose outcomes at historical cost, never current promotional flags', () => {
+    const movements = [mv({ eventId: 'e1', quantity: 10, unitCostAtMovement: 100 }), mv({ eventId: 'e1', type: 'return', quantity: 2, unitCostAtMovement: 100 })];
+    const outcomes = { status: 'approved', sold: 4, giveaway: 3, lost: 1, damaged: 0 };
+    const costing = eventCosting(movements, [{ ...ring, unitCost: 999, promotional: true }], 'e1', outcomes);
+    expect(costing).toMatchObject({ soldValue: 400, promoValue: 300, returnedValue: 200, lostValue: 100, outcomeValuationAvailable: true });
+    expect(eventCosting(movements, [ring], 'e1', { ...outcomes, status: 'draft' }).soldValue).toBe(0);
+    expect(eventCosting([...movements, mv({ eventId: 'e1', unitCostAtMovement: 200 })], [ring], 'e1', outcomes).outcomeValuationAvailable).toBe(false);
+  });
+  it('does not turn unreconciled custody into sales or infer historical cost from current products', () => {
     const movements = [
       mv({ eventId: 'e1', productId: 'p-ring', type: 'issue', quantity: 4 }),
       mv({ eventId: 'e1', productId: 'p-ring', type: 'return', quantity: 1 }),
@@ -90,11 +98,16 @@ describe('eventCosting', () => {
     const costing = eventCosting(movements, [ring, shirt], 'e1');
     // ring: issued 4*2500=10000, returned 1*2500=2500, consumed 3*2500=7500
     // shirt: issued 10*200=2000, consumed 10*200=2000 (promotional)
-    expect(costing.issuedValue).toBe(12000);
-    expect(costing.returnedValue).toBe(2500);
-    expect(costing.consumedValue).toBe(9500);
-    expect(costing.promoValue).toBe(2000);
-    expect(costing.soldValue).toBe(7500);
+    expect(costing.valuationAvailable).toBe(false);
+    expect(costing.promoValue).toBe(0);
+    expect(costing.soldValue).toBe(0);
+    const captured = movements.map(m => ({ ...m, unitCostAtMovement: m.productId === ring.id ? 2500 : 200 }));
+    const historical = eventCosting(captured, [{ ...ring, unitCost: 99999, promotional: true }, { ...shirt, unitCost: 1, promotional: false }], 'e1');
+    expect(historical.valuationAvailable).toBe(true);
+    expect(historical.issuedValue).toBe(12000);
+    expect(historical.returnedValue).toBe(2500);
+    expect(historical.consumedValue).toBe(9500);
+    expect(historical.soldValue).toBe(0);
   });
 
   it('clamps per-product consumed value at zero', () => {

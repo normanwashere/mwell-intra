@@ -5,7 +5,7 @@ import {
   useState,
   type FormEvent,
 } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import type {
   CustomerReturnCase,
   DepartmentRequestOption,
@@ -22,6 +22,7 @@ import type {
 } from "@intra/data-kit";
 import { normalizeSafeHttpsUrl } from "@intra/data-kit";
 import { useWarehouse } from "@/app/store";
+import { FLOOR_WORK_PATH, isFloorWork, isReleasedFollowUp } from "@/domain/workQueues";
 import {
   Badge,
   EmptyState,
@@ -286,8 +287,8 @@ function QueueCounters({
 
 function matchesOrderStatus(order: FulfillmentOrder, filter: string) {
   if (filter === "all") return true;
-  if (filter === "active")
-    return !["completed", "cancelled"].includes(order.status);
+  if (filter === "active" || filter === "floor_work") return isFloorWork(order);
+  if (filter === "released") return isReleasedFollowUp(order);
   if (filter === "pick_queue")
     return ["allocated", "picking"].includes(order.status);
   return order.status === filter;
@@ -511,6 +512,7 @@ function OrdersWorkspace({
   floorMode: boolean;
 }) {
   const { createFulfillmentOrder, advanceFulfillmentOrder } = useWarehouse();
+  const [orderSearchParams] = useSearchParams();
   const toast = useToast();
   const [createOpen, setCreateOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -523,8 +525,14 @@ function OrdersWorkspace({
   const [trackingOrder, setTrackingOrder] = useState<FulfillmentOrder>();
   const [detailOrder, setDetailOrder] = useState<FulfillmentOrder>();
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("active");
+  const [statusFilter, setStatusFilter] = useState(() => orderSearchParams.get("filter") === "floor_work" ? "floor_work" : "active");
   const [channelFilter, setChannelFilter] = useState("all");
+  useEffect(() => {
+    if (orderSearchParams.get("filter") !== "floor_work") return;
+    setStatusFilter("floor_work");
+    setQuery("");
+    setChannelFilter("all");
+  }, [orderSearchParams]);
   const channelOptions = [
     ...new Set(
       orders.map((order) => order.ecommerceChannel).filter(Boolean) as string[],
@@ -570,12 +578,13 @@ function OrdersWorkspace({
           { id: "pick_queue", label: "Picking" },
           { id: "packing", label: "Packing" },
           { id: "ready", label: "Ready for release" },
+          { id: "released", label: "Released follow-up" },
         ].map((counter) => ({
           ...counter,
           count: orders.filter((order) => matchesOrderStatus(order, counter.id))
             .length,
         }))}
-        selected={statusFilter}
+        selected={statusFilter === "floor_work" ? "active" : statusFilter}
         onSelect={(status) => {
           setStatusFilter(status);
           setQuery("");
@@ -590,6 +599,7 @@ function OrdersWorkspace({
           >
             Orders and event demand
           </h2>
+          <Link to={FLOOR_WORK_PATH} className="text-sm text-brand-600 underline">Floor work</Link>
           <p className="text-sm text-muted">
             Ecommerce, event, and third-party demand through pick, pack,
             release, and settlement.
@@ -669,6 +679,7 @@ function OrdersWorkspace({
             onChange={(event) => setStatusFilter(event.target.value)}
           >
             <option value="active">Active work</option>
+            <option value="floor_work">Floor work</option>
             <option value="all">All statuses</option>
             <option value="pick_queue">Allocated and picking</option>
             {[
@@ -1027,6 +1038,13 @@ function OrderDetailsSheet({
       description="Fulfillment record, controlled customer details, and shipment history."
     >
       <div className="space-y-5">
+        <section aria-label="Operational summary" className="space-y-2 border-b border-line pb-3 text-sm">
+          <p className="font-semibold text-ink">{titleCase(order.status)} / {order.externalReference}</p>
+          <ul>{order.lines.map((line) => <li key={line.productId}>{line.quantity} x {products.find((product) => product.id === line.productId)?.name ?? line.productId}</li>)}</ul>
+          <p className="break-words">Destination: {address ? `${address.addressLine}, ${address.city}, ${address.province} ${address.postalCode}` : order.requestingDepartment ?? "Not provided"}</p>
+          {order.deliveryMethod === "shipment" && <p className="break-words">{order.courier ?? "Courier not provided"} / {order.waybillNumber ?? "Waybill not provided"}</p>}
+          {order.status === "ready" && <p>Next owner: a warehouse operator other than the packer.</p>}
+        </section>
         <dl className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-xl border border-line bg-inset p-4 text-sm">
           <div>
             <dt className="text-xs text-faint">Channel</dt>
@@ -1066,13 +1084,13 @@ function OrderDetailsSheet({
         </dl>
 
         {order.source === "ecommerce" && showCommercial && (
-          <section aria-labelledby="commercial-title">
-            <h3
+          <details aria-labelledby="commercial-title">
+            <summary
               id="commercial-title"
               className="font-display text-base font-bold text-ink"
             >
               Payment and commercial summary
-            </h3>
+            </summary>
             <dl className="mt-2 grid grid-cols-2 gap-3 rounded-xl border border-line p-4 text-sm sm:grid-cols-3">
               <div>
                 <dt className="text-xs text-faint">Payment reference</dt>
@@ -1163,7 +1181,7 @@ function OrderDetailsSheet({
                 </dd>
               </div>
             </dl>
-          </section>
+          </details>
         )}
 
         {order.source === "ecommerce" && (
@@ -1296,7 +1314,9 @@ function OrderDetailsSheet({
                       Invalid tracking link. Update packing details.
                     </span>
                   ) : (
-                    "Pending packing"
+                    ["ready", "released", "completed"].includes(order.status)
+                      ? "No tracking link provided"
+                      : "Pending packing"
                   )}
                 </dd>
               </div>
@@ -1404,9 +1424,11 @@ function PickSheet({
   stockLevels: StockLevel[];
   onClose: () => void;
 }) {
-  const { advanceFulfillmentOrder } = useWarehouse();
+  const warehouse = useWarehouse();
+  const { advanceFulfillmentOrder } = warehouse;
   const toast = useToast();
   const [serials, setSerials] = useState<Record<string, string>>({});
+  const pendingCommand = useRef<Parameters<typeof advanceFulfillmentOrder>[0] | null>(null);
   const [binCodes, setBinCodes] = useState<Record<string, string>>({});
   const [pickEvidence, setPickEvidence] = useState<Record<string, string[]>>(
     {},
@@ -1414,6 +1436,10 @@ function PickSheet({
   const evidence = useEvidencePending();
   const [validationError, setValidationError] = useState("");
   const [saving, setSaving] = useState(false);
+  const submitting = useRef(false);
+  const [discardRequested, setDiscardRequested] = useState(false);
+  const [unconfirmed, setUnconfirmed] = useState(false);
+  const [queued, setQueued] = useState(false);
   if (!order) return null;
   const recommendedBin = (productId: string) => {
     const unitBin = units.find(
@@ -1433,13 +1459,39 @@ function PickSheet({
     )?.binId;
     return storageAreas.find((area) => area.id === (unitBin ?? stockBin));
   };
+  const captured = (productId: string) => (serials[productId] ?? "").split(/[\n,]/).map((value) => value.trim()).filter(Boolean);
+  const verifiedBin = (productId: string) => {
+    const suggestion = recommendedBin(productId);
+    return suggestion && suggestion.active !== false &&
+      (!order.sourceLocationId || suggestion.locationId === order.sourceLocationId) &&
+      binCodes[productId]?.trim().toLowerCase() === suggestion.code.toLowerCase()
+      ? suggestion : undefined;
+  };
+  const serialError = (productId: string, code: string, existing: string[]) => {
+    const normalized = code.trim().toLowerCase();
+    if (recommendedBin(productId) && !verifiedBin(productId)) return "Scan the correct source bin before scanning items.";
+    if (existing.some((value) => value.toLowerCase() === normalized)) return `${code} was already scanned.`;
+    const unit = units.find((row) => row.serialNumber.toLowerCase() === normalized);
+    if (!unit) return `Unknown serial: ${code}.`;
+    if (unit.productId !== productId) return "This serial belongs to a different product.";
+    if (unit.status !== "in_stock") return "This serial is not accepted, available stock.";
+    if (order.sourceLocationId && unit.locationId !== order.sourceLocationId) return "This serial is at a different warehouse.";
+    if ((unit.binId ?? "") !== (verifiedBin(productId)?.id ?? "")) return "This serial is not in the verified source bin.";
+    return "";
+  };
+  const requestClose = () => {
+    if (queued || submitting.current || evidence.pendingKeys.current.size > 0) return;
+    if (Object.values(serials).some(Boolean) || Object.values(binCodes).some(Boolean) || Object.values(pickEvidence).some((urls) => urls.length)) {
+      setDiscardRequested(true);
+    } else onClose();
+  };
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (saving || evidence.pendingKeys.current.size > 0) return;
-    for (const line of order.lines) {
+    if (submitting.current || evidence.pendingKeys.current.size > 0) return;
+    for (const line of pendingCommand.current ? [] : order.lines) {
       const product = products.find((row) => row.id === line.productId);
       const suggestion = recommendedBin(line.productId);
-      if (suggestion && !binCodes[line.productId]?.trim()) {
+      if (suggestion && !verifiedBin(line.productId)) {
         setValidationError(
           `Scan the source rack or bin for ${product?.name ?? line.productId} before scanning items.`,
         );
@@ -1455,10 +1507,20 @@ function PickSheet({
         );
         return;
       }
+      for (const [index, code] of capturedSerials.entries()) {
+        const error = serialError(line.productId, code, capturedSerials.slice(0, index));
+        if (error) {
+          setValidationError(error);
+          return;
+        }
+      }
     }
     setValidationError("");
+    setUnconfirmed(false);
+    submitting.current = true;
     setSaving(true);
-    const ok = await advanceFulfillmentOrder({
+    try {
+    pendingCommand.current ??= {
       orderId: order.id,
       action: "confirm_pick",
       pickedLines: order.lines.map((line) => ({
@@ -1468,28 +1530,32 @@ function PickSheet({
           .split(/[\n,]/)
           .map((value) => value.trim())
           .filter(Boolean),
-        binId: storageAreas.find(
-          (area) =>
-            area.code.toLowerCase() ===
-            (binCodes[line.productId] ?? "").trim().toLowerCase(),
-        )?.id,
+        binId: verifiedBin(line.productId)?.id,
         evidenceUrl: pickEvidence[line.productId]?.[0],
       })),
-    });
-    setSaving(false);
+    };
+    const ok = await advanceFulfillmentOrder(pendingCommand.current);
     if (ok) {
+      pendingCommand.current = null;
       toast.success("Scanned pick confirmed. Move the order to packing.");
       onClose();
       setSerials({});
       setBinCodes({});
       setPickEvidence({});
+    } else { setQueued(warehouse.lastActionStatus === "queued"); setUnconfirmed(true); }
+    } catch {
+      setUnconfirmed(true);
+      setValidationError("Pick confirmation was not acknowledged. Your capture is retained; verify the order before retrying.");
+    } finally {
+      submitting.current = false;
+      setSaving(false);
     }
   };
   return (
     <Sheet
       open
       onOpenChange={(open) => {
-        if (!open) onClose();
+        if (!open) requestClose();
       }}
       title={`Confirm pick / ${order.externalReference}`}
       description="Scan the source bin and items, then attach line evidence before confirming the pick."
@@ -1508,12 +1574,21 @@ function PickSheet({
         </button>
       }
     >
+      {unconfirmed && queued && <p role="status" className="mb-3 text-sm">Pick confirmation is queued for sync, not yet committed. Captured details are retained.</p>}
+      {discardRequested && (
+        <div role="alert" className="mb-4 space-y-2 border border-line p-3">
+          <p>Discard captured pick details?</p>
+          <button type="button" className="btn-primary" onClick={() => setDiscardRequested(false)}>Keep capturing</button>
+          <button type="button" className="btn-ghost" disabled={saving || evidence.pending} onClick={onClose}>Discard capture</button>
+        </div>
+      )}
       <form
         id="pick-order-form"
         aria-busy={saving || evidence.pending}
         className="space-y-4"
         onSubmit={(event) => void submit(event)}
       >
+        <fieldset disabled={saving || queued || unconfirmed} className="min-w-0 space-y-4">
         {validationError && (
           <p
             role="alert"
@@ -1578,12 +1653,19 @@ function PickSheet({
                       label="Scan rack or bin"
                       manualLabel={`Scanned bin code for ${product?.name ?? line.productId}`}
                       manualActionLabel="Use bin"
-                      onDetected={(code) =>
+                      disabled={saving || evidence.pending}
+                      onDetected={(code) => {
+                        if (code.trim().toLowerCase() !== suggestion.code.toLowerCase() || suggestion.active === false || (order.sourceLocationId && suggestion.locationId !== order.sourceLocationId)) {
+                          setBinCodes((current) => ({ ...current, [line.productId]: "" }));
+                          setValidationError(`Wrong source bin. Scan ${suggestion.code} for ${product?.name ?? line.productId}.`);
+                          return;
+                        }
+                        setValidationError("");
                         setBinCodes((current) => ({
                           ...current,
-                          [line.productId]: code,
-                        }))
-                      }
+                          [line.productId]: suggestion.code,
+                        }));
+                      }}
                     />
                   </div>
                   {binCodes[line.productId] && (
@@ -1622,25 +1704,31 @@ function PickSheet({
                       label={`Scan serial for ${product.name}`}
                       manualLabel={`Enter serial for ${product.name}`}
                       manualActionLabel="Add serial"
-                      onDetected={(code) =>
+                      mode="batch"
+                      disabled={saving || evidence.pending || (Boolean(suggestion) && !verifiedBin(line.productId)) || captured(line.productId).length >= line.quantity}
+                      onDetected={(code) => {
+                        const error = serialError(line.productId, code, captured(line.productId));
+                        if (error) { setValidationError(error); return; }
+                        setValidationError("");
                         setSerials((current) => {
                           const existing = (current[line.productId] ?? "")
                             .split(/[\n,]/)
                             .map((value) => value.trim())
                             .filter(Boolean);
-                          if (existing.includes(code)) return current;
+                          if (existing.some((value) => value.toLowerCase() === code.trim().toLowerCase()) || existing.length >= line.quantity) return current;
                           return {
                             ...current,
-                            [line.productId]: [...existing, code].join("\n"),
+                            [line.productId]: [...existing, units.find((unit) => unit.serialNumber.toLowerCase() === code.trim().toLowerCase())!.serialNumber].join("\n"),
                           };
-                        })
-                      }
+                        });
+                      }}
                     />
                   </div>
                   <textarea
                     aria-label={`Scanned serial numbers for ${product.name}`}
                     className="input mt-3 min-h-24 font-mono"
                     value={serials[line.productId] ?? ""}
+                    disabled={saving || evidence.pending || (Boolean(suggestion) && !verifiedBin(line.productId))}
                     onChange={(event) =>
                       setSerials((current) => ({
                         ...current,
@@ -1675,6 +1763,7 @@ function PickSheet({
             </div>
           );
         })}
+        </fieldset>
       </form>
     </Sheet>
   );
@@ -1689,12 +1778,14 @@ function PackSheet({
   products: Product[];
   onClose: () => void;
 }) {
-  const { advanceFulfillmentOrder } = useWarehouse();
+  const warehouse = useWarehouse();
+  const { advanceFulfillmentOrder } = warehouse;
   const toast = useToast();
   const supplies = products.filter(
     (product) => product.itemClass === "fulfillment_supply",
   );
   const [courier, setCourier] = useState("");
+  const pendingCommand = useRef<Parameters<typeof advanceFulfillmentOrder>[0] | null>(null);
   const [waybill, setWaybill] = useState("");
   const [deliveryLink, setDeliveryLink] = useState("");
   const [recipientName, setRecipientName] = useState("");
@@ -1706,6 +1797,11 @@ function PackSheet({
     { key: crypto.randomUUID(), productId: "", quantity: 1 },
   ]);
   const [saving, setSaving] = useState(false);
+  const submitting = useRef(false);
+  const [dirty, setDirty] = useState(false);
+  const [discardRequested, setDiscardRequested] = useState(false);
+  const [unconfirmed, setUnconfirmed] = useState(false);
+  const [queued, setQueued] = useState(false);
   useEffect(() => {
     setCourier(order?.courier ?? "");
     setWaybill(order?.waybillNumber ?? "");
@@ -1723,15 +1819,23 @@ function PackSheet({
   }, [order]);
   if (!order) return null;
   const shipment = order.deliveryMethod === "shipment";
+  const requestClose = () => {
+    if (queued || submitting.current || evidence.pendingKeys.current.size > 0) return;
+    if (dirty || handoverEvidence.length || packaging.some((line) => line.productId)) setDiscardRequested(true);
+    else onClose();
+  };
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (saving || evidence.pendingKeys.current.size > 0) return;
-    if (shipment && !normalizeSafeHttpsUrl(deliveryLink)) {
+    if (submitting.current || evidence.pendingKeys.current.size > 0) return;
+    if (!pendingCommand.current && shipment && !normalizeSafeHttpsUrl(deliveryLink)) {
       toast.error("Delivery tracking link must use a secure HTTPS URL.");
       return;
     }
+    submitting.current = true;
     setSaving(true);
-    const ok = await advanceFulfillmentOrder({
+    setUnconfirmed(false);
+    try {
+    pendingCommand.current ??= {
       orderId: order.id,
       action: "confirm_pack",
       courier,
@@ -1746,22 +1850,30 @@ function PackSheet({
       packaging: packaging
         .filter((line) => line.productId)
         .map(({ productId, quantity }) => ({ productId, quantity })),
-    });
-    setSaving(false);
+    };
+    const ok = await advanceFulfillmentOrder(pendingCommand.current);
     if (ok) {
+      pendingCommand.current = null;
       toast.success(
         shipment
           ? "Packing confirmed. The shipment is ready for release."
           : "Handover prepared. A second operator must release it.",
       );
       onClose();
+    } else { setQueued(warehouse.lastActionStatus === "queued"); setUnconfirmed(true); }
+    } catch {
+      setUnconfirmed(true);
+      toast.error("Packing was not acknowledged. Your capture is retained; verify the order before retrying.");
+    } finally {
+      submitting.current = false;
+      setSaving(false);
     }
   };
   return (
     <Sheet
       open
       onOpenChange={(open) => {
-        if (!open) onClose();
+        if (!open) requestClose();
       }}
       title={`Pack order / ${order.externalReference}`}
       description={
@@ -1784,12 +1896,20 @@ function PackSheet({
         </button>
       }
     >
+      {unconfirmed && queued && <p role="status">Packing queued for sync, not yet committed. Captured details are retained.</p>}
+      {discardRequested && <div role="alert" className="mb-3 space-y-2">
+        <p>Discard captured packing details?</p>
+        <button type="button" className="btn-primary" onClick={() => setDiscardRequested(false)}>Keep capturing</button>
+        <button type="button" className="btn-ghost" disabled={saving || evidence.pending} onClick={onClose}>Discard capture</button>
+      </div>}
       <form
         id="pack-order-form"
+        onChangeCapture={() => setDirty(true)}
         aria-busy={saving || evidence.pending}
         className="space-y-4"
         onSubmit={(event) => void submit(event)}
       >
+        <fieldset disabled={saving || queued || unconfirmed} className="min-w-0 space-y-4">
         {shipment ? (
           <>
             <Field label="Courier" htmlFor="pack-courier">
@@ -1970,6 +2090,7 @@ function PackSheet({
             or wrap in Inventory before tracking pack consumption.
           </p>
         )}
+        </fieldset>
       </form>
     </Sheet>
   );

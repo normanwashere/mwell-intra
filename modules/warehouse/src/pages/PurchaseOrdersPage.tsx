@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { inboundQueue, isReceivableInbound } from "@/domain/workQueues";
 import { Link, useSearchParams } from "react-router-dom";
 import { useSession } from "@intra/auth";
 import { CertifiedAction } from "@intra/learning";
@@ -17,7 +18,7 @@ import {
 } from "@/domain/format";
 import {
   loadProcurementPOs,
-  useProcurementPOs,
+  useInboundProcurementPOs,
   type BridgedPO,
 } from "@/data/procurementBridge";
 import type { POStatus, PurchaseOrder } from "@/domain/types";
@@ -151,11 +152,12 @@ export function PurchaseOrdersPage() {
   // Procurement-module POs (issued/approved) read from their localStorage
   // contract — read-only visibility across the module seam (J1-6).
   const [bridgeReload, setBridgeReload] = useState(0);
-  const bridgedPOs = useProcurementPOs(
+  const inboundState = useInboundProcurementPOs(
     source,
     loadReceivableProcurementPOs,
     bridgeReload,
   );
+  const bridgedPOs = inboundState.rows;
 
   // Row-as-target (WH-27): tapping a PO opens its detail sheet; Receive and
   // Cancel live INSIDE the sheet instead of repeating on every card.
@@ -716,10 +718,10 @@ export function PurchaseOrdersPage() {
     // A draft was never ordered — receiving against it would fake supply
     // (WH-25). Receivable = ordered or partially received.
     po.status === "ordered" || po.status === "partially_received";
-  const openCount = warehousePOs.filter(isOpenPO).length;
-  const openValue = warehousePOs
-    .filter(isOpenPO)
-    .reduce((s, po) => s + poValue(po, data.products), 0);
+  const inbound = inboundQueue(bridgedPOs, warehousePOs, source);
+  const openCount = inbound.count;
+  const openValue = inbound.outstandingValue === null ? null : inbound.outstandingValue + inbound.legacyOpen
+    .reduce((s, po) => s + poValue({ ...po, lines: po.lines.map(line => ({ ...line, quantityOrdered: Math.max(0, line.quantityOrdered - line.quantityReceived) })) }, data.products), 0);
   const shownPOs = warehousePOs
     .slice()
     .sort((a, b) => Number(isOpenPO(b)) - Number(isOpenPO(a)))
@@ -727,11 +729,11 @@ export function PurchaseOrdersPage() {
       filter === "all"
         ? true
         : filter === "open"
-          ? isOpenPO(po)
+          ? isReceivable(po)
           : !isOpenPO(po),
     );
   // Bridged procurement POs are by definition open (issued/approved).
-  const shownBridged: BridgedPO[] = filter === "closed" ? [] : bridgedPOs;
+  const shownBridged: BridgedPO[] = filter === "closed" ? bridgedPOs.filter(po => po.status === "issued" && !isReceivableInbound(po)) : filter === "open" ? inbound.receivable : bridgedPOs;
 
   const detailPO = detailPOId
     ? (warehousePOs.find((po) => po.id === detailPOId) ?? null)
@@ -1138,14 +1140,15 @@ export function PurchaseOrdersPage() {
             </div>
             <p className="text-xs text-faint">
               <span className="font-semibold text-brand-700 dark:text-brand-300">
-                {openCount}
+                {inboundState.loading ? "Loading" : inboundState.error ? "Unavailable" : openCount}
               </span>{" "}
-              open • {money(openValue)} on order
+              receivable • {inboundState.loading || inboundState.error || openValue === null ? "Value unavailable" : money(openValue)} outstanding receipt value
               {bridgedPOs.length > 0 && (
                 <> • {bridgedPOs.length} from procurement</>
               )}
             </p>
           </div>
+          {inboundState.error && <p role="alert">{inboundState.error} <button type="button" className="btn-ghost" onClick={() => setBridgeReload(value => value + 1)}>Retry inbound work</button></p>}
           {shownPOs.length === 0 && shownBridged.length === 0 ? (
             <EmptyState icon="cart" title={`No ${filter} purchase orders`} />
           ) : (
@@ -1239,7 +1242,7 @@ export function PurchaseOrdersPage() {
                         <span className="text-sm text-muted">
                           {po.lines.length} line(s) • {money(po.value)}
                         </span>
-                        {canReceive && po.status === "issued" ? (
+                        {canReceive && isReceivableInbound(po) ? (
                           <button
                             type="button"
                             className="btn-accent btn-sm shrink-0"
@@ -1469,9 +1472,26 @@ export function PurchaseOrdersPage() {
         open={bridgeReceivePO !== null}
         onOpenChange={(open) => !open && !bridgeBusy && closeBridgeReceive()}
         title="Receive approved procurement PO"
+        size="wide"
         description={bridgeReceivePO?.poNumber}
         footer={
-          <div className="flex flex-wrap justify-end gap-2">
+          <div className="w-full space-y-2">
+            <div aria-label="Receipt requirements" className="max-h-24 overflow-y-auto text-sm text-rose-700 dark:text-rose-300">
+              {[
+                ...(!bridgeLocation ? [{ text: 'Choose a receiving location', target: 'bridge-receive-location' }] : []),
+                ...(!bridgeEvidenceUrls.length || bridgeEvidenceError ? [{ text: bridgeEvidenceError ? 'Correct the delivery evidence link' : 'Attach delivery evidence', target: 'bridge-receive-evidence' }] : []),
+                ...(bridgeReceiptValidation.hasExceptions && !bridgeExceptionReason.trim() ? [{ text: 'Add the exception reason', target: 'bridge-exception-reason' }] : []),
+                ...Object.entries(bridgeReceiptValidation.errors).map(([id, errors]) => ({ text: id === 'command' ? 'Review receipt line selection and serials' : `${bridgeReceivePO?.lines.find(line => line.id === id)?.description ?? 'Receipt line'}: review ${errors.length} required corrections`, target: id === 'command' ? 'bridge-receipt-lines' : `bridge-line-${id}` })),
+              ].map(({ text, target }, index) => (
+                <button key={`${target}-${index}`} type="button" className="block min-h-11 text-left underline underline-offset-2" onClick={() => {
+                  const element = document.getElementById(target);
+                  if (element instanceof HTMLDetailsElement) element.open = true;
+                  element?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                  (element?.querySelector<HTMLElement>('input:not([disabled]), select:not([disabled]), textarea:not([disabled])') ?? element)?.focus();
+                }}>{text}</button>
+              ))}
+            </div>
+            <div className="flex flex-wrap justify-end gap-2">
             <button
               type="button"
               className="btn-ghost"
@@ -1503,6 +1523,7 @@ export function PurchaseOrdersPage() {
             >
               Confirm governed receipt
             </button>
+            </div>
           </div>
         }
       >
@@ -1696,6 +1717,8 @@ export function PurchaseOrdersPage() {
                 </Field>
               )}
               <ul
+                id="bridge-receipt-lines"
+                tabIndex={-1}
                 className="space-y-3"
                 aria-label="Procurement PO receipt lines"
               >
@@ -1724,6 +1747,8 @@ export function PurchaseOrdersPage() {
                       key={line.id}
                       className="space-y-3 rounded-lg bg-inset p-3"
                     >
+                      <details id={`bridge-line-${line.id}`} open={bridgeReceivePO.lines.length <= 2}>
+                      <summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-ink">{line.description} · {remaining} outstanding{lineErrors.length ? ` · ${lineErrors.length} required corrections` : ''}</summary>
                       <div className="flex flex-wrap items-baseline justify-between gap-2">
                         <label className="flex min-h-11 items-center gap-2 text-sm font-semibold text-ink">
                           <input
@@ -1962,6 +1987,7 @@ export function PurchaseOrdersPage() {
                           </ul>
                         )}
                       </fieldset>
+                      </details>
                     </li>
                   );
                 })}

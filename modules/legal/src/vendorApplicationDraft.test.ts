@@ -123,9 +123,10 @@ describe('vendor application draft repository', () => {
   });
 
   it('keeps memory-mode drafts local and removable', async () => {
+    let value = '{}';
     const storage = {
-      getItem: vi.fn(() => '{}'),
-      setItem: vi.fn(),
+      getItem: vi.fn(() => value),
+      setItem: vi.fn((_key: string, next: string) => { value = next; }),
       removeItem: vi.fn(),
     };
     const options = {
@@ -140,6 +141,17 @@ describe('vendor application draft repository', () => {
 
     await repository.discard('case-1', 1);
     const persisted = JSON.parse(String(storage.setItem.mock.calls.at(-1)?.[1]));
-    expect(persisted).toEqual({});
+    expect(persisted).toEqual({ 'case-1': { version: 1, status: 'superseded' } });
+    const reloaded = createVendorApplicationDraftRepository(options);
+    expect(await reloaded.load('case-1')).toEqual({ version: 1, status: 'superseded' });
+    await expect(reloaded.save('case-1', application, 0, 'stale')).rejects.toThrow('version');
+    await expect(reloaded.save('case-1', application, 1, 'new')).resolves.toMatchObject({ version: 2 });
+  });
+  it('loads the retained live cursor without restoring discarded content', async () => {
+    const live = liveClient({ payload: application, version: 3, status: 'superseded' });
+    const repository = createVendorApplicationDraftRepository({ mode: 'supabase', client: live.client, canManageDraft: true });
+    expect(await repository.load('case-1')).toEqual({ application: undefined, version: 3, status: 'superseded' });
+    await repository.save('case-1', application, 3, 'restart');
+    expect(live.rpc).toHaveBeenLastCalledWith('save_vendor_application_draft', { payload: { case_id: 'case-1', application, expected_version: 3, idempotency_key: 'restart' } });
   });
 });

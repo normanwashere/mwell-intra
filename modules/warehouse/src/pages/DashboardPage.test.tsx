@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { screen, fireEvent } from "@testing-library/react";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
 import { axe } from "jest-axe";
 import { useLocation } from "react-router-dom";
 import { DashboardPage } from "./DashboardPage";
@@ -60,7 +60,9 @@ describe("DashboardPage", () => {
     "renders the canonical %s dashboard without undefined map access",
     async (role, expectedContent) => {
       renderWithProviders(<DashboardPage />, { role });
-      expect(await screen.findByText(expectedContent)).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText(expectedContent)).toBeInTheDocument();
+      });
     },
   );
 
@@ -72,9 +74,9 @@ describe("DashboardPage", () => {
       "Pick & Pack",
       "Returns and counts",
     ]) {
-      expect(
-        await screen.findByRole("link", { name: label }),
-      ).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByRole("link", { name: label })).toBeInTheDocument();
+      });
     }
     expect(screen.getByRole("link", { name: "Cycle counts" })).toHaveAttribute(
       "href",
@@ -82,7 +84,7 @@ describe("DashboardPage", () => {
     );
     expect(screen.getByRole("link", { name: "Pick & Pack" })).toHaveAttribute(
       "href",
-      "/fulfillment",
+      "/fulfillment?filter=floor_work",
     );
     expect(
       screen.queryByText(/consumption by event type/i),

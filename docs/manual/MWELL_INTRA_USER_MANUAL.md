@@ -38,6 +38,16 @@ Never share passwords, tokens, private keys, or confidential documents in suppor
 - **Return stock:** Add multiple return items, identify their source event where applicable, and scan the returned identities. Intake always goes into quarantine. Quality, not the intake operator, authorizes restocking. If the submitted result is unknown, keep the original payload unchanged and use **Recover original result**. A confirmed validation rejection allows correction; a timeout is not confirmation that nothing saved.
 - **Review requests:** In Pick & Pack, check the tab counters and use View request to inspect item quantities before approval. Split backorder permits zero fulfill-now for an individual line, but the split still needs both a fulfill-now quantity and a deferred quantity overall.
 
+### September 5 UAT Candidate: Control Queues and Receiving
+
+These procedures describe the remediation candidate. They are not proof of live deployment; confirm the release manifest before using them as the UAT acceptance baseline.
+
+1. **Find the exact task:** Open a task using its action. A Quality task opens its specific inspection, including older queue entries. A count task opens the recorded count rather than starting a new count. An exception task selects the referenced exception. If the source is missing or already completed, review the displayed status; do not act on a substitute record.
+2. **Inspect a receipt:** In Quality Control, search by product, serial or source reference and expand the receipt group. Check the serial and quantity before opening inspection. Repeated products on different PO lines remain separate obligations. A queue loading error is not an empty queue; retry before deciding there is no work.
+3. **Review a stock adjustment:** Confirm the product, SKU, warehouse/bin, requester, reason, expected quantity, counted quantity, proposed change, financial impact and supporting evidence. Open the source count when needed. If required count context is unavailable, approval stays blocked. The requester still cannot approve their own change.
+4. **Complete governed PO receiving:** Desktop uses a wider dialog. Expand the item line you are working on and collapse other lines to reduce scrolling. The fixed footer lists missing requirements; select a requirement to reach its field or line. Complete delivery evidence and line corrections before confirming. Save progress remains a draft, not a receipt.
+5. **Use help without losing your place:** Contextual help stays within the viewport. Dismiss it with Escape or an outside click. Help does not change permission or transaction state.
+
 ### Safe Attachments and Interrupted Work
 
 1. Open the intended record before attaching evidence. An upload started for one record cannot satisfy another record's evidence requirement.

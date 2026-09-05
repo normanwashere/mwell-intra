@@ -1,5 +1,15 @@
 # User Training And Operations Manual
 
+## September 5 Candidate Training Delta
+
+Use these scenarios with the matching UAT release only; deployment verification is still required.
+
+1. Search a large Quality queue by serial or receipt, expand the matching group, and verify exactly one intended inspection opens from its task. Repeat with a completed and an unavailable source.
+2. Open a governed PO receipt on desktop and mobile. Expand item lines, select a missing requirement in the footer, and verify focus reaches its field. Saving progress must not receive stock; confirmation remains blocked until the selected lines and evidence reconcile.
+3. Review a stock adjustment against its product, warehouse/bin, expected/counted quantities, requester and evidence. A missing source count must block approval. The requester must not decide their own change.
+4. Interrupt a supported queued stock action. Confirm that queued status is not success, the draft remains recoverable, and replay does not duplicate the movement. Escalate legacy queue records that lack a verifiable owner or intent key.
+5. Simulate a queue loading error. The page must offer retry and must not say there is no work. Retest the same record after recovery.
+
 **Reviewed:** August 23, 2026
 
 **Current UAT behavior reference:** `32170e425e125c63597ea8e05c6287a7cd256f5b`

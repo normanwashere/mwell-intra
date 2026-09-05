@@ -1,8 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CycleCountsPage } from "./CycleCountsPage";
-import { renderWithProviders } from "@/test/renderWithProviders";
+import { makeRepo, renderWithProviders } from "@/test/renderWithProviders";
 
 async function attachCountEvidence(user: ReturnType<typeof userEvent.setup>) {
   await user.upload(
@@ -13,6 +13,18 @@ async function attachCountEvidence(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("CycleCountsPage", () => {
+  it("opens an exact historical count outside the initial snapshot and retries a failed read", async () => {
+    const repo = makeRepo();
+    const read = vi.spyOn(repo, 'getCycleCount')
+      .mockRejectedValueOnce(new Error('Count read interrupted'))
+      .mockResolvedValue({ id: 'older-count', locationId: 'wh-main', category: 'merchandise', actor: 'previous-counter', createdAt: '2026-08-01T00:00:00Z', lines: [{ productId: 'shirt-l', expected: 12, counted: 10 }] });
+    renderWithProviders(<CycleCountsPage />, { repo, role: 'logistics_supervisor', route: '/cycle-counts?count=older-count' });
+    expect(await screen.findByText('Count read interrupted')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Retry source count' }));
+    expect(await screen.findByText('Expected 12 · Counted 10 · Variance -2')).toBeInTheDocument();
+    expect(read).toHaveBeenLastCalledWith('older-count');
+    expect(screen.queryByRole('heading', { name: /count sheet/i })).not.toBeInTheDocument();
+  });
   it.each(["warehouse_operator", "warehouse_supervisor"] as const)(
     "renders governed cycle counts for canonical %s",
     async (role) => {

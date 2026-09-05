@@ -7,6 +7,7 @@ import type { EventsData } from "./types";
 const state = vi.hoisted(() => ({
   session: null as unknown as SessionValue,
   reconciliationStatus: "draft" as "draft" | "submitted" | "approved",
+  issuedUnits: 3,
   saveReconciliation: vi.fn(async () => undefined),
   openReconciliationEvidence: vi.fn(async () =>
     "https://example.com/uat/events/UAT-AUG24-EVENT-A"),
@@ -30,7 +31,7 @@ vi.mock("./data", async (importOriginal) => {
         ownerEmail: "marketing@mwell.demo",
         lifecycle: "planned",
         reservedUnits: 3,
-        issuedUnits: 3,
+        issuedUnits: state.issuedUnits,
         returnedUnits: 0,
       },
     ],
@@ -106,6 +107,7 @@ function renderEvent() {
 describe("event reconciliation handoff", () => {
   beforeEach(() => {
     state.reconciliationStatus = "draft";
+    state.issuedUnits = 3;
     state.saveReconciliation.mockClear();
     state.openReconciliationEvidence.mockClear();
   });
@@ -131,6 +133,21 @@ describe("event reconciliation handoff", () => {
         }),
       ),
     );
+  });
+
+  it('LV06 keeps live balance and identity in the editor without blocking an incomplete draft', async () => {
+    state.issuedUnits = 5;
+    state.session = session({ events: ['coordinator'] });
+    renderEvent();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit outcomes' }));
+    expect(screen.getByText('Issued: 5 / Accounted: 3 / Remaining: 2')).toBeInTheDocument();
+    expect(screen.getByText('Incomplete draft balance')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Giveaway'), { target: { value: '3' } });
+    expect(screen.getByText('Issued: 5 / Accounted: 6 / Remaining: -1')).toBeInTheDocument();
+    expect(screen.getByText('Excess outcomes')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Giveaway'), { target: { value: '0' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+    await waitFor(() => expect(state.saveReconciliation).toHaveBeenCalledWith(expect.objectContaining({ action: 'save', soldUnits: 3 })));
   });
 
   it("lets the Finance reviewer add only the missing reference before approval", async () => {

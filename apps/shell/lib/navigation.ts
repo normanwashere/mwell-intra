@@ -218,7 +218,7 @@ export function canAccessFinance(access: ShellAccess): boolean {
 }
 
 export type WorkSource =
-  "warehouse" | "procurement" | "legal" | "events" | "finance";
+  "warehouse" | "procurement" | "legal" | "events" | "finance" | "product" | "insights";
 
 /** Work filters are limited to authoritative areas assigned to this account. */
 export function workSources(access: ShellAccess): readonly WorkSource[] {
@@ -228,10 +228,12 @@ export function workSources(access: ShellAccess): readonly WorkSource[] {
     "procurement",
     "legal",
     "events",
+    "product",
   ] as const) {
     if (hasModuleAccess(access, source)) sources.push(source);
   }
   if (canAccessFinance(access)) sources.push("finance");
+  if (hasModuleAccess(access,'insights') || hasCapability(access,'warehouse','manage_finance_close') || hasCapability(access,'procurement','review_payment_readiness') || hasCapability(access,'core','manage_rbac') || hasCapability(access,'warehouse','resolve_exceptions') || hasCapability(access,'procurement','admin') || hasCapability(access,'legal','admin')) sources.push('insights');
   return sources;
 }
 

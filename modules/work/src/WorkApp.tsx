@@ -1,4 +1,6 @@
 "use client";
+import { deadlineLabel } from './deadline';
+import { FollowupQueue } from './FollowupQueue';
 
 import { useState } from "react";
 import { useSession } from "@intra/auth";
@@ -13,7 +15,6 @@ import {
   SegmentedControl,
   SignInPrompt,
   SkeletonList,
-  relativeTime,
 } from "@intra/ui";
 import {
   availableWorkFilters,
@@ -29,6 +30,7 @@ const PRIORITY_TONE: Record<WorkPriority, "rose" | "amber" | "slate"> = {
   normal: "slate",
 };
 const ALL_SOURCES: readonly WorkSource[] = [
+  'product', 'insights',
   "warehouse",
   "procurement",
   "legal",
@@ -88,6 +90,7 @@ function EmployeeWorkApp({
   ).length;
   return (
     <div className="space-y-6">
+      <FollowupQueue />
       <ModuleHero
         eyebrow="Personal queue"
         title="My Work"
@@ -161,7 +164,7 @@ function EmployeeWorkApp({
                 </p>
                 {item.dueAt && (
                   <p className="mt-2 text-xs font-semibold text-faint">
-                    Due {relativeTime(item.dueAt)}
+                    {deadlineLabel(item.dueAt)}
                   </p>
                 )}
               </div>

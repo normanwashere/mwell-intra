@@ -56,6 +56,18 @@ async function setup(
 describe("AllocationReturnSheet quarantine intake", () => {
   afterEach(() => _resetMemoryQueue());
 
+  it('WE02 opens a partial bulk return at the remaining allocation quantity', async () => {
+    const { dialog } = await setup(false, data => {
+      const allocation = data.allocations.find(row => row.id === 'alloc-1')!;
+      allocation.quantity = 10;
+      data.returns.push({ id: 'partial-return-fixture', source: 'event', eventId: allocation.eventId,
+        lines: [{ allocationId: allocation.id, productId: allocation.productId, quantity: 3, reason: 'unused' }],
+        actor: 'fixture', createdAt: '2026-09-05T00:00:00Z' });
+    });
+    expect(within(dialog).getByText('7 remaining of 10 issued')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Quantity returned')).toHaveValue(7);
+  });
+
   it("locks an uncertain return without claiming failure or allowing a duplicate retry", async () => {
     const { dialog, user, recordReturn, onOpenChange } = await setup();
     recordReturn.mockRejectedValueOnce(new Error("Response lost"));
@@ -191,7 +203,7 @@ describe("AllocationReturnSheet quarantine intake", () => {
     expect(within(dialog).getByRole("alert")).toHaveTextContent(
       /cannot be returned/i,
     );
-    expect(within(dialog).getByText("0 of 2 selected")).toBeInTheDocument();
+    expect(within(dialog).getByText("0 selected; 2 remaining of 2 issued")).toBeInTheDocument();
   });
 
   it("resets custody, reason, and evidence when reopening the same allocation", async () => {

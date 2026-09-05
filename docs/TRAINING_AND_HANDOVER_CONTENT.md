@@ -1,5 +1,14 @@
 # Mwell Intra Training and Handover Content
 
+## September 5 Candidate Handover Gate
+
+The current remediation remains a UAT candidate until its release manifest and live checks are complete. Training material must not describe candidate screenshots as production evidence.
+
+- Trainers: demonstrate exact task-to-record navigation, searchable grouped Quality work, actionable receipt validation, source-backed stock approval, and honest queued-versus-committed outcomes.
+- Developers: preserve receipt line identity, complete cursor traversal, failure-state recovery, and immutable queued intent keys. Run the corresponding negative and retry regressions after changing these contracts.
+- Infrastructure: apply reviewed forward migrations only to the UAT project, verify actual installed function signatures and grants, then deploy the matching app adapter. Preserve tester seed data and retain ambiguous legacy records for governed reconciliation.
+- Acceptance owners: require desktop/mobile screenshots, cross-role readback, wrong-source/unauthorized rejection, and lost-response recovery evidence. Unit-test totals are not a substitute for deployed transaction certification.
+
 **Reviewed:** August 25, 2026
 **Procurement application behavior baseline:** `32170e425e125c63597ea8e05c6287a7cd256f5b`
 **Evidence status:** deployed UAT behavior; standalone handbook Task 8 certification is recorded in `docs/releases/2026-08-24-OUTCOME-FIRST-HANDBOOK.md`
@@ -61,7 +70,7 @@ Use only screenshots from `docs/manual/assets/knowledge-base/` whose binding app
 
 ### Certified training baseline
 
-Training uses 13 task guides, 52 stage screenshots, 11 role simulations, 48 decisions, 96 branches, 27 terminal outcomes, and 331 migrated legacy links. The current registry includes eighteen source links added on August 28. The original Task 8 certification covered 313 links: its source-model unit trio passed 81 of 81 tests, strict evidence coverage and provenance produced zero warnings and zero errors, and CI attestation verified. That original browser acceptance passed 116 tests with 100 project-conditional skips and zero failures across all eight responsive projects in 19.6 minutes. Its 24 visual-review captures cover light, dark, and print at every certified width; later changes require their own evidence.
+Training uses 13 task guides, 52 stage screenshots, 11 role simulations, 48 decisions, 96 branches, 27 terminal outcomes, and 335 migrated legacy links. The current registry includes eighteen source links added on August 28 and four candidate links on September 5. The original Task 8 certification covered 313 links: its source-model unit trio passed 81 of 81 tests, strict evidence coverage and provenance produced zero warnings and zero errors, and CI attestation verified. That original browser acceptance passed 116 tests with 100 project-conditional skips and zero failures across all eight responsive projects in 19.6 minutes. Its 24 visual-review captures cover light, dark, and print at every certified width; later changes require their own evidence.
 
 Trainers and handover reviewers must use `docs/manual/index.html` generated from the same 29-source set and may inspect `outputs/handbook-visual-review/` for the responsive evidence. Lint, typecheck, generated-documentation, and release-documentation gates passed. The release record retains the three unrelated existing Procurement lint warnings and the local Node/pnpm engine warning; neither warning changes the learner procedure or grants production approval.
 

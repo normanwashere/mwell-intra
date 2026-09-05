@@ -19,7 +19,8 @@ const state = vi.hoisted(() => ({
 
 vi.mock("@intra/auth", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@intra/auth")>();
-  return { ...actual, useSession: () => state.session };
+  const { can } = await import('@intra/rbac');
+  return { ...actual, useSession: () => state.session, useCan: (module: keyof SessionValue['userRoles'], cap: string) => state.session.mode === 'supabase' ? state.session.userCapabilities?.[module]?.includes(cap) === true : can(state.session.userRoles, module, cap as never) };
 });
 
 vi.mock("./data", async (importOriginal) => {
@@ -107,6 +108,17 @@ describe("FinanceApp", () => {
     expect(
       screen.getByRole("link", { name: /review next payment pack/i }),
     ).toHaveAttribute("href", "/procurement/purchase-orders/po_seed_004");
+  });
+
+  it('uses effective live grants, withholding uncertified close actions while retaining reads', () => {
+    state.session = {...state.session, mode: 'supabase', userCapabilities: {warehouse:['view_finance']}, roleCapabilities: {warehouse:['view_finance','manage_finance_close']}};
+    const view = renderFinanceApp();
+    expect(screen.queryByRole('button',{name:'Prepare close entry'})).not.toBeInTheDocument();
+    expect(screen.getByRole('link',{name:'Complete Finance onboarding'})).toBeInTheDocument();
+    expect(screen.queryByRole('heading',{name:'Payment readiness'})).not.toBeInTheDocument();
+    state.session = {...state.session, userCapabilities: {warehouse:['view_finance','manage_finance_close']}};
+    view.rerender(<ToastProvider><FinanceApp /></ToastProvider>);
+    expect(screen.getByRole('button',{name:'Prepare close entry'})).toBeInTheDocument();
   });
 
   it("opens receipt evidence in place instead of linking Finance to receiving", () => {

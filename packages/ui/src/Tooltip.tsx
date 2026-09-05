@@ -18,12 +18,14 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
 } from 'react';
 import { clsx } from 'clsx';
 import { Icon } from './Icon';
+import { createPortal } from 'react-dom';
 
 /** Close whatever InfoTip is currently open (one-at-a-time behavior). */
 let closeCurrent: (() => void) | null = null;
@@ -62,7 +64,8 @@ export function InfoTip({
   children,
 }: InfoTipProps) {
   const [open, setOpen] = useState(false);
-  const [placement, setPlacement] = useState<'top' | 'bottom'>(side);
+  const [position, setPosition] = useState({ left: 8, top: 8 });
+  const bubbleRef = useRef<HTMLSpanElement>(null);
   const wrapRef = useRef<HTMLSpanElement>(null);
   const bubbleId = useId();
   // Distinguishes tap-toggle (click) from hover so touch devices don't get a
@@ -77,25 +80,36 @@ export function InfoTip({
   const show = useCallback(() => {
     if (closeCurrent && closeCurrent !== close) closeCurrent();
     closeCurrent = close;
-    // Flip when the trigger is too close to the top of the viewport for a
-    // top-side bubble (or bottom for bottom-side).
-    const rect = wrapRef.current?.getBoundingClientRect();
-    if (rect) {
-      if (side === 'top' && rect.top < 120) setPlacement('bottom');
-      else if (side === 'bottom' && window.innerHeight - rect.bottom < 120) {
-        setPlacement('top');
-      } else {
-        setPlacement(side);
-      }
-    }
     setOpen(true);
-  }, [close, side]);
+  }, [close]);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const update = () => {
+      const anchor = wrapRef.current?.getBoundingClientRect();
+      const bubble = bubbleRef.current?.getBoundingClientRect();
+      if (!anchor || !bubble) return;
+      const preferred = side === 'top' ? anchor.top - bubble.height - 6 : anchor.bottom + 6;
+      const alternate = side === 'top' ? anchor.bottom + 6 : anchor.top - bubble.height - 6;
+      const top = preferred >= 8 && preferred + bubble.height <= window.innerHeight - 8 ? preferred : alternate;
+      setPosition({
+        left: Math.max(8, Math.min(anchor.left + anchor.width / 2 - bubble.width / 2, window.innerWidth - bubble.width - 8)),
+        top: Math.max(8, Math.min(top, window.innerHeight - bubble.height - 8)),
+      });
+    };
+    update();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update);
+    if (bubbleRef.current) observer?.observe(bubbleRef.current);
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, true);
+    return () => { observer?.disconnect(); window.removeEventListener('resize', update); window.removeEventListener('scroll', update, true); };
+  }, [open, side, content]);
 
   // Tap outside + Escape dismiss while open.
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent | TouchEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node) && !bubbleRef.current?.contains(e.target as Node)) {
         close();
       }
     };
@@ -148,17 +162,16 @@ export function InfoTip({
         {children ?? <Icon name="info" className="h-3.5 w-3.5" />}
       </button>
 
-      {open && (
+      {open && createPortal(
         <span
+          ref={bubbleRef}
           id={bubbleId}
           role="tooltip"
-          className={clsx(
-            'absolute left-1/2 z-40 w-max max-w-[min(20rem,80vw)] -translate-x-1/2 rounded-xl border border-line bg-surface px-3 py-2 text-left text-xs font-normal leading-snug text-muted shadow-pop',
-            placement === 'top' ? 'bottom-full mb-1.5' : 'top-full mt-1.5',
-          )}
+          style={{ ...position, maxHeight: 'calc(100dvh - 16px)' }}
+          className="fixed z-[100] w-max max-w-[min(20rem,calc(100vw-16px))] overflow-auto rounded-lg border border-line bg-surface px-3 py-2 text-left text-xs font-normal leading-snug text-muted shadow-pop"
         >
           {content}
-        </span>
+        </span>, document.body
       )}
     </span>
   );

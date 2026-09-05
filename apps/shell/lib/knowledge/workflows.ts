@@ -925,7 +925,7 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
         "action",
         "Post the governed pending-inspection receipt",
         ["warehouse_logistics_supervisor"],
-        "Record only the delivered eligible quantities, preserve receipt and traceability references, and keep the stock unavailable for Quality.",
+        "Expand the selected item lines in Receive approved procurement PO. Reconcile quantities, identities, and evidence; use the footer requirements to reach an incomplete field. Save progress stores a draft without moving stock. Confirm governed receipt records only delivered eligible quantities and keeps the stock unavailable for Quality.",
         {
           databaseEffect:
             "Receipt lines, units or lots, and the inventory ledger are posted from the PO in pending-inspection custody.",
@@ -1046,7 +1046,7 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
         "start",
         "Open stock pending inspection",
         ["warehouse_logistics_supervisor", "warehouse_operations"],
-        "Match the receipt or return, product, quantity, serial or lot, and inspection evidence context.",
+        "Open the exact task or search Quality Control by receipt, product, or serial. Expand its receipt group and match the source, quantity, serial or lot, and evidence before selecting Inspect. Repeated products on different PO lines are separate inspection obligations. If the linked source is missing or completed, review its status; never substitute another item. A queue loading error does not mean there is no work.",
       ),
       decision(
         "quality-inspection",

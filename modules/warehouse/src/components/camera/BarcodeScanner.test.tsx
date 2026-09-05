@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'jest-axe';
 import { BarcodeScanner } from './BarcodeScanner';
@@ -15,6 +15,41 @@ function fakeEngine(codeToEmit?: string): ScanEngine {
 }
 
 describe('BarcodeScanner', () => {
+  it('keeps a batch session alive across rejected codes and uses the latest callback', async () => {
+    let emit!: (code: string) => void;
+    const engine: ScanEngine = { start: vi.fn(async (_video, callback) => { emit = callback; }), stop: vi.fn() };
+    const first = vi.fn();
+    const latest = vi.fn();
+    const user = userEvent.setup();
+    const view = render(<BarcodeScanner mode="batch" onDetected={first} engineFactory={() => engine} />);
+    await user.click(screen.getByRole('button', { name: /scan barcode/i }));
+    act(() => { emit('VALID-1'); emit('VALID-1'); });
+    expect(first).toHaveBeenCalledOnce();
+    view.rerender(<BarcodeScanner mode="batch" onDetected={latest} engineFactory={() => engine} />);
+    act(() => { emit('INVALID'); emit('VALID-2'); });
+    expect(latest.mock.calls).toEqual([['INVALID'], ['VALID-2']]);
+    expect(engine.start).toHaveBeenCalledOnce();
+    expect(engine.stop).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeVisible();
+    view.rerender(<BarcodeScanner mode="batch" disabled onDetected={latest} engineFactory={() => engine} />);
+    expect(engine.stop).toHaveBeenCalledOnce();
+    act(() => emit('LATE'));
+    expect(latest).toHaveBeenCalledTimes(2);
+  });
+
+  it('cleans up a stream acquired after unmount and ignores late results', async () => {
+    let finish!: () => void;
+    let emit!: (code: string) => void;
+    const engine: ScanEngine = { start: vi.fn((_video, callback) => { emit = callback; return new Promise<void>((resolve) => { finish = resolve; }); }), stop: vi.fn() };
+    const onDetected = vi.fn();
+    const user = userEvent.setup();
+    const view = render(<BarcodeScanner mode="batch" onDetected={onDetected} engineFactory={() => engine} />);
+    await user.click(screen.getByRole('button', { name: /scan barcode/i }));
+    view.unmount();
+    await act(async () => { emit('LATE'); finish(); });
+    expect(onDetected).not.toHaveBeenCalled();
+    expect(engine.stop).toHaveBeenCalledTimes(2);
+  });
   it('emits a manually entered barcode', async () => {
     const onDetected = vi.fn();
     const user = userEvent.setup();

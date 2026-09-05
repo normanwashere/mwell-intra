@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { clsx } from 'clsx';
 import { useWarehouse } from '@/app/store';
 import { toStockState } from '@/data/repository';
@@ -10,6 +10,7 @@ import { Badge, Card, Field, PageHeader, SectionTitle, useToast } from '@/compon
 import { Icon } from '@/components/Icon';
 import { WarehouseScanFlow } from '@/components/camera/WarehouseScanFlow';
 import { EvidenceCapture } from '@/components/camera/EvidenceCapture';
+import { useCycleCountRecord } from '@/domain/useCycleCountRecord';
 
 export function CycleCountsPage() {
   const { data, submitNewCycleCount } = useWarehouse();
@@ -33,8 +34,25 @@ export function CycleCountsPage() {
   const [variancesOnly, setVariancesOnly] = useState(
     searchParams.get('filter') === 'variances',
   );
+  const sourceId = searchParams.get('count') ?? searchParams.get('source');
+  const sourceCount = useCycleCountRecord(sourceId);
 
   if (!data) return null;
+  if (sourceId) {
+    const record = sourceCount.record;
+    return <div className="space-y-4">
+      <PageHeader title="Cycle count record" icon="clipboard" subtitle={sourceId} />
+      <Link className="btn-ghost" to="/tasks">Back to tasks</Link>
+      {sourceCount.loading ? <p role="status">Loading source count...</p> : sourceCount.error ? <div role="alert"><p>{sourceCount.error}</p><button type="button" className="btn-ghost mt-2" onClick={sourceCount.retry}>Retry source count</button></div> : record ? <section className="rounded-lg border border-line bg-surface p-4">
+        <p className="font-semibold">{data.locations.find(l => l.id === record.locationId)?.name ?? record.locationId} · {record.status ?? 'Recorded'}</p>
+        <p className="mt-1 break-all text-sm text-muted">{record.actor} · {record.createdAt.slice(0, 10)}</p>
+        <ul className="mt-4 divide-y divide-line">{record.lines.map((line, index) => <li key={`${line.productId}-${index}`} className="py-3">
+          <p className="font-medium">{data.products.find(p => p.id === line.productId)?.name ?? line.productId}</p>
+          <p className="text-sm">Expected {line.expected} · Counted {line.counted} · Variance {line.counted - line.expected}</p>
+        </li>)}</ul>
+      </section> : <p role="status">This count is unavailable or outside your access. No new count was opened.</p>}
+    </div>;
+  }
   const activeLocation = locationId || warehouses[0]?.id || '';
   const state = toStockState(data);
   const bins = (data.storageAreas ?? []).filter(

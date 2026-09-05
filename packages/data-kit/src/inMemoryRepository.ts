@@ -15,7 +15,6 @@ import type {
 } from "./domain/types";
 import { ReturnRejectedError } from "./returnOutcome";
 import {
-  returnClosesAllocation,
   uncommittedAvailable,
   validateReservation,
 } from "./domain/allocations";
@@ -355,6 +354,10 @@ export class InMemoryRepository implements WarehouseControlRepository {
     return clone(toStockState(this.data));
   }
 
+  async getCycleCount(id: string): Promise<CycleCount | null> {
+    return clone(this.data.cycleCounts.find((count) => count.id === id) ?? null);
+  }
+
   async getProfiles(): Promise<Profile[]> {
     return buildProfiles();
   }
@@ -553,7 +556,7 @@ export class InMemoryRepository implements WarehouseControlRepository {
       input.idempotencyKey,
       input,
       () => {
-        if (!this.data.events.some((event) => event.id === input.eventId)) {
+        if (!this.data.events.some((event) => event.id === input.eventId && !['closed', 'cancelled'].includes(event.status ?? 'planned'))) {
           return { status: "rejected", error: "Select a valid event." };
         }
         if (!input.lines.length || input.lines.length > 100) {
@@ -624,6 +627,9 @@ export class InMemoryRepository implements WarehouseControlRepository {
   }
 
   async reserve(input: ReserveInput): Promise<Allocation> {
+    if (this.data.events.some(event => event.id === input.eventId && ['closed', 'cancelled'].includes(event.status ?? 'planned'))) {
+      throw new Error('Event reservations are closed. Ask the event owner to reopen it.');
+    }
     const state = toStockState(this.data);
     const result = validateReservation(
       state,
@@ -771,6 +777,7 @@ export class InMemoryRepository implements WarehouseControlRepository {
         const createdAt = this.now();
         const quarantinedLines = input.lines.map((line) => ({
           ...line,
+          allocationId: input.allocationId ?? line.allocationId,
           disposition: "quarantine" as const,
         }));
         try {
@@ -865,21 +872,35 @@ export class InMemoryRepository implements WarehouseControlRepository {
             } else if (line.serialNumber)
               throw new Error("Bulk products cannot carry a serial number.");
           }
-          if (input.allocationId) {
+          if (input.allocationId && input.lines.some(line => line.allocationId && line.allocationId !== input.allocationId)) {
+            throw new Error("Return line allocation conflicts with the selected allocation.");
+          }
+          const quantities = new Map<string, number>();
+          for (const line of quarantinedLines) {
+            if (!line.allocationId) continue;
+            quantities.set(line.allocationId, (quantities.get(line.allocationId) ?? 0) + line.quantity);
+          }
+          for (const [allocationId, quantity] of quantities) {
             const allocation = this.data.allocations.find(
-              (row) => row.id === input.allocationId,
+              (row) => row.id === allocationId,
             );
             if (
               !allocation ||
               allocation.status !== "issued" ||
               allocation.eventId !== input.eventId ||
               quarantinedLines.some(
-                (line) => line.productId !== allocation.productId,
-              ) ||
-              quarantinedLines.reduce((sum, line) => sum + line.quantity, 0) >
-                allocation.quantity
+                (line) => line.allocationId === allocationId && line.productId !== allocation.productId,
+              )
             )
               throw new Error("Return does not match an issued allocation.");
+            const historical = this.data.returns.filter(record => record.eventId === allocation.eventId).flatMap(record => record.lines);
+            if (this.data.returns.some(record => record.source === "event" && record.eventId === allocation.eventId && record.lines.some(line => line.productId === allocation.productId && !line.allocationId))) {
+              throw new Error("Legacy return allocation lineage needs reconciliation before further intake.");
+            }
+            const returned = historical.filter(line => line.allocationId === allocationId).reduce((sum, line) => sum + line.quantity, 0);
+            if (returned + quantity > allocation.quantity) {
+              throw new Error("Return quantity exceeds outstanding allocation custody.");
+            }
           }
         } catch (error) {
           // Only this pre-mutation validation establishes a confirmed rejection.
@@ -952,31 +973,15 @@ export class InMemoryRepository implements WarehouseControlRepository {
           });
         }
 
-        // Close out the originating allocation only when this return fully accounts
-        // for it. Partial serialized returns keep the allocation `issued` until all
-        // issued units have come back.
-        if (input.allocationId) {
-          const allocation = this.data.allocations.find(
-            (a) => a.id === input.allocationId,
-          );
-          if (allocation && allocation.status === "issued") {
-            const product = this.data.products.find(
-              (p) => p.id === allocation.productId,
-            );
-            if (
-              returnClosesAllocation(
-                allocation,
-                product,
-                input.lines,
-                this.data.units,
-              )
-            ) {
-              allocation.status = "returned";
-            }
-          }
-        }
-
         this.data.returns.push(record);
+        for (const allocationId of new Set(quarantinedLines.map(line => line.allocationId).filter(Boolean))) {
+          const allocation = this.data.allocations.find(row => row.id === allocationId);
+          if (!allocation) continue;
+          const returned = this.data.returns.filter(row => row.eventId === allocation.eventId)
+            .flatMap(row => row.lines).filter(line => line.allocationId === allocationId)
+            .reduce((sum, line) => sum + line.quantity, 0);
+          if (returned === allocation.quantity) allocation.status = "returned";
+        }
         return clone(record);
       },
     );
@@ -1456,13 +1461,56 @@ export class InMemoryRepository implements WarehouseControlRepository {
   async listStockChangeRequests(
     query: PageQuery,
   ): Promise<PageResult<StockChangeRequest>> {
-    return this.page(this.stockChanges, query, (row) => row.status);
+    const page = this.page(this.stockChanges, query, (row) => row.status);
+    const profiles = buildProfiles();
+    return {
+      ...page,
+      rows: page.rows.map((row) => ({
+        ...row,
+        requestedByDisplayName: profiles.find((profile) =>
+          profile.id === row.requestedBy || profile.email === row.requestedBy)?.name?.trim()
+          || `Name unavailable (${row.requestedBy})`,
+      })),
+    };
   }
 
   async listWarehouseTasks(
     query: PageQuery,
   ): Promise<PageResult<WarehouseTask>> {
+    const staging: InventoryPosition[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await this.listInventoryPositions({ limit: 200, cursor });
+      staging.push(...page.rows.filter((row) => !row.binId && row.available > 0));
+      cursor = page.nextCursor;
+    } while (cursor);
+    const putaway: WarehouseTask[] = [];
+    for (const position of staging) {
+      if (!this.data.locations.some((row) => row.id === position.locationId && row.type === "warehouse")) continue;
+      const product = this.data.products.find((row) => row.id === position.productId);
+      if (!product) continue;
+      if (product.serialized) {
+        const units = this.data.units.filter((unit) =>
+          unit.productId === product.id && unit.locationId === position.locationId &&
+          !unit.binId && unit.status === "in_stock" && !this.holds.some((hold) =>
+            hold.status === "active" && hold.productId === product.id &&
+            hold.locationId === unit.locationId && !hold.binId &&
+            (!hold.serialNumber || hold.serialNumber === unit.serialNumber)),
+        ).sort((a, b) => a.id.localeCompare(b.id)).slice(0, position.available);
+        putaway.push(...units.map((unit) => ({
+          id: `putaway-unit-${unit.id}`, type: "putaway" as const,
+          sourceId: unit.id, title: `Put away ${product.name} / ${unit.serialNumber}`,
+          status: "due" as const,
+        })));
+      } else {
+        // One current balance, not one task for every historical inspection.
+        const sourceId = `staging:${JSON.stringify([product.id, position.locationId])}`;
+        putaway.push({ id: `putaway-${sourceId}`, type: "putaway", sourceId,
+          title: `Put away ${product.name} / ${position.available} units`, status: "due" });
+      }
+    }
     const tasks: WarehouseTask[] = [
+      ...putaway,
       ...this.data.receipts
         .filter((receipt) =>
           ["pending", "partial"].includes(receipt.qualityStatus ?? "pending"),

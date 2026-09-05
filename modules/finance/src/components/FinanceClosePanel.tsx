@@ -10,6 +10,9 @@ import type {
   ManageFinanceCloseEntryInput,
 } from '../types';
 import { isSupportedFinanceEvidenceReference, validateFinanceCloseEntry } from '../data';
+import { closeActionReason } from '../closeEligibility';
+import type { SearchCloseSources, LoadCloseEvidence, CloseSource, CloseEvidenceOption } from '../sourceSelection';
+import { closeSourceBlocker } from '../sourceSelection';
 
 const ENTRY_LABEL: Record<FinanceCloseEntryType, string> = {
   inventory_valuation: 'Inventory valuation',
@@ -39,6 +42,8 @@ const EVIDENCE_LABEL: Record<FinanceCloseEvidenceRecordType, string> = {
 };
 
 interface FinanceClosePanelProps {
+  searchSources?: SearchCloseSources;
+  loadEvidenceOptions?: LoadCloseEvidence;
   entries: FinanceCloseEntry[];
   manage: (input: ManageFinanceCloseEntryInput) => Promise<FinanceCloseEntry>;
   openEvidence: (entry: FinanceCloseEntry) => Promise<string>;
@@ -89,10 +94,16 @@ function FinanceClosePanelSession({
   openEvidence,
   canManage,
   currentActorId,
+  searchSources,
+  loadEvidenceOptions,
 }: FinanceClosePanelProps) {
   const toast = useToast();
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<FinanceCloseEntry>();
+  const [flagging, setFlagging] = useState<FinanceCloseEntry>();
+  const [flagReason, setFlagReason] = useState('');
   const [workingId, setWorkingId] = useState<string>();
+  const transitionLock = useRef(false);
   const [saving, setSaving] = useState(false);
   const [openingEvidenceId, setOpeningEvidenceId] = useState<string>();
   const [evidenceLink, setEvidenceLink] = useState<{ id: string; url: string }>();
@@ -104,6 +115,49 @@ function FinanceClosePanelSession({
   const evidenceOperation = useRef<object | null>(null);
   useEffect(() => () => { evidenceOperation.current = null; }, []);
   const [draft, setDraft] = useState(emptyCloseDraft);
+  const [sourceQuery, setSourceQuery] = useState('');
+  const [sources, setSources] = useState<CloseSource[]>([]);
+  const [sourceError, setSourceError] = useState('');
+  const [authorizedSource, setAuthorizedSource] = useState<CloseSource>();
+  const [evidenceOptions, setEvidenceOptions] = useState<CloseEvidenceOption[]>([]);
+  useEffect(() => {
+    if (!searchSources || !canManage) return;
+    const query = new URLSearchParams(window.location.search);
+    const type = query.get('close_source_type');
+    const id = query.get('close_source_id');
+    if (!type || !id) return;
+    const blocker = closeSourceBlocker(type);
+    if (blocker) { toast.error(blocker); return; }
+    let active = true;
+    void searchSources('', type, id).then(rows => {
+      const source = rows.find(row => row.type === type && row.id === id);
+      if (!source) throw new Error('The requested source is not available in your scope.');
+      if (active) { setDraft(current => ({...current,sourceRecordType:source.type,sourceRecordId:source.id,sourceModule:source.module,sourceReference:source.reference,amount:source.amount ?? 0,evidenceRecordType:'core_document',evidenceRecordId:''})); setOpen(true); }
+    }).catch(cause => { if (active) toast.error(cause.message || 'Source access unavailable'); });
+    return () => { active = false; };
+  }, [searchSources, canManage]);
+  useEffect(() => {
+    if (!open || !searchSources) return;
+    let active = true;
+    const timer = setTimeout(() => {
+      void searchSources(sourceQuery).then(rows => { if (active) { setSources(rows); setSourceError(''); } }).catch(cause => { if (active) setSourceError(cause.message || 'Source lookup unavailable'); });
+    }, 200);
+    return () => { active = false; clearTimeout(timer); };
+  }, [open, sourceQuery, searchSources]);
+  useEffect(() => {
+    setAuthorizedSource(undefined); setEvidenceOptions([]);
+    if (!open || !searchSources || !draft.sourceRecordId) return;
+    const blocker = closeSourceBlocker(draft.sourceRecordType);
+    if (blocker) { setSourceError(blocker); return; }
+    let active = true;
+    void searchSources('', draft.sourceRecordType, draft.sourceRecordId).then(async rows => {
+      const source = rows.find(row => row.id === draft.sourceRecordId && row.type === draft.sourceRecordType);
+      if (!source) throw new Error('Source access unavailable. Select an authorized source.');
+      const options = await loadEvidenceOptions?.(source.type, source.id) ?? [];
+      if (active) { setAuthorizedSource(source); setEvidenceOptions(options); setSourceError(''); }
+    }).catch(cause => { if (active) setSourceError(cause.message || 'Source lookup unavailable'); });
+    return () => { active = false; };
+  }, [open, draft.sourceRecordId, draft.sourceRecordType, searchSources, loadEvidenceOptions]);
   const savingRef = useRef(false);
   const attachment = useEvidenceAttachment(`${open}:${draft.sourceRecordType}:${draft.sourceRecordId}:${draft.evidenceRecordType}:${draft.evidenceRecordId}`);
   const evidenceIdentity = attachment.document?.documentId
@@ -119,7 +173,7 @@ function FinanceClosePanelSession({
   const dirty = JSON.stringify(draft) !== JSON.stringify(empty.current);
 
   useEffect(() => {
-    if (!open || !dirty || !draftKey || draftConflict || saving) return;
+    if (!open || !dirty || !draftKey || draftConflict || saving || editing) return;
     setDraftStatus('Saving browser draft...');
     const timer = window.setTimeout(() => {
       try {
@@ -141,7 +195,7 @@ function FinanceClosePanelSession({
       } catch { setDraftStatus('Browser draft could not be saved. Keep this page open.'); }
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [open, dirty, draft, draftKey, draftConflict, saving]);
+  }, [open, dirty, draft, draftKey, draftConflict, saving, editing]);
 
   useEffect(() => {
     if (!open || (!dirty && !attachment.reference)) return;
@@ -151,6 +205,7 @@ function FinanceClosePanelSession({
   }, [open, dirty, attachment.reference]);
 
   const resumeDraft = () => {
+    setEditing(undefined);
     const saved = readCloseDraft(draftKey);
     if (!saved) { setRecovery(undefined); setDraftStatus('No valid browser draft remains.'); return; }
     revision.current = saved.raw;
@@ -160,6 +215,7 @@ function FinanceClosePanelSession({
     setOpen(true);
   };
   const discardDraft = () => {
+    if (editing) { setEditing(undefined); setDraft(emptyCloseDraft()); attachment.clear(); setOpen(false); return; }
     try {
       if (draftKey && localStorage.getItem(draftKey) === revision.current) localStorage.removeItem(draftKey);
       else if (draftKey && readCloseDraft(draftKey)) {
@@ -181,18 +237,23 @@ function FinanceClosePanelSession({
     entry: FinanceCloseEntry,
     action: 'post' | 'reconcile' | 'exception',
   ) => {
-    if (action === 'exception' && !entry.reconciliationNote?.trim()) {
-      toast.error('Provide a correction reason on the close entry before flagging it.');
+    if (transitionLock.current) return;
+    const blocked = closeActionReason(entry, action, currentActorId, canManage);
+    if (blocked || (action === 'exception' && !flagReason.trim())) {
+      toast.error(blocked ?? 'Enter a correction reason.');
       return;
     }
+    transitionLock.current = true;
     setWorkingId(entry.id);
     try {
       await manage({
         action,
         id: entry.id,
         expectedUpdatedAt: entry.updatedAt,
-        reconciliationNote: action === 'exception' ? entry.reconciliationNote : undefined,
+        reconciliationNote: action === 'exception' ? flagReason.trim() : undefined,
       });
+      setFlagging(undefined);
+      setFlagReason('');
       toast.success(
         action === 'post'
           ? 'Close entry posted.'
@@ -205,6 +266,7 @@ function FinanceClosePanelSession({
         cause instanceof Error ? cause.message : 'Finance close entry could not be updated.',
       );
     } finally {
+      transitionLock.current = false;
       setWorkingId(undefined);
     }
   };
@@ -243,20 +305,30 @@ function FinanceClosePanelSession({
     savingRef.current = true;
     setSaving(true);
     try {
+      if (searchSources) {
+        const matches = await searchSources('', draft.sourceRecordType, draft.sourceRecordId);
+        const selected = matches.find(source => source.id === draft.sourceRecordId && source.type === draft.sourceRecordType);
+        if (!selected || selected.module !== draft.sourceModule || selected.reference !== draft.sourceReference) throw new Error('Source access or canonical identity changed. Select the source again.');
+      }
       await manage({
         action: 'save',
+        id: editing?.id,
+        expectedUpdatedAt: editing?.updatedAt,
         ...draft,
         ...evidenceIdentity,
-        evidenceUrl: attachment.reference,
+        evidenceUrl: attachment.reference || editing?.evidenceUrl || '',
         costCenter: draft.costCenter || undefined,
       });
       toast.success('Finance close entry prepared for independent posting.');
       setOpen(false);
+      setEditing(undefined);
       try {
-        if (draftKey && localStorage.getItem(draftKey) === revision.current) localStorage.removeItem(draftKey);
-        revision.current = null;
-        setRecovery(undefined);
-        setDraftStatus('');
+        if (!editing) {
+          if (draftKey && localStorage.getItem(draftKey) === revision.current) localStorage.removeItem(draftKey);
+          revision.current = null;
+          setRecovery(undefined);
+          setDraftStatus('');
+        }
       } catch { setDraftStatus('Entry prepared, but its browser draft could not be removed.'); }
       setDraft((current) => ({
         ...current,
@@ -293,7 +365,7 @@ function FinanceClosePanelSession({
           <button
             type="button"
             className="btn-primary w-full sm:w-auto"
-            onClick={() => { if (recovery) resumeDraft(); else setOpen(true); }}
+            onClick={() => { if (recovery) resumeDraft(); else { setEditing(undefined); setDraft(emptyCloseDraft()); setOpen(true); } }}
           >
             <Icon name="plus" className="h-4 w-4" /> Prepare close entry
           </button>
@@ -321,6 +393,7 @@ function FinanceClosePanelSession({
         <div className="grid gap-3 xl:grid-cols-2">
           {entries.map((entry) => (
             <Card key={entry.id} className="space-y-3">
+              <span id={`close-${entry.id}`} />
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="font-semibold text-ink">{ENTRY_LABEL[entry.entryType]}</p>
@@ -345,9 +418,9 @@ function FinanceClosePanelSession({
                   <p className="text-xs text-faint">Amount</p>
                   <p className="font-display text-lg font-bold text-ink">{money(entry.amount)}</p>
                 </div>
-                {canManage && (
+                {(
                   <div className="flex flex-wrap justify-end gap-2">
-                    {(entry.sourceRecordType === 'event_reconciliation' || entry.evidenceUrl?.startsWith('evidence://')) && (
+                    {(entry.evidenceRecordId || entry.sourceRecordType === 'event_reconciliation' || entry.evidenceUrl?.startsWith('evidence://')) && (
                       <button
                         type="button"
                         className="btn-ghost btn-sm"
@@ -361,12 +434,12 @@ function FinanceClosePanelSession({
                     {evidenceLink?.id === entry.id && <a href={evidenceLink.url} target="_blank" rel="noopener noreferrer" className="btn-ghost btn-sm">
                       <Icon name="download" className="h-4 w-4" /> Open document
                     </a>}
-                    {entry.status === 'ready' && (
+                    {canManage && entry.status === 'ready' && (
                       <button
                         type="button"
                         className="btn-outline btn-sm"
                         disabled={
-                          workingId === entry.id ||
+                          workingId === entry.id || Boolean(closeActionReason(entry, 'post', currentActorId, canManage)) ||
                           Boolean(
                             currentActorId && entry.settlementApprovedBy === currentActorId,
                           ) ||
@@ -383,12 +456,12 @@ function FinanceClosePanelSession({
                         Post
                       </button>
                     )}
-                    {entry.status === 'posted' && (
+                    {canManage && entry.status === 'posted' && (
                       <button
                         type="button"
                         className="btn-primary btn-sm"
                         disabled={
-                          workingId === entry.id ||
+                          workingId === entry.id || Boolean(closeActionReason(entry, 'reconcile', currentActorId, canManage)) ||
                           Boolean(
                             currentActorId && entry.settlementApprovedBy === currentActorId,
                           )
@@ -403,12 +476,12 @@ function FinanceClosePanelSession({
                         Reconcile
                       </button>
                     )}
-                    {!['reconciled', 'exception'].includes(entry.status) && (
+                    {canManage && ['draft', 'ready'].includes(entry.status) && (
                       <button
                         type="button"
                         className="btn-ghost btn-sm text-rose-700 dark:text-rose-300"
                         disabled={workingId === entry.id}
-                        onClick={() => void transition(entry, 'exception')}
+                        onClick={() => { setFlagReason(''); setFlagging(entry); }}
                       >
                         Flag
                       </button>
@@ -416,6 +489,18 @@ function FinanceClosePanelSession({
                   </div>
                 )}
               </div>
+              {entry.reconciliationNote && <p className="text-sm [overflow-wrap:anywhere]">Correction / reconciliation note: {entry.reconciliationNote}{entry.correctionBy ? `; flagged by ${entry.correctionBy} at ${entry.correctionAt}` : ''}</p>}
+              {['ready', 'posted'].includes(entry.status) && <p role="status" className="text-sm text-muted">{closeActionReason(entry, entry.status === 'ready' ? 'post' : 'reconcile', currentActorId, canManage) ?? `Next: independent Finance ${entry.status === 'ready' ? 'poster' : 'reconciler'}`}</p>}
+              {canManage && !closeActionReason(entry, 'save', currentActorId, canManage) && <button type="button" className="btn-outline btn-sm" onClick={() => {
+                setEditing(entry);
+                setDraft({ ...emptyCloseDraft(), periodStart: entry.periodStart, periodEnd: entry.periodEnd,
+                  entryType: entry.entryType, sourceModule: entry.sourceModule, sourceReference: entry.sourceReference,
+                  sourceRecordType: entry.sourceRecordType!, sourceRecordId: entry.sourceRecordId ?? '',
+                  evidenceRecordType: entry.evidenceRecordType!, evidenceRecordId: entry.evidenceRecordId ?? '',
+                  amount: entry.amount, costCenter: entry.costCenter ?? '', reconciliationNote: entry.reconciliationNote ?? '' });
+                attachment.clear(); setOpen(true);
+              }}>Edit and resubmit</button>}
+              {entry.sourceRecordType === 'event_reconciliation' && entry.status === 'exception' && <a className="btn-outline btn-sm" href={`/events/${encodeURIComponent(entry.sourceRecordId ?? '')}`}>Open governed Event correction</a>}
               <dl className="grid gap-2 border-t border-line pt-3 text-xs sm:grid-cols-2">
                 <div>
                   <dt className="text-faint">Canonical source</dt>
@@ -454,6 +539,9 @@ function FinanceClosePanelSession({
         </div>
       )}
 
+      {canManage && <Sheet open={Boolean(flagging)} onOpenChange={(next) => { if (!workingId && !next) setFlagging(undefined); }} title="Flag close entry" footer={<button type="button" className="btn-primary" disabled={Boolean(workingId) || !flagReason.trim()} onClick={() => flagging && void transition(flagging, 'exception')}>Record correction reason</button>}>
+        <Field label="Correction reason" htmlFor="close-flag-reason"><textarea id="close-flag-reason" className="input" value={flagReason} onChange={event => setFlagReason(event.target.value)} required /></Field>
+      </Sheet>}
       {canManage && (
         <Sheet
           open={open}
@@ -466,7 +554,7 @@ function FinanceClosePanelSession({
               form="finance-close-form"
               className="btn-primary w-full"
               disabled={
-                saving || draftConflict || !attachment.canSubmit(requiresAttachment) || validateFinanceCloseEntry({ action: 'save', ...draft, ...evidenceIdentity, evidenceUrl: attachment.reference }).length > 0
+                saving || draftConflict || (Boolean(searchSources) && !authorizedSource) || !attachment.canSubmit(requiresAttachment) || validateFinanceCloseEntry({ action: 'save', ...draft, ...evidenceIdentity, evidenceUrl: attachment.reference }).length > 0
               }
             >
               {saving ? 'Preparing...' : 'Prepare for posting'}
@@ -478,6 +566,19 @@ function FinanceClosePanelSession({
             className="space-y-4"
             onSubmit={(event) => void submit(event)}
           >
+            {searchSources && <div className="space-y-2">
+              <Field label="Find source by business reference" htmlFor="close-source-search"><input id="close-source-search" className="input" value={sourceQuery} onChange={event => setSourceQuery(event.target.value)} /></Field>
+              {sourceError && <p role="alert">{sourceError}</p>}
+              <p className="text-sm text-muted">Available sources: purchase orders, receipts, posted payment releases. Event settlements are upstream-only. Direct request/pack preparation, counts, and returns are unavailable here.</p>
+              <label className="block">Source record<select className="input w-full" value={authorizedSource ? `${authorizedSource.type}:${authorizedSource.id}` : ''} onChange={event => {
+                const source = sources.find(row => `${row.type}:${row.id}` === event.target.value);
+                if (!source) return;
+                setDraft(current => ({...current, sourceRecordType: source.type, sourceRecordId: source.id, sourceModule: source.module, sourceReference: source.reference, amount: source.amount ?? current.amount, evidenceRecordId: '', evidenceRecordType: 'core_document'}));
+                attachment.clear();
+              }}><option value="">Select an authorized source</option>{sources.map(source => <option key={`${source.type}:${source.id}`} value={`${source.type}:${source.id}`}>{source.reference} / {source.party ?? 'Party unavailable'} / {source.occurred_at.slice(0,10)} / {source.amount == null ? 'Amount unavailable' : money(source.amount)}</option>)}</select></label>
+              {authorizedSource && <div className="flex flex-wrap gap-3"><a className="underline" href={authorizedSource.href}>Open source record</a><a className="underline" href={`/finance?${new URLSearchParams({close_source_type:authorizedSource.type,close_source_id:authorizedSource.id})}`}>Open prebound source draft</a></div>}
+              <label className="block">Eligible registered evidence<select className="input w-full" value={draft.evidenceRecordId} onChange={event => { const evidence = evidenceOptions.find(item => item.id === event.target.value); if (evidence) setDraft(current => ({...current,evidenceRecordId:evidence.id,evidenceRecordType:evidence.type})); }}><option value="">Select evidence or upload below</option>{evidenceOptions.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
+            </div>}
             {draftKey && <div className="space-y-1 border-b border-line pb-3">
               <p role="status" className="text-xs text-muted">{draftStatus || 'Browser-only draft recovery; expires after 7 days.'}</p>
               <p className="text-xs text-muted">Evidence links are not saved in browser drafts.</p>
@@ -523,6 +624,7 @@ function FinanceClosePanelSession({
                   id="close-source-record-type"
                   className="input"
                   value={draft.sourceRecordType}
+                  disabled={Boolean(searchSources)}
                   onChange={(event) =>
                     setDraft((current) => ({
                       ...current,
@@ -542,6 +644,7 @@ function FinanceClosePanelSession({
                   id="close-source-record-id"
                   className="input"
                   value={draft.sourceRecordId}
+                  readOnly={Boolean(searchSources)}
                   onChange={(event) =>
                     setDraft((current) => ({
                       ...current,
@@ -558,7 +661,7 @@ function FinanceClosePanelSession({
                   id="close-evidence-record-type"
                   className="input"
                   value={evidenceIdentity.evidenceRecordType}
-                  disabled={saving || Boolean(attachment.document?.documentId)}
+                  disabled={saving || Boolean(searchSources) || Boolean(attachment.document?.documentId)}
                   onChange={(event) =>
                     setDraft((current) => ({
                       ...current,
@@ -578,7 +681,7 @@ function FinanceClosePanelSession({
                   id="close-evidence-record-id"
                   className="input"
                   value={evidenceIdentity.evidenceRecordId}
-                  disabled={saving || Boolean(attachment.document?.documentId)}
+                  disabled={saving || Boolean(searchSources) || Boolean(attachment.document?.documentId)}
                   onChange={(event) =>
                     setDraft((current) => ({
                       ...current,
@@ -614,6 +717,7 @@ function FinanceClosePanelSession({
                   id="close-source-module"
                   className="input"
                   value={draft.sourceModule}
+                  readOnly={Boolean(searchSources)}
                   onChange={(event) =>
                     setDraft((current) => ({
                       ...current,
@@ -628,6 +732,7 @@ function FinanceClosePanelSession({
                   id="close-source-reference"
                   className="input"
                   value={draft.sourceReference}
+                  readOnly={Boolean(searchSources)}
                   onChange={(event) =>
                     setDraft((current) => ({
                       ...current,

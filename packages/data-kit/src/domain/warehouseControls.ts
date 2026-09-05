@@ -113,6 +113,8 @@ export interface StockChangeRequest {
   evidenceUrls: string[];
   status: 'pending_supervisor' | 'pending_finance' | 'approved' | 'rejected';
   requestedBy: string;
+  /** Read-only presentation label; never use this instead of requestedBy for authority. */
+  requestedByDisplayName?: string;
   requestedAt: string;
   supervisorApprovedBy?: string;
   /** Server-authoritative eligibility for the current pending approval step. */

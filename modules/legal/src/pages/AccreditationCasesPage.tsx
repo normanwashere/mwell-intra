@@ -123,6 +123,7 @@ function columns(
 type CaseFilter = "all" | InboxBucket;
 
 export function AccreditationCasesPage() {
+  const [workspace, setWorkspace] = useState<'cases' | 'lifecycle'>('cases');
   const { profile } = useSession();
   const { rows, loading } = useAccreditationCases();
   const { rows: allChecklist } = useChecklist();
@@ -283,9 +284,13 @@ export function AccreditationCasesPage() {
         })}
       </StaggerGrid>
 
-      <VendorLifecyclePanel vendors={lifecycleVendors} />
+      <div className="flex gap-3" aria-label="Legal workspace">
+        <button type="button" className="btn-outline" aria-pressed={workspace === 'cases'} onClick={() => setWorkspace('cases')}>Accreditation cases</button>
+        <button type="button" className="btn-outline" aria-pressed={workspace === 'lifecycle'} onClick={() => setWorkspace('lifecycle')}>Vendor lifecycle</button>
+      </div>
+      {workspace === 'lifecycle' && <VendorLifecyclePanel vendors={lifecycleVendors} />}
 
-      <div>
+      <div hidden={workspace !== 'cases'}>
         <SectionTitle
           title="Accreditation cases"
           action={

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import type { InventoryHold, QualityInspection, VendorReturn } from '@intra/data-kit';
 import { useSession } from '@intra/auth';
 import { useWarehouse } from '@/app/store';
@@ -6,20 +7,9 @@ import { WAREHOUSE_MUTATION_CAPABILITIES } from '@/app/authorization';
 import { Badge, EmptyState, PageHeader, SegmentedControl } from '@/components/ui';
 import { InspectionSheet } from '@/components/quality/InspectionSheet';
 import { HoldReleaseSheet } from '@/components/quality/HoldReleaseSheet';
+import { loadCompleteControlQueue, pendingQualityWork, type PendingInspection } from '@/domain/controlQueues';
 
 type QualityTab = 'pending' | 'holds' | 'completed';
-
-interface PendingInspection {
-  id: string;
-  sourceType: 'receipt' | 'return';
-  sourceId: string;
-  productId: string;
-  quantity: number;
-  binId?: string;
-  recordedAt: string;
-  procurementPoLineId?: string;
-  serialNumber?: string;
-}
 
 export function QualityPage() {
   const {
@@ -41,18 +31,27 @@ export function QualityPage() {
   const [loading, setLoading] = useState(true);
   const [selectedPending, setSelectedPending] = useState<PendingInspection | null>(null);
   const [selectedHold, setSelectedHold] = useState<InventoryHold | null>(null);
+  const [search, setSearch] = useState('');
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [params] = useSearchParams();
+  const selectedSource = params.get('source') ?? params.get('inspection');
+  const openedSource = useRef<string | null>(null);
 
   const reloadControls = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const [inspectionPage, holdPage, vendorReturnPage] = await Promise.all([
-        loadQualityInspections({ limit: 100 }),
-        loadHolds({ limit: 100 }),
-        loadVendorReturns({ limit: 100 }),
+        loadCompleteControlQueue(loadQualityInspections),
+        loadCompleteControlQueue(loadHolds),
+        loadCompleteControlQueue(loadVendorReturns),
       ]);
-      setInspections(inspectionPage.rows);
-      setHolds(holdPage.rows);
-      setVendorReturns(vendorReturnPage.rows);
+      setInspections(inspectionPage);
+      setHolds(holdPage);
+      setVendorReturns(vendorReturnPage);
+    } catch (error) {
+      setSelectedPending(null);
+      setLoadError(error instanceof Error ? error.message : 'Quality controls could not be loaded.');
     } finally {
       setLoading(false);
     }
@@ -62,84 +61,35 @@ export function QualityPage() {
     void reloadControls();
   }, [reloadControls]);
 
-  const pending = useMemo<PendingInspection[]>(() => {
-    if (!data) return [];
-    const receipts = data.receipts.flatMap((receipt) => receipt.lines.flatMap((line, lineIndex) => {
-      const procurementPoLineId = (line as typeof line & { procurementLineId?: string }).procurementLineId;
-      const staged = inspections.filter((inspection) => inspection.sourceType === 'receipt'
-        && inspection.sourceId === receipt.id
-        && inspection.productId === line.productId
-        && inspection.disposition === 'pending'
-        && (!procurementPoLineId || inspection.procurementPoLineId === procurementPoLineId));
-      if (staged.length > 0) {
-        return staged.map((inspection) => ({
-          id: inspection.id,
-          sourceType: 'receipt' as const,
-          sourceId: receipt.id,
-          productId: inspection.productId,
-          quantity: inspection.quantity,
-          ...(inspection.binId ? { binId: inspection.binId } : {}),
-          ...(inspection.serialNumber ? { serialNumber: inspection.serialNumber } : {}),
-          recordedAt: inspection.inspectedAt,
-          ...(inspection.procurementPoLineId
-            ? { procurementPoLineId: inspection.procurementPoLineId }
-            : {}),
-        }));
-      }
-      const inspected = inspections
-        .filter((inspection) => inspection.sourceType === 'receipt'
-          && inspection.sourceId === receipt.id
-          && inspection.disposition !== 'pending'
-          && inspection.productId === line.productId)
-        .reduce((sum, inspection) => sum + inspection.quantity, 0);
-      const quantity = Math.max(0, line.quantity - inspected);
-      return quantity > 0 ? [{
-        id: `${receipt.id}-${line.productId}-${lineIndex}`,
-        sourceType: 'receipt' as const,
-        sourceId: receipt.id,
-        productId: line.productId,
-        quantity,
-        ...(line.binId ? { binId: line.binId } : {}),
-        recordedAt: receipt.createdAt,
-        ...(procurementPoLineId ? { procurementPoLineId } : {}),
-      }] : [];
-    }));
-    const returns = data.returns.flatMap((returned) => {
-      const groups = new Map<string, (typeof returned.lines)[number]>();
-      for (const line of returned.lines) {
-        const key = JSON.stringify([line.productId, line.binId ?? null, line.serialNumber ?? null]);
-        const existing = groups.get(key);
-        if (existing) existing.quantity += line.quantity;
-        else groups.set(key, { ...line });
-      }
-      return [...groups.entries()].flatMap(([key, line]) => {
-        const inspected = inspections.filter((inspection) =>
-          inspection.sourceType === 'return' && inspection.sourceId === returned.id
-          && inspection.productId === line.productId && inspection.disposition !== 'pending'
-          && (inspection.binId ?? null) === (line.binId ?? null)
-          && (inspection.serialNumber ?? null) === (line.serialNumber ?? null)
-        ).reduce((sum, inspection) => sum + inspection.quantity, 0);
-        const quantity = Math.max(0, line.quantity - inspected);
-        return quantity > 0 ? [{
-          id: `${returned.id}-${key}`,
-          sourceType: 'return' as const,
-          sourceId: returned.id,
-          productId: line.productId,
-          quantity,
-          ...(line.binId ? { binId: line.binId } : {}),
-          ...(line.serialNumber ? { serialNumber: line.serialNumber } : {}),
-          recordedAt: returned.createdAt,
-        }] : [];
-      });
-    });
-    return [...receipts, ...returns];
-  }, [data, inspections]);
+  const pending = useMemo(() => data ? pendingQualityWork(data, inspections) : [], [data, inspections]);
+  useEffect(() => {
+    if (!selectedSource || loading || loadError || openedSource.current === selectedSource) return;
+    openedSource.current = selectedSource;
+    const item = pending.find(i => i.id === selectedSource);
+    if (item) { setTab('pending'); if (can(WAREHOUSE_MUTATION_CAPABILITIES.inspectQuality)) setSelectedPending(item); else setSearch(selectedSource); return; }
+    const hold = holds.find(h => h.id === selectedSource || h.inspectionId === selectedSource);
+    if (hold && hold.status === 'active' && hold.reason !== 'Awaiting independent quality inspection') {
+      setTab('holds'); setSearch(selectedSource); return;
+    }
+    const inspection = inspections.find(i => i.id === selectedSource);
+    if (inspection && inspection.disposition !== 'pending') setTab('completed');
+    setSearch(selectedSource);
+  }, [selectedSource, loading, loadError, pending, holds, inspections, can]);
 
   if (!data) return null;
   const productName = (productId: string) => data.products.find((product) => product.id === productId)?.name ?? productId;
+  const matches = (...values: (string | undefined)[]) => values.join(' ').toLowerCase().includes(search.trim().toLowerCase());
+  const shownPending = pending.filter(i => matches(i.id, i.sourceId, i.serialNumber, productName(i.productId)));
+  const groups = new Map<string, PendingInspection[]>();
+  for (const item of shownPending) {
+    const key = `${item.sourceType}:${item.sourceId}:${item.productId}`;
+    groups.set(key, [...(groups.get(key) ?? []), item]);
+  }
   const activeHolds = holds.filter((hold) =>
-    hold.status === 'active' && hold.reason !== 'Awaiting independent quality inspection');
-  const completed = inspections.filter((inspection) => inspection.disposition !== 'pending');
+    hold.status === 'active' && hold.reason !== 'Awaiting independent quality inspection'
+    && matches(hold.id, hold.inspectionId, hold.serialNumber, hold.reason, productName(hold.productId)));
+  const completed = inspections.filter((inspection) => inspection.disposition !== 'pending'
+    && matches(inspection.id, inspection.sourceId, inspection.serialNumber, productName(inspection.productId)));
   const receiptRoute = data.operationRoutes?.find((route) => route.active && route.operationTypeId.includes('receipt'));
   const requiresEvidence = receiptRoute?.requiresEvidence ?? true;
   const mayInspect = can(WAREHOUSE_MUTATION_CAPABILITIES.inspectQuality);
@@ -215,21 +165,38 @@ export function QualityPage() {
           { value: 'completed', label: 'Completed' },
         ]}
       />
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-3">
+        <label className="min-w-0 flex-1 text-sm font-medium">Find receipt, product or serial
+          <input type="search" className="input mt-1 w-full" value={search} onChange={e => setSearch(e.target.value)} />
+        </label>
+        <p className="text-sm text-muted sm:py-3">{tab === 'pending' && search ? `${shownPending.length} of ${pending.length} pending inspections` : `${pending.length} pending inspections`}</p>
+      </div>
+      {selectedSource && <div className="space-y-1 rounded-lg border border-line p-3 text-sm">
+        <p className="break-all">Selected source: {selectedSource}</p>
+        {!loading && !loadError && !pending.some(i => i.id === selectedSource || i.sourceId === selectedSource)
+          && !holds.some(h => h.id === selectedSource || h.inspectionId === selectedSource)
+          && <p role="status">{inspections.some(i => i.id === selectedSource) ? 'This inspection is already recorded. Review its disposition below.' : 'This source is unavailable or outside your access. No different item was selected.'}</p>}
+        <Link to="/tasks" className="btn-ghost btn-sm">Back to tasks</Link>
+      </div>}
 
-      {loading ? (
+      {loadError ? <div role="alert" className="rounded-lg border border-rose-400 p-4"><p>{loadError}</p><button type="button" className="btn-ghost mt-2" onClick={() => void reloadControls()}>Retry quality queue</button></div> : loading ? (
         <p className="text-sm text-muted">Loading quality controls...</p>
       ) : tab === 'pending' ? (
-        pending.length === 0 ? <EmptyState icon="clipboard" title="No inspections waiting" /> : (
-          <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface" aria-label="Pending inspections">
-            {pending.map((item) => (
+        shownPending.length === 0 ? <EmptyState icon="clipboard" title={search ? 'No matching inspections' : 'No inspections waiting'} /> : (
+          <ul className="space-y-3" aria-label="Pending inspections">
+            {[...groups.entries()].map(([key, items]) => <li key={key}><details open={Boolean(search) || groups.size < 5} className="rounded-lg border border-line bg-surface">
+              <summary className="cursor-pointer p-4 text-sm font-semibold">{productName(items[0]!.productId)} <span className="ml-2 font-normal text-muted">{items.length} inspection(s) · {items[0]!.recordedAt.slice(0, 10)}</span><span className="mt-1 block break-all text-xs font-normal text-muted">{items[0]!.sourceType} {items[0]!.sourceId}</span></summary>
+              <ul className="divide-y divide-line">
+            {items.map((item) => (
               <li key={item.id} className="grid gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-ink">{productName(item.productId)}</p>
-                  <p className="text-xs text-faint">{item.sourceType === 'receipt' ? 'Receipt' : 'Return'} {item.sourceId} · {item.quantity} unit(s){item.serialNumber ? ` · Serial ${item.serialNumber}` : ''} · {item.recordedAt.slice(0, 10)}</p>
+                  <p className="break-words text-sm font-semibold text-ink">{item.serialNumber ? `Serial ${item.serialNumber}` : productName(item.productId)}</p>
+                  <p className="text-xs text-muted">{item.quantity} unit(s) · {item.recordedAt.slice(0, 10)}</p>
                 </div>
                 {mayInspect && <button type="button" className="btn-primary btn-sm justify-center" onClick={() => setSelectedPending(item)}>Inspect</button>}
               </li>
             ))}
+              </ul></details></li>)}
           </ul>
         )
       ) : tab === 'holds' ? (

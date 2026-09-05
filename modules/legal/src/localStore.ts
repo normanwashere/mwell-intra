@@ -897,7 +897,7 @@ export function useAccreditationCases(): CasesAPI {
           caseId: id,
           actorEmail: actor,
           action: 'reminder_sent',
-          detail: `Reminder sent to ${merged.contactEmail ?? merged.vendorName} to complete the outstanding requirements.`,
+          detail: `Manual follow-up with ${merged.contactEmail ?? merged.vendorName} recorded. No automatic message was sent.`,
         });
       }
       return merged;

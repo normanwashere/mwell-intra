@@ -66,6 +66,9 @@ export function documentationSources() {
     "docs/PROCESS_REFERENCE_LIBRARY.md",
   ];
   const remaining = [
+    "docs/manual/SEP05_PROCUREMENT_LEGAL_CANDIDATE.md",
+    "docs/manual/SEP05_PLATFORM_FINANCE_CANDIDATE.md",
+    "docs/manual/SEP05_WAREHOUSE_EVENTS_CANDIDATE.md",
     ...markdownFiles("docs"),
     ...markdownFiles("docs/policy"),
     ...markdownFiles("docs/runbooks"),

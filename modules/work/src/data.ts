@@ -15,6 +15,7 @@ import type {
 type UnknownRow = Record<string, unknown>;
 type CapabilityProjection = Readonly<Record<string, readonly string[]>>;
 const SOURCES = new Set<WorkSource>([
+  'product', 'insights',
   "warehouse",
   "procurement",
   "legal",
@@ -25,6 +26,7 @@ const PRIORITIES = new Set<WorkPriority>(["critical", "high", "normal"]);
 const text = (value: unknown, fallback = "") =>
   typeof value === "string" && value ? value : fallback;
 const FILTER_LABELS: Record<WorkSource, string> = {
+  product: 'Product', insights: 'Follow-ups',
   warehouse: "Warehouse",
   procurement: "Procurement",
   legal: "Legal",

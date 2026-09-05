@@ -1,4 +1,4 @@
-export type WorkSource = 'warehouse' | 'procurement' | 'legal' | 'events' | 'finance';
+export type WorkSource = 'warehouse' | 'procurement' | 'legal' | 'events' | 'finance' | 'product' | 'insights';
 export type WorkPriority = 'critical' | 'high' | 'normal';
 export type WorkFilter = 'all' | WorkSource;
 

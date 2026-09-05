@@ -283,6 +283,9 @@ export type ApproverTier =
 export type ApprovalStepStatus = 'pending' | 'approved' | 'rejected' | 'skipped';
 
 export interface ApprovalStep {
+  assignedUserId?: string;
+  requestVersion?: number;
+  matrixVersion?: number;
   /** Stable id so history + inbox rows can link to a specific step. */
   id: string;
   /** Order in the ladder; lower runs first. */
@@ -462,6 +465,7 @@ export interface ImportationPlan {
 }
 
 export interface ProcurementRequest {
+  revision?: number;
   id: string;
   title: string;
   description?: string;

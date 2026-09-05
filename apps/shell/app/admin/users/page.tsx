@@ -21,7 +21,7 @@
 //     and a role picker with the same grid but scoped to that one user, which
 //     is what a phone user will use to grant/revoke.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Badge,
   Button,
@@ -48,7 +48,6 @@ import { MODULE_LIST, MODULES, type Module, type UserRoles } from '@intra/rbac';
 import { DEMO_PROFILES } from '@shell/lib/demoProfiles';
 import { cx } from '@shell/lib/cx';
 import {
-  filterAndPageProfiles,
   validateRoleChangeEvidence,
   type RoleChangeEvidence,
 } from '@shell/lib/adminGovernance';
@@ -399,6 +398,8 @@ function LiveAdminUsers() {
     'all',
   );
   const [page, setPage] = useState(1);
+  const [directoryTotal, setDirectoryTotal] = useState(0);
+  const directoryRequest = useRef(0);
   const [roleChange, setRoleChange] = useState<{
     userId: string;
     moduleName: Module;
@@ -417,37 +418,39 @@ function LiveAdminUsers() {
 
   const refresh = useCallback(async () => {
     if (!supabase) return;
+    const request = ++directoryRequest.current;
+    setDetailUserId(null);
     setLoading(true);
     setError(null);
     try {
       const [
-        { data: profileRows, error: pErr },
-        { data: roleRows, error: rErr },
+        { data: directoryData, error: pErr },
         { data: catalogRows, error: catalogError },
       ] = await Promise.all([
-        supabase
-          .from('profiles')
-          .select('id,email,full_name,title,kind,vendor_id,status')
-          .order('email'),
-        supabase.from('user_roles').select('user_id,module,role'),
+        supabase.rpc('platform_user_directory', { p_query: query, p_status: statusFilter, p_kind: kindFilter, p_page: page }),
         supabase.rpc('list_rbac_catalog'),
       ]);
       if (pErr) throw pErr;
-      if (rErr) throw rErr;
       if (catalogError) throw catalogError;
-      setProfiles((profileRows ?? []) as AdminProfile[]);
-      setHeld(indexAssignments((roleRows ?? []) as RoleAssignment[]));
+      if (request !== directoryRequest.current) return;
+      const result = directoryData as { rows: AdminProfile[]; roles: RoleAssignment[]; total: number };
+      if (!Array.isArray(result?.rows) || !Array.isArray(result?.roles) || !Number.isFinite(result.total)) throw new Error('Directory authority is incomplete. Retry before changing roles.');
+      setProfiles(result.rows);
+      setHeld(indexAssignments(result.roles));
+      setDirectoryTotal(result.total);
       setColumns(
         roleColumnsFromCatalog((catalogRows ?? []) as RoleCatalogRow[]),
       );
     } catch (err) {
+      if (request !== directoryRequest.current) return;
+      setProfiles([]); setHeld(new Map()); setDetailUserId(null);
       const msg = err instanceof Error ? err.message : 'Failed to load users.';
       setError(msg);
       toast.error(msg);
     } finally {
-      setLoading(false);
+      if (request === directoryRequest.current) setLoading(false);
     }
-  }, [supabase, toast]);
+  }, [supabase, toast, query, statusFilter, kindFilter, page]);
 
   useEffect(() => {
     void refresh();
@@ -461,7 +464,7 @@ function LiveAdminUsers() {
       next: boolean,
       evidence: RoleChangeEvidence,
     ) => {
-      if (!supabase) return;
+      if (!supabase || loading || error) return;
       const key = `${userId}::${moduleName}:${role}`;
       // Optimistic update.
       setPending((prev) => new Set(prev).add(key));
@@ -519,23 +522,13 @@ function LiveAdminUsers() {
         });
       }
     },
-    [supabase, toast],
+    [supabase, toast, loading, error],
   );
 
   const detailUser = detailUserId
     ? profiles.find((p) => p.id === detailUserId)
     : null;
-  const directory = useMemo(
-    () =>
-      filterAndPageProfiles(profiles, {
-        query,
-        status: statusFilter,
-        kind: kindFilter,
-        page,
-        pageSize: 20,
-      }),
-    [profiles, query, statusFilter, kindFilter, page],
-  );
+  const directory = { rows: profiles, total: directoryTotal, pages: Math.max(1, Math.ceil(directoryTotal / 20)) };
 
   useEffect(() => {
     setPage(1);
@@ -593,12 +586,12 @@ function LiveAdminUsers() {
         }
         accessory={
           <div className="flex flex-wrap items-end gap-3">
-            <HeroStat label="Profiles">
+            <HeroStat label="Matching profiles">
               <p className="tnum font-display text-2xl font-extrabold text-ink">
-                {profiles.length}
+                {directoryTotal}
               </p>
             </HeroStat>
-            <HeroStat label="Scoped grants" align="right">
+            <HeroStat label="Grants on this page" align="right">
               <p className="tnum font-display text-2xl font-extrabold text-ink">
                 {totalGrants}
               </p>
@@ -610,8 +603,8 @@ function LiveAdminUsers() {
       <StaggerGrid className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StaggerItem>
           <StatCard
-            label="Profiles"
-            value={profiles.length}
+            label="Matching profiles"
+            value={directoryTotal}
             icon="list"
             tone="brand"
             hint="Employees + vendors"
@@ -619,16 +612,16 @@ function LiveAdminUsers() {
         </StaggerItem>
         <StaggerItem>
           <StatCard
-            label="Scoped grants"
+            label="Grants on this page"
             value={totalGrants}
             icon="check"
             tone="emerald"
-            hint="Across all modules"
+            hint="Current directory page"
           />
         </StaggerItem>
         <StaggerItem>
           <StatCard
-            label="External vendors"
+            label="Vendors on this page"
             value={vendors}
             icon="building"
             tone="cyan"
@@ -660,19 +653,7 @@ function LiveAdminUsers() {
         </Card>
       )}
 
-      {loading ? (
-        <div className="space-y-2">
-          <Skeleton className="h-11 w-full" />
-          <Skeleton className="h-11 w-full" />
-          <Skeleton className="h-11 w-full" />
-        </div>
-      ) : profiles.length === 0 ? (
-        <EmptyState
-          icon="info"
-          title="No profiles yet"
-          message="Users appear here after they sign in for the first time."
-        />
-      ) : (
+      {(
         <>
           <Card className="p-4 sm:p-5">
             <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_12rem_12rem]">
@@ -708,14 +689,14 @@ function LiveAdminUsers() {
                     )
                   }
                 >
-                  <option value="all">Employees and vendors</option>
+                  <option value="all">All user types</option>
                   <option value="employee">Employees</option>
                   <option value="vendor">Vendors</option>
                 </select>
               </Field>
             </div>
           </Card>
-          {directory.total === 0 ? (
+          {loading ? <Skeleton className="h-32 w-full" /> : error ? <p role="status">Directory unavailable. Retry before managing access.</p> : directory.total === 0 ? (
             <EmptyState
               icon="search"
               title="No matching users"
@@ -739,14 +720,14 @@ function LiveAdminUsers() {
               <div className="flex gap-2">
                 <Button
                   variant="outline"
-                  disabled={page <= 1}
+                  disabled={loading || page <= 1}
                   onClick={() => setPage((value) => Math.max(1, value - 1))}
                 >
                   Previous
                 </Button>
                 <Button
                   variant="outline"
-                  disabled={page >= directory.pages}
+                  disabled={loading || page >= directory.pages}
                   onClick={() =>
                     setPage((value) => Math.min(directory.pages, value + 1))
                   }
@@ -974,7 +955,7 @@ function UserRoleTable({
             {assigned.slice(0, 3).map((column) => (
               <span
                 key={column.key}
-                className="chip bg-inset text-xs text-muted"
+                className="inline-block max-w-full whitespace-normal break-words [overflow-wrap:anywhere] rounded px-2 py-1 bg-inset text-xs text-muted"
                 title={`${column.label} in ${getAdminModulePresentation(column.module).label}`}
               >
                 {getAdminModulePresentation(column.module).shortLabel} ·{' '}

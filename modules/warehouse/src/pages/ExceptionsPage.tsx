@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import type { ResolveExceptionInput, WarehouseException } from '@intra/data-kit';
 import { useWarehouse } from '@/app/store';
 import { Badge, EmptyState, Field, PageHeader, Sheet } from '@/components/ui';
+import { loadCompleteControlQueue } from '@/domain/controlQueues';
 
 function commandKey(exceptionId: string, action: string) {
   return `exception-${exceptionId}-${action}-${Date.now()}`;
@@ -25,6 +26,8 @@ export function ExceptionsPage() {
   const [resolution, setResolution] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const sourceId = params.get('source');
   const severity = params.get('severity') ?? 'all';
   const status = params.get('status') ?? 'open';
   const mayResolve = can('resolve_exceptions');
@@ -32,8 +35,11 @@ export function ExceptionsPage() {
 
   const reload = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
-      setExceptions((await loadExceptions({ limit: 100 })).rows);
+      setExceptions(await loadCompleteControlQueue(loadExceptions));
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : 'Exceptions could not be loaded.');
     } finally {
       setLoading(false);
     }
@@ -43,8 +49,9 @@ export function ExceptionsPage() {
   useEffect(() => setResolution(''), [selected]);
 
   const rows = useMemo(() => exceptions.filter((exception) =>
+    sourceId ? exception.id === sourceId || exception.sourceId === sourceId :
     (severity === 'all' || exception.severity === severity) &&
-    (status === 'all' || exception.status === status)), [exceptions, severity, status]);
+    (status === 'all' || exception.status === status)), [exceptions, severity, status, sourceId]);
 
   const setFilter = (key: string, value: string) => {
     const next = new URLSearchParams(params);
@@ -89,11 +96,12 @@ export function ExceptionsPage() {
         </Field>
       </div>
 
-      {loading ? <p className="text-sm text-muted">Loading exceptions...</p> : rows.length === 0 ? (
+      {sourceId && <p className="break-all text-sm">Selected source: {sourceId} <Link to="/tasks" className="btn-ghost btn-sm">Back to tasks</Link></p>}
+      {loadError ? <div role="alert"><p>{loadError}</p><button type="button" className="btn-ghost mt-2" onClick={() => void reload()}>Retry exceptions</button></div> : loading ? <p className="text-sm text-muted">Loading exceptions...</p> : rows.length === 0 ? (
         <EmptyState
           compact
           icon="check"
-          title={hasNonDefaultFilters ? 'No exceptions match these filters' : 'No open warehouse exceptions'}
+          title={sourceId ? 'Selected exception is unavailable or outside your access' : hasNonDefaultFilters ? 'No exceptions match these filters' : 'No open warehouse exceptions'}
           message={
             hasNonDefaultFilters
               ? `${exceptions.length} exception${exceptions.length === 1 ? '' : 's'} exist outside this view.`

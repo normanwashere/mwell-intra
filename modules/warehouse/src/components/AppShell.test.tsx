@@ -71,7 +71,7 @@ describe("AppShell navigation", () => {
     }
     expect(
       within(sidebar).getByRole("link", { name: "Pick & Pack" }),
-    ).toHaveAttribute("href", "/fulfillment");
+    ).toHaveAttribute("href", "/fulfillment?filter=floor_work");
   });
 
   it("presents Warehouse as an Mwell Intra workspace on desktop and mobile", async () => {

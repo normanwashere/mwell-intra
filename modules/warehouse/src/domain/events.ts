@@ -50,6 +50,10 @@ export function eventSummary(
 }
 
 export interface EventCosting {
+  valuationAvailable: boolean;
+  outcomeValuationAvailable: boolean;
+  lostValue: number;
+  damagedValue: number;
   issuedValue: number;
   returnedValue: number;
   consumedValue: number;
@@ -58,44 +62,38 @@ export interface EventCosting {
 }
 
 /**
- * Peso valuation of an event using each product's unit cost. Promotional
- * give-aways are split out from sold/used value via product.promotional.
+ * Custody is not a sale. Missing historical valuation is explicitly unavailable;
+ * current catalogue cost and promotional flags cannot restate historical facts.
  */
 export function eventCosting(
   movements: Movement[],
-  products: Product[],
+  _products: Product[],
   eventId: string,
+  outcomes?: { status: string; sold: number; giveaway: number; lost: number; damaged: number },
 ): EventCosting {
   let issuedValue = 0;
   let returnedValue = 0;
-  let consumedValue = 0;
-  let promoValue = 0;
-
-  for (const product of products) {
-    const issued = sumMovementQty(
-      movements.filter((m) => m.productId === product.id),
-      'issue',
-      eventId,
-    );
-    const returned = sumMovementQty(
-      movements.filter((m) => m.productId === product.id),
-      'return',
-      eventId,
-    );
-    const consumed = Math.max(0, issued - returned);
-    const consumedCost = consumed * product.unitCost;
-
-    issuedValue += issued * product.unitCost;
-    returnedValue += returned * product.unitCost;
-    consumedValue += consumedCost;
-    if (product.promotional === true) promoValue += consumedCost;
+  const relevant = movements.filter(m => m.eventId === eventId && ['issue', 'return'].includes(m.type));
+  const valuationAvailable = relevant.every(m => Number.isFinite(m.unitCostAtMovement));
+  for (const movement of relevant) {
+    if (movement.type === 'issue') issuedValue += movement.quantity * (movement.unitCostAtMovement ?? 0);
+    if (movement.type === 'return') returnedValue += movement.quantity * (movement.unitCostAtMovement ?? 0);
   }
 
+  const issues = relevant.filter(m => m.type === 'issue');
+  const costs = new Set(issues.map(m => m.unitCostAtMovement));
+  const unitCost = issues.length > 0 && costs.size === 1 && Number.isFinite(issues[0]?.unitCostAtMovement) ? issues[0]!.unitCostAtMovement! : undefined;
+  const outcomeValuationAvailable = outcomes?.status === 'approved' && unitCost !== undefined;
+
   return {
+    valuationAvailable,
+    outcomeValuationAvailable,
     issuedValue,
     returnedValue,
-    consumedValue,
-    promoValue,
-    soldValue: consumedValue - promoValue,
+    consumedValue: Math.max(0, issuedValue - returnedValue),
+    promoValue: outcomeValuationAvailable ? outcomes!.giveaway * unitCost! : 0,
+    soldValue: outcomeValuationAvailable ? outcomes!.sold * unitCost! : 0,
+    lostValue: outcomeValuationAvailable ? outcomes!.lost * unitCost! : 0,
+    damagedValue: outcomeValuationAvailable ? outcomes!.damaged * unitCost! : 0,
   };
 }

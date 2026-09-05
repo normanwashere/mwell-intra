@@ -158,7 +158,10 @@ export function VendorApplicationPage() {
         if (!active) return;
         setApplication(draft?.application ?? blankApplication(supportedEntity(kase.entityType), kase.vendorName));
         setDraftVersion(draft?.version ?? 0);
-        setSubmitted(draft?.status === 'submitted');
+        const correctionSource = kase.status === 'correction_requested'
+          && kase.correctionRequest?.sourceVersion === draft?.version;
+        setSubmitted(draft?.status === 'submitted' && !correctionSource);
+        setSignature(null);
         setDraftState('saved');
         editRevision.current = 0;
       })
@@ -170,10 +173,10 @@ export function VendorApplicationPage() {
     return () => {
       active = false;
     };
-  }, [isVendor, kase?.id, repository]);
+  }, [isVendor, kase?.id, kase?.status, kase?.correctionRequest?.sourceVersion, repository]);
 
   useEffect(() => {
-    if (!kase || !application || !repository || !isVendor || readOnly || draftState !== 'unsaved') return;
+    if (!kase || !application || !repository || !isVendor || readOnly || busy || draftState !== 'unsaved') return;
     const revision = editRevision.current;
     const timer = window.setTimeout(() => {
       setDraftState('saving');
@@ -186,7 +189,7 @@ export function VendorApplicationPage() {
         .catch(() => setDraftState('error'));
     }, 1200);
     return () => window.clearTimeout(timer);
-  }, [application, draftState, draftVersion, isVendor, kase, readOnly, repository]);
+  }, [application, busy, draftState, draftVersion, isVendor, kase, readOnly, repository]);
 
   const checklist = useMemo(
     () =>
@@ -287,14 +290,16 @@ export function VendorApplicationPage() {
     } catch (cause) {
       if (cause instanceof Error && /version|stale|conflict/i.test(cause.message)) {
         const latest = await repository.load(activeCase.id);
-        if (latest?.application) {
+        if (latest) {
           const recovered = recoverStaleDraft(
             { version: draftVersion, application: currentApplication },
-            { version: latest.version, application: latest.application },
+            { version: latest.version, application: latest.application ?? blankApplication(supportedEntity(activeCase.entityType), activeCase.vendorName) },
           );
           setApplication(recovered.application);
           setDraftVersion(recovered.version);
           setDraftState('saved');
+          setSubmitted(latest.status === 'submitted' && !(activeCase.status === 'correction_requested' && activeCase.correctionRequest?.sourceVersion === latest.version));
+          setSignature(null);
           error(recovered.message);
           return;
         }
@@ -598,7 +603,7 @@ export function VendorApplicationPage() {
                   : 'Unsaved changes'}
           </p>
           <div className="flex flex-col-reverse gap-2 sm:flex-row">
-            <button type="button" className="btn-ghost min-h-11" disabled={busy} onClick={() => void discardDraft()}>
+            <button type="button" className="btn-ghost min-h-11" disabled={busy || draftState === 'saving'} onClick={() => void discardDraft()}>
               Discard draft
             </button>
             <button
@@ -612,7 +617,7 @@ export function VendorApplicationPage() {
             <button
               type="button"
               className="btn-primary"
-              disabled={busy || !validation.ok || !signature}
+              disabled={busy || draftState === 'saving' || !validation.ok || !signature}
               onClick={() => void submitApplication()}
             >
               <Icon name="signature" className="h-4 w-4" />

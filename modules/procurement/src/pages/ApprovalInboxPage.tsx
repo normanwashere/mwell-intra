@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Badge,
@@ -26,8 +26,21 @@ import { formatDate, formatDateTime, statusLabel } from '../labels';
 import { makeTypedSignature } from '../signature';
 
 export function ApprovalInboxPage() {
-  const { rows, decide, loading } = useProcurementRequests();
-  const { profile, userRoles } = useSession();
+  const { rows, decide, loading, refresh } = useProcurementRequests();
+  const { profile, userRoles, mode, supabaseClient } = useSession();
+  const [eligibility, setEligibility] = useState<Record<string, boolean>>({});
+  const rowKey = rows.map(r => `${r.id}:${r.status}:${r.approvalSteps?.map(s => `${s.id}:${s.status}:${s.assignedUserId}`).join(',')}`).join('|');
+  useEffect(() => {
+    let active = true;
+    setEligibility({});
+    if (mode === 'supabase' && supabaseClient) {
+      void Promise.all(rows.filter(r => ['submitted','under_review'].includes(r.status)).map(async r => {
+        const { data, error } = await supabaseClient.schema('procurement').rpc('request_decision_eligibility', { payload: { request_id: r.id } });
+        return [r.id, !error && data?.canDecide === true] as const;
+      })).then(entries => { if (active) setEligibility(Object.fromEntries(entries)); }).catch(() => { if (active) setEligibility({}); });
+    }
+    return () => { active = false; };
+  }, [rowKey, profile?.id, mode, supabaseClient]);
   const { success, error } = useToast();
   const [active, setActive] = useState<ProcurementRequest | null>(null);
   const [decision, setDecision] = useState<'approved' | 'rejected' | null>(null);
@@ -68,10 +81,11 @@ export function ApprovalInboxPage() {
       // cap can decide" behaviour of the old inbox. This keeps existing
       // localStorage drafts actionable during the rollout.
       const step = nextPendingStep(r.approvalSteps);
-      if (!step) return myTiers.length > 0;
-      return myTiers.includes(step.tier);
+      if (mode === 'supabase') return eligibility[r.id] === true;
+      if (r.requesterId === profile?.id || r.requesterEmail === profile?.email) return false;
+      return !!step && (!step.assignedUserId || step.assignedUserId === profile?.id) && myTiers.includes(step.tier);
     });
-  }, [rows, myTiers]);
+  }, [rows, myTiers, profile, mode, eligibility]);
 
   const pendingValue = useMemo(
     () => pending.reduce((s, r) => s + (r.estimatedAmount ?? 0), 0),
@@ -84,9 +98,9 @@ export function ApprovalInboxPage() {
         if (r.status !== 'submitted' && r.status !== 'under_review') return false;
         const step = nextPendingStep(r.approvalSteps);
         if (!step) return false;
-        return !myTiers.includes(step.tier);
+        return !pending.some(item => item.id === r.id);
       }),
-    [rows, myTiers],
+    [rows, pending],
   );
 
   const decidedRecent = useMemo(
@@ -143,6 +157,7 @@ export function ApprovalInboxPage() {
       error(`This step is waiting on ${tierLabel(step.tier)} — not your tier.`);
       return;
     }
+    try {
     const ok = await decide(active.id, decision, {
       email: profile?.email,
       note,
@@ -159,6 +174,12 @@ export function ApprovalInboxPage() {
       closeSheet();
     } else {
       error('Could not save the decision.');
+    }
+    } catch (cause) {
+      setEligibility({});
+      error(cause instanceof Error ? cause.message : 'Decision failed. Refresh and try again.');
+      await refresh();
+      closeSheet();
     }
   }
 
@@ -258,7 +279,7 @@ export function ApprovalInboxPage() {
                         </p>
                       </div>
                       <Badge tone="amber">
-                        Waiting on {step ? tierLabel(step.tier) : 'next tier'}
+                        Waiting on {step ? (step.label ?? tierLabel(step.tier)) : 'next tier'}
                       </Badge>
                     </div>
                   </Card>
@@ -318,7 +339,7 @@ export function ApprovalInboxPage() {
             <button
               type="button"
               onClick={submitDecision}
-              disabled={decision === 'approved' && !effectiveSignature}
+              disabled={isSelfApproval || (mode === 'supabase' && !!active && !eligibility[active.id]) || (decision === 'approved' && !effectiveSignature)}
               className={
                 decision === 'approved'
                   ? 'btn-primary disabled:cursor-not-allowed disabled:opacity-60'
@@ -355,7 +376,7 @@ export function ApprovalInboxPage() {
               <Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0" />
               <p>
                 <span className="font-semibold">You raised this request.</span>{' '}
-                Deciding on your own request is flagged on the audit trail.
+                You cannot approve or reject your own request.
               </p>
             </div>
           )}
