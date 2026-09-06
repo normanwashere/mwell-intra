@@ -16,7 +16,7 @@ function RegisterServiceWorker() {
 }
 
 export function SafeServiceWorker({ children }: { children: ReactNode }) {
-  return <SerwistProvider swUrl="/serwist/sw.js" register={false}>
+  return <SerwistProvider swUrl="/serwist/sw.js" register={false} reloadOnOnline={false}>
     <RegisterServiceWorker />
     {children}
   </SerwistProvider>;

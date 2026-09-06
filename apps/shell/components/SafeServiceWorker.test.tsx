@@ -6,8 +6,9 @@ import { afterEach, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({ register: vi.fn() }));
 vi.mock("@serwist/turbopack/react", () => ({
-  SerwistProvider: ({ children, register }: { children: React.ReactNode; register: boolean }) => {
+  SerwistProvider: ({ children, register, reloadOnOnline }: { children: React.ReactNode; register: boolean; reloadOnOnline: boolean }) => {
     expect(register).toBe(false);
+    expect(reloadOnOnline).toBe(false);
     return children;
   },
   useSerwist: () => ({ serwist: state }),
