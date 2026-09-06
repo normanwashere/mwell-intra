@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "@intra/auth";
-import { OnboardingCenter } from "@intra/learning";
+import { Suspense } from "react";
+import { TaskLearningWorkspace } from "@shell/components/knowledge/TaskLearningWorkspace";
 import { MwellIntraLogo } from "@shell/components/MwellIntraLogo";
 
 export default function VendorOnboardingPage() {
@@ -46,7 +47,7 @@ export default function VendorOnboardingPage() {
         </div>
       </header>
       <main className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6">
-        <OnboardingCenter audience="vendor" />
+        <Suspense><TaskLearningWorkspace audience="vendor" /></Suspense>
       </main>
     </div>
   );

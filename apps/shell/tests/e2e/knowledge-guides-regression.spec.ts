@@ -103,6 +103,9 @@ test("feature guide renders only explicit policy and flow relationships", async 
   await expect(
     page.getByRole("heading", { level: 1, name: "Purchase request detail" }),
   ).toBeVisible();
+  const referenceTab = page.getByRole("tab", { name: "Control reference", exact: true });
+  await referenceTab.click();
+  await expect(referenceTab).toHaveAttribute("aria-selected", "true");
   await expect(
     page.getByText(
       "Procurement policy requires threshold- and risk-appropriate sourcing, competition evidence, vendor eligibility, budget evidence, and active approval authority.",
@@ -120,6 +123,10 @@ test("feature guide renders only explicit policy and flow relationships", async 
   await expect(
     page.locator('article a[href="/procurement/requests/:id"]'),
   ).toHaveCount(0);
+  await expectAccessibleGuide(page);
+  const taskTab = page.getByRole("tab", { name: "Task guide", exact: true });
+  await taskTab.click();
+  await expect(taskTab).toHaveAttribute("aria-selected", "true");
   await expect(page.getByText("Open from a record list")).toBeVisible();
   await expectAccessibleGuide(page);
 });

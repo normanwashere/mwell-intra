@@ -3,6 +3,9 @@ import type {
   KnowledgeContent,
   KnowledgeModule,
 } from "./types";
+import { knowledgeContentForAudience } from "./audience";
+import { taskCatalog, tasksForRoles } from "./taskCatalog";
+import type { TaskRoleAssignments } from "./taskCatalog";
 
 export type HandbookEntryMode = "task" | "role" | "feature";
 export type HandbookResultType =
@@ -19,6 +22,8 @@ export type HandbookResultType =
   | "roadmap";
 
 export interface HandbookSearchResult {
+  taskId?: string;
+  actionHref?: string;
   id: string;
   type: HandbookResultType;
   title: string;
@@ -35,6 +40,8 @@ export interface HandbookSearchResult {
 }
 
 export interface KnowledgeFilters {
+  audience?: "internal" | "vendor";
+  userRoles?: TaskRoleAssignments;
   module?: KnowledgeModule | "all";
   roleId?: string;
   type?: HandbookResultType | HandbookEntryMode | "article" | "flow" | "future" | "all";
@@ -163,6 +170,7 @@ const scoreText = (text: WeightedText, query: string) => {
 
   for (const token of tokens) {
     if (includesToken(title, token)) score += 24;
+    else if (approximatelyIncludesToken(title, token)) score += 12;
     if (aliases.some((value) => includesToken(value, token))) score += 20;
     if (keywords.some((value) => includesToken(value, token))) score += 14;
     if (includesToken(body, token)) score += 3;
@@ -196,6 +204,10 @@ export function searchKnowledge(
   query: string,
   filters: KnowledgeFilters = {},
 ): HandbookSearchResult[] {
+  const vendorScope = filters.roleId === "vendor_portal" || filters.userRoles?.core?.includes("vendor_portal") ||
+      (content.roles.length > 0 && content.roles.every(role => role.id === "vendor_portal"));
+  const audience = vendorScope ? "vendor" : (filters.audience ?? "internal");
+  content = knowledgeContentForAudience(content, audience === "vendor" ? "vendor" : "employee");
   const rolesById = new Map(content.roles.map((role) => [role.id, role]));
   const roleContext = (roleIds: string[]) =>
     roleIds.map((id) => rolesById.get(id)?.label ?? id);
@@ -220,6 +232,25 @@ export function searchKnowledge(
     .filter((token) => !ROADMAP_TERMS.has(token))
     .join(" ");
   const results: IndexedResult[] = [];
+
+  const tasks = filters.userRoles
+    ? tasksForRoles(content, filters.userRoles, audience)
+    : taskCatalog(content, audience);
+  for (const task of tasks) {
+    results.push({
+      id: task.id, taskId: task.id, type: "action",
+      title: task.title, summary: task.outcome,
+      href: task.guideHref, actionHref: task.actionHref,
+      availability: task.availability, module: task.module,
+      moduleContext: [task.module], roleIds: [...task.roleIds],
+      roleContext: roleContext([...task.roleIds]), destinationContext: "Task guide",
+      text: {
+        title: task.title,
+        aliases: [task.id, ...task.aliases],
+        body: task.outcome,
+      },
+    });
+  }
 
   for (const role of content.roles) {
     results.push({
@@ -439,6 +470,7 @@ export function searchKnowledge(
         roleIds: node.ownerRoleIds,
         roleContext: roleContext(node.ownerRoleIds),
         availability:
+          flow.availability === "coming_soon" ? "coming_soon" :
           flow.availability === "limited" ||
           node.type === "terminal" || node.type === "system"
             ? "limited"
@@ -533,11 +565,15 @@ export function searchKnowledge(
           : item.availability === "limited"
             ? 250
             : 0;
-      return { ...item, score: relevance + availabilityBoost, relevance };
+      const exactTaskPhrase = [text.title, ...(text.aliases ?? [])]
+        .some(value => q.length > 0 && normalize(value) === q);
+      const taskBoost = item.taskId && exactTaskPhrase && relevance > 0 ? 300 : 0;
+      return { ...item, score: relevance + availabilityBoost + taskBoost, relevance };
     })
     .filter(
       (item) =>
         item.relevance > 0 &&
+        (item.availability !== "coming_soon" || item.type === "roadmap" || requestsRoadmap || filters.type === "future" || filters.type === "roadmap") &&
         (!filters.module ||
           filters.module === "all" ||
           item.moduleContext.includes(filters.module)) &&

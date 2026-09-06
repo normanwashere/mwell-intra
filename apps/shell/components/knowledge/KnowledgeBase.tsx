@@ -133,10 +133,12 @@ export function KnowledgeBase({ content }: { content: KnowledgeContent }) {
   const results = useMemo(
     () =>
       searchKnowledge(scopedContent, query, {
+        audience: profile?.kind === "vendor" ? "vendor" : "internal",
+        userRoles,
         module,
         roleId: roleId || undefined,
       }),
-    [module, query, roleId, scopedContent],
+    [module, query, roleId, scopedContent, profile?.kind, userRoles],
   );
 
   const setParams = (

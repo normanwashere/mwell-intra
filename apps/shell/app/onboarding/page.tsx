@@ -1,7 +1,8 @@
 "use client";
 
-import { OnboardingCenter } from "@intra/learning";
+import { Suspense } from "react";
+import { TaskLearningWorkspace } from "@shell/components/knowledge/TaskLearningWorkspace";
 
 export default function OnboardingPage() {
-  return <OnboardingCenter />;
+  return <Suspense><TaskLearningWorkspace /></Suspense>;
 }

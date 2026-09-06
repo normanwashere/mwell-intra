@@ -6,20 +6,24 @@ import { useRouter, useSearchParams } from "next/navigation.js";
 import { useSession } from "@intra/auth";
 import { MODULES } from "@intra/rbac";
 import { Badge, Button, Icon, Sheet } from "@intra/ui";
-import { OPERATING_PERSONAS } from "./personas";
 import { useLearning } from "./LearningProvider";
 import { OnboardingProgress } from "./OnboardingProgress";
+import { TaskLearningSummary } from "./TaskLearningSummary";
+import {
+  projectTaskLearning,
+  type SelectedLearningTask,
+} from "./taskReadiness";
 import { OnboardingTrainingSession } from "./OnboardingTrainingSession";
 import { AssessmentRunner } from "./AssessmentRunner";
 import { PolicyAcknowledgment } from "./PolicyAcknowledgment";
 import { assessmentQuestionsFor, policyDocumentFor } from "./content";
 import { getTrainingAdapter } from "./training/registry";
 import { ROLE_CURRICULA, supportsEmbeddedTraining } from "./catalog";
-import { sharedCompletionKey } from "./requirementIdentity";
 import {
-  roleOrientationState,
-  sanitizeOnboardingReturnPath,
-} from "./orientationGate";
+  sharedCompletionKey,
+  requirementProgress,
+} from "./requirementIdentity";
+import { sanitizeOnboardingReturnPath } from "./orientationGate";
 import type {
   Certification,
   RequirementDefinition,
@@ -49,7 +53,11 @@ const KIND_LABEL: Record<RequirementDefinition["kind"], string> = {
 const capabilityLabel = (value: string) =>
   value
     .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .map(
+      (part) =>
+        ({ po: "PO", doa: "DOA", rbac: "RBAC", rfp: "RFP" })[part] ??
+        part.charAt(0).toUpperCase() + part.slice(1),
+    )
     .join(" ");
 
 // Published role_curricula verified on UAT, 2026-09-06. These are presentation
@@ -81,25 +89,36 @@ const publishedRoles = [
   "core.vendor_portal",
 ];
 
-function certificationContext(certification: Certification): string {
-  const module = MODULES[certification.capability.module];
-  const curriculum = ROLE_CURRICULA.find(
+function curriculumScope(
+  curriculumId: string,
+  curriculumVersion: number,
+  moduleId?: string,
+) {
+  return ROLE_CURRICULA.find(
     (item) =>
-      item.module === certification.capability.module &&
-      ((item.id === certification.curriculumId &&
-        item.version === certification.curriculumVersion) ||
+      (!moduleId || item.module === moduleId) &&
+      ((item.id === curriculumId && item.version === curriculumVersion) ||
         (publishedRoles.includes(`${item.module}.${item.role}`) &&
-          certification.curriculumId ===
+          curriculumId ===
             `${item.audience}.role.${item.module}.${item.role}.capability-practice.v1.curriculum` &&
-          (certification.curriculumVersion === 1 ||
+          (curriculumVersion === 1 ||
             (item.module === "warehouse" &&
               item.role === "marketing" &&
-              certification.curriculumVersion === 2))) ||
+              curriculumVersion === 2))) ||
         (item.module === "warehouse" &&
           item.role === "warehouse_operator" &&
-          certification.curriculumId ===
+          curriculumId ===
             "internal.warehouse.warehouse_operator.receiving-certification.v1" &&
-          certification.curriculumVersion === 1)),
+          curriculumVersion === 1)),
+  );
+}
+
+function certificationContext(certification: Certification): string {
+  const module = MODULES[certification.capability.module];
+  const curriculum = curriculumScope(
+    certification.curriculumId,
+    certification.curriculumVersion,
+    certification.capability.module,
   );
   const role = curriculum
     ? Object.entries(module.roles).find(([key]) => key === curriculum.role)?.[1]
@@ -113,6 +132,23 @@ const lockLabel = (reason: string) =>
     : reason === "expired_certification"
       ? "Certification expired"
       : "Certification required";
+
+function vendorReturnPath(value: string | null): string {
+  if (!value) return "/vendor";
+  const url = new URL(value, "https://onboarding.invalid");
+  const path = url.pathname;
+  // Reject encoded path separators and traversal; query and fragment stay intact.
+  if (
+    url.origin !== "https://onboarding.invalid" ||
+    /[%\\]/.test(path) ||
+    [...path].some((character) => character.charCodeAt(0) <= 32) ||
+    !(path === "/vendor" || path.startsWith("/vendor/")) ||
+    path === "/vendor/onboarding" ||
+    path.startsWith("/vendor/onboarding/")
+  )
+    return "/vendor";
+  return `${path}${url.search}${url.hash}`;
+}
 
 function RequirementAction({
   requirement,
@@ -172,10 +208,22 @@ function RequirementAction({
 
 export function OnboardingCenter({
   audience = "internal",
+  selectedTask,
 }: {
   audience?: "internal" | "vendor";
+  selectedTask?: SelectedLearningTask;
 }) {
-  const { profile } = useSession();
+  const { profile, userRoles } = useSession();
+  const assignedScopes = Object.entries(MODULES).flatMap(([moduleId, module]) =>
+    Object.entries(module.roles).flatMap(([roleId, role]) =>
+      (
+        userRoles?.[moduleId as keyof typeof MODULES] as
+          readonly string[] | undefined
+      )?.includes(roleId)
+        ? [{ moduleId, roleId, label: `${module.label} / ${role.label}` }]
+        : [],
+    ),
+  );
   const {
     snapshot,
     loading,
@@ -196,10 +244,29 @@ export function OnboardingCenter({
   const router = useRouter();
   const searchParams = useSearchParams();
   const requestedRequirementId = searchParams.get("requirement");
-  const returnPath = sanitizeOnboardingReturnPath(searchParams.get("next"));
+  const requestedReturnPath = sanitizeOnboardingReturnPath(
+    searchParams.get("next"),
+  );
+  const returnPath =
+    audience === "vendor"
+      ? vendorReturnPath(requestedReturnPath)
+      : requestedReturnPath &&
+          !requestedReturnPath.startsWith("/onboarding") &&
+          !requestedReturnPath.startsWith("/vendor")
+        ? requestedReturnPath
+        : "/work";
   const requiredHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const trainingWasActive = useRef(false);
   const focusedRequirementRef = useRef<string | null>(null);
+  const taskProjection = selectedTask
+    ? projectTaskLearning(
+        snapshot,
+        audience,
+        selectedTask.actionCapabilities,
+        stale || Boolean(error) || loading,
+      )
+    : null;
+  const ChecklistContainer = selectedTask ? "details" : "div";
 
   useEffect(() => {
     if (!activeTraining) return;
@@ -220,48 +287,62 @@ export function OnboardingCenter({
         launcher.focus();
         return;
       }
-      requiredHeadingRef.current?.focus();
+      if (selectedTask) {
+        document
+          .querySelector<HTMLElement>(
+            "[data-onboarding-anchor='onboarding-required-steps']",
+          )
+          ?.focus();
+      } else requiredHeadingRef.current?.focus();
     });
-  }, [activeTraining]);
+  }, [activeTraining, selectedTask]);
 
   const view = useMemo(() => {
     const requirements = new Map<string, RequirementDefinition>();
     const allRequirements = new Map<string, RequirementDefinition>();
     const sharedRequirements = new Set<string>();
-    const personaIds = new Set<string>();
     for (const effective of snapshot?.curricula ?? []) {
       if (effective.curriculum.audience !== audience) continue;
-      personaIds.add(effective.curriculum.personaId);
       for (const requirement of effective.requirements) {
+        if (requirement.audience !== audience) continue;
         allRequirements.set(requirement.id, requirement);
         const sharedKey = sharedCompletionKey(requirement);
         if (sharedRequirements.has(sharedKey)) continue;
         sharedRequirements.add(sharedKey);
-        requirements.set(requirement.id, requirement);
+        requirements.set(sharedKey, requirement);
       }
     }
     const progress = new Map(
-      (snapshot?.progress ?? []).map((item) => [item.requirementId, item]),
+      [...requirements.values()].map((item) => [
+        sharedCompletionKey(item),
+        requirementProgress(item, snapshot?.progress ?? []),
+      ]),
     );
     const completedSharedKeys = new Set(
       [...progress.values()].flatMap((item) => {
-        if (!["passed", "waived"].includes(item.state)) return [];
-        const requirement = allRequirements.get(item.requirementId);
-        return requirement ? [sharedCompletionKey(requirement)] : [];
+        if (!item || !["passed", "waived"].includes(item.state)) return [];
+        const requirement = [...requirements.values()].find(
+          (candidate) =>
+            candidate.id === item.requirementId &&
+            candidate.version === item.requirementVersion,
+        );
+        return requirement && requirement.version === item.requirementVersion
+          ? [sharedCompletionKey(requirement)]
+          : [];
       }),
     );
     const required = [...requirements.values()].filter(
       (item) => item.mandatory,
     );
     const completed = required.filter((item) =>
-      ["passed", "waived"].includes(progress.get(item.id)?.state ?? ""),
+      ["passed", "waived"].includes(
+        progress.get(sharedCompletionKey(item))?.state ?? "",
+      ),
     ).length;
-    const personas = OPERATING_PERSONAS.filter((item) =>
-      personaIds.has(item.id),
-    );
     const ordered = [...requirements.values()].sort((left, right) => {
       const rank = (item: RequirementDefinition) => {
-        const state = progress.get(item.id)?.state ?? "not_started";
+        const state =
+          progress.get(sharedCompletionKey(item))?.state ?? "not_started";
         return state === "in_progress"
           ? 0
           : state === "failed_retryable"
@@ -281,7 +362,6 @@ export function OnboardingCenter({
       progress,
       required,
       completed,
-      personas,
     };
   }, [audience, snapshot]);
 
@@ -369,7 +449,7 @@ export function OnboardingCenter({
     );
   }
 
-  if (!snapshot && error) {
+  if (!snapshot) {
     return (
       <div
         role="alert"
@@ -382,7 +462,9 @@ export function OnboardingCenter({
         <h1 className="mt-4 font-display text-2xl font-bold text-ink">
           Onboarding unavailable
         </h1>
-        <p className="mt-2 text-sm text-muted">{error}</p>
+        <p className="mt-2 text-sm text-muted">
+          {error ?? "Current learning status could not be confirmed."}
+        </p>
         <Button
           variant="outline"
           className="mt-6"
@@ -395,7 +477,7 @@ export function OnboardingCenter({
     );
   }
 
-  if (!snapshot || view.requirements.length === 0) {
+  if (view.requirements.length === 0 && !selectedTask) {
     return (
       <div className="mx-auto max-w-2xl border-y border-line py-10 text-center">
         <Icon name="clipboard" className="mx-auto h-8 w-8 text-brand-600" />
@@ -403,18 +485,61 @@ export function OnboardingCenter({
           No onboarding assigned yet
         </h1>
         <p className="mt-2 text-sm text-muted">
-          You can continue exploring read-only areas while your role curriculum
-          is assigned.
+          Your authorized workspace remains available. Learning requirements
+          apply to the actions that need them.
         </p>
-        <Link href="/knowledge" className="btn-outline mt-6 inline-flex">
-          Open Knowledge Base
+        <Link href={returnPath} className="btn-outline mt-6 inline-flex">
+          Return to workspace
         </Link>
       </div>
     );
   }
 
+  const assignedContextFor = (requirement: RequirementDefinition) =>
+    [
+      ...new Set(
+        snapshot.curricula
+          .filter(
+            (effective) =>
+              effective.curriculum.audience === audience &&
+              effective.requirements.some(
+                (item) =>
+                  sharedCompletionKey(item) ===
+                  sharedCompletionKey(requirement),
+              ),
+          )
+          .flatMap((effective) => {
+            const scope = curriculumScope(
+              effective.curriculum.id,
+              effective.curriculum.version,
+            );
+            if (scope && scope.audience === audience) {
+              const role = Object.entries(MODULES[scope.module].roles).find(
+                ([id]) => id === scope.role,
+              )?.[1];
+              return role
+                ? [`${MODULES[scope.module].label} / ${role.label}`]
+                : [];
+            }
+            return assignedScopes
+              .filter((assigned) =>
+                ROLE_CURRICULA.some(
+                  (item) =>
+                    item.module === assigned.moduleId &&
+                    item.role === assigned.roleId &&
+                    item.audience === audience &&
+                    item.requirementIds.includes(requirement.id),
+                ),
+              )
+              .map((item) => item.label);
+          }),
+      ),
+    ].join("; ") || "Assigned learning";
+
   const unavailableReasonFor = (requirement: RequirementDefinition) => {
-    const state = view.progress.get(requirement.id)?.state;
+    if (taskProjection?.status === "unavailable")
+      return "Refresh task learning status before starting";
+    const state = view.progress.get(sharedCompletionKey(requirement))?.state;
     if (state === "expired") return "Ask your manager to reassign this step";
     if (
       requirement.kind === "assessment" &&
@@ -434,7 +559,10 @@ export function OnboardingCenter({
       return "Guided practice is being prepared";
     }
     const incomplete = requirement.prerequisiteIds.find((requirementId) => {
-      const prerequisiteState = view.progress.get(requirementId)?.state;
+      const prerequisiteDefinition = view.allRequirements.get(requirementId);
+      const prerequisiteState = prerequisiteDefinition
+        ? view.progress.get(sharedCompletionKey(prerequisiteDefinition))?.state
+        : undefined;
       if (["passed", "waived"].includes(prerequisiteState ?? "")) {
         return false;
       }
@@ -451,13 +579,14 @@ export function OnboardingCenter({
     return `Complete ${title ?? "the required previous step"} first`;
   };
   const next = view.requirements.find((requirement) => {
-    const state = view.progress.get(requirement.id)?.state ?? "not_started";
+    const state =
+      view.progress.get(sharedCompletionKey(requirement))?.state ??
+      "not_started";
     return (
       !["passed", "waived", "needs_support", "expired"].includes(state) &&
       !unavailableReasonFor(requirement)
     );
   });
-  const orientation = roleOrientationState(snapshot);
   const returnLabel = returnPath
     ? returnPath === "/work"
       ? "My Work"
@@ -485,7 +614,9 @@ export function OnboardingCenter({
     ? view.requirements.find((item) => item.id === activeActivity.requirementId)
     : undefined;
   const activityProgress = activeActivity
-    ? view.progress.get(activeActivity.requirementId)
+    ? activityRequirement
+      ? view.progress.get(sharedCompletionKey(activityRequirement))
+      : undefined
     : undefined;
   const assessmentQuestions =
     activeActivity?.kind === "assessment"
@@ -547,7 +678,11 @@ export function OnboardingCenter({
           />
         )}
       <header
-        className="border-b border-line pb-5"
+        className={
+          selectedTask
+            ? "border-b border-line pb-3"
+            : "border-b border-line pb-5"
+        }
         data-onboarding-anchor="onboarding-role-context"
       >
         <p className="text-xs font-semibold uppercase text-brand-700 dark:text-brand-300">
@@ -555,17 +690,36 @@ export function OnboardingCenter({
             ? "Accreditation and access"
             : "Learning and access"}
         </p>
-        <h1 className="mt-1 font-display text-2xl font-bold text-ink sm:text-3xl">
+        <h1
+          className={
+            selectedTask
+              ? "mt-1 font-display text-xl font-bold text-ink"
+              : "mt-1 font-display text-2xl font-bold text-ink sm:text-3xl"
+          }
+        >
           {audience === "vendor" ? "Vendor onboarding" : "Role onboarding"}
         </h1>
-        <p className="mt-2 max-w-3xl text-sm text-muted">
-          Practice the work your role performs. Live actions unlock only after
-          the required controls are complete.
-        </p>
-        <div className="mt-4 flex flex-wrap gap-2">
-          {view.personas.map((persona) => (
-            <Badge key={persona.id} tone="brand">
-              {persona.label}
+        {audience === "vendor" && profile?.name && (
+          <p className="mt-2 min-w-0 break-words text-sm font-semibold text-ink [overflow-wrap:anywhere]">
+            {profile.name}
+          </p>
+        )}
+        {!selectedTask && (
+          <p className="mt-2 max-w-3xl text-sm text-muted">
+            Continue your authorized work while you learn. Only actions with
+            required learning wait for completion; your permissions still apply.
+          </p>
+        )}
+        <div
+          className={
+            selectedTask
+              ? "mt-2 flex flex-wrap gap-2"
+              : "mt-4 flex flex-wrap gap-2"
+          }
+        >
+          {assignedScopes.map((scope) => (
+            <Badge key={`${scope.moduleId}:${scope.roleId}`} tone="brand">
+              {scope.label}
             </Badge>
           ))}
         </div>
@@ -603,23 +757,75 @@ export function OnboardingCenter({
         </div>
       )}
 
+      {selectedTask && taskProjection && (
+        <TaskLearningSummary
+          task={selectedTask}
+          projection={taskProjection}
+          renderRequirement={(requirement) => (
+            <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="break-words text-sm font-semibold text-ink">
+                  {requirement.title}
+                </p>
+                <p className="mt-1 text-xs text-muted">
+                  Assigned to: {assignedContextFor(requirement)} | Version{" "}
+                  {requirement.version}
+                </p>
+                <p className="text-xs text-muted">
+                  {
+                    STATUS_LABEL[
+                      view.progress.get(sharedCompletionKey(requirement))
+                        ?.state ?? "not_started"
+                    ]
+                  }
+                </p>
+              </div>
+              <RequirementAction
+                requirement={requirement}
+                progress={view.progress.get(sharedCompletionKey(requirement))}
+                unavailableReason={
+                  startingRequirementId === requirement.id
+                    ? "Starting your governed attempt"
+                    : unavailableReasonFor(requirement)
+                }
+                onResume={(launcher) => {
+                  launcherRef.current = launcher;
+                  void resume(requirement.id);
+                }}
+              />
+            </div>
+          )}
+        />
+      )}
+
       <section className="border-b border-line py-5">
+        {selectedTask && (
+          <p className="mb-2 text-xs font-semibold text-muted">
+            All assigned mandatory learning
+          </p>
+        )}
         <OnboardingProgress
           completed={view.completed}
           total={view.required.length}
         />
-        {audience === "internal" && returnPath && orientation.complete && (
-          <div className="mt-5 flex flex-col gap-3 border-l-4 border-emerald-500 bg-emerald-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+        {returnPath && (
+          <div
+            className={
+              selectedTask
+                ? "mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+                : "mt-5 flex flex-col gap-3 border-l-4 border-emerald-500 bg-emerald-500/5 p-4 sm:flex-row sm:items-center sm:justify-between"
+            }
+          >
             <div>
               <p className="text-xs font-semibold uppercase text-emerald-700 dark:text-emerald-300">
-                Role orientation complete
+                Workspace access
               </p>
               <p className="mt-1 font-display text-base font-bold text-ink">
-                {returnLabel} is ready
+                Continue your authorized work
               </p>
               <p className="mt-1 text-sm text-muted">
-                You may enter the module now. Remaining learning continues to
-                govern its specific live actions.
+                You can return before finishing this checklist. Requirements
+                still apply to their specific actions.
               </p>
             </div>
             <a
@@ -631,7 +837,7 @@ export function OnboardingCenter({
             </a>
           </div>
         )}
-        {next && (
+        {next && !selectedTask && (
           <div className="mt-5 flex flex-col gap-3 border-l-4 border-brand-500 bg-brand-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase text-brand-700 dark:text-brand-300">
@@ -640,6 +846,9 @@ export function OnboardingCenter({
               <p className="mt-1 font-display text-base font-bold text-ink">
                 {next.title}
               </p>
+              <p className="mt-1 text-xs text-muted">
+                Assigned to: {assignedContextFor(next)}
+              </p>
               <p className="mt-1 text-sm text-muted">
                 {KIND_LABEL[next.kind]} |{" "}
                 {next.mandatory ? "Required" : "Optional"}
@@ -647,7 +856,7 @@ export function OnboardingCenter({
             </div>
             <RequirementAction
               requirement={next}
-              progress={view.progress.get(next.id)}
+              progress={view.progress.get(sharedCompletionKey(next))}
               unavailableReason={
                 startingRequirementId === next.id
                   ? "Starting your governed attempt"
@@ -662,195 +871,216 @@ export function OnboardingCenter({
         )}
       </section>
 
-      <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        <section
-          className="py-6 lg:pr-8"
-          aria-labelledby="required-learning-heading"
-          data-onboarding-anchor="onboarding-required-steps"
-        >
-          <div className="mb-3">
-            <h2
-              id="required-learning-heading"
-              ref={requiredHeadingRef}
-              tabIndex={-1}
-              className="font-display text-lg font-bold text-ink outline-none"
-            >
-              Your required steps
-            </h2>
-            <p className="text-sm text-muted">
-              Complete these in order. Shared requirements appear once.
-            </p>
-          </div>
-          <ol className="border-t border-line">
-            {view.requirements.map((requirement, index) => {
-              const progress = view.progress.get(requirement.id);
-              return (
-                <li
-                  key={requirement.id}
-                  id={`onboarding-requirement-${encodeURIComponent(requirement.id)}`}
-                  tabIndex={-1}
-                  aria-current={
-                    requestedRequirementId === requirement.id
-                      ? "step"
-                      : undefined
-                  }
-                  className={
-                    requestedRequirementId === requirement.id
-                      ? "grid gap-3 border-b border-brand-400 bg-brand-500/5 px-3 py-4 outline-none sm:grid-cols-[2rem_minmax(0,1fr)_auto] sm:items-center"
-                      : "grid gap-3 border-b border-line py-4 outline-none sm:grid-cols-[2rem_minmax(0,1fr)_auto] sm:items-center"
-                  }
-                >
-                  <span className="tnum grid h-8 w-8 place-items-center rounded-full border border-line text-xs font-bold text-muted">
-                    {index + 1}
-                  </span>
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="font-semibold text-ink">
-                        {requirement.title}
-                      </h3>
-                      <Badge
-                        tone={
-                          progress?.state === "passed"
-                            ? "emerald"
-                            : progress?.state === "needs_support"
-                              ? "rose"
-                              : "slate"
-                        }
-                      >
-                        {STATUS_LABEL[progress?.state ?? "not_started"]}
-                      </Badge>
-                    </div>
-                    <p className="mt-1 text-sm text-muted">
-                      {KIND_LABEL[requirement.kind]}
-                      {requirement.maxAttempts
-                        ? ` | ${progress?.attemptCount ?? 0} of ${requirement.maxAttempts} attempts used`
-                        : ""}
-                    </p>
-                  </div>
-                  {requirement.id === next?.id ? (
-                    <span className="text-sm font-semibold text-brand-700 dark:text-brand-300">
-                      Continue above
-                    </span>
-                  ) : (
-                    <RequirementAction
-                      requirement={requirement}
-                      progress={progress}
-                      unavailableReason={unavailableReasonFor(requirement)}
-                      onResume={(launcher) => {
-                        launcherRef.current = launcher;
-                        void resume(requirement.id);
-                      }}
-                    />
-                  )}
-                </li>
-              );
-            })}
-          </ol>
-        </section>
-
-        <aside
-          className="border-t border-line py-6 lg:border-l lg:border-t-0 lg:pl-8"
-          aria-label="Access outcomes"
-        >
-          <section>
-            <h2 className="font-display text-base font-bold text-ink">
-              Access outcomes
-            </h2>
-            {snapshot.lockedCapabilities.length > 0 ? (
-              <ul className="mt-3 space-y-3">
-                {snapshot.lockedCapabilities.map((lock) => (
+      <ChecklistContainer
+        open={selectedTask ? Boolean(requestedRequirementId) : undefined}
+        className="group"
+      >
+        {selectedTask && (
+          <summary className="min-h-11 cursor-pointer border-b border-line py-3 text-sm font-semibold text-ink">
+            All assigned learning
+          </summary>
+        )}
+        <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_20rem]">
+          <section
+            className="py-6 lg:pr-8"
+            aria-labelledby="required-learning-heading"
+            data-onboarding-anchor={
+              selectedTask ? undefined : "onboarding-required-steps"
+            }
+          >
+            <div className="mb-3">
+              <h2
+                id="required-learning-heading"
+                ref={requiredHeadingRef}
+                tabIndex={-1}
+                className="font-display text-lg font-bold text-ink outline-none"
+              >
+                Your required steps
+              </h2>
+              <p className="text-sm text-muted">
+                Assigned learning across your roles. Matching requirements
+                appear once; prerequisites apply only where required.
+              </p>
+            </div>
+            <ol className="border-t border-line">
+              {view.requirements.map((requirement, index) => {
+                const progress = view.progress.get(
+                  sharedCompletionKey(requirement),
+                );
+                return (
                   <li
-                    key={`${lock.capability.module}:${lock.capability.capability}`}
-                    className="border-l-2 border-amber-500 pl-3"
+                    key={sharedCompletionKey(requirement)}
+                    id={`onboarding-requirement-${encodeURIComponent(requirement.id)}`}
+                    tabIndex={-1}
+                    aria-current={
+                      requestedRequirementId === requirement.id
+                        ? "step"
+                        : undefined
+                    }
+                    className={
+                      requestedRequirementId === requirement.id
+                        ? "grid gap-3 border-b border-brand-400 bg-brand-500/5 px-3 py-4 outline-none sm:grid-cols-[2rem_minmax(0,1fr)_auto] sm:items-center"
+                        : "grid gap-3 border-b border-line py-4 outline-none sm:grid-cols-[2rem_minmax(0,1fr)_auto] sm:items-center"
+                    }
                   >
-                    <p className="font-semibold text-ink">
-                      {capabilityLabel(lock.capability.capability)}
-                    </p>
-                    <p className="text-sm text-muted">
-                      {lockLabel(lock.reason)}
-                    </p>
-                    {lock.canRequestEmergencyException && (
-                      <p className="mt-1 text-xs font-semibold text-amber-800 dark:text-amber-300">
-                        Temporary emergency access
+                    <span className="tnum grid h-8 w-8 place-items-center rounded-full border border-line text-xs font-bold text-muted">
+                      {index + 1}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="font-semibold text-ink">
+                          {requirement.title}
+                        </h3>
+                        <Badge
+                          tone={
+                            progress?.state === "passed"
+                              ? "emerald"
+                              : progress?.state === "needs_support"
+                                ? "rose"
+                                : "slate"
+                          }
+                        >
+                          {STATUS_LABEL[progress?.state ?? "not_started"]}
+                        </Badge>
+                      </div>
+                      <p className="mt-1 text-xs text-muted">
+                        Assigned to: {assignedContextFor(requirement)}
                       </p>
+                      <p className="mt-1 text-sm text-muted">
+                        {KIND_LABEL[requirement.kind]} | Version{" "}
+                        {requirement.version}
+                        {requirement.maxAttempts
+                          ? ` | ${progress?.attemptCount ?? 0} of ${requirement.maxAttempts} attempts used`
+                          : ""}
+                      </p>
+                    </div>
+                    {requirement.id === next?.id && !selectedTask ? (
+                      <span className="text-sm font-semibold text-brand-700 dark:text-brand-300">
+                        Continue above
+                      </span>
+                    ) : (
+                      <RequirementAction
+                        requirement={requirement}
+                        progress={progress}
+                        unavailableReason={unavailableReasonFor(requirement)}
+                        onResume={(launcher) => {
+                          launcherRef.current = launcher;
+                          void resume(requirement.id);
+                        }}
+                      />
                     )}
                   </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="mt-2 text-sm text-muted">
-                No capabilities are waiting on onboarding.
-              </p>
-            )}
+                );
+              })}
+            </ol>
           </section>
 
-          <section className="mt-6 border-t border-line pt-6">
-            <h2 className="font-display text-base font-bold text-ink">
-              Certifications
-            </h2>
-            {activeCertifications.length > 0 ? (
-              <ul className="mt-3 space-y-3">
-                {activeCertifications.map((certification) => (
-                  <li key={certification.id}>
-                    <p className="font-semibold text-emerald-700 dark:text-emerald-300">
-                      Certification active
-                    </p>
-                    <p className="text-sm text-ink">
-                      {capabilityLabel(certification.capability.capability)}
-                    </p>
-                    <p className="break-words text-xs text-muted">
-                      {certificationContext(certification)}
-                    </p>
-                    {certification.expiresAt && (
-                      <p className="text-xs text-muted">
-                        Valid until{" "}
-                        {new Intl.DateTimeFormat("en-PH", {
-                          dateStyle: "medium",
-                        }).format(new Date(certification.expiresAt))}
+          <aside
+            className="border-t border-line py-6 lg:border-l lg:border-t-0 lg:pl-8"
+            aria-label="Action readiness"
+          >
+            <section>
+              <h2 className="font-display text-base font-bold text-ink">
+                Action readiness
+              </h2>
+              {snapshot.lockedCapabilities.length > 0 ? (
+                <ul className="mt-3 space-y-3">
+                  {snapshot.lockedCapabilities.map((lock) => (
+                    <li
+                      key={`${lock.capability.module}:${lock.capability.capability}`}
+                      className="border-l-2 border-amber-500 pl-3"
+                    >
+                      <p className="font-semibold text-ink">
+                        {MODULES[lock.capability.module].label} /{" "}
+                        {capabilityLabel(lock.capability.capability)}
                       </p>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            ) : inactiveCertifications.length === 0 ? (
-              <p className="mt-2 text-sm text-muted">
-                Complete your first capability path to earn certification.
-              </p>
-            ) : null}
-            {inactiveCertifications.length > 0 && (
-              <ul className="mt-4 space-y-3 border-t border-line pt-4">
-                {inactiveCertifications.map((certification) => (
-                  <li key={certification.id}>
-                    <p className="font-semibold text-amber-800 dark:text-amber-300">
-                      {certification.revokedAt
-                        ? "Certification revoked"
-                        : certification.supersededAt
-                          ? "Certification superseded"
-                          : "Certification expired"}
-                    </p>
-                    <p className="text-sm text-ink">
-                      {capabilityLabel(certification.capability.capability)}
-                    </p>
-                    <p className="break-words text-xs text-muted">
-                      {certificationContext(certification)}
-                    </p>
-                    {certification.expiresAt &&
-                      !certification.revokedAt &&
-                      !certification.supersededAt && (
+                      <p className="text-sm text-muted">
+                        {lockLabel(lock.reason)}
+                      </p>
+                      {lock.canRequestEmergencyException && (
+                        <p className="mt-1 text-xs font-semibold text-amber-800 dark:text-amber-300">
+                          Temporary emergency access
+                        </p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-2 text-sm text-muted">
+                  No actions are waiting on learning. Existing permissions still
+                  apply.
+                </p>
+              )}
+            </section>
+
+            <section className="mt-6 border-t border-line pt-6">
+              <h2 className="font-display text-base font-bold text-ink">
+                Certifications
+              </h2>
+              {activeCertifications.length > 0 ? (
+                <ul className="mt-3 space-y-3">
+                  {activeCertifications.map((certification) => (
+                    <li key={certification.id}>
+                      <p className="font-semibold text-emerald-700 dark:text-emerald-300">
+                        Certification active
+                      </p>
+                      <p className="text-sm text-ink">
+                        {capabilityLabel(certification.capability.capability)}
+                      </p>
+                      <p className="break-words text-xs text-muted">
+                        {certificationContext(certification)}
+                      </p>
+                      {certification.expiresAt && (
                         <p className="text-xs text-muted">
-                          Expired{" "}
+                          Valid until{" "}
                           {new Intl.DateTimeFormat("en-PH", {
                             dateStyle: "medium",
                           }).format(new Date(certification.expiresAt))}
                         </p>
                       )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        </aside>
-      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : inactiveCertifications.length === 0 ? (
+                <p className="mt-2 text-sm text-muted">
+                  Complete your first capability path to earn certification.
+                </p>
+              ) : null}
+              {inactiveCertifications.length > 0 && (
+                <ul className="mt-4 space-y-3 border-t border-line pt-4">
+                  {inactiveCertifications.map((certification) => (
+                    <li key={certification.id}>
+                      <p className="font-semibold text-amber-800 dark:text-amber-300">
+                        {certification.revokedAt
+                          ? "Certification revoked"
+                          : certification.supersededAt
+                            ? "Certification superseded"
+                            : "Certification expired"}
+                      </p>
+                      <p className="text-sm text-ink">
+                        {capabilityLabel(certification.capability.capability)}
+                      </p>
+                      <p className="break-words text-xs text-muted">
+                        {certificationContext(certification)}
+                      </p>
+                      {certification.expiresAt &&
+                        !certification.revokedAt &&
+                        !certification.supersededAt && (
+                          <p className="text-xs text-muted">
+                            Expired{" "}
+                            {new Intl.DateTimeFormat("en-PH", {
+                              dateStyle: "medium",
+                            }).format(new Date(certification.expiresAt))}
+                          </p>
+                        )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </aside>
+        </div>
+      </ChecklistContainer>
     </div>
   );
 }

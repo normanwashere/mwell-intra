@@ -655,7 +655,7 @@ const definitions: FeatureDefinition[] = [
     route: "/onboarding",
     roleIds: CURRENT_ROLE_IDS.filter((roleId) => roleId !== "vendor_portal"),
     purpose:
-      "Shows every module assigned to the employee while guiding each employee through role-specific first-time orientation before operational entry. Later policy, practice, assessment, and attestation requirements restrict only the live actions they govern. Practices without a simulation use a completable guided review, and demo completion persists by profile and role bundle.",
+      "Uses one learning checklist across assigned roles. Open any currently authorized workspace without completing unrelated onboarding first. Required orientation, policy, practice, assessment, and attestation evidence still governs the associated live actions. Shared learning is grouped only by approved requirement identity; separate role authority and policy versions remain distinct. Practices without a simulation use a guided review, and demo completion persists by profile and role bundle.",
     reads:
       "Current scoped role assignments, effective curricula, requirement progress, capability locks, support state, and certification evidence. Certification entries name their module and canonical curriculum role using exact known curriculum identities and versions, including published capability-practice and receiving curricula. Similar capability names may represent separate grants; entries are not merged. Role context unavailable means that curriculum identity or version cannot be matched safely; ask the role owner rather than assuming another permission was granted. Labels do not change active, expired, revoked, or superseded status.",
     writes:
@@ -663,9 +663,9 @@ const definitions: FeatureDefinition[] = [
     statuses:
       "Loading, not assigned, not started, in progress, retryable, needs support, complete, expired, waived, stale, or certification active.",
     exception:
-      "Knowledge Base and onboarding remain available while module entry is locked. Scroll inside a long training coach on desktop or mobile to read rejection feedback and reach Back, Resume later, or Exit training. A rejected choice keeps the checkpoint open. Refresh stale status, use the support route after exhausted attempts, and contact the role owner when no curriculum is assigned.",
+      "Incomplete or unavailable learning does not redirect the whole workspace. A governed action remains blocked until its requirements and current access are verified. Resume onboarding from an action opens the assigned learning in a new tab, keeping the original form open; return and select Refresh access after completion. Scroll inside a long coach to reach feedback and recovery controls. A rejected choice keeps the checkpoint open. Contact the role owner for missing assignments; learning never grants an unassigned permission.",
     completionEvidence:
-      "Mandatory orientation shows complete or waived and the employee can use the explicit Continue to module action. Any remaining capability-specific learning stays visible until its governed action is unlocked.",
+      "The learning service records the required evidence and current capability readiness. Returning to a workspace is not proof of certification. Any remaining action-specific requirements stay visible, and the server rechecks permission, certification, and transaction controls when work is submitted.",
   },
   {
     id: "vendor-onboarding",
@@ -674,7 +674,7 @@ const definitions: FeatureDefinition[] = [
     route: "/vendor/onboarding",
     roleIds: ["vendor_portal"],
     purpose:
-      "Keeps accreditation orientation, evidence expectations, and vendor-specific readiness separate from internal employee training.",
+      "Uses the same checklist and guided-practice experience as employee onboarding, with only the vendor's assigned accreditation orientation, evidence expectations, and readiness. Shared presentation does not merge vendor and internal authority.",
     reads:
       "Only the authenticated vendor's assigned curriculum, progress, capability locks, and certification evidence.",
     writes:

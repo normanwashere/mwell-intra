@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Badge, Icon } from "@intra/ui";
@@ -37,7 +38,7 @@ export function StepWorkspace({
     assignedRoleIds.includes(roleId),
   );
   const returnTo = `/knowledge${params.size ? `?${params}` : ""}`;
-  const liveRoute = evidence?.route
+  const liveRoute = flow.availability !== "coming_soon" && evidence?.route
     ? guidedEvidenceRoute(evidence.route, node.id, returnTo)
     : null;
   const branches = outgoingEdges(flow, node.id);
@@ -51,10 +52,7 @@ export function StepWorkspace({
       aria-labelledby="step-workspace-title"
       className="border-t border-line pt-6"
     >
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(20rem,.85fr)]">
-        <div className="min-w-0">
-          <EvidenceViewer evidence={evidence} node={node} />
-        </div>
+      <div className="space-y-6">
         <div className="min-w-0">
           <div className="flex flex-wrap gap-2">
             <Badge
@@ -90,6 +88,9 @@ export function StepWorkspace({
               <p className="mt-1 text-sm text-muted">{node.prerequisite}</p>
             </div>
           )}
+          <div className="mt-5">
+            <EvidenceViewer evidence={evidence} node={node} />
+          </div>
           {node.outcome && (
             <div className="mt-5 border-l-4 border-emerald-500 pl-4">
               <p className="text-xs font-semibold uppercase text-emerald-700">
@@ -99,12 +100,12 @@ export function StepWorkspace({
             </div>
           )}
           {node.databaseEffect && (
-            <div className="mt-5 border-l-4 border-cyan-500 pl-4">
-              <p className="text-xs font-semibold uppercase text-cyan-700">
+            <details className="mt-5 border-l-4 border-cyan-500 pl-4">
+              <summary className="min-h-11 cursor-pointer text-sm font-semibold text-cyan-700">
                 Database effect
-              </p>
+              </summary>
               <p className="mt-1 text-sm text-muted">{node.databaseEffect}</p>
-            </div>
+            </details>
           )}
           {node.exception && (
             <div className="mt-5 border-l-4 border-amber-500 pl-4">
@@ -129,8 +130,8 @@ export function StepWorkspace({
                     onClick={() => selectEdge(edge)}
                     className={`flex min-h-11 items-center justify-between gap-3 border px-3 py-2 text-left text-sm font-semibold ${edge.outcome === "exception" ? "border-rose-300 bg-rose-50 text-rose-800" : "border-line bg-surface text-ink hover:border-brand-400"}`}
                   >
-                    <span>{edge.label ?? "Next step"}</span>
-                    <Icon name="arrowRight" className="h-4 w-4" />
+                    <span className="min-w-0 break-words">{edge.label ?? "Next step"}<span className="mt-1 block text-xs font-normal">{flow.nodes.find((target) => target.id === edge.to)?.ownerRoleIds.map((id) => rolesById.get(id)?.label ?? id).join(", ")}</span></span>
+                    <Icon name="arrowRight" className="h-4 w-4 shrink-0" />
                   </button>
                 ))}
               </div>

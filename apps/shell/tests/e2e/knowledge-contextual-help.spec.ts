@@ -66,16 +66,49 @@ for (const scenario of [
     href: "/knowledge?article=feature-vendor-cases",
   },
 ] as const) {
-  test(`${scenario.name} pages expose exact contextual guidance`, async ({
+  test(`${scenario.name} pages expose exact contextual guidance${scenario.name === "vendor" ? "" : " with controlled context response"}`, async ({
     page,
   }) => {
     await setSession(page, scenario.session);
+    const requestedPaths: string[] = [];
+    if (scenario.name !== "vendor") {
+      await page.route((url) => url.pathname === "/api/knowledge/context", async (route) => {
+        const url = new URL(route.request().url());
+        expect(url.pathname).toBe("/api/knowledge/context");
+        expect(route.request().method()).toBe("GET");
+        requestedPaths.push(url.searchParams.get("path") ?? "");
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ guide: url.searchParams.get("path") === scenario.route
+            ? { title: scenario.label.replace(/^Help for /, ""), href: scenario.href }
+            : null }),
+        });
+      });
+    }
     await page.goto(scenario.route);
 
     const help = page.getByRole("link", { name: scenario.label });
     await expect(help).toBeVisible();
     await expect(help).toHaveAttribute("href", scenario.href);
+    if (scenario.name !== "vendor") expect(requestedPaths).toContain(scenario.route);
   });
+
+  if (scenario.name !== "vendor") {
+    test(`${scenario.name} memory context uses the generic knowledge fallback without server authentication`, async ({ page }) => {
+      await setSession(page, scenario.session);
+      const responsePromise = page.waitForResponse((response) => {
+        const url = new URL(response.url());
+        return url.pathname === "/api/knowledge/context" && url.searchParams.get("path") === scenario.route;
+      });
+      await page.goto(scenario.route);
+      const response = await responsePromise;
+      expect(response.status()).toBe(200);
+      expect(await response.json()).toEqual({ guide: null, unavailable: true });
+      await expect(page.getByRole("link", { name: "Open the Knowledge Base", exact: true })).toHaveAttribute("href", "/knowledge");
+      await expect(page.getByRole("link", { name: scenario.label, exact: true })).toHaveCount(0);
+    });
+  }
 }
 
 test("role capability guidance uses plain language and a specific meaning", async ({

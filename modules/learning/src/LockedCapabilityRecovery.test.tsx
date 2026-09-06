@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { LockedCapabilityRecovery } from "./LockedCapabilityRecovery";
 import { LearningContext, type LearningContextValue } from "./LearningProvider";
 
@@ -22,6 +22,8 @@ const value: LearningContextValue = {
 };
 
 describe("LockedCapabilityRecovery", () => {
+  afterEach(() => window.history.replaceState(null, "", "/"));
+
   it("distinguishes a role denial from an onboarding lock", () => {
     const { rerender } = render(
       <LearningContext.Provider value={value}>
@@ -45,8 +47,10 @@ describe("LockedCapabilityRecovery", () => {
     expect(screen.getByText("Receive and inspect controlled stock")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Resume onboarding" })).toHaveAttribute(
       "href",
-      "/onboarding?requirement=receiving",
+      "/onboarding?requirement=receiving&next=%2F",
     );
+    expect(screen.getByRole("link", { name: "Resume onboarding" })).toHaveAttribute("target", "_blank");
+    expect(screen.getByRole("button", { name: "Refresh access" })).toBeInTheDocument();
   });
 
   it("offers an explicit fail-closed access refresh", async () => {
@@ -60,5 +64,34 @@ describe("LockedCapabilityRecovery", () => {
     fireEvent.click(screen.getByRole("button", { name: "Refresh access" }));
     await waitFor(() => expect(refreshAccess).toHaveBeenCalledOnce());
     expect(screen.getByRole("alert")).toHaveTextContent("Access could not be refreshed");
+  });
+
+  it("preserves the complete source location without navigating the original form", () => {
+    window.history.replaceState(null, "", "/warehouse/receiving?receipt=123#inspection");
+    render(
+      <LearningContext.Provider value={value}>
+        <LockedCapabilityRecovery module="warehouse" capability="receive_stock" reason="training" requirementIds={["receiving"]} />
+      </LearningContext.Provider>,
+    );
+    const link = screen.getByRole("link", { name: "Resume onboarding" });
+    expect(link).toHaveAttribute("href", "/onboarding?requirement=receiving&next=%2Fwarehouse%2Freceiving%3Freceipt%3D123%23inspection");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    expect(window.location.pathname).toBe("/warehouse/receiving");
+  });
+
+  it("uses the vendor route for a vendor requirement without mixing audiences", () => {
+    const curriculum = value.snapshot!.curricula[0]!;
+    render(
+      <LearningContext.Provider value={{ ...value, snapshot: {
+        ...value.snapshot!, curricula: [{
+          ...curriculum,
+          curriculum: { ...curriculum.curriculum, audience: "vendor" },
+          requirements: curriculum.requirements.map((item) => ({ ...item, audience: "vendor" as const })),
+        }],
+      } }}>
+        <LockedCapabilityRecovery module="core" capability="vendor_portal" reason="training" requirementIds={["receiving"]} />
+      </LearningContext.Provider>,
+    );
+    expect(screen.getByRole("link", { name: "Resume onboarding" })).toHaveAttribute("href", "/vendor/onboarding?requirement=receiving&next=%2F");
   });
 });

@@ -34,10 +34,9 @@ const useIsomorphicLayoutEffect =
   typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
 function useNormalizeBasenamePath(basename: string): boolean {
-  const [ready, setReady] = useState(
-    () =>
-      typeof window === 'undefined' || window.location.pathname !== basename,
-  );
+  // Next can mount this module before publishing its new browser location.
+  // Read the location after the host navigation commits, not during render.
+  const [ready, setReady] = useState(false);
 
   useIsomorphicLayoutEffect(() => {
     if (typeof window === 'undefined') return;
@@ -128,7 +127,7 @@ export function WarehouseApp({ basename = '/warehouse' }: WarehouseAppProps) {
 
   // Session still restoring → paint a lightweight skeleton instead of a
   // blank frame (or, worse, a flash of the access-denied notice).
-  if (!basenameReady || loading) {
+  if (loading) {
     return <WarehouseBootSkeleton />;
   }
 
@@ -165,6 +164,8 @@ export function WarehouseApp({ basename = '/warehouse' }: WarehouseAppProps) {
       </main>
     );
   }
+
+  if (!basenameReady) return <WarehouseBootSkeleton />;
 
   return (
     <BrowserRouter

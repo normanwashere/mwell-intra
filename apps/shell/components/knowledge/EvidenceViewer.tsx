@@ -146,7 +146,7 @@ export function EvidenceViewer({
   );
   return (
     <div>
-      <div className="flex items-center justify-between gap-3 border border-b-0 border-line bg-surface px-3 py-2">
+      <div className="flex flex-wrap items-center justify-between gap-3 border border-b-0 border-line bg-surface px-3 py-2">
         <span className="text-xs font-semibold text-muted">
           {evidence.environment === "production"
             ? "Production evidence"
@@ -155,9 +155,10 @@ export function EvidenceViewer({
               : "Demo example"}{" "}
           · Reviewed {evidence.reviewedAt}
         </span>
-        <div className="flex gap-1">
+        <div className="flex shrink-0 gap-1">
           <button
-            className="icon-btn h-11 w-11 sm:h-8 sm:w-8"
+            type="button"
+            className="icon-btn h-11 w-11 min-h-11 min-w-11 shrink-0"
             aria-label="Zoom out"
             title="Zoom out"
             disabled={zoom <= 1}
@@ -166,7 +167,8 @@ export function EvidenceViewer({
             <Icon name="minus" />
           </button>
           <button
-            className="icon-btn h-11 w-11 sm:h-8 sm:w-8"
+            type="button"
+            className="icon-btn h-11 w-11 min-h-11 min-w-11 shrink-0"
             aria-label="Reset zoom"
             title="Reset zoom"
             onClick={() => setZoom(1)}
@@ -174,7 +176,8 @@ export function EvidenceViewer({
             <Icon name="scan" />
           </button>
           <button
-            className="icon-btn h-11 w-11 sm:h-8 sm:w-8"
+            type="button"
+            className="icon-btn h-11 w-11 min-h-11 min-w-11 shrink-0"
             aria-label="Zoom in"
             title="Zoom in"
             disabled={zoom >= 2}
@@ -208,12 +211,13 @@ export function EvidenceViewer({
               type="button"
               onClick={() => setActive(hotspot.id)}
               aria-label={`${hotspot.number}. ${hotspot.label}`}
+              title={`${hotspot.number}. ${hotspot.label}`}
               aria-pressed={active === hotspot.id}
               style={{
                 left: `${(mobile ? (hotspot.mobileX ?? hotspot.x) : hotspot.x) * 100}%`,
                 top: `${(mobile ? (hotspot.mobileY ?? hotspot.y) : hotspot.y) * 100}%`,
               }}
-              className={`absolute grid h-11 w-11 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full text-xs font-bold text-white shadow-e2 ring-4 ring-white sm:h-8 sm:w-8 ${active === hotspot.id ? "bg-brand-700" : "bg-brand-500"}`}
+              className={`absolute grid h-11 w-11 min-h-11 min-w-11 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full text-xs font-bold text-white shadow-e2 ring-4 ring-white ${active === hotspot.id ? "bg-brand-700" : "bg-brand-500"}`}
             >
               {hotspot.number}
             </button>
@@ -272,7 +276,7 @@ export function EvidenceViewer({
               ref={closeButtonRef}
               type="button"
               onClick={() => setExpanded(false)}
-              className="icon-btn shrink-0"
+              className="icon-btn h-11 w-11 min-h-11 min-w-11 shrink-0"
               aria-label="Close full-screen evidence"
             >
               <Icon name="x" />
@@ -291,11 +295,13 @@ export function EvidenceViewer({
                   type="button"
                   onClick={() => setActive(hotspot.id)}
                   aria-label={`${hotspot.number}. ${hotspot.label} in full-screen evidence`}
+                  title={`${hotspot.number}. ${hotspot.label}`}
+                  aria-pressed={active === hotspot.id}
                   style={{
                     left: `${(mobile ? hotspot.mobileX : hotspot.x) * 100}%`,
                     top: `${(mobile ? hotspot.mobileY : hotspot.y) * 100}%`,
                   }}
-                  className="absolute grid h-9 w-9 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-brand-700 text-sm font-bold text-white shadow-e2 ring-4 ring-white"
+                  className="absolute grid h-11 w-11 min-h-11 min-w-11 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-brand-700 text-sm font-bold text-white shadow-e2 ring-4 ring-white"
                 >
                   {hotspot.number}
                 </button>

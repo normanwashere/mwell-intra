@@ -89,6 +89,46 @@ afterEach(() => {
 });
 
 describe("EvidenceViewer", () => {
+  it("keeps named zoom and hotspot controls at least 44px without desktop shrink overrides", async () => {
+    await act(() => root.render(<EvidenceViewer evidence={evidence} node={node} />));
+    const assertTarget = (button: HTMLButtonElement) => {
+      expect(button.getAttribute("aria-label")).toMatch(/[a-z]/i);
+      expect(button.type).toBe("button");
+      expect(button.classList.contains("min-h-11")).toBe(true);
+      expect(button.classList.contains("min-w-11")).toBe(true);
+      expect(button.classList.contains("h-11")).toBe(true);
+      expect(button.classList.contains("w-11")).toBe(true);
+      expect(button.className).not.toMatch(/(?:^|\s)(?:\w+:)*(?:h|w)-(?:8|9|10)(?:\s|$)/);
+    };
+    const inline = [...container.querySelectorAll<HTMLButtonElement>("button[aria-label]")];
+    expect(inline.map(button => button.getAttribute("aria-label"))).toEqual([
+      "Zoom out", "Reset zoom", "Zoom in", "1. Bin code", "2. Add bin",
+    ]);
+    inline.forEach(assertTarget);
+    const open = [...container.querySelectorAll("button")].find(button => button.textContent?.includes("View image full screen"))!;
+    await act(() => open.click());
+    const expanded = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')];
+    expect(expanded.map(button => button.getAttribute("aria-label"))).toEqual([
+      "Close full-screen evidence", "1. Bin code in full-screen evidence", "2. Add bin in full-screen evidence",
+    ]);
+    expanded.forEach(assertTarget);
+  });
+
+  it("preserves zoom limits, reset, and named hotspot selection", async () => {
+    await act(() => root.render(<EvidenceViewer evidence={evidence} node={node} />));
+    const get = (label: string) => container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
+    expect(get("Zoom out").disabled).toBe(true);
+    for (let index = 0; index < 4; index += 1) await act(() => get("Zoom in").click());
+    expect(get("Zoom in").disabled).toBe(true);
+    expect(container.querySelector('[role="status"]')?.textContent).toBe("Zoom 200 percent");
+    await act(() => get("Reset zoom").click());
+    expect(container.querySelector('[role="status"]')?.textContent).toBe("Zoom 100 percent");
+    await act(() => get("2. Add bin").click());
+    expect(get("2. Add bin").getAttribute("aria-pressed")).toBe("true");
+    expect(get("1. Bin code").getAttribute("aria-pressed")).toBe("false");
+    expect(container.textContent).toContain("Submit once.");
+  });
+
   it("shows ordered markers and opens an unobstructed full-screen mobile view", async () => {
     await act(() =>
       root.render(<EvidenceViewer evidence={evidence} node={node} />),

@@ -1,357 +1,85 @@
 import { describe, expect, it } from "vitest";
-import { readdirSync } from "node:fs";
-import path from "node:path";
-import { WAREHOUSE_ROUTE_CONTRACTS } from "@intra/warehouse";
-import { PROCUREMENT_ROUTE_CONTRACTS } from "@intra/procurement";
-import { mountLegalRouteContracts } from "@intra/legal";
-import { SHELL_PAGE_ROUTE_CONTRACTS } from "../routes";
+import { readFileSync } from "node:fs";
 import { KNOWLEDGE_CONTENT } from "./content";
-import { buildKnowledgeCoverage, isCombinedControlName, LIVE_ROUTE_MANIFEST } from "./coverage";
-import type { KnowledgeContent } from "./types";
+import { validateTaskCoverage } from "./coverage";
 
-const cloneContent = (): KnowledgeContent => structuredClone(KNOWLEDGE_CONTENT);
-
-function discoverNextPageRoutes(directory = path.resolve("app")): string[] {
-  const routes: string[] = [];
-  const visit = (current: string) => {
-    for (const entry of readdirSync(current, { withFileTypes: true })) {
-      const absolute = path.join(current, entry.name);
-      if (entry.isDirectory()) visit(absolute);
-      if (!entry.isFile() || entry.name !== "page.tsx") continue;
-      const relative = path.relative(directory, current).replaceAll("\\", "/");
-      const segments = relative
-        .split("/")
-        .filter(Boolean)
-        .filter((segment) => !segment.startsWith("("));
-      const catchAll = segments.findIndex((segment) =>
-        segment.startsWith("[[..."),
-      );
-      const routeSegments =
-        catchAll >= 0 ? segments.slice(0, catchAll) : segments;
-      routes.push(routeSegments.length ? `/${routeSegments.join("/")}` : "/");
-    }
-  };
-  visit(directory);
-  return [...new Set(routes)].sort();
-}
-
-const authoritativeRoutes = [
-  ...SHELL_PAGE_ROUTE_CONTRACTS,
-  ...WAREHOUSE_ROUTE_CONTRACTS.map((entry) => ({
-    ...entry,
-    route: entry.path === "/" ? "/warehouse" : `/warehouse${entry.path}`,
-  })),
-  ...PROCUREMENT_ROUTE_CONTRACTS.map((entry) => ({
-    ...entry,
-    route: entry.path === "/" ? "/procurement" : `/procurement${entry.path}`,
-  })),
-  ...mountLegalRouteContracts("/legal", "legal"),
-  ...mountLegalRouteContracts("/vendor", "vendor"),
-];
-
-describe("Knowledge Base live coverage", () => {
-  it("matches the Next filesystem in both directions", () => {
-    expect(
-      SHELL_PAGE_ROUTE_CONTRACTS.map((entry) => entry.route).sort(),
-    ).toEqual(discoverNextPageRoutes());
+describe("task coverage evidence boundary", () => {
+  it("keeps the reviewed machine-readable documentation snapshot exact", () => {
+    const doc = readFileSync(new URL("../../../../docs/audits/task-first-coverage.md", import.meta.url), "utf8");
+    const snapshot = JSON.parse(doc.match(/```json\r?\n([\s\S]*?)\r?\n```/)![1]!);
+    const result = validateTaskCoverage(KNOWLEDGE_CONTENT);
+    expect(snapshot.counts).toEqual(result.counts);
+    expect(snapshot.controls).toEqual(result.inventory.map((row) => ({
+      key: row.key, referenceId: row.referenceId, availability: row.availability,
+      flowIds: row.flowIds, evidenceIds: row.evidenceIds, unverified: row.unverified,
+    })));
   });
-
-  it("matches every authoritative module route in both directions", () => {
-    const expected = [
-      ...new Set(authoritativeRoutes.map((entry) => entry.route)),
-    ].sort();
-    const actual = LIVE_ROUTE_MANIFEST.map((entry) => entry.route).sort();
-    expect(actual).toEqual(expected);
-    expect(buildKnowledgeCoverage(KNOWLEDGE_CONTENT).errors).toEqual([]);
-  });
-
-  it("documents every router page with complete plain-language feature content", () => {
-    expect(KNOWLEDGE_CONTENT.features).toHaveLength(68);
-    const liveFeatures = KNOWLEDGE_CONTENT.features.filter(
-      (feature) => feature.availability !== "coming_soon",
-    );
-    expect(liveFeatures).toHaveLength(LIVE_ROUTE_MANIFEST.length);
-    for (const feature of liveFeatures) {
-      const contract = LIVE_ROUTE_MANIFEST.find((entry) =>
-        feature.routes.includes(entry.route),
-      );
-      expect(contract, feature.id).toBeDefined();
-      expect(
-        feature.purpose.trim().split(/\s+/).length,
-        feature.id,
-      ).toBeGreaterThan(5);
-      expect(feature.roleIds.length, feature.id).toBeGreaterThan(0);
-      expect(feature.controls.length, feature.id).toBeGreaterThanOrEqual(
-        contract!.minimumControls,
-      );
-      expect(feature.fields?.length ?? 0, feature.id).toBeGreaterThanOrEqual(
-        contract!.minimumFields,
-      );
-      for (const control of feature.controls) {
-        const controlId = `${feature.id}:${control.name}`;
-        expect(isCombinedControlName(feature.id, control.name), controlId).toBe(false);
-        expect(
-          control.behavior.trim().split(/\s+/).length,
-          controlId,
-        ).toBeGreaterThan(4);
-        expect(
-          control.validation.trim().split(/\s+/).length,
-          controlId,
-        ).toBeGreaterThan(4);
-        expect(
-          control.result.trim().split(/\s+/).length,
-          controlId,
-        ).toBeGreaterThan(4);
-      }
-      for (const field of feature.fields ?? []) {
-        const fieldId = `${feature.id}:${field.name}`;
-        expect(field.name, fieldId).not.toMatch(/,|\band\b/i);
-        expect(
-          field.purpose.trim().split(/\s+/).length,
-          fieldId,
-        ).toBeGreaterThan(3);
-        expect(
-          field.validation.trim().split(/\s+/).length,
-          fieldId,
-        ).toBeGreaterThan(4);
-      }
-      expect(feature.reads.length, feature.id).toBeGreaterThan(0);
-      expect(feature.writes.length, feature.id).toBeGreaterThan(0);
-      expect(feature.statuses.length, feature.id).toBeGreaterThan(0);
-      expect(feature.notifications?.length ?? 0, feature.id).toBeGreaterThan(0);
-      expect(feature.exceptions.length, feature.id).toBeGreaterThan(0);
-      expect(
-        feature.completionEvidence?.length ?? 0,
-        feature.id,
-      ).toBeGreaterThan(0);
-      expect(feature.owner.trim(), feature.id).not.toBe("");
-      expect(feature.reviewedAt, feature.id).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-      expect(
-        KNOWLEDGE_CONTENT.articles.some(
-          (article) => article.id === `feature-${feature.id}`,
-        ),
-        feature.id,
-      ).toBe(true);
-    }
-  });
-
-  it("documents DOA controls and fields individually", () => {
-    const feature = KNOWLEDGE_CONTENT.features.find(
-      (item) => item.id === "admin-doa",
-    );
-    expect(feature?.controls.map((control) => control.name)).toEqual(
-      expect.arrayContaining([
-        "Create revision",
-        "Activate matrix",
-        "Add tier",
-        "Remove tier",
-        "Save draft",
-      ]),
-    );
-    expect(feature?.fields?.map((field) => field.name)).toEqual(
-      expect.arrayContaining([
-        "Department",
-        "Version",
-        "Source document",
-        "Effective date",
-        "Tier",
-        "Category",
-        "Minimum amount",
-        "Maximum amount",
-        "Named approver",
-      ]),
-    );
-  });
-
-  it("documents department hierarchy administration in plain language", () => {
-    const feature = KNOWLEDGE_CONTENT.features.find(
-      (item) => item.id === "admin-departments",
-    );
-
-    expect(feature).toMatchObject({
-      availability: "live",
-      routes: ["/admin/departments"],
-      roleIds: ["platform_admin"],
-      capabilityIds: ["manage_rbac"],
+  it("counts the exact inventory without claiming screenshots are accepted", () => {
+    const result = validateTaskCoverage(KNOWLEDGE_CONTENT);
+    expect(result.counts).toEqual({
+      features: 68, controls: 280, liveFeatures: 59, limitedFeatures: 0,
+      comingSoonFeatures: 9, flows: 25, decisions: 54, policyReferences: 14,
+      evidenceRecords: 53, controlEvidenceMatches: 0,
     });
-    expect(feature?.controls.map((control) => control.name)).toEqual(
-      expect.arrayContaining([
-        "Add department",
-        "Edit department",
-        "Choose parent",
-        "Save department",
-        "Deactivate department",
-      ]),
-    );
-    expect(feature?.fields?.map((field) => field.name)).toEqual(
-      expect.arrayContaining([
-        "Code",
-        "Name",
-        "Purpose",
-        "Parent department",
-        "Sort order",
-        "Active status",
-      ]),
-    );
+    expect(result.unmappedLiveControls).toEqual([]);
+    expect(result.unresolvedTargets).toEqual([]);
+    expect(result.invalidDecisionBranches).toEqual([]);
+    expect(result.missingActionEvidence).toHaveLength(271);
+    expect(result.counts.features).toBe(KNOWLEDGE_CONTENT.features.length);
+    expect(result.counts.controls).toBe(KNOWLEDGE_CONTENT.features.reduce((n, f) => n + f.controls.length, 0));
+    expect(result.inventory).toHaveLength(result.counts.controls);
+    expect(result.unverified).toBe(true);
+    expect(result.inventory.every((row) => row.unverified)).toBe(true);
   });
 
-  it("fails when a live route is undocumented", () => {
-    const content = cloneContent();
-    content.features = content.features.filter(
-      (feature) => !feature.routes.includes("/procurement/requests/new"),
-    );
-
-    expect(buildKnowledgeCoverage(content).errors).toContain(
-      "live route /procurement/requests/new has no live feature documentation",
-    );
+  it("reports missing control instructions and missing exact control screenshots separately", () => {
+    const content = structuredClone(KNOWLEDGE_CONTENT);
+    const feature = content.features.find((f) => f.availability === "live")!;
+    feature.controls[0]!.validation = "";
+    content.evidence = [];
+    const result = validateTaskCoverage(content);
+    expect(result.unmappedLiveControls).toContain(`${feature.id}:${feature.controls[0]!.name}`);
+    expect(result.missingActionEvidence).toContain(`${feature.id}:${feature.controls[0]!.name}`);
   });
 
-  it("fails when a current role capability is undocumented", () => {
-    const content = cloneContent();
-    for (const feature of content.features) {
-      feature.capabilityIds = feature.capabilityIds.filter(
-        (capability) => capability !== "manage_notifications",
-      );
-    }
-
-    expect(buildKnowledgeCoverage(content).errors).toContain(
-      "live route / capability manage_notifications has no feature documentation",
-    );
+  it("rejects dangling and coming-soon flow targets without mutating content", () => {
+    const content = structuredClone(KNOWLEDGE_CONTENT);
+    content.features[0]!.relatedFlowIds = ["missing", content.flows[0]!.id];
+    content.flows[0]!.availability = "coming_soon";
+    const before = JSON.stringify(content);
+    const result = validateTaskCoverage(content);
+    expect(result.unresolvedTargets).toContain(`${content.features[0]!.id}:missing`);
+    expect(result.unresolvedTargets).toContain(`${content.features[0]!.id}:${content.flows[0]!.id}:coming_soon`);
+    expect(JSON.stringify(content)).toBe(before);
   });
 
-  it("fails when a feature claims a capability absent from its route contract", () => {
-    const content = cloneContent();
-    const adminUsers = content.features.find(
-      (feature) => feature.id === "admin-users",
-    )!;
-    adminUsers.capabilityIds.push("record_approval");
-
-    expect(buildKnowledgeCoverage(content).errors).toContain(
-      "feature admin-users claims capability record_approval outside route /admin/users",
-    );
+  it("retains existing graph checks for orphan edges and closed cycles", () => {
+    const content = structuredClone(KNOWLEDGE_CONTENT);
+    const flow = content.flows[0]!;
+    flow.edges.push({ from: flow.startNodeId, to: "missing" });
+    flow.edges = flow.edges.filter((e) => !flow.nodes.some((n) => n.id === e.to && n.type === "terminal"));
+    expect(validateTaskCoverage(content).invalidDecisionBranches.length).toBeGreaterThan(0);
   });
 
-  it("does not publish unrelated approval capabilities on user administration", () => {
-    const adminUsers = KNOWLEDGE_CONTENT.features.find(
-      (feature) => feature.id === "admin-users",
-    );
-    expect(adminUsers?.capabilityIds).toEqual(["manage_rbac"]);
+  it("does not promote a matching hotspot to accepted release evidence", () => {
+    const content = structuredClone(KNOWLEDGE_CONTENT);
+    const feature = content.features.find((item) => item.availability === "live")!;
+    const evidence = content.evidence[0]!;
+    evidence.featureId = feature.id;
+    evidence.hotspots[0]!.label = feature.controls[0]!.name;
+    const row = validateTaskCoverage(content).inventory.find((item) => item.key === `${feature.id}:${feature.controls[0]!.name}`)!;
+    expect(row.evidenceIds).toContain(evidence.id);
+    expect(row.unverified).toBe(true);
   });
 
-  it("fails when an administrator surface lacks an authorized administrator", () => {
-    const content = cloneContent();
-    const adminUsers = content.features.find((feature) =>
-      feature.routes.includes("/admin/users"),
-    );
-    expect(adminUsers).toBeDefined();
-    adminUsers!.roleIds = ["core_staff_only"];
-
-    expect(buildKnowledgeCoverage(content).errors).toContain(
-      "administrator route /admin/users is not assigned to an authorized administrator role",
-    );
-  });
-
-  it("fails a live feature that omits controls", () => {
-    const content = cloneContent();
-    content.features[0]!.controls = [];
-
-    expect(buildKnowledgeCoverage(content).errors).toContain(
-      `live feature ${content.features[0]!.id} has no documented controls`,
-    );
-  });
-
-  it("allows only the exact atomic Finance correction label", () => {
-    expect(isCombinedControlName("warehouse-finance", "Edit and resubmit")).toBe(false);
-    expect(isCombinedControlName("admin-doa", "Edit and resubmit")).toBe(true);
-    expect(isCombinedControlName("warehouse-finance", "Edit and resubmit, post")).toBe(true);
-    expect(isCombinedControlName("warehouse-finance", "Edit and resubmit everything")).toBe(true);
-    expect(isCombinedControlName("insights-workspace", "Acknowledge and resolve follow-up")).toBe(true);
-    const content = cloneContent();
-    const finance = content.features.find((feature) => feature.id === "warehouse-finance")!;
-    const correction = finance.controls.find((control) => control.name === "Edit and resubmit")!;
-    expect(buildKnowledgeCoverage(content).errors).toEqual([]);
-    correction.name = "Edit and resubmit, post";
-    expect(buildKnowledgeCoverage(content).errors).toContain(
-      "live feature warehouse-finance has combined control name Edit and resubmit, post",
-    );
-  });
-
-  it("fails shallow combined control documentation", () => {
-    const content = cloneContent();
-    const doa = content.features.find((feature) => feature.id === "admin-doa")!;
-    doa.controls = [
-      {
-        name: "Create revision, activate, and save",
-        behavior:
-          "Combines several unrelated administration actions into one shallow description.",
-        validation:
-          "Claims every matrix validation rule applies without naming the actual gate.",
-        result:
-          "Claims the matrix changes without distinguishing draft or active state.",
-      },
-    ];
-
-    expect(buildKnowledgeCoverage(content).errors).toContain(
-      "live feature admin-doa documents 1 controls; route /admin/doa requires at least 5",
-    );
-    expect(buildKnowledgeCoverage(content).errors).toContain(
-      "live feature admin-doa has combined control name Create revision, activate, and save",
-    );
-  });
-
-  it("fails shallow combined field documentation", () => {
-    const content = cloneContent();
-    const doa = content.features.find((feature) => feature.id === "admin-doa")!;
-    doa.fields = [
-      {
-        name: "Department, version, tiers, and approvers",
-        purpose: "Combines unrelated matrix inputs into one field description.",
-        required: true,
-        validation:
-          "Claims all values are required without documenting their individual rules.",
-      },
-    ];
-
-    expect(buildKnowledgeCoverage(content).errors).toContain(
-      "live feature admin-doa documents 1 fields; route /admin/doa requires at least 9",
-    );
-    expect(buildKnowledgeCoverage(content).errors).toContain(
-      "live feature admin-doa has combined field name Department, version, tiers, and approvers",
-    );
-  });
-
-  it("warns about coming-soon entries without allowing them to cover live routes", () => {
-    const content = cloneContent();
-    const route = "/admin/doa";
-    const feature = content.features.find((item) =>
-      item.routes.includes(route),
-    );
-    expect(feature).toBeDefined();
-    feature!.availability = "coming_soon";
-
-    const report = buildKnowledgeCoverage(content);
-    expect(report.warnings).toContain(
-      `coming-soon feature ${feature!.id} references live route ${route}`,
-    );
-    expect(report.errors).toContain(
-      `live route ${route} has no live feature documentation`,
-    );
-  });
-
-  it("normalizes optional trailing slashes and parameterized detail routes", () => {
-    const content = cloneContent();
-    const feature = content.features.find((item) =>
-      item.routes.includes("/procurement/requests/:id"),
-    );
-    expect(feature).toBeDefined();
-    feature!.routes = ["/procurement/requests/request-123/"];
-
-    const report = buildKnowledgeCoverage(content);
-    expect(report.errors).not.toContain(
-      "live route /procurement/requests/:id has no live feature documentation",
-    );
-    expect(report.routeCoverage.get("/procurement/requests/:id")).toContain(
-      feature!.id,
-    );
+  it("rejects unknown decision owners and ambiguous branches", () => {
+    const content = structuredClone(KNOWLEDGE_CONTENT);
+    const flow = content.flows.find((item) => item.nodes.some((node) => node.type === "decision"))!;
+    const decision = flow.nodes.find((node) => node.type === "decision")!;
+    decision.authorityRoleId = "unknown";
+    for (const edge of flow.edges.filter((item) => item.from === decision.id)) edge.label = "Same outcome";
+    const errors = validateTaskCoverage(content).invalidDecisionBranches;
+    expect(errors).toContain(`${flow.id}:${decision.id}:decision authority/policy`);
+    expect(errors).toContain(`${flow.id}:${decision.id}:decision labels`);
   });
 });

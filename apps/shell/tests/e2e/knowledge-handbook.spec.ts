@@ -91,11 +91,11 @@ test("first-time orientation remains legible in dark mode", async ({
   await page.addInitScript(() => localStorage.setItem("intra-theme", "dark"));
   await page.goto("/knowledge");
   await expect(
-    page.getByRole("region", { name: "First 10 minutes in Intra" }),
+    page.getByRole("region", { name: "Getting started" }),
   ).toBeVisible();
   const checkpointContrast = await page
     .getByText(
-      "You know what you may do and which decisions stay with another owner.",
+      "Start with your assigned learning and the work your role performs.",
       { exact: true },
     )
     .evaluate((element) => {
@@ -116,9 +116,9 @@ test("first-time orientation remains legible in dark mode", async ({
         );
       };
       const foreground = luminance(parseRgb(getComputedStyle(element).color));
-      const background = luminance(
-        parseRgb(getComputedStyle(element.parentElement!).backgroundColor),
-      );
+      let ancestor: Element | null = element;
+      while (ancestor && ["rgba(0, 0, 0, 0)", "transparent"].includes(getComputedStyle(ancestor).backgroundColor)) ancestor = ancestor.parentElement;
+      const background = luminance(parseRgb(getComputedStyle(ancestor ?? document.body).backgroundColor));
       return (
         (Math.max(foreground, background) + 0.05) /
         (Math.min(foreground, background) + 0.05)
@@ -126,10 +126,8 @@ test("first-time orientation remains legible in dark mode", async ({
     });
   expect(checkpointContrast).toBeGreaterThanOrEqual(4.5);
 
-  await page.getByRole("button", { name: "Next orientation step" }).click();
-  await expect(
-    page.getByRole("heading", { name: "Learn your workspace", exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole("link", { name: "My learning", exact: true })).toHaveAttribute("href", "/onboarding");
+  await expect(page.getByText("Orientation complete", { exact: true })).toHaveCount(0);
 });
 
 test("first-time orientation, personal library, and feedback remain available", async ({
@@ -137,12 +135,9 @@ test("first-time orientation, personal library, and feedback remain available", 
 }) => {
   await page.goto("/knowledge");
   await expect(
-    page.getByRole("region", { name: "First 10 minutes in Intra" }),
+    page.getByRole("region", { name: "Getting started" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Next orientation step" }).click();
-  await expect(
-    page.getByRole("heading", { name: "Learn your workspace", exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole("link", { name: "My learning", exact: true })).toBeVisible();
 
   await page.goto("/knowledge?article=feature-warehouse-receiving");
   await page.getByRole("button", { name: "Save guide" }).click();

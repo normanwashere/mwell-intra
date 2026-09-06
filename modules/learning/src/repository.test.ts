@@ -606,7 +606,7 @@ describe("MemoryLearningRepository", () => {
     ).toBe("passed");
   });
 
-  it("shares completion across equivalent persona orientation records", async () => {
+  it("does not share completion merely because persona orientation titles match", async () => {
     const equivalentOrientation: RequirementDefinition = {
       ...orientation,
       id: "product-owner-orientation-v1",
@@ -658,12 +658,12 @@ describe("MemoryLearningRepository", () => {
       resolved.progress.find(
         (item) => item.assignmentRequirementId === "ar-product-orientation",
       )?.state,
-    ).toBe("passed");
+    ).toBe("not_started");
     await expect(
       repository.startRequirement({
         assignmentRequirementId: "ar-product-simulation",
       }),
-    ).resolves.toMatchObject({ progress: { state: "in_progress" } });
+    ).rejects.toThrow("prerequisite");
   });
 
   it("converges compatible initial progress when assignments resolve", async () => {

@@ -120,3 +120,12 @@ export type {
   SimulationDefinition,
   SimulationStepDefinition,
 } from "./types";
+export {
+  projectTaskLearning,
+  type TaskLearningProjection,
+  type SelectedLearningTask,
+} from "./taskReadiness";
+export {
+  TaskLearningSummary,
+  type TaskLearningSummaryProps,
+} from "./TaskLearningSummary";

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { useInsertionEffect } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import { SessionProvider } from '@intra/auth';
 import { ToastProvider } from '@intra/ui';
@@ -10,6 +11,7 @@ const FIRST_RENDER_TIMEOUT = 10_000;
 function renderSignedInWarehouse(
   path: string,
   warehouseRoles: string[] = ['procurement'],
+  delayedHostPath?: string,
 ) {
   window.history.replaceState(window.history.state, '', path);
   window.sessionStorage.setItem(
@@ -19,6 +21,13 @@ function renderSignedInWarehouse(
       roles: { warehouse: warehouseRoles },
     }),
   );
+
+  function HostNavigationCommit() {
+    useInsertionEffect(() => {
+      if (delayedHostPath) window.history.replaceState(window.history.state, '', delayedHostPath);
+    }, []);
+    return <WarehouseApp basename="/warehouse" />;
+  }
 
   return render(
     <SessionProvider
@@ -37,13 +46,21 @@ function renderSignedInWarehouse(
       }}
     >
       <ToastProvider>
-        <WarehouseApp basename="/warehouse" />
+        <HostNavigationCommit />
       </ToastProvider>
     </SessionProvider>,
   );
 }
 
 describe('WarehouseApp basename handling', () => {
+  it('waits for the host navigation commit before initializing the embedded router', async () => {
+    renderSignedInWarehouse('/', ['procurement'], '/warehouse?source=home#stock');
+    expect(await screen.findByRole('heading', { name: /warehouse dashboard/i })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/warehouse/');
+    expect(window.location.search).toBe('?source=home');
+    expect(window.location.hash).toBe('#stock');
+  });
+
   it(
     'normalizes bare /warehouse before mounting BrowserRouter',
     async () => {

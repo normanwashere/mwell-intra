@@ -11,6 +11,7 @@ import type {
   GlossaryEntry,
 } from "@shell/lib/knowledge/types";
 import { capabilityGuidance } from "@shell/lib/knowledge/capabilities";
+import { resolveRoleTasks } from "@shell/lib/knowledge/taskGuidance";
 import {
   ROLE_ROUTE_PARENT_LABELS,
   ROLE_ROUTE_PARENT_PATHS,
@@ -30,12 +31,6 @@ const ROLE_OUTLINE = [
   { id: "role-escalation", label: "Exceptions" },
   { id: "role-related", label: "Related guidance" },
 ];
-
-const taskScore = (task: string, candidate: string) => {
-  const words = task.toLowerCase().split(/[^a-z0-9]+/).filter((word) => word.length > 3);
-  const normalizedCandidate = candidate.toLowerCase();
-  return words.filter((word) => normalizedCandidate.includes(word)).length;
-};
 
 const availabilityLabel = {
   live: "Live",
@@ -72,13 +67,7 @@ export function KnowledgeRoleGuide({
   onOpenFlow: (id: string) => void;
 }) {
   const isRoadmap = role.availability === "coming_soon";
-  const taskLaunches = role.dailyTasks.slice(0, 5).map((task) => {
-    const destinations = [
-      ...relatedFlows.map((item) => ({ kind: "flow" as const, id: item.id, title: item.title, summary: item.summary, score: taskScore(task, `${item.title} ${item.summary}`) })),
-      ...relatedFeatures.map((item) => ({ kind: "feature" as const, id: item.id, title: item.title, summary: item.purpose, score: taskScore(task, `${item.title} ${item.purpose}`) })),
-    ].sort((left, right) => right.score - left.score || left.title.localeCompare(right.title));
-    return { task, destination: destinations[0] };
-  });
+  const taskLaunches = resolveRoleTasks(role, relatedFeatures, relatedFlows);
 
   return (
     <article className="mx-auto max-w-5xl">
@@ -106,220 +95,256 @@ export function KnowledgeRoleGuide({
         <p className="mt-4 border-l-4 border-brand-500 pl-4 text-sm leading-6 text-ink">
           {isRoadmap
             ? "Not available for live work. This profile documents planned authority only and grants no current access or execution rights."
-            : `${role.label} has ${role.authority.capabilities.length} recorded capabilities and ${role.authority.decisions.length} explicit decision ${role.authority.decisions.length === 1 ? "responsibility" : "responsibilities"}.`}
+            : (role.authority.decisions[0] ?? role.purpose)}
         </p>
         <GlossaryTerms
           entries={glossary}
-          text={[role.purpose, ...role.dailyTasks, ...role.authority.canDo, ...role.authority.cannotDo, ...role.authority.decisions].join(" ")}
+          text={[
+            role.purpose,
+            ...role.dailyTasks,
+            ...role.authority.canDo,
+            ...role.authority.cannotDo,
+            ...role.authority.decisions,
+          ].join(" ")}
         />
       </header>
 
       <div className="mt-7 grid gap-8 lg:grid-cols-[minmax(0,1fr)_15rem]">
-        <aside className="lg:order-2"><GuideOutline items={ROLE_OUTLINE} /></aside>
-        <div className="min-w-0 space-y-9 lg:order-1">
-        <GuideSection id="role-tasks" title="Common tasks">
-          <p className="mt-2 text-sm leading-6 text-muted">
-            Choose the task closest to what you need to complete. The linked guide shows prerequisites, handoffs, decisions, and completion evidence.
-          </p>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            {taskLaunches.map(({ task, destination }, index) => (
-              <button
-                key={task}
-                type="button"
-                disabled={!destination || isRoadmap}
-                onClick={() => destination?.kind === "flow" ? onOpenFlow(destination.id) : destination && onOpenArticle(`feature-${destination.id}`)}
-                className="group min-h-28 border border-line bg-surface p-4 text-left transition hover:border-brand-400 hover:shadow-e1 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-              >
-                <span className="text-xs font-semibold uppercase text-brand-700">Task {index + 1}</span>
-                <span className="mt-1 block font-semibold text-ink">{task}</span>
-                <span className="mt-3 flex items-center justify-between gap-3 text-xs text-muted">
-                  <span>{destination ? `${destination.kind === "flow" ? "Guided workflow" : "Feature guide"}: ${destination.title}` : "Written responsibility only"}</span>
-                  {destination && <Icon name="arrowRight" className="h-4 w-4 shrink-0 text-brand-700" />}
-                </span>
-              </button>
-            ))}
+        <aside className="min-w-0 lg:order-2">
+          <details className="border-y border-line py-3 lg:hidden">
+            <summary className="cursor-pointer text-sm font-semibold text-ink">
+              On this page
+            </summary>
+            <GuideOutline items={ROLE_OUTLINE} />
+          </details>
+          <div className="hidden lg:block">
+            <GuideOutline items={ROLE_OUTLINE} />
           </div>
-        </GuideSection>
-
-        <GuideSection id="role-pages" title="Accessible pages">
-          {role.authority.accessibleRoutes.length > 0 ? (
+        </aside>
+        <div className="min-w-0 space-y-9 lg:order-1">
+          <GuideSection id="role-tasks" title="Common tasks">
             <ul className="mt-3 divide-y divide-line border-y border-line">
-              {role.authority.accessibleRoutes.map((route) => (
-                <RoleRoute key={route} route={route} isRoadmap={isRoadmap} />
+              {taskLaunches.map(({ task, destination, guidance }) => (
+                <li key={task} className="min-w-0">
+                  {destination ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        destination.kind === "flow"
+                          ? onOpenFlow(destination.id)
+                          : onOpenArticle(`feature-${destination.id}`)
+                      }
+                      className="flex min-h-11 w-full items-center justify-between gap-4 py-4 text-left hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                    >
+                      <span className="min-w-0 break-words">
+                        <span className="block text-sm font-semibold leading-6 text-ink">
+                          {task}
+                        </span>
+                        <span className="mt-1 block text-xs text-muted">
+                          {destination.kind === "flow"
+                            ? "Guided workflow"
+                            : "Feature guide"}
+                          : {destination.title}
+                        </span>
+                      </span>
+                      <Icon
+                        name="arrowRight"
+                        className="h-4 w-4 shrink-0 text-brand-700"
+                      />
+                    </button>
+                  ) : (
+                    <div className="break-words py-4">
+                      <p className="text-sm font-semibold leading-6 text-ink">
+                        {task}
+                      </p>
+                      <p className="mt-1 text-sm leading-6 text-muted">
+                        {guidance}
+                      </p>
+                    </div>
+                  )}
+                </li>
               ))}
             </ul>
-          ) : (
-            <p className="mt-2 text-sm text-muted">
-              {isRoadmap
-                ? "No live pages are assigned to this planned profile."
-                : "This role has no direct page entry; work arrives through assigned records."}
-            </p>
-          )}
-        </GuideSection>
+          </GuideSection>
 
-        <GuideSection id="role-capabilities" title="Capability matrix">
-          <div
-            className="mt-3 overflow-x-auto border-y border-line"
-            tabIndex={0}
-            role="region"
-            aria-label="Role capability matrix"
-          >
-            <table className="w-full min-w-[32rem] text-left text-sm">
-              <thead className="bg-inset text-xs uppercase text-muted">
-                <tr>
-                  <th scope="col" className="px-3 py-3 font-semibold">
-                    Capability
-                  </th>
-                  <th scope="col" className="px-3 py-3 font-semibold">
-                    State
-                  </th>
-                  <th scope="col" className="px-3 py-3 font-semibold">
-                    Operational meaning
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line">
-                {role.authority.capabilities.length > 0 ? (
-                  role.authority.capabilities.map((capability) => {
-                    const guidance = capabilityGuidance(
-                      capability,
-                      role.rbacModule ?? role.module,
-                    );
-                    return (
-                    <tr key={capability}>
-                      <th
-                        scope="row"
-                        className="px-3 py-3 font-medium text-ink"
-                      >
-                        {guidance.label}
-                      </th>
-                      <td className="px-3 py-3 text-muted">Granted</td>
-                      <td className="px-3 py-3 text-muted">
-                        {guidance.description}
-                      </td>
-                    </tr>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan={3} className="px-3 py-4 text-muted">
-                      No live capabilities assigned.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </GuideSection>
-
-        <GuideSection id="role-boundaries" title="Can do and cannot do">
-          <div className="mt-3 grid gap-6 border-y border-line py-5 md:grid-cols-2">
-            <div>
-              <h3 className="font-semibold text-emerald-700">Can do</h3>
-              <BulletList items={role.authority.canDo} />
-            </div>
-            <div className="md:border-l md:border-line md:pl-6">
-              <h3 className="font-semibold text-red-700">Cannot do</h3>
-              <BulletList items={role.authority.cannotDo} />
-            </div>
-          </div>
-        </GuideSection>
-
-        <GuideSection id="role-decisions" title="Decision authority">
-          <BulletList items={role.authority.decisions} />
-        </GuideSection>
-
-        <GuideSection id="role-timeline" title="Responsibility timeline">
-          <ol className="mt-3 divide-y divide-line border-y border-line">
-            {role.responsibilityStages.map((item, index) => (
-              <TimelineItem
-                key={`${item.title}-${index}`}
-                number={String(index + 1)}
-                title={item.title}
-                outcome={item.outcome}
-              >
-                {item.responsibility}
-              </TimelineItem>
-            ))}
-          </ol>
-        </GuideSection>
-
-        <GuideSection
-          id="role-handoffs"
-          title="Upstream and downstream handoffs"
-        >
-          <div className="mt-3 grid gap-6 border-y border-line py-5 md:grid-cols-2">
-            <HandoffList
-              title="Receives from"
-              roleIds={role.authority.upstreamRoleIds}
-              rolesById={rolesById}
-            />
-            <div className="md:border-l md:border-line md:pl-6">
-              <HandoffList
-                title="Hands off to"
-                roleIds={role.authority.downstreamRoleIds}
-                rolesById={rolesById}
-              />
-            </div>
-          </div>
-        </GuideSection>
-
-        <GuideSection id="role-sod" title="Segregation of duties">
-          <p className="mt-2 text-sm leading-6 text-muted">
-            Access is additive, but authority is not transferable. A page or
-            platform role never replaces the independent owner or decision
-            authority named by policy.
-          </p>
-          <BulletList items={role.authority.cannotDo} />
-        </GuideSection>
-
-        <GuideSection id="role-escalation" title="Exceptions and escalation">
-          <p className="mt-2 text-sm leading-6 text-muted">
-            Stop when access, ownership, evidence, or record status conflicts
-            with this guide. Do not use an offline action to bypass a denied or
-            unavailable control.
-          </p>
-          <p className="mt-3 border-l-4 border-amber-500 pl-4 text-sm font-medium leading-6 text-ink">
-            {role.authority.escalation}
-          </p>
-        </GuideSection>
-
-        <GuideSection id="role-related" title="Related content">
-          <div className="mt-3 divide-y divide-line border-y border-line">
-            {relatedFeatures.map((feature) => (
-              <RelatedButton
-                key={`feature-${feature.id}`}
-                label={feature.title}
-                context="Feature guide"
-                onClick={() => onOpenArticle(`feature-${feature.id}`)}
-              />
-            ))}
-            {relatedArticles.map((article) => (
-              <RelatedButton
-                key={article.id}
-                label={article.title}
-                context="Procedure"
-                onClick={() => onOpenArticle(article.id)}
-              />
-            ))}
-            {relatedFlows.map((flow) => (
-              <RelatedButton
-                key={flow.id}
-                label={flow.title}
-                context="Guided workflow"
-                onClick={() => onOpenFlow(flow.id)}
-              />
-            ))}
-            {relatedFeatures.length +
-              relatedArticles.length +
-              relatedFlows.length ===
-              0 && (
-              <p className="py-4 text-sm text-muted">
-                No related live handbook content is registered yet.
+          <GuideSection id="role-pages" title="Accessible pages">
+            {role.authority.accessibleRoutes.length > 0 ? (
+              <ul className="mt-3 divide-y divide-line border-y border-line">
+                {role.authority.accessibleRoutes.map((route) => (
+                  <RoleRoute key={route} route={route} isRoadmap={isRoadmap} />
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-2 text-sm text-muted">
+                {isRoadmap
+                  ? "No live pages are assigned to this planned profile."
+                  : "This role has no direct page entry; work arrives through assigned records."}
               </p>
             )}
-          </div>
-        </GuideSection>
+          </GuideSection>
+
+          <GuideSection id="role-capabilities" title="Capability matrix">
+            <div
+              className="mt-3 overflow-x-auto border-y border-line"
+              tabIndex={0}
+              role="region"
+              aria-label="Role capability matrix"
+            >
+              <table className="w-full min-w-[32rem] text-left text-sm">
+                <thead className="bg-inset text-xs uppercase text-muted">
+                  <tr>
+                    <th scope="col" className="px-3 py-3 font-semibold">
+                      Capability
+                    </th>
+                    <th scope="col" className="px-3 py-3 font-semibold">
+                      State
+                    </th>
+                    <th scope="col" className="px-3 py-3 font-semibold">
+                      Operational meaning
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {role.authority.capabilities.length > 0 ? (
+                    role.authority.capabilities.map((capability) => {
+                      const guidance = capabilityGuidance(
+                        capability,
+                        role.rbacModule ?? role.module,
+                      );
+                      return (
+                        <tr key={capability}>
+                          <th
+                            scope="row"
+                            className="px-3 py-3 font-medium text-ink"
+                          >
+                            {guidance.label}
+                          </th>
+                          <td className="px-3 py-3 text-muted">Granted</td>
+                          <td className="px-3 py-3 text-muted">
+                            {guidance.description}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={3} className="px-3 py-4 text-muted">
+                        No live capabilities assigned.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </GuideSection>
+
+          <GuideSection id="role-boundaries" title="Can do and cannot do">
+            <div className="mt-3 grid gap-6 border-y border-line py-5 md:grid-cols-2">
+              <div>
+                <h3 className="font-semibold text-emerald-700">Can do</h3>
+                <BulletList items={role.authority.canDo} />
+              </div>
+              <div className="md:border-l md:border-line md:pl-6">
+                <h3 className="font-semibold text-red-700">Cannot do</h3>
+                <BulletList items={role.authority.cannotDo} />
+              </div>
+            </div>
+          </GuideSection>
+
+          <GuideSection id="role-decisions" title="Decision authority">
+            <BulletList items={role.authority.decisions} />
+          </GuideSection>
+
+          <GuideSection id="role-timeline" title="Responsibility timeline">
+            <ol className="mt-3 divide-y divide-line border-y border-line">
+              {role.responsibilityStages.map((item, index) => (
+                <TimelineItem
+                  key={`${item.title}-${index}`}
+                  number={String(index + 1)}
+                  title={item.title}
+                  outcome={item.outcome}
+                >
+                  {item.responsibility}
+                </TimelineItem>
+              ))}
+            </ol>
+          </GuideSection>
+
+          <GuideSection
+            id="role-handoffs"
+            title="Upstream and downstream handoffs"
+          >
+            <div className="mt-3 grid gap-6 border-y border-line py-5 md:grid-cols-2">
+              <HandoffList
+                title="Receives from"
+                roleIds={role.authority.upstreamRoleIds}
+                rolesById={rolesById}
+              />
+              <div className="md:border-l md:border-line md:pl-6">
+                <HandoffList
+                  title="Hands off to"
+                  roleIds={role.authority.downstreamRoleIds}
+                  rolesById={rolesById}
+                />
+              </div>
+            </div>
+          </GuideSection>
+
+          <GuideSection id="role-sod" title="Segregation of duties">
+            <p className="mt-2 text-sm leading-6 text-muted">
+              Access is additive, but authority is not transferable. A page or
+              platform role never replaces the independent owner or decision
+              authority named by policy.
+            </p>
+          </GuideSection>
+
+          <GuideSection id="role-escalation" title="Exceptions and escalation">
+            <p className="mt-2 text-sm leading-6 text-muted">
+              Stop when access, ownership, evidence, or record status conflicts
+              with this guide. Do not use an offline action to bypass a denied
+              or unavailable control.
+            </p>
+            <p className="mt-3 border-l-4 border-amber-500 pl-4 text-sm font-medium leading-6 text-ink">
+              {role.authority.escalation}
+            </p>
+          </GuideSection>
+
+          <GuideSection id="role-related" title="Related content">
+            <div className="mt-3 divide-y divide-line border-y border-line">
+              {relatedFeatures.map((feature) => (
+                <RelatedButton
+                  key={`feature-${feature.id}`}
+                  label={feature.title}
+                  context="Feature guide"
+                  onClick={() => onOpenArticle(`feature-${feature.id}`)}
+                />
+              ))}
+              {relatedArticles.map((article) => (
+                <RelatedButton
+                  key={article.id}
+                  label={article.title}
+                  context="Procedure"
+                  onClick={() => onOpenArticle(article.id)}
+                />
+              ))}
+              {relatedFlows.map((flow) => (
+                <RelatedButton
+                  key={flow.id}
+                  label={flow.title}
+                  context="Guided workflow"
+                  onClick={() => onOpenFlow(flow.id)}
+                />
+              ))}
+              {relatedFeatures.length +
+                relatedArticles.length +
+                relatedFlows.length ===
+                0 && (
+                <p className="py-4 text-sm text-muted">
+                  No related live handbook content is registered yet.
+                </p>
+              )}
+            </div>
+          </GuideSection>
         </div>
       </div>
     </article>
@@ -394,7 +419,7 @@ function RoleRoute({
   const parentHref = ROLE_ROUTE_PARENT_PATHS[route];
   const parentLabel = ROLE_ROUTE_PARENT_LABELS[route];
   return (
-    <li className="flex min-h-14 items-center justify-between gap-3 py-2">
+    <li className="flex min-h-14 flex-wrap items-center justify-between gap-3 py-2">
       <code className="break-all text-sm text-ink">{route}</code>
       {isRoadmap ? (
         <span

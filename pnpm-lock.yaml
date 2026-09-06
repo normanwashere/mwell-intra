@@ -405,6 +405,9 @@ importers:
       '@intra/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@intra/learning':
+        specifier: workspace:*
+        version: link:../learning
       '@intra/rbac':
         specifier: workspace:*
         version: link:../../packages/rbac

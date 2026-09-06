@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link.js";
-import { useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Badge, Button, Icon } from "@intra/ui";
 import type { Module } from "@intra/rbac";
 import { useOptionalLearning } from "./LearningProvider";
+import { sanitizeOnboardingReturnPath } from "./orientationGate";
 
 const humanize = (value: string) =>
   value.split("_").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
@@ -23,8 +24,15 @@ export function LockedCapabilityRecovery({
   requirementIds?: readonly string[];
 }) {
   const learning = useOptionalLearning();
+  const newTabHintId = useId();
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
+  const [returnPath, setReturnPath] = useState<string | null>(null);
+  useEffect(() => {
+    setReturnPath(sanitizeOnboardingReturnPath(
+      `${window.location.pathname}${window.location.search}${window.location.hash}`,
+    ));
+  }, []);
   const requirements = learning?.snapshot?.curricula.flatMap((item) => item.requirements) ?? [];
   const titles = requirementIds.flatMap((id) => {
     const title = requirements.find((requirement) => requirement.id === id)?.title;
@@ -35,6 +43,11 @@ export function LockedCapabilityRecovery({
     : reason === "training"
       ? "Complete onboarding before this action"
       : "This action is temporarily unavailable";
+  const audience = requirements.find((item) => item.id === requirementIds[0])?.audience;
+  const learningPath = audience === "vendor" ? "/vendor/onboarding" : "/onboarding";
+  const learningQuery = new URLSearchParams();
+  if (requirementIds[0]) learningQuery.set("requirement", requirementIds[0]);
+  if (returnPath) learningQuery.set("next", returnPath);
 
   return (
     <section role="status" className="border-l-4 border-amber-500 bg-amber-50/80 px-4 py-4 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
@@ -49,16 +62,19 @@ export function LockedCapabilityRecovery({
             {reason === "role"
               ? "Ask your department owner or platform administrator to review your assignment."
               : reason === "training"
-                ? "Finish the required learning step, then return here to continue."
+                ? "Only this action needs the learning listed below. Your other authorized work remains available."
                 : "Refresh your access status. If this continues, contact your department owner."}
           </p>
           {titles.length > 0 && (
             <ul className="mt-2 list-disc space-y-1 pl-5 text-sm font-semibold">{titles.map((item) => <li key={item}>{item}</li>)}</ul>
           )}
           {reason === "training" && requirementIds[0] && (
-            <Link href={`/onboarding?requirement=${encodeURIComponent(requirementIds[0])}`} className="btn-outline btn-sm mt-4 inline-flex">Resume onboarding</Link>
+            <div className="mt-4">
+              <Link href={`${learningPath}?${learningQuery.toString()}`} target="_blank" rel="noopener noreferrer" className="btn-outline btn-sm inline-flex" aria-describedby={newTabHintId}>Resume onboarding</Link>
+              <p id={newTabHintId} className="mt-2 text-sm">Opens in a new tab so your current form stays open. Return here when finished.</p>
+            </div>
           )}
-          {reason === "unavailable" && learning && (
+          {(reason === "unavailable" || reason === "training") && learning && (
             <div className="mt-4">
               <Button
                 variant="outline"

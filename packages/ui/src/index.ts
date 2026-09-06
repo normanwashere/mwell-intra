@@ -4,6 +4,8 @@
 
 export { Icon, type IconName } from "./Icon";
 export { ContextualHelpLink } from "./ContextualHelpLink";
+export { TaskHelpProvider, useTaskHelp } from "./TaskHelpContext";
+export type { TaskHelpController, TaskHelpRequest } from "./TaskHelpContext";
 export { EvidenceAttachment, useEvidenceAttachment, type EvidenceDocument } from './EvidenceAttachment';
 export { AccessDenied, type AccessDeniedProps } from "./AccessDenied";
 

@@ -32,7 +32,7 @@ Stored legacy receipt JSON may omit the bin. A matching exact procurement line o
 - Reconciliation separates sold, giveaway, returned, lost, damaged and re-kitted quantities. Drafts may be incomplete; submission and approval require valid whole quantities accounting for all issued units.
 - Valuation uses captured issue costs. Missing historical snapshots and ambiguous mixed costs remain unavailable rather than being reconstructed from today's catalogue price.
 - Floor work includes received, allocated, picking, packing and ready demand. The shared navigation contract is `/fulfillment?filter=floor_work`; released follow-up is separate. Inbound counters use issued purchase orders with outstanding quantities and retain unavailable prices as unknown.
-- Certification, RLS, Finance separation of duties, evidence requirements and idempotency remain in force. Orientation grants module entry, not completion of action-specific training.
+- Certification, RLS, Finance separation of duties, evidence requirements and idempotency remain in force. The historical capture below completed orientation before module entry; that sequence is not the September 6 task-first candidate's navigation rule. In the candidate, authorized exploration is separate from exact action-specific learning, and no local KB introduction grants access or certification.
 
 ## Local Browser Verification
 

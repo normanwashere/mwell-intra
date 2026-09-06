@@ -4,7 +4,7 @@ import { auditWarehouseLayout } from "../helpers/warehouseLayoutAudit";
 const SESSION_KEY = "intra.memory-session.v1";
 
 async function installWarehouseOperator(page: Page) {
-  await page.addInitScript(
+  await page.context().addInitScript(
     ({ key, value }) => sessionStorage.setItem(key, JSON.stringify(value)),
     {
       key: SESSION_KEY,
@@ -115,7 +115,14 @@ test.describe("certified action recovery", () => {
     await expect(page.getByText("Receive and inspect controlled stock")).toBeVisible();
     await expect(page.getByRole("button", { name: /Receive 1 item/ })).toHaveCount(0);
     const resume = page.getByRole("link", { name: "Resume onboarding" });
-    await expect(resume).toHaveAttribute("href", "/onboarding?requirement=internal.role.warehouse.warehouse_operator.capability-practice.v1");
+    await expect(resume).toHaveAttribute("target", "_blank");
+    await expect(resume).toHaveAttribute("href", /[&?]next=%2Fwarehouse%2Freceiving/);
+    const recoveryHref = await resume.getAttribute("href");
+    if (!recoveryHref) throw new Error("Missing onboarding recovery URL");
+    const recoveryUrl = new URL(recoveryHref, page.url());
+    expect(recoveryUrl.pathname).toBe("/onboarding");
+    expect(recoveryUrl.searchParams.get("requirement")).toBe("internal.role.warehouse.warehouse_operator.capability-practice.v1");
+    expect(recoveryUrl.searchParams.get("next")).toBe("/warehouse/receiving");
     expect(operationalWrites).toEqual([]);
 
     const receivingLayout = await auditWarehouseLayout(page);
@@ -134,10 +141,15 @@ test.describe("certified action recovery", () => {
       path: testInfo.outputPath(`locked-receiving-${testInfo.project.name}.png`),
     });
 
-    await resume.click();
-    await expect(page).toHaveURL(/\/onboarding\?requirement=internal\.role\.warehouse\.warehouse_operator\.capability-practice\.v1$/);
-    await expect(page.getByRole("heading", { level: 1, name: "Role onboarding" })).toBeVisible();
-    const requirement = page.locator("#onboarding-requirement-internal\\.role\\.warehouse\\.warehouse_operator\\.capability-practice\\.v1");
+    const [onboardingPage] = await Promise.all([
+      page.waitForEvent("popup"),
+      resume.click(),
+    ]);
+    await expect(onboardingPage).toHaveURL(recoveryUrl.href);
+    await expect(page).toHaveURL(/\/warehouse\/receiving$/);
+    await expect(page.getByText("LOCK-TEST-SERIAL-001", { exact: true })).toBeVisible();
+    await expect(onboardingPage.getByRole("heading", { level: 1, name: "Role onboarding" })).toBeVisible();
+    const requirement = onboardingPage.locator("#onboarding-requirement-internal\\.role\\.warehouse\\.warehouse_operator\\.capability-practice\\.v1");
     await expect(requirement).toHaveAttribute("aria-current", "step");
     await expect(requirement).toBeFocused();
     await expect(
@@ -146,10 +158,18 @@ test.describe("certified action recovery", () => {
     expect(pageErrors).toEqual([]);
     expect(operationalWrites).toEqual([]);
 
-    const onboardingLayout = await auditWarehouseLayout(page);
+    const onboardingLayout = await auditWarehouseLayout(onboardingPage);
     expect(onboardingLayout.overflowElements).toEqual([]);
     expect(onboardingLayout.clippedControls).toEqual([]);
     expect(onboardingLayout.overlaps).toEqual([]);
     expect(onboardingLayout.deadEnds).toEqual([]);
+    await onboardingPage.close();
+    await page.getByRole("button", { name: "Refresh access", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Refresh access", exact: true })).toBeEnabled();
+    await expect(page.getByText("LOCK-TEST-SERIAL-001", { exact: true })).toBeVisible();
+    await expect(page.getByText("Complete onboarding before this action")).toBeVisible();
+    await expect(page.getByRole("button", { name: /Receive 1 item/ })).toHaveCount(0);
+    expect(operationalWrites).toEqual([]);
+    expect(pageErrors).toEqual([]);
   });
 });

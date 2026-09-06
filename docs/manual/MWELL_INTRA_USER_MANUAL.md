@@ -1,5 +1,15 @@
 # Mwell Intra Standalone Operating Handbook
 
+**September 6 task-first candidate, not a live-release claim:** Home, Knowledge Base and onboarding share **What are you working on?**. Choose **Prepare for task** to prioritize learning for the selected task, or **View guide** to read its current instructions. **All task guides** retains the broader library. Suggestions are presentation, not a grant of role or record access; a selected task does not establish that an operation is authorized or complete.
+
+In the candidate, **Needed for this task** includes the exact selected capabilities and their required prerequisites. **Other required learning** and **Optional guidance** remain available; mandatory obligations, policy versions, scores, attempt limits and expiry do not change. If readiness is unavailable, refresh learning status rather than treating the missing response as ready. A task with no outstanding learning still requires its normal role, record, evidence and approval checks.
+
+The Knowledge Base **New to Intra?** strip is advisory: **Explore role guides**, **View a workflow** and **My learning** are navigation, not a four-step local orientation or a second completion credential. Reading or dismissing an introduction never awards certification. Only governed learning records establish completion; stored reading preferences do not.
+
+Where contextual help is available, open it alongside the current task without submitting or resetting the form. Close help to return to the source control; use the full guide when needed. If help cannot load, retry or use the full Knowledge Base without assuming the business action failed or completed. Required learning retains its separate-tab recovery: finish the exact requirement, return, refresh access and review current record state before submitting.
+
+Task guides lead with outcome/access and prerequisites, then the existing decision flow and owners, controls and actual screen evidence, followed by result/handoff/recovery. **Control reference** retains fields, data effects, statuses and controlled policy references. A missing screenshot is explicitly unverified, not a completed blank guide. Current candidate screenshots, desktop/mobile interactions and the human pilot remain subject to their own recorded checks; the inventory or generated handbook is not proof of live acceptance.
+
 **Audience:** All authenticated employees and vendors
 
 **Live app:** https://mwell-intra.vercel.app
@@ -85,13 +95,17 @@ These procedures describe the remediation candidate. They are not proof of live 
 3. In a supported document control, upload a JPEG, PNG, WebP or PDF up to 4 MB, or choose a registered document; an HTTPS link remains an alternative. Private files require authorized preview access. A successful upload alone does not mean the business action has been submitted.
 4. Returns and order intake retain drafts for the current operator in the same browser. Resume or discard an editable draft deliberately. Recover a pending transaction before creating another intake; never discard an unknown result and submit again with a new reference.
 5. Drafts are not stock movements, assignments, approvals, shared team records, or cross-device backups. Review current stock, permissions and source records before submitting a restored draft. Do not use shared browser profiles for individual operators.
-6. If access says onboarding is incomplete, follow the onboarding action shown. If the role itself lacks permission, ask the administrator for the appropriate assignment. Completing training does not grant an unassigned permission.
+6. Incomplete learning does not block unrelated authorized workspace exploration. A controlled action lists the learning it needs. **Resume onboarding** opens that requirement in a new tab, keeping the current form open. Finish the required evidence, return to the original tab, and select **Refresh access**. Review current record state before submitting. If the role itself lacks permission, ask the administrator for the appropriate assignment; completing training does not grant one.
 
 ### Guided Practice Feedback
+
+All user types use one checklist model. Users with several roles see combined assigned learning, with shared approved requirements grouped and distinct policy versions and role authority kept separate. Vendors use the same experience within their own vendor scope, not employee workspaces. Orientation is still required where it is a prerequisite to a governed action; it is no longer a blanket navigation gate. An access-sensitive page may still require a capability that is not yet certified.
 
 In employee and vendor onboarding, read the coach's feedback before choosing again. Long coach content scrolls within the panel on desktop and mobile; scroll inside it to reach feedback and **Back**, **Resume later**, or **Exit training**. A rejected choice keeps the current checkpoint open. Complete every required checkpoint before finishing the review.
 
 Local demo or sandbox completion is practice evidence, not a live certification or a new permission. Existing completed onboarding also does not prove that a new attempt was completed during a later verification run.
+
+The candidate vendor evidence-responsibility review explains how to prepare evidence and keep legal declarations separate. It does not upload documents, sign an MNDA, acknowledge a purchase order, submit accreditation, or approve a vendor. Complete those steps in the actual vendor workflow. This new exercise is local catalog content until a reviewed version is published to the live learning curriculum.
 
 ## Navigation
 

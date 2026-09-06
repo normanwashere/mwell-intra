@@ -300,7 +300,7 @@ describe("Knowledge Base content", () => {
     );
 
     expect(JSON.stringify(feature("role-onboarding"))).toMatch(
-      /role-specific.*guided review.*profile.*role bundle/i,
+      /one learning checklist.*assigned roles.*guided review.*profile.*role bundle/i,
     );
     expect(JSON.stringify(feature("my-work"))).toMatch(
       /effective capabilities.*valid source records.*counts/i,

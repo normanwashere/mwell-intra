@@ -1,12 +1,15 @@
-import { createElement, type ReactNode } from "react";
+// @vitest-environment jsdom
+import { act, createElement, useInsertionEffect, type ReactNode } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LegalApp } from "./LegalApp";
 
 const state = vi.hoisted(() => ({
   session: {} as Record<string, unknown>,
   capabilities: new Set<string>(),
   selectedRoute: "/cases/:id/application",
+  routerMountPaths: [] as string[],
 }));
 
 vi.mock("@intra/auth", () => ({
@@ -28,7 +31,10 @@ vi.mock("@intra/ui", () => ({
 }));
 
 vi.mock("react-router-dom", () => ({
-  BrowserRouter: ({ children }: { children: ReactNode }) => children,
+  BrowserRouter: ({ children }: { children: ReactNode }) => {
+    state.routerMountPaths.push(window.location.pathname);
+    return children;
+  },
   Navigate: () => null,
   Route: ({
     path,
@@ -70,11 +76,43 @@ function renderDenied(basename: string, kind: "employee" | "vendor" = "employee"
   return renderToStaticMarkup(createElement(LegalApp, { basename }));
 }
 
+async function renderClientRoute(basename: string) {
+  window.history.replaceState(null, "", "/");
+  function HostNavigationCommit() {
+    useInsertionEffect(() => {
+      window.history.replaceState(null, "", `${basename}?source=home#case`);
+    }, []);
+    return createElement(LegalApp, { basename });
+  }
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(createElement(HostNavigationCommit)));
+    expect(window.location.pathname).toBe(`${basename}/`);
+    expect(window.location.search).toBe("?source=home");
+    expect(window.location.hash).toBe("#case");
+    expect(state.routerMountPaths.length).toBeGreaterThan(0);
+    expect(state.routerMountPaths.every((path) => path === `${basename}/`)).toBe(true);
+    return container.innerHTML;
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+  }
+}
+
 describe("LegalApp access-denied recovery", () => {
   beforeEach(() => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    vi.spyOn(window, "scrollTo").mockImplementation(() => {});
     state.session = {};
     state.capabilities.clear();
     state.selectedRoute = "/cases/:id/application";
+    state.routerMountPaths = [];
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("does not add a nested main landmark inside the internal shell", () => {
@@ -97,7 +135,7 @@ describe("LegalApp access-denied recovery", () => {
     expect(html).toContain("Sign in with a different account");
   });
 
-  it("denies the vendor application route when live draft authority is absent", () => {
+  it("denies the vendor application route when live draft authority is absent", async () => {
     state.capabilities.add("core:view_own_accreditation");
     state.session = {
       userRoles: { core: ["vendor_portal"] },
@@ -114,13 +152,13 @@ describe("LegalApp access-denied recovery", () => {
       supabaseClient: {},
     };
 
-    const html = renderToStaticMarkup(createElement(LegalApp, { basename: "/vendor" }));
+    const html = await renderClientRoute("/vendor");
 
     expect(html).toContain("Accreditation draft access required");
     expect(html).not.toContain("Vendor application rendered");
   });
 
-  it("keeps the read-only vendor case list available without draft authority", () => {
+  it("keeps the read-only vendor case list available without draft authority", async () => {
     state.selectedRoute = "/";
     state.capabilities.add("core:view_own_accreditation");
     state.session = {
@@ -138,7 +176,7 @@ describe("LegalApp access-denied recovery", () => {
       supabaseClient: {},
     };
 
-    const html = renderToStaticMarkup(createElement(LegalApp, { basename: "/vendor" }));
+    const html = await renderClientRoute("/vendor");
 
     expect(html).toContain("Vendor cases rendered");
     expect(html).not.toContain("Accreditation draft access required");

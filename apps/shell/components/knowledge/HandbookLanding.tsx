@@ -16,6 +16,9 @@ import type {
 import { OperatingModel } from "./OperatingModel";
 import { FirstTimeJourney } from "./FirstTimeJourney";
 import { PersonalLibrary } from "./PersonalLibrary";
+import { TaskStart } from "./TaskStart";
+import { tasksForRoles } from "@shell/lib/knowledge/taskCatalog";
+import { useSession } from "@intra/auth";
 
 const MODULES: Array<{
   id: KnowledgeModule;
@@ -261,6 +264,8 @@ export function HandbookLanding({
   onOpenResult: (result: HandbookSearchResult) => void;
   onOpenHref: (href: string) => void;
 }) {
+  const { userRoles, profile } = useSession();
+  const suggestedTasks = tasksForRoles(content, userRoles, profile?.kind === "vendor" ? "vendor" : "internal");
   const recommendedRoles = new Set(recommendedRoleIds);
   const matchingResults = results.filter(
     (result) =>
@@ -297,22 +302,22 @@ export function HandbookLanding({
     query.length > 0 || filtersActive || mode !== "task";
 
   return (
-    <div className="mx-auto max-w-[78rem] space-y-8 pb-10 sm:space-y-10">
-      <header className="border-b border-line pb-6">
+    <div className="mx-auto max-w-[78rem] space-y-5 pb-10 sm:space-y-6">
+      <header className="border-b border-line pb-4">
         <div className="flex flex-wrap items-end justify-between gap-5">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">
+            <p className="text-xs font-semibold uppercase tracking-wide text-brand-700 dark:text-brand-300">
               Mwell Intra Knowledge Base
             </p>
-            <h1 className="mt-1 text-3xl font-bold text-ink sm:text-4xl">
+            <h1 className="mt-1 text-2xl font-bold text-ink">
               Find the right next step
             </h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted sm:text-base">
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
               Follow a complete workflow, understand your responsibility, or
               find the exact control you need without leaving Intra.
             </p>
           </div>
-          <dl className="flex gap-6 text-right">
+          <dl className="hidden gap-6 text-right xl:flex">
             <div>
               <dt className="text-2xl font-bold text-ink">
                 {content.flows.length}
@@ -321,9 +326,9 @@ export function HandbookLanding({
             </div>
             <div>
               <dt className="text-2xl font-bold text-ink">
-                {OPERATING_PERSONAS.length}
+                {content.roles.length}
               </dt>
-              <dd className="text-xs text-muted">job personas</dd>
+              <dd className="text-xs text-muted">role guides</dd>
             </div>
           </dl>
         </div>
@@ -334,16 +339,16 @@ export function HandbookLanding({
         aria-labelledby="handbook-search-title"
         className="relative scroll-mt-28"
       >
-        <div className="rounded-lg border border-brand-400 bg-surface p-4 shadow-e1 sm:p-6">
+        <div className="bg-surface px-4 py-3">
           <div className="flex flex-wrap items-end justify-between gap-2">
             <div>
               <h2
                 id="handbook-search-title"
-                className="text-lg font-bold text-ink"
+                className="sr-only"
               >
                 Search the knowledge base
               </h2>
-              <p className="mt-1 text-sm text-muted">
+              <p className="sr-only">
                 Use a task, page, role, policy, status, error, or question.
               </p>
             </div>
@@ -361,10 +366,10 @@ export function HandbookLanding({
           <label htmlFor="knowledge-search" className="sr-only">
             Search all handbook content
           </label>
-          <div className="relative mt-4">
+          <div className="relative">
             <Icon
               name="search"
-              className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-brand-700"
+              className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-brand-700 dark:text-brand-300"
             />
             <input
               id="knowledge-search"
@@ -399,8 +404,10 @@ export function HandbookLanding({
             )}
           </div>
           {!query && (
+            <details className="mt-1">
+              <summary className="min-h-11 cursor-pointer py-3 text-xs font-semibold text-muted">Common tasks</summary>
             <div
-              className="mt-3 flex flex-wrap items-center gap-2"
+              className="flex flex-wrap items-center gap-2 pb-2"
               aria-label="Popular searches"
             >
               <span className="mr-1 text-xs font-semibold uppercase text-muted">
@@ -417,11 +424,12 @@ export function HandbookLanding({
                 </button>
               ))}
             </div>
+            </details>
           )}
         </div>
 
         <div
-          className="mt-4 grid gap-3 sm:grid-cols-3"
+          className="mt-2 flex flex-wrap gap-1 border-b border-line"
           aria-label="Knowledge base entry point"
         >
           {MODES.map((item) => (
@@ -432,22 +440,24 @@ export function HandbookLanding({
                 onSetParams({ mode: item.id, q: null, limit: null })
               }
               aria-pressed={mode === item.id}
-              className={`group flex min-h-20 items-center gap-3 rounded-lg border p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
+              aria-label={item.label}
+              className={`group flex min-h-11 flex-1 items-center justify-center gap-2 border-b-2 px-2 py-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:flex-none sm:justify-start sm:px-3 ${
                 mode === item.id
-                  ? "border-brand-500 bg-surface text-ink shadow-e1 ring-1 ring-brand-500"
-                  : "border-line bg-surface text-muted hover:border-brand-300 hover:bg-inset hover:text-ink"
+                  ? "border-brand-500 text-ink"
+                  : "border-transparent text-muted hover:border-brand-300 hover:bg-inset hover:text-ink"
               }`}
             >
               <span
-                className={`grid h-10 w-10 shrink-0 place-items-center rounded-md ${mode === item.id ? "bg-brand-600 text-white" : "bg-inset text-muted group-hover:text-brand-700"}`}
+                className={`hidden h-5 w-5 shrink-0 place-items-center sm:grid ${mode === item.id ? "text-brand-700 dark:text-brand-300" : "text-muted"}`}
               >
                 <Icon name={item.icon} className="h-5 w-5" />
               </span>
               <span className="min-w-0">
                 <span className="block text-sm font-semibold">
-                  {item.label}
+                  <span className="sm:hidden">{item.id === "task" ? "Tasks" : item.id === "role" ? "Roles" : "Features"}</span>
+                  <span className="hidden sm:inline">{item.label}</span>
                 </span>
-                <span className="mt-0.5 block text-xs">{item.description}</span>
+                <span className="sr-only">{item.description}</span>
               </span>
             </button>
           ))}
@@ -516,20 +526,22 @@ export function HandbookLanding({
         )}
       </section>
 
-      {isHome && <KnowledgeSectionNav />}
 
       {isHome && (
         <>
+          <TaskStart tasks={suggestedTasks} learningHref={profile?.kind === "vendor" ? "/vendor/onboarding" : "/onboarding"} />
+          <KnowledgeSectionNav />
           <div id="kb-start" className="scroll-mt-36">
             <FirstTimeJourney
               userId={userId}
+              learningHref={profile?.kind === "vendor" ? "/vendor/onboarding" : "/onboarding"}
               onExploreRoles={() => onSetParams({ mode: "role" })}
               onPractice={
                 practiceResult ? () => onOpenResult(practiceResult) : undefined
               }
             />
           </div>
-          {recommended.length > 0 && (
+          {suggestedTasks.length === 0 && recommended.length > 0 && (
             <StartHere
               results={recommended}
               rolesById={rolesById}

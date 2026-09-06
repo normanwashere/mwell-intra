@@ -25,6 +25,19 @@ export async function GET(request: Request) {
     audience,
   );
   const allowedFeatureIds = new Set(content.features.map((item) => item.id));
+  const articleId = new URL(request.url).searchParams.get("article");
+  if (articleId !== null) {
+    const feature = content.features.find((item) => `feature-${item.id}` === articleId);
+    if (!feature) return NextResponse.json({ guide: null });
+    return NextResponse.json({ guide: {
+      title: feature.title,
+      href: `/knowledge?article=${encodeURIComponent(articleId)}`,
+      purpose: feature.purpose,
+      controls: feature.controls.map(({ name, behavior, validation, result }) => ({ name, behavior, validation, result })),
+      exceptions: feature.exceptions,
+      completionEvidence: feature.completionEvidence ?? [],
+    } }, { headers: { "Cache-Control": "private, no-store" } });
+  }
   const pathname = new URL(request.url).searchParams.get("path") ?? "/";
   const feature = featureGuideForPathname(
     CONTEXTUAL_FEATURE_GUIDES.filter((item) => allowedFeatureIds.has(item.id)),

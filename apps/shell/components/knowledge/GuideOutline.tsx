@@ -9,8 +9,16 @@ export interface GuideOutlineItem {
 
 export function GuideOutline({ items }: { items: GuideOutlineItem[] }) {
   const goTo = (id: string) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
-    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#${id}`);
+    const target = document.getElementById(id);
+    if (!target) return;
+    for (let ancestor: HTMLElement | null = target; ancestor; ancestor = ancestor.parentElement) {
+      if (ancestor instanceof HTMLDetailsElement) ancestor.open = true;
+    }
+    target.scrollIntoView({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+      block: "start",
+    });
+    window.history.replaceState(window.history.state, "", `${window.location.pathname}${window.location.search}#${encodeURIComponent(id)}`);
   };
 
   return (
@@ -34,7 +42,7 @@ export function GuideOutline({ items }: { items: GuideOutlineItem[] }) {
               <button
                 type="button"
                 onClick={() => goTo(item.id)}
-                className="min-h-9 w-full text-left text-sm text-muted hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                className="min-h-11 w-full text-left text-sm text-muted hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
               >
                 <span className="mr-2 text-xs text-faint">{index + 1}</span>{item.label}
               </button>

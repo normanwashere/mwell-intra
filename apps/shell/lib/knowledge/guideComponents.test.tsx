@@ -367,7 +367,14 @@ describe("FeatureGuide", () => {
     expect(markup).toMatch(/<h2[^>]*>Fields<\/h2>/);
     expect(markup).toMatch(/<h2[^>]*>Reads and writes<\/h2>/);
     expect(markup).toMatch(/<h2[^>]*>Statuses and notifications<\/h2>/);
-    expect(markup).toMatch(/<h2[^>]*>Errors and completion<\/h2>/);
+    expect(markup).toMatch(/<h2[^>]*>Before you start<\/h2>/);
+    expect(markup).toMatch(/<h2[^>]*>Decision flow<\/h2>/);
+    expect(markup).toMatch(/<h2[^>]*>Screen guide<\/h2>/);
+    expect(markup).toMatch(/<h2[^>]*>Result, handoff and recovery<\/h2>/);
+    expect(markup).toContain("Errors and recovery");
+    expect(markup).toContain("Completion evidence");
+    expect(markup).toContain("A stale release shows an error");
+    expect(markup).toContain("Audit history contains the final disposition.");
     expect(markup).toMatch(/<h2[^>]*>Policy basis<\/h2>/);
     expect(markup).toMatch(/<h2[^>]*>Related flows and content<\/h2>/);
     expect(markup).toContain("<dl");

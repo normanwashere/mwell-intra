@@ -12,8 +12,8 @@ export interface RoleOrientationState {
 }
 
 /**
- * Role orientation is the first-entry boundary. Later policy, assessment, and
- * scenario requirements continue to govern only their associated live actions.
+ * Summarizes orientation progress; it does not block workspace navigation.
+ * Policy, assessment, and scenario requirements govern their associated actions.
  */
 export function roleOrientationState(
   snapshot: LearningSnapshot | null,
@@ -62,6 +62,15 @@ export function sanitizeOnboardingReturnPath(
   value: string | null,
 ): string | null {
   if (!value || !value.startsWith("/") || value.startsWith("//")) return null;
-  if (value.includes("\\") || /[\r\n]/.test(value)) return null;
-  return value;
+  if (value.includes("\\") || /[\u0000-\u001f\u007f]/.test(value)) return null;
+  try {
+    const decoded = decodeURIComponent(value);
+    if (decoded.startsWith("//") || decoded.includes("\\") || /[\u0000-\u001f\u007f]/.test(decoded)) return null;
+    const base = "https://intra.invalid";
+    const destination = new URL(value, base);
+    if (destination.origin !== base) return null;
+    return `${destination.pathname}${destination.search}${destination.hash}`;
+  } catch {
+    return null;
+  }
 }

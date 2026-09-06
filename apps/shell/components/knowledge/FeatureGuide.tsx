@@ -127,9 +127,10 @@ export function FeatureGuide({
             items={
               view === "guide"
                 ? [
-                    ...(evidence.length > 0 ? [{ id: "feature-screen-guide", label: "Screen guide" }] : []),
                     { id: "feature-entry", label: "Before you start" },
+                    { id: "feature-flow", label: "Decision flow" },
                     { id: "feature-controls", label: "Controls" },
+                    { id: "feature-screen-guide", label: "Screen guide" },
                     { id: "feature-outcomes", label: "Completion and recovery" },
                     { id: "feature-related", label: "Related guidance" },
                   ]
@@ -145,18 +146,6 @@ export function FeatureGuide({
         </aside>
         <div className="min-w-0 space-y-9 lg:order-1">
         <div hidden={view !== "guide"} className="space-y-9">
-        {evidence.length > 0 && (
-          <GuideSection id="feature-screen-guide" title="Screen guide">
-            <p className="mt-2 text-sm leading-6 text-muted">
-              Follow the numbered control on the actual desktop or mobile application screen.
-            </p>
-            <div className="mt-4 space-y-6">
-              {evidence.map((item) => (
-                <EvidenceViewer key={item.id} evidence={item} title={feature.title} />
-              ))}
-            </div>
-          </GuideSection>
-        )}
         <GuideSection id="feature-entry" title="Before you start">
           <div className="mt-3 divide-y divide-line border-y border-line">
             {feature.routes.map((route) => (
@@ -198,9 +187,35 @@ export function FeatureGuide({
           </p>
         </GuideSection>
 
+        <GuideSection id="feature-flow" title="Decision flow">
+          {exactFlows.length === 0 ? (
+            <p className="mt-3 text-sm text-muted">No reviewed decision flow is linked to this guide. Use the control reference; workflow coverage remains unverified.</p>
+          ) : exactFlows.map((flow) => (
+            <div key={flow.id} className="mt-4 border-t border-line pt-4">
+              <h3 className="font-semibold text-ink">{flow.title}</h3>
+              <p className="mt-2 text-sm text-muted">{flow.summary}</p>
+              <ul className="mt-3 space-y-3 text-sm">
+                {flow.nodes.map((node) => (
+                  <li key={node.id}>
+                    <span className="font-semibold">{node.title}</span>
+                    <span className="block text-muted">{node.ownerRoleIds.map((id) => rolesById.get(id)?.label ?? id).join(", ")}</span>
+                    {flow.edges.filter((edge) => edge.from === node.id).map((edge, index) => (
+                      <span key={`${edge.to}-${index}`} className="block text-muted">
+                        {edge.label ?? "Next"}: {flow.nodes.find((target) => target.id === edge.to)?.title ?? "Unverified destination"}
+                      </span>
+                    ))}
+                    {node.type === "terminal" && <span className="block text-muted">{node.outcome ?? node.terminalOutcome}</span>}
+                  </li>
+                ))}
+              </ul>
+              {!isRoadmap && flow.availability !== "coming_soon" && <RelatedButton label={flow.title} context="Open decision flow" onClick={() => onOpenFlow(flow.id)} />}
+            </div>
+          ))}
+        </GuideSection>
+
         <GuideSection id="feature-controls" title="Controls">
           <p className="mt-2 text-sm leading-6 text-muted">
-            Complete these interactions in order. Confirm each validation before moving to the next control.
+            Use the control for your current workflow state. Check its requirements and expected result before continuing.
           </p>
           <ol className="mt-3 divide-y divide-line border-y border-line">
             {feature.controls.map((control, index) => (
@@ -221,7 +236,11 @@ export function FeatureGuide({
           </ol>
         </GuideSection>
 
-        <GuideSection id="feature-outcomes" title="Errors and completion">
+        <GuideSection id="feature-screen-guide" title="Screen guide">
+          {evidence.length ? <div className="mt-4 space-y-6">{evidence.map((item) => <EvidenceViewer key={item.id} evidence={item} title={feature.title} />)}</div> : <p className="mt-3 text-sm text-muted">Unverified screen evidence: no screenshot is linked to this guide.</p>}
+        </GuideSection>
+
+        <GuideSection id="feature-outcomes" title="Result, handoff and recovery">
           <div className="mt-3 grid gap-6 border-y border-line py-5 md:grid-cols-2">
             <DataList title="Errors and recovery" items={feature.exceptions} />
             <div className="md:border-l md:border-line md:pl-6">
@@ -231,6 +250,9 @@ export function FeatureGuide({
               />
             </div>
           </div>
+          {exactFlows.flatMap((flow) => flow.nodes.filter((node) => node.type === "handoff").map((node) => (
+            <p key={`${flow.id}-${node.id}`} className="mt-3 text-sm text-muted"><strong>{node.title}</strong>: {node.outcome ?? node.body} {flow.edges.filter((edge) => edge.from === node.id).flatMap((edge) => flow.nodes.find((target) => target.id === edge.to)?.ownerRoleIds ?? []).map((id) => rolesById.get(id)?.label ?? id).join(", ")}</p>
+          )))}
         </GuideSection>
         </div>
 
@@ -340,7 +362,7 @@ export function FeatureGuide({
                 onClick={() => onOpenArticle(article.id)}
               />
             ))}
-            {exactFlows.map((flow) => (
+            {exactFlows.filter((flow) => !isRoadmap && flow.availability !== "coming_soon").map((flow) => (
               <RelatedButton
                 key={flow.id}
                 label={flow.title}

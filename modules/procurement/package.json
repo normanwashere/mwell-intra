@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@intra/auth": "workspace:*",
+    "@intra/learning": "workspace:*",
     "@intra/rbac": "workspace:*",
     "@intra/ui": "workspace:*",
     "clsx": "^2.1.1",

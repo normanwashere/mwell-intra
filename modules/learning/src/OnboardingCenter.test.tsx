@@ -1,9 +1,18 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { LearningSnapshot } from "./types";
 import { MODULES } from "@intra/rbac";
+import type { UserRoles } from "@intra/rbac";
+import { ROLE_CURRICULA } from "./catalog";
 import { OnboardingCenter } from "./OnboardingCenter";
 import { OnboardingStatusBand } from "./OnboardingStatusBand";
+import { OPERATING_PERSONAS } from "./personas";
 import { LearningContext, type LearningContextValue } from "./LearningProvider";
 import {
   clearTrainingAdaptersForTests,
@@ -19,10 +28,12 @@ vi.mock("next/navigation", () => ({
 }));
 
 const session = {
+  userRoles: { warehouse: ["operations"] } as Partial<UserRoles>,
   profile: {
     id: "learner-1",
     email: "operator@mwell.test",
     kind: "employee" as "employee" | "vendor",
+    name: "Test account",
   },
 };
 
@@ -207,6 +218,146 @@ function renderCenter(overrides: Partial<LearningContextValue> = {}) {
 }
 
 describe("OnboardingCenter", () => {
+  it("prioritizes task learning and retains the complete mandatory checklist", () => {
+    const task = {
+      id: "receive",
+      title: "Receive delivery",
+      outcome: "Inspect and record the received units",
+      actionCapabilities: [
+        { module: "warehouse" as const, capability: "receive_stock" },
+      ],
+    };
+    render(
+      <LearningContext.Provider value={value()}>
+        <OnboardingCenter selectedTask={task} />
+      </LearningContext.Provider>,
+    );
+    expect(screen.getByText(task.outcome)).toBeInTheDocument();
+    expect(
+      screen
+        .getByRole("region", { name: "Task learning" })
+        .compareDocumentPosition(
+          screen.getByText("All assigned mandatory learning"),
+        ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      screen.getByText("1 of 3 required steps complete"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Needed for this task" }),
+    ).toBeInTheDocument();
+    const all = screen.getByText("All assigned learning").closest("details")!;
+    expect(all).not.toHaveAttribute("open");
+    fireEvent.click(screen.getByText("All assigned learning"));
+    expect(
+      screen.getByRole("heading", { name: "Your required steps" }),
+    ).toBeInTheDocument();
+  });
+
+  it("fails closed for stale task learning without losing the return destination", () => {
+    searchParams = new URLSearchParams("next=%2Fwarehouse");
+    render(
+      <LearningContext.Provider value={value({ stale: true })}>
+        <OnboardingCenter
+          selectedTask={{
+            id: "receive",
+            title: "Receive delivery",
+            outcome: "Inspect units",
+            actionCapabilities: [
+              { module: "warehouse", capability: "receive_stock" },
+            ],
+          }}
+        />
+      </LearningContext.Provider>,
+    );
+    expect(
+      screen.getByText(/Task learning readiness is unavailable/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Continue to Warehouse" }),
+    ).toHaveAttribute("href", "/warehouse");
+    fireEvent.click(screen.getByText("All assigned learning"));
+    expect(
+      screen.getByRole("button", {
+        name: "Resume Receive and inspect a serialized device",
+      }),
+    ).toBeDisabled();
+  });
+  it.each([false, true])(
+    "labels contributor scope, not its product-owner training persona (published=%s)",
+    (published) => {
+      session.userRoles = { product: ["contributor"] };
+      const curriculum = ROLE_CURRICULA.find(
+        (item) => item.module === "product" && item.role === "contributor",
+      )!;
+      const orientation = {
+        ...snapshot.curricula[0]!.requirements[0]!,
+        title: "Role orientation",
+      };
+      renderCenter({
+        snapshot: {
+          ...snapshot,
+          progress: [],
+          curricula: [
+            {
+              source: "role",
+              curriculum: {
+                ...curriculum,
+                id: published
+                  ? "internal.role.product.contributor.capability-practice.v1.curriculum"
+                  : curriculum.id,
+              },
+              requirements: [orientation],
+            },
+          ],
+        },
+      });
+      expect(
+        screen.getByText("Product / Product Contributor", {
+          selector: ".chip",
+        }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getAllByText("Assigned to: Product / Product Contributor"),
+      ).toHaveLength(2);
+      expect(screen.queryByText("Product Owner")).not.toBeInTheDocument();
+      session.userRoles = { warehouse: ["operations"] };
+    },
+  );
+
+  it("shows the vendor account name without ellipsis in the onboarding header", () => {
+    session.profile.kind = "vendor";
+    session.profile.name = "Long Vendor Company / Authorized Representative";
+    session.userRoles = { core: ["vendor_portal"] };
+    const base = snapshot.curricula[0]!;
+    render(
+      <LearningContext.Provider
+        value={value({
+          snapshot: {
+            ...snapshot,
+            curricula: [
+              {
+                ...base,
+                curriculum: { ...base.curriculum, audience: "vendor" },
+                requirements: base.requirements.map((item) => ({
+                  ...item,
+                  audience: "vendor",
+                })),
+              },
+            ],
+          },
+        })}
+      >
+        <OnboardingCenter audience="vendor" />
+      </LearningContext.Provider>,
+    );
+    expect(screen.getByText(session.profile.name)).toHaveClass("break-words");
+    expect(screen.getByText(session.profile.name)).not.toHaveClass("truncate");
+    session.profile.kind = "employee";
+    session.profile.name = "Test account";
+    session.userRoles = { warehouse: ["operations"] };
+  });
+
   beforeEach(() => {
     push.mockClear();
     prefetch.mockClear();
@@ -282,7 +433,9 @@ describe("OnboardingCenter", () => {
     expect(
       screen.getByRole("heading", { level: 1, name: "Role onboarding" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Operations Associate")).toBeInTheDocument();
+    expect(
+      screen.getByText("Warehouse / eCommerce / Operations"),
+    ).toBeInTheDocument();
     expect(
       screen.getByText("1 of 3 required steps complete"),
     ).toBeInTheDocument();
@@ -300,7 +453,7 @@ describe("OnboardingCenter", () => {
     ).toHaveAttribute("href", "/knowledge?article=trouble-access-denied");
   });
 
-  it("deduplicates equivalent orientations assigned by different personas", () => {
+  it("keeps same-title orientations independent across personas", () => {
     const equivalentOrientation = {
       ...snapshot.curricula[0]!.requirements[0]!,
       id: "product-owner-orientation",
@@ -358,10 +511,58 @@ describe("OnboardingCenter", () => {
         level: 3,
         name: "Warehouse safety orientation",
       }),
-    ).toHaveLength(1);
+    ).toHaveLength(2);
     expect(
-      screen.queryByText("Complete Warehouse safety orientation first"),
+      screen.getByRole("button", {
+        name: "Start Product Owner guided practice",
+      }),
+    ).toBeDisabled();
+  });
+
+  it("identifies the next generic orientation's persona without changing its button name", () => {
+    const base = snapshot.curricula[0]!;
+    const curricula = ["general_employee", "finance_controller"].map(
+      (personaId) => ({
+        ...base,
+        curriculum: {
+          ...base.curriculum,
+          id:
+            personaId === "general_employee"
+              ? "internal.role.warehouse.business_unit.v1"
+              : "internal.role.warehouse.finance.v1",
+          personaId,
+        },
+        requirements: [
+          {
+            ...base.requirements[0]!,
+            id: `${personaId}-orientation`,
+            title: "Role orientation",
+          },
+        ],
+      }),
+    );
+    const resume = vi.fn();
+    renderCenter({
+      resume,
+      snapshot: { ...snapshot, curricula, progress: [] },
+    });
+    const nextSection = screen.getByText("Next required action").parentElement!;
+    expect(
+      within(nextSection).getByText("Assigned to: Warehouse / Business Unit"),
+    ).toBeInTheDocument();
+    expect(
+      within(nextSection).queryByText(
+        "Assigned to: Warehouse / Finance Manager",
+      ),
     ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Assigned to: Warehouse / Finance Manager"),
+    ).toBeInTheDocument();
+    const buttons = screen.getAllByRole("button", {
+      name: "Start Role orientation",
+    });
+    buttons[0]!.click();
+    expect(resume).toHaveBeenCalledWith("general_employee-orientation");
   });
 
   it("blocks unmet prerequisites and labels retryable work accurately", () => {
@@ -517,7 +718,9 @@ describe("OnboardingCenter", () => {
         ([key]) => key === role,
       )![1].label;
       expect(
-        screen.getByText(`${definition.label} / ${roleLabel}`),
+        screen.getByText(`${definition.label} / ${roleLabel}`, {
+          selector: "p.break-words",
+        }),
       ).toBeInTheDocument();
       expect(screen.getAllByText("Certification active")).toHaveLength(1);
     },
@@ -651,8 +854,8 @@ describe("OnboardingCenter", () => {
 
     expect(screen.getByText("No onboarding assigned yet")).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "Open Knowledge Base" }),
-    ).toHaveAttribute("href", "/knowledge");
+      screen.getByRole("link", { name: "Return to workspace" }),
+    ).toHaveAttribute("href", "/work");
   });
 
   it("distinguishes an initial service failure from an empty assignment", () => {
@@ -697,6 +900,10 @@ describe("OnboardingCenter", () => {
             ...snapshot,
             curricula: snapshot.curricula.map((effective) => ({
               ...effective,
+              requirements: effective.requirements.map((item) => ({
+                ...item,
+                audience: "vendor" as const,
+              })),
               curriculum: {
                 ...effective.curriculum,
                 audience: "vendor",
@@ -738,7 +945,167 @@ describe("OnboardingCenter", () => {
 });
 
 describe("OnboardingStatusBand", () => {
-  it("makes the first-time module boundary explicit", () => {
+  it.each([
+    { snapshot: null, stale: false, error: null },
+    {
+      snapshot: { ...snapshot, curricula: [], lockedCapabilities: [] },
+      stale: true,
+      error: null,
+    },
+    { snapshot, stale: false, error: "Refresh failed" },
+  ])(
+    "does not claim readiness from missing or unconfirmed state %#",
+    (state) => {
+      const refresh = vi.fn();
+      render(
+        <LearningContext.Provider
+          value={value({ ...state, loading: false, refresh })}
+        >
+          <OnboardingStatusBand />
+        </LearningContext.Provider>,
+      );
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "Role readiness unavailable",
+      );
+      expect(
+        screen.queryByText(
+          /No required learning|No actions are waiting|actions need learning/,
+        ),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+      screen.getByRole("button", { name: "Retry" }).click();
+      expect(refresh).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("counts unique learning-locked actions, excluding role and service restrictions", () => {
+    const lock = snapshot.lockedCapabilities[0]!;
+    const locks = [
+      lock,
+      { ...lock, reason: "missing_certification" },
+      {
+        ...lock,
+        capability: { module: "procurement", capability: "approve_request" },
+        reason: "expired_certification",
+      },
+      {
+        ...lock,
+        capability: { module: "core", capability: "admin" },
+        reason: "missing_role",
+      },
+      {
+        ...lock,
+        capability: { module: "core", capability: "manage_users" },
+        reason: "unavailable",
+      },
+    ] as unknown as LearningSnapshot["lockedCapabilities"];
+    render(
+      <LearningContext.Provider
+        value={value({ snapshot: { ...snapshot, lockedCapabilities: locks } })}
+      >
+        <OnboardingStatusBand />
+      </LearningContext.Provider>,
+    );
+    expect(screen.getByText(/2 actions need learning/)).toBeInTheDocument();
+  });
+
+  it.each([
+    [
+      "/vendor/cases/case-1/application?tab=documents#declaration",
+      "/vendor/cases/case-1/application?tab=documents#declaration",
+    ],
+    ["/vendor?tab=cases#active", "/vendor?tab=cases#active"],
+    ["/procurement/requests/one", "/vendor"],
+    ["/vendor/onboarding?next=bad#step", "/vendor"],
+    ["/vendor/onboarding/step", "/vendor"],
+    ["//external.test/vendor/cases", "/vendor"],
+    ["/vendor/../admin", "/vendor"],
+    ["/vendor/%2e%2e/admin", "/vendor"],
+    ["/vendor/%2f..%2fadmin", "/vendor"],
+  ])("bounds vendor return %s", (next, expected) => {
+    session.profile.kind = "vendor";
+    searchParams = new URLSearchParams({ next });
+    render(
+      <LearningContext.Provider
+        value={value({ snapshot: { ...snapshot, curricula: [] } })}
+      >
+        <OnboardingCenter audience="vendor" />
+      </LearningContext.Provider>,
+    );
+    expect(
+      screen.getByRole("link", { name: "Return to workspace" }),
+    ).toHaveAttribute("href", expected);
+    session.profile.kind = "employee";
+    searchParams = new URLSearchParams();
+  });
+
+  it.each(OPERATING_PERSONAS)(
+    "uses the same unfinished checklist for $label",
+    (persona) => {
+      const audience =
+        persona.id === "vendor_representative" ? "vendor" : "internal";
+      session.profile.kind = audience === "vendor" ? "vendor" : "employee";
+      searchParams = new URLSearchParams();
+      const effective = snapshot.curricula[0]!;
+      const assigned: LearningSnapshot = {
+        ...snapshot,
+        progress: [],
+        curricula: [
+          {
+            ...effective,
+            curriculum: {
+              ...effective.curriculum,
+              personaId: persona.id,
+              audience,
+            },
+            requirements: effective.requirements.map((item) => ({
+              ...item,
+              audience,
+            })),
+          },
+        ],
+      };
+      render(
+        <LearningContext.Provider value={value({ snapshot: assigned })}>
+          <OnboardingCenter audience={audience} />
+          <OnboardingStatusBand />
+        </LearningContext.Provider>,
+      );
+      expect(
+        screen.queryByText(persona.label, { selector: ".chip" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("link", {
+          name:
+            audience === "vendor"
+              ? "Continue to Vendor"
+              : "Continue to My Work",
+        }),
+      ).toHaveAttribute("href", audience === "vendor" ? "/vendor" : "/work");
+      expect(
+        screen.getByRole("link", { name: "Continue onboarding" }),
+      ).toHaveAttribute(
+        "href",
+        audience === "vendor" ? "/vendor/onboarding" : "/onboarding",
+      );
+      session.profile.kind = "employee";
+    },
+  );
+
+  it("offers return before any learning is completed without resuming or granting credit", () => {
+    searchParams = new URLSearchParams("next=%2Fprocurement");
+    const resume = vi.fn();
+    renderCenter({ resume, snapshot: { ...snapshot, progress: [] } });
+    expect(
+      screen.getByRole("link", { name: "Continue to Procurement" }),
+    ).toHaveAttribute("href", "/procurement");
+    expect(
+      screen.getByText("0 of 3 required steps complete"),
+    ).toBeInTheDocument();
+    expect(resume).not.toHaveBeenCalled();
+  });
+
+  it("keeps authorized work available before orientation", () => {
     const firstTimeSnapshot: LearningSnapshot = {
       ...snapshot,
       progress: snapshot.progress.map((item) =>
@@ -759,13 +1126,13 @@ describe("OnboardingStatusBand", () => {
     );
 
     expect(
-      screen.getByText("Complete role orientation to enter your modules"),
+      screen.getByText(/Other authorized work remains available/),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("0 of 1 required step complete"),
+      screen.getByText("0 of 3 required steps complete"),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "Start onboarding" }),
+      screen.getByRole("link", { name: "Continue onboarding" }),
     ).toHaveAttribute("href", "/onboarding");
   });
 
@@ -776,7 +1143,9 @@ describe("OnboardingStatusBand", () => {
     expect(
       screen.getByRole("link", { name: "Continue to Procurement" }),
     ).toHaveAttribute("href", "/procurement");
-    expect(screen.getByText("Procurement is ready")).toBeInTheDocument();
+    expect(
+      screen.getByText("Continue your authorized work"),
+    ).toBeInTheDocument();
   });
 
   it("summarizes readiness without presenting onboarding as an app module", () => {

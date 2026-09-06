@@ -33,14 +33,17 @@ export interface LegalAppProps {
 }
 
 // See WarehouseApp for the react-router basename normalization rationale.
-function useNormalizeBasenamePath(basename: string): void {
+function useNormalizeBasenamePath(basename: string): boolean {
+  const [ready, setReady] = useState(false);
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (window.location.pathname === basename) {
       const next = `${basename}/${window.location.search}${window.location.hash}`;
       window.history.replaceState(window.history.state, "", next);
     }
+    setReady(true);
   }, [basename]);
+  return ready;
 }
 
 function ScrollToTopOnRouteChange() {
@@ -52,7 +55,7 @@ function ScrollToTopOnRouteChange() {
 }
 
 export function LegalApp({ basename = "/legal" }: LegalAppProps) {
-  useNormalizeBasenamePath(basename);
+  const basenameReady = useNormalizeBasenamePath(basename);
   const { profile, loading, signOut, mode, supabaseClient } = useSession();
   const isVendorSurface = basename.startsWith("/vendor");
   const [vendorInviteSearch, setVendorInviteSearch] = useState<string | null>(
@@ -155,6 +158,11 @@ export function LegalApp({ basename = "/legal" }: LegalAppProps) {
       </div>
     );
     return isVendorSurface ? <main>{denied}</main> : <section>{denied}</section>;
+  }
+
+  if (!basenameReady) {
+    const pending = <div aria-busy="true" className="mx-auto max-w-5xl p-4 md:p-6"><SkeletonList rows={5} /></div>;
+    return isVendorSurface ? <main>{pending}</main> : pending;
   }
 
   const routes = (

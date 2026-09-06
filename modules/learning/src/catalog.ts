@@ -99,6 +99,7 @@ const vendorJourneyRequirements: readonly RequirementDefinition[] = [
     audience: "vendor",
     kind: "attestation",
     title: "Vendor evidence and acknowledgments",
+    simulationId: "vendor-evidence-review-v1",
     mandatory: true,
     prerequisiteIds: ["vendor.vendor_representative.orientation.v1"],
     capabilityOutcomes: [],
@@ -772,7 +773,14 @@ const capabilityRequirements = roleDefinitions.flatMap((roleDefinition) => {
           ?.access === "mutation",
     )
     // Reservation has its own scored check; old event practice cannot certify it.
-    .filter((grant) => !(grant.module === "warehouse" && grant.role === "marketing" && grant.cap === "reserve_allocate"))
+    .filter(
+      (grant) =>
+        !(
+          grant.module === "warehouse" &&
+          grant.role === "marketing" &&
+          grant.cap === "reserve_allocate"
+        ),
+    )
     .map((grant) => ({ module: grant.module, capability: grant.cap }));
   if (capabilities.length === 0) return [];
 
@@ -865,9 +873,16 @@ const requirements: readonly RequirementDefinition[] = [
     kind: "assessment",
     title: MARKETING_RESERVATION_ASSESSMENT.title,
     mandatory: true,
-    prerequisiteIds: ["internal.role.warehouse.marketing.capability-practice.v1"],
+    prerequisiteIds: [
+      "internal.role.warehouse.marketing.capability-practice.v1",
+    ],
     capabilityOutcomes: roleCapabilities
-      .filter((grant) => grant.module === "warehouse" && grant.role === "marketing" && grant.cap === "reserve_allocate")
+      .filter(
+        (grant) =>
+          grant.module === "warehouse" &&
+          grant.role === "marketing" &&
+          grant.cap === "reserve_allocate",
+      )
       .map((grant) => ({ module: grant.module, capability: grant.cap })),
     passingScore: MARKETING_RESERVATION_ASSESSMENT.passingScore,
     maxAttempts: MARKETING_RESERVATION_ASSESSMENT.maxAttempts,
@@ -925,7 +940,8 @@ export const ROLE_CURRICULA: readonly RoleCurriculumDefinition[] =
             ? [VENDOR_EVIDENCE_REQUIREMENT_ID]
             : []),
           ...(hasCapabilityPractice ? [capabilityRequirementId] : []),
-          ...(roleDefinition.module === "warehouse" && roleDefinition.role === "marketing"
+          ...(roleDefinition.module === "warehouse" &&
+          roleDefinition.role === "marketing"
             ? [MARKETING_RESERVATION_ASSESSMENT.id]
             : []),
           ...(!hasCapabilityPractice &&
@@ -994,6 +1010,31 @@ const rolePractices = OPERATING_PERSONA_IDS.map((personaId) => {
 const simulations: readonly SimulationDefinition[] = [
   ...orientationSimulations,
   ...rolePractices.map((practice) => practice.simulation),
+  {
+    id: "vendor-evidence-review-v1",
+    version: 1,
+    audience: "vendor",
+    module: "core",
+    title: "Vendor evidence learning review",
+    checkpointIds: ["review-evidence", "complete"],
+    capabilityOutcomes: [],
+    embeddedSteps: [
+      {
+        checkpointId: "review-evidence",
+        title: "Review evidence responsibilities",
+        instruction:
+          "Review the current document checklist in your vendor case. Prepare accurate, current company evidence and address missing or expired documents before submission. This learning review does not upload or approve documents.",
+        outcomeId: "reviewed",
+      },
+      {
+        checkpointId: "complete",
+        title: "Keep legal declarations separate",
+        instruction:
+          "Declarations, acknowledgments, and signatures must be completed by the authorized vendor representative in the actual application. Completing this learning review does not sign a document, make a legal acknowledgment, submit an application, or grant accreditation.",
+        outcomeId: "reviewed",
+      },
+    ],
+  },
 ];
 
 export const LEARNING_CATALOG = {
@@ -1009,6 +1050,15 @@ export function simulationForRequirement(
   requirement: RequirementDefinition,
 ): SimulationDefinition | undefined {
   if (!requirement.simulationId) return undefined;
+  if (
+    requirement.simulationId === "vendor-evidence-review-v1" &&
+    (requirement.id !== VENDOR_EVIDENCE_REQUIREMENT_ID ||
+      requirement.version !== 1 ||
+      requirement.audience !== "vendor" ||
+      requirement.kind !== "attestation" ||
+      requirement.capabilityOutcomes.length !== 0)
+  )
+    return undefined;
   return LEARNING_CATALOG.simulations.find(
     (simulation) => simulation.id === requirement.simulationId,
   );

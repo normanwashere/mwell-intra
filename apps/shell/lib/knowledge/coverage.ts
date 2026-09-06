@@ -1,8 +1,9 @@
 import type { KnowledgeContent, KnowledgeModule } from "./types";
-import { WAREHOUSE_ROUTE_CONTRACTS } from "@intra/warehouse";
+import { WAREHOUSE_ROUTE_CONTRACTS } from "@intra/warehouse/navigation";
 import { PROCUREMENT_ROUTE_CONTRACTS } from "@intra/procurement/routes";
 import { mountLegalRouteContracts } from "@intra/legal/routes";
 import { SHELL_PAGE_ROUTE_CONTRACTS } from "../routes";
+import { outgoingEdges } from "./graph";
 
 export interface LiveRouteManifestEntry {
   route: string;
@@ -112,6 +113,120 @@ function matchesRoute(pattern: string, candidate: string): boolean {
 
 const hasDocumentedText = (values: string[] | undefined): boolean =>
   Boolean(values?.length && values.every((value) => value.trim().length > 0));
+
+/** Content inventory only. Accepted capture artifacts remain a separate release gate. */
+export function validateTaskCoverage(content: KnowledgeContent) {
+  const unmappedLiveControls: string[] = [];
+  const unresolvedTargets: string[] = [];
+  const missingActionEvidence: string[] = [];
+  const flows = new Map(content.flows.map((flow) => [flow.id, flow]));
+  const roles = new Set(content.roles.map((role) => role.id));
+  const inventory = content.features.flatMap((feature) => {
+    const executable = feature.availability !== "coming_soon";
+    for (const id of feature.relatedFlowIds) {
+      const flow = flows.get(id);
+      if (!flow) unresolvedTargets.push(`${feature.id}:${id}`);
+      else if (executable && flow.availability === "coming_soon")
+        unresolvedTargets.push(`${feature.id}:${id}:coming_soon`);
+    }
+    for (const id of feature.roleIds)
+      if (!roles.has(id)) unresolvedTargets.push(`${feature.id}:role:${id}`);
+    return feature.controls.map((control) => {
+      const key = `${feature.id}:${control.name}`;
+      const mapped = [control.name, control.behavior, control.validation, control.result,
+        feature.owner, feature.reviewedAt, ...feature.policyBasis].every((value) => value.trim())
+        && feature.policyBasis.length > 0 && feature.routes.length > 0;
+      if (executable && !mapped) unmappedLiveControls.push(key);
+      const evidenceIds = content.evidence.filter((item) =>
+        item.featureId === feature.id && item.desktopSrc && item.mobileSrc &&
+        item.state.trim() && item.expectedLandmark.trim() &&
+        item.hotspots.some((spot) => spot.label.trim() === control.name.trim() && spot.instruction.trim()),
+      ).map((item) => item.id);
+      if (executable && !evidenceIds.length) missingActionEvidence.push(key);
+      return {
+        key, featureId: feature.id, control: control.name,
+        referenceId: `feature-${feature.id}`, availability: feature.availability,
+        owner: feature.owner, roleIds: feature.roleIds, capabilityIds: feature.capabilityIds,
+        routes: feature.routes, flowIds: feature.relatedFlowIds,
+        prerequisite: control.validation, fields: feature.fields ?? [], result: control.result,
+        nextOwnerRoleIds: [...new Set(feature.relatedFlowIds.flatMap((id) => {
+          const flow = flows.get(id);
+          return flow?.nodes.filter((node) => node.type === "handoff").flatMap((node) =>
+            flow.edges.filter((edge) => edge.from === node.id).flatMap((edge) =>
+              flow.nodes.find((target) => target.id === edge.to)?.ownerRoleIds ?? [])) ?? [];
+        }))],
+        recovery: feature.exceptions, policyReferences: feature.policyBasis,
+        evidenceIds, mapped: Boolean(mapped), executable,
+        // Metadata/control matches are not visual review, freshness or artifact verification.
+        unverified: true as const,
+      };
+    });
+  });
+  // coverage is imported by the client feature catalog: keep graph checks pure,
+  // without importing the filesystem-based release validator.
+  const invalidDecisionBranches: string[] = [];
+  for (const flow of content.flows) {
+    const nodes = new Map(flow.nodes.map((node) => [node.id, node]));
+    const fail = (id: string, reason: string) => invalidDecisionBranches.push(`${flow.id}:${id}:${reason}`);
+    if (!nodes.has(flow.startNodeId)) fail(flow.startNodeId, "missing start");
+    for (const edge of flow.edges)
+      if (!nodes.has(edge.from) || !nodes.has(edge.to)) fail(edge.from, `missing destination/source ${edge.to}`);
+    const reachable = new Set<string>();
+    const pending = [flow.startNodeId];
+    while (pending.length) {
+      const id = pending.pop()!;
+      if (reachable.has(id)) continue;
+      reachable.add(id);
+      pending.push(...outgoingEdges(flow, id).map((edge) => edge.to));
+    }
+    const terminating = new Set(flow.nodes.filter((node) => node.type === "terminal").map((node) => node.id));
+    const reverse = [...terminating];
+    while (reverse.length) {
+      const id = reverse.pop()!;
+      for (const edge of flow.edges.filter((item) => item.to === id)) {
+        if (terminating.has(edge.from)) continue;
+        terminating.add(edge.from);
+        reverse.push(edge.from);
+      }
+    }
+    for (const node of flow.nodes) {
+      if (!reachable.has(node.id)) fail(node.id, "orphan");
+      if (!terminating.has(node.id)) fail(node.id, "no terminal outcome");
+      if (!node.ownerRoleIds.length || node.ownerRoleIds.some((id) => !roles.has(id))) fail(node.id, "unknown owner");
+      if (node.type !== "decision") continue;
+      const edges = outgoingEdges(flow, node.id);
+      const labels = edges.map((edge) => edge.label?.trim().replace(/\s+/g, " ").toLowerCase());
+      if (!roles.has(node.authorityRoleId) || !node.ownerRoleIds.includes(node.authorityRoleId) || !node.policyBasis.trim()) fail(node.id, "decision authority/policy");
+      if (edges.length < 2 || labels.some((label) => !label) || new Set(labels).size !== edges.length) fail(node.id, "decision labels");
+      const destinations = new Set(edges.map((edge) => edge.to));
+      if (destinations.size !== edges.length && !(node.mergeContract?.justification.trim() && edges.filter((edge) => edge.to === node.mergeContract?.destinationNodeId).length >= 2)) fail(node.id, "decision destinations");
+    }
+  }
+  unresolvedTargets.push(...buildKnowledgeCoverage(content).errors.filter((error) =>
+    error.includes("unknown route") || error.includes("has no live feature documentation"),
+  ));
+  for (const flow of content.flows.filter((item) => item.availability !== "coming_soon")) {
+    for (const node of flow.nodes.filter((item) => ["start", "action", "handoff"].includes(item.type))) {
+      const evidence = content.evidence.find((item) => item.id === node.evidenceId && item.nodeId === node.id);
+      if (!evidence?.desktopSrc || !evidence.mobileSrc || !evidence.hotspots.length)
+        missingActionEvidence.push(`${flow.id}:${node.id}`);
+    }
+  }
+  return {
+    unmappedLiveControls, unresolvedTargets, missingActionEvidence, invalidDecisionBranches,
+    inventory, unverified: true as const,
+    counts: {
+      features: content.features.length, controls: inventory.length,
+      liveFeatures: content.features.filter((item) => item.availability === "live").length,
+      limitedFeatures: content.features.filter((item) => item.availability === "limited").length,
+      comingSoonFeatures: content.features.filter((item) => item.availability === "coming_soon").length,
+      flows: content.flows.length, decisions: content.flows.reduce((n, flow) => n + flow.nodes.filter((node) => node.type === "decision").length, 0),
+      policyReferences: new Set(content.features.flatMap((feature) => feature.policyBasis)).size,
+      evidenceRecords: content.evidence.length,
+      controlEvidenceMatches: inventory.filter((item) => item.evidenceIds.length).length,
+    },
+  };
+}
 
 export function buildKnowledgeCoverage(
   content: KnowledgeContent,

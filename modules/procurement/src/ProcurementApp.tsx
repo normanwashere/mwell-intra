@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   BrowserRouter,
   Navigate,
@@ -32,14 +32,17 @@ export interface ProcurementAppProps {
 }
 
 // See WarehouseApp for the react-router basename normalization rationale.
-function useNormalizeBasenamePath(basename: string): void {
+function useNormalizeBasenamePath(basename: string): boolean {
+  const [ready, setReady] = useState(false);
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (window.location.pathname === basename) {
       const next = `${basename}/${window.location.search}${window.location.hash}`;
       window.history.replaceState(window.history.state, "", next);
     }
+    setReady(true);
   }, [basename]);
+  return ready;
 }
 
 function ScrollToTopOnRouteChange() {
@@ -53,7 +56,7 @@ function ScrollToTopOnRouteChange() {
 export function ProcurementApp({
   basename = "/procurement",
 }: ProcurementAppProps) {
-  useNormalizeBasenamePath(basename);
+  const basenameReady = useNormalizeBasenamePath(basename);
   const { profile, userRoles, loading } = useSession();
   // PR-11 (P0): the module previously gated on procurement.view_dashboard,
   // which locked out ladder-tier approvers with NO procurement role (the
@@ -137,6 +140,10 @@ export function ProcurementApp({
         </div>
       </div>
     );
+  }
+
+  if (!basenameReady) {
+    return <div aria-busy="true" className="mx-auto max-w-5xl p-4 md:p-6"><SkeletonList rows={5} /></div>;
   }
 
   return (

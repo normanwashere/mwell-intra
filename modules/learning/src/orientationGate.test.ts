@@ -100,4 +100,12 @@ describe("sanitizeOnboardingReturnPath", () => {
     expect(sanitizeOnboardingReturnPath("//example.com/path")).toBeNull();
     expect(sanitizeOnboardingReturnPath("/warehouse\\redirect")).toBeNull();
   });
+  it.each(["/\t/example.org", "/\u0000/evil.test", "/%09/example.org", "/%2fexample.org", "/%5cexample.org", "/%zz"])("rejects URL normalization bypass %s", (value) => {
+    expect(sanitizeOnboardingReturnPath(value)).toBeNull();
+  });
+  it("rejects a decoded query parameter before producing a return link", () => {
+    const value = new URLSearchParams("next=%2F%09%2Fexample.org").get("next");
+    expect(sanitizeOnboardingReturnPath(value)).toBeNull();
+    expect(sanitizeOnboardingReturnPath("/warehouse/../work?tab=mine#tasks")).toBe("/work?tab=mine#tasks");
+  });
 });

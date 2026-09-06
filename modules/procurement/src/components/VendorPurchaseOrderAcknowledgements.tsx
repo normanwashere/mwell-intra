@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useSession } from '@intra/auth';
+import { CertifiedAction } from '@intra/learning';
 import { Badge, money } from '@intra/ui';
 
 type VendorPo = {
@@ -54,12 +55,12 @@ export function VendorPurchaseOrderAcknowledgements() {
           {['paymentTerms','deliveryTerms','shippingTerms','scopeOfWork','acceptanceCriteria','validityPeriod'].map(key => <p key={key}><strong>{key.replace(/([A-Z])/g, ' $1')}: </strong>{po.terms?.[key] || 'Not specified'}</p>)}
         </div>
       </details>
-      {po.lifecycle.acknowledgementStatus !== 'acknowledged' ? <label className="block text-sm font-semibold text-ink">Acknowledgement reference<input aria-label={`Acknowledgement reference for ${po.poNumber}`} className="input mt-1.5" value={reference[po.id] ?? ''} onChange={(event) => setReference((current) => ({ ...current, [po.id]: event.target.value }))} /><button type="button" className="btn-primary mt-2" disabled={!reference[po.id]?.trim() || !po.documentHash || reviewed[po.id] !== po.documentHash} onClick={async () => {
+      {po.lifecycle.acknowledgementStatus !== 'acknowledged' ? <div className="space-y-2"><label className="block text-sm font-semibold text-ink">Acknowledgement reference<input aria-label={`Acknowledgement reference for ${po.poNumber}`} className="input mt-1.5" value={reference[po.id] ?? ''} onChange={(event) => setReference((current) => ({ ...current, [po.id]: event.target.value }))} /></label><CertifiedAction module="core" capability="submit_accreditation">{({ execute, pending }) => <button type="button" className="btn-primary mt-2" disabled={pending || !reference[po.id]?.trim() || !po.documentHash || reviewed[po.id] !== po.documentHash} onClick={() => void execute(async () => {
         try {
           const { error: rpcError } = await live!.schema('procurement').rpc('acknowledge_purchase_order', { payload: { purchase_order_id: po.id, expected_revision: po.lifecycle.revision, document_hash: po.documentHash, acknowledgement_reference: reference[po.id]!.trim() } });
           if (rpcError) { await refresh(); setError(`${rpcError.message}. Review the refreshed purchase order before retrying.`); setReviewed({}); } else await refresh();
         } catch (cause) { setError(cause instanceof Error ? cause.message : 'Acknowledgement failed'); }
-      }}>Acknowledge revision {po.lifecycle.revision}</button></label> : null}
+      })}>{pending ? 'Acknowledging...' : `Acknowledge revision ${po.lifecycle.revision}`}</button>}</CertifiedAction></div> : null}
     </section>)}
   </main>;
 }

@@ -18,7 +18,10 @@ import {
   roleCurriculumFor,
   requiredCurriculaFor,
   vendorRequirementIds,
+  simulationForRequirement,
+  supportsEmbeddedTraining,
 } from "./catalog";
+import { MemoryLearningRepository } from "./repository";
 import { OPERATING_PERSONA_IDS } from "./personas";
 import { REQUIREMENT_PROGRESS_STATES } from "./types";
 import { assessmentQuestionsFor } from "./content";
@@ -28,6 +31,91 @@ const allCurricula = [
   ...ROLE_CURRICULA,
   ...CAPABILITY_COVERAGE_CURRICULA,
 ];
+
+describe("vendor evidence learning review", () => {
+  it("supports the exact attestation without legal or capability grants", async () => {
+    const requirement = LEARNING_CATALOG.requirements.find(
+      (item) =>
+        item.id ===
+        "vendor.vendor_representative.evidence-and-acknowledgments.v1",
+    )!;
+    const orientation = LEARNING_CATALOG.requirements.find(
+      (item) => item.id === requirement.prerequisiteIds[0],
+    )!;
+    const simulation = simulationForRequirement(requirement)!;
+    expect(requirement.kind).toBe("attestation");
+    expect(requirement.capabilityOutcomes).toEqual([]);
+    expect(simulation.capabilityOutcomes).toEqual([]);
+    expect(simulation.audience).toBe("vendor");
+    expect(supportsEmbeddedTraining(requirement)).toBe(true);
+    expect(supportsEmbeddedTraining({ ...requirement, version: 2 })).toBe(
+      false,
+    );
+    expect(
+      supportsEmbeddedTraining({ ...requirement, id: "unpublished-review" }),
+    ).toBe(false);
+    expect(
+      supportsEmbeddedTraining({ ...requirement, audience: "internal" }),
+    ).toBe(false);
+    expect(simulation.embeddedSteps?.[1]?.instruction).toContain(
+      "does not sign a document",
+    );
+    const repository = new MemoryLearningRepository({
+      runtime: "test",
+      simulations: [simulation],
+      snapshot: {
+        curricula: [
+          {
+            curriculum: {
+              id: "vendor-review",
+              version: 1,
+              audience: "vendor",
+              personaId: "vendor_representative",
+              requirementIds: [orientation.id, requirement.id],
+            },
+            source: "role",
+            requirements: [orientation, requirement],
+          },
+        ],
+        progress: [orientation, requirement].map((item) => ({
+          assignmentRequirementId: item.id,
+          requirementId: item.id,
+          requirementVersion: item.version,
+          state: item.id === orientation.id ? "passed" : "not_started",
+          attemptCount: 0,
+          allowsSharedCompletion: false,
+          updatedAt: "2026-09-06T00:00:00Z",
+        })),
+        certifications: [],
+        lockedCapabilities: [],
+        refreshedAt: "2026-09-06T00:00:00Z",
+      },
+    });
+    const started = await repository.startRequirement({
+      assignmentRequirementId: requirement.id,
+    });
+    expect(started.attempt?.mode).toBe("attestation");
+    const command = {
+      assignmentRequirementId: requirement.id,
+      attemptId: started.attempt!.id,
+      simulationId: simulation.id,
+      outcomeId: "reviewed",
+    };
+    expect(
+      (
+        await repository.checkpoint({
+          ...command,
+          checkpointId: "review-evidence",
+        })
+      ).state,
+    ).toBe("in_progress");
+    expect(
+      (await repository.checkpoint({ ...command, checkpointId: "complete" }))
+        .state,
+    ).toBe("passed");
+    expect((await repository.resolveAssignments()).certifications).toEqual([]);
+  });
+});
 
 const requirementById = new Map(
   LEARNING_CATALOG.requirements.map((requirement) => [
@@ -155,7 +243,10 @@ describe("learning catalog", () => {
     for (const requirement of LEARNING_CATALOG.requirements) {
       if (requirement.capabilityOutcomes.length === 0) continue;
       if (requirement.kind === "assessment") {
-        expect(assessmentQuestionsFor(requirement.id), requirement.id).not.toBeNull();
+        expect(
+          assessmentQuestionsFor(requirement.id),
+          requirement.id,
+        ).not.toBeNull();
         continue;
       }
       if (requirement.id.includes(".unassigned.")) {

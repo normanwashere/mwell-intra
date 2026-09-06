@@ -3,6 +3,7 @@ import { inboundQueue, isReceivableInbound } from "@/domain/workQueues";
 import { Link, useSearchParams } from "react-router-dom";
 import { useSession } from "@intra/auth";
 import { CertifiedAction } from "@intra/learning";
+import { can as roleCan } from "@intra/rbac";
 import { useWarehouse } from "@/app/store";
 import {
   poProgress,
@@ -136,7 +137,7 @@ export function PurchaseOrdersPage() {
     canOpenRoute,
   } = useWarehouse();
   const toast = useToast();
-  const { mode, supabaseClient, profile } = useSession();
+  const { mode, supabaseClient, profile, userRoles, roleCapabilities } = useSession();
   const [searchParams] = useSearchParams();
   const handoffPoId = searchParams.get("po");
   const openedHandoffRef = useRef<string | null>(null);
@@ -148,6 +149,10 @@ export function PurchaseOrdersPage() {
     };
   }, []);
   const canManagePOs = can("view_procurement");
+  // The legacy cancellation grant is SQL-only; it is not Warehouse read authority.
+  const canCancelPO = canManagePOs && (mode === "supabase"
+    ? roleCapabilities?.procurement?.includes("cancel_purchase_order") === true
+    : roleCan(userRoles, "procurement", "author_po"));
   const canReceive = can("receive_stock");
 
   // Procurement-module POs (issued/approved) read from their localStorage
@@ -164,6 +169,9 @@ export function PurchaseOrdersPage() {
   // Cancel live INSIDE the sheet instead of repeating on every card.
   const [detailPOId, setDetailPOId] = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  useEffect(() => {
+    if (!canCancelPO) setConfirmCancel(false);
+  }, [canCancelPO]);
   const [receivePO, setReceivePO] = useState<PurchaseOrder | null>(null);
   const [receiveQty, setReceiveQty] = useState<Record<string, number>>({});
   const [receiveLoc, setReceiveLoc] = useState("");
@@ -798,6 +806,7 @@ export function PurchaseOrdersPage() {
   };
 
   const cancel = async (po: PurchaseOrder) => {
+    if (!canCancelPO) return;
     const ok = await cancelPurchaseOrder({ poId: po.id });
     if (!ok) return;
     setConfirmCancel(false);
@@ -1309,16 +1318,41 @@ export function PurchaseOrdersPage() {
           detailPO ? `Created ${formatDate(detailPO.createdAt)}` : undefined
         }
         footer={
-          detailPO && (canReceive || canManagePOs) && isOpenPO(detailPO) ? (
+          detailPO && (canReceive || canCancelPO) && isOpenPO(detailPO) ? (
             <div className="flex gap-2">
-              {canManagePOs && !confirmCancel && (
-                <button
-                  type="button"
-                  className="btn-ghost flex-1 justify-center"
-                  onClick={() => setConfirmCancel(true)}
-                >
-                  Cancel PO
-                </button>
+              {canCancelPO && (
+                <div className="min-w-0 flex-1">
+                  <CertifiedAction module="procurement" capability="author_po">
+                    {({ execute, pending }) => confirmCancel ? (
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className="btn-ghost flex-1 justify-center"
+                          disabled={pending}
+                          onClick={() => setConfirmCancel(false)}
+                        >
+                          Keep PO
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-primary flex-1 justify-center bg-rose-600 hover:bg-rose-700"
+                          disabled={pending}
+                          onClick={() => void execute(() => cancel(detailPO))}
+                        >
+                          {pending ? "Cancelling PO..." : "Confirm cancel"}
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn-ghost w-full justify-center"
+                        onClick={() => setConfirmCancel(true)}
+                      >
+                        Cancel PO
+                      </button>
+                    )}
+                  </CertifiedAction>
+                </div>
               )}
               {canReceive && isReceivable(detailPO) && !confirmCancel && (
                 <button
@@ -1328,24 +1362,6 @@ export function PurchaseOrdersPage() {
                 >
                   <Icon name="truck" className="h-4 w-4" /> Receive and inspect
                 </button>
-              )}
-              {confirmCancel && (
-                <>
-                  <button
-                    type="button"
-                    className="btn-ghost flex-1 justify-center"
-                    onClick={() => setConfirmCancel(false)}
-                  >
-                    Keep PO
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-primary flex-1 justify-center bg-rose-600 hover:bg-rose-700"
-                    onClick={() => detailPO && void cancel(detailPO)}
-                  >
-                    Confirm cancel
-                  </button>
-                </>
               )}
             </div>
           ) : undefined

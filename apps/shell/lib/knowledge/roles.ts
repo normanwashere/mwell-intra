@@ -3,7 +3,7 @@ import {
   roleCapabilities,
   type Module as RbacModule,
 } from "@intra/rbac";
-import { MODULES as WAREHOUSE_MODULES } from "@intra/warehouse";
+import { MODULES as WAREHOUSE_MODULES } from "@intra/warehouse/navigation";
 import type { KnowledgeAuthority, KnowledgeRole } from "./types";
 
 type RoleOperatingDetails = Pick<

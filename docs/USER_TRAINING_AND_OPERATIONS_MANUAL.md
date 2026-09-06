@@ -1,5 +1,9 @@
 # User Training And Operations Manual
 
+**Task-first candidate (September 6; not yet a live acceptance claim):** Use the shared **What are you working on?** entry on Home, Knowledge Base and onboarding. **Prepare for task** selects task-specific learning; **View guide** opens instructions; **All task guides** keeps the full library available. Read **Needed for this task**, with **Other required learning** and **Optional guidance** separately available. These groups prioritize existing requirements without waiving mandatory policy, authority, evidence or certification checks. Unavailable readiness is not readiness.
+
+The **New to Intra?** Knowledge Base strip is an optional introduction, not a four-step local completion process. Its navigation and reading preferences never issue learning credit. Use contextual task help without submitting the operational form; close it to return, or open the full guide. Read prerequisites, the actual decision/owner path, control steps and screenshots, then expected result, next owner and recovery. Missing evidence remains unverified. Required learning may open separately; return and refresh access before retrying the exact action. Candidate captures and pilot outcomes must be verified on the eventual release rather than inferred from this manual.
+
 ## Reading PO Counts and Closure
 
 **Received** is the physical count from the matching normalized PO line. **Unknown** means that count could not be read; refresh or escalate without assuming zero, full receipt or a payment entitlement. **Not yet QC accepted (outstanding)** is separate: delivered stock can still await inspection. A known receipt with no Quality acceptance shows **Awaiting QC acceptance**.
@@ -38,7 +42,13 @@ Use these scenarios with the matching UAT release only. September 5 changes thro
 
 ## Training Format
 
+The action-scoped onboarding candidate uses one checklist model for employees, vendors, and multi-role users. Start with the authorized workspace, not a mandatory tour of every assigned module. Practice the relevant task and complete its required policy and competency evidence before performing a governed action. A new or unfinished role requirement does not redirect unrelated authorized work. Vendor scope remains separate from internal scope; access-sensitive pages can still require a capability that has not yet been certified.
+
+When an action shows required learning, use **Resume onboarding** to open the assigned requirement in a separate tab. Leave the original form open, complete the learning, return, and select **Refresh access**. Recheck the current record before submitting. Training completion does not change the user's role, approval limit, evidence obligations, or segregation-of-duties rules.
+
 Include an account with several scoped roles in onboarding rehearsal. Read each certification's module and role alongside its capability, status and validity. Similar names must remain separate when their authority differs. Historical curriculum context may be unavailable; escalate it rather than treating the label as an access change. A screenshot with all requirements already completed proves the completed view only, not a fresh orientation or assessment attempt.
+
+For vendors, the candidate evidence-responsibility review is training only. It must never be presented as a signature, legal acknowledgment, document upload, application submission, or accreditation decision. The new local exercise requires a reviewed versioned curriculum publication before trainers can claim it is available in live UAT.
 
 Rehearse full delivery with zero outstanding quantity, independent acceptance, real invoice/document registration, and Finance preparation on the resulting Closed PO. Do not add an artificial balance line to keep its status Issued. Reject draft/cancelled POs, wrong-owner evidence and missing acceptance. Separately receive a lowercase serial and independently inspect the same canonical identity. Verify completed raw QC leaves the exact unit `in_stock`, not stranded in `pending_inspection`, without a duplicate inspection. Active holds still enforce availability, including for non-accepted QC; governed hold release does not change the unit status. Do not allocate or pick held stock merely because it is `in_stock`. Repeat with a different serial and a case-only duplicate as rejection paths. On mobile, the procurement route explanation must provide a full-height touch target.
 

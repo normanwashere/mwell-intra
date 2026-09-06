@@ -15,6 +15,20 @@ import {
 } from "./navigation";
 
 describe("authorized post-login destinations", () => {
+  it("pending multi-role learning exposes only effective read areas, never raw-role admin authority", () => {
+    const access = {
+      mode: "supabase" as const,
+      userRoles: { core: ["platform_admin"], warehouse: ["operator"] } satisfies Partial<UserRoles>,
+      userCapabilities: { warehouse: ["view_inventory"] },
+    } satisfies ShellAccess;
+    expect(authorizedPostLoginPath("/warehouse/inventory", access, "employee")).toBe("/warehouse/inventory");
+    for (const route of ["/admin/users", "/admin/departments", "/admin/doa", "/procurement", "/finance"]) {
+      expect(authorizedPostLoginPath(route, access, "employee")).toBe("/");
+    }
+    expect(dashboardAreas(access, "employee").some(area => area.href.startsWith("/admin"))).toBe(false);
+    expect(authorizedPostLoginPath("/vendor/purchase-orders", access, "employee")).toBe("/");
+    expect(authorizedPostLoginPath("/onboarding", access, "employee")).toBe("/onboarding");
+  });
   it("defers an allowed deep link until live authorization is ready", () => {
     const access = {
       mode: "supabase" as const,

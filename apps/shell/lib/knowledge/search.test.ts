@@ -3,6 +3,37 @@ import { KNOWLEDGE_CONTENT } from "./content";
 import { searchKnowledge } from "./search";
 
 describe("knowledge search taxonomy", () => {
+  it("preserves task, role and feature filter behavior without mutating query context", () => {
+    const filters = Object.freeze({ type: "task" as const, audience: "internal" as const, userRoles: { procurement: ["requester"] } });
+    const results = searchKnowledge(KNOWLEDGE_CONTENT, "buy something", filters);
+    expect(results[0]?.taskId).toBe("create-purchase-request");
+    expect(results[0]?.href).toBe("/knowledge?article=feature-procurement-request-create");
+    expect(searchKnowledge(KNOWLEDGE_CONTENT, "buy something", { ...filters, type: "role" }).every(result => result.type === "role")).toBe(true);
+    expect(searchKnowledge(KNOWLEDGE_CONTENT, "purchase", { ...filters, type: "feature" }).every(result => result.type === "feature")).toBe(true);
+    expect(filters.type).toBe("task");
+  });
+
+  it("returns each stable task once even when source references are duplicated", () => {
+    const content = { ...KNOWLEDGE_CONTENT, features: [...KNOWLEDGE_CONTENT.features, ...KNOWLEDGE_CONTENT.features] };
+    const results = searchKnowledge(content, "buy something");
+    expect(results.filter(result => result.taskId === "create-purchase-request")).toHaveLength(1);
+    expect(new Set(results.map(result => result.type + ":" + result.href + ":" + result.title)).size).toBe(results.length);
+  });
+  it("indexes stable task IDs and prefers literal task guidance", () => {
+    expect(searchKnowledge(KNOWLEDGE_CONTENT, "request-stock")[0]?.id).toBe("request-stock");
+    expect(searchKnowledge(KNOWLEDGE_CONTENT, "buy something")[0]?.id).toBe("create-purchase-request");
+    expect(searchKnowledge(KNOWLEDGE_CONTENT, "zxqv nonexistent astrophysics")).toEqual([]);
+  });
+
+  it("requires explicit roadmap intent for coming-soon flows and their nodes", () => {
+    const flow = KNOWLEDGE_CONTENT.flows[0]!;
+    const content = { ...KNOWLEDGE_CONTENT, flows: [{ ...flow, availability: "coming_soon" as const }] };
+    const normal = searchKnowledge(content, "");
+    expect(normal.some(result => result.id === flow.id || result.id.startsWith(flow.id + "-"))).toBe(false);
+    const roadmap = searchKnowledge(content, "roadmap").filter(result => result.id === flow.id || result.id.startsWith(flow.id + "-"));
+    expect(roadmap.length).toBeGreaterThan(0);
+    expect(roadmap.every(result => result.availability === "coming_soon")).toBe(true);
+  });
   it("recovers from common spelling mistakes and plain-language aliases", () => {
     expect(searchKnowledge(KNOWLEDGE_CONTENT, "recieving")[0]?.title).toMatch(
       /receiv/i,

@@ -998,7 +998,7 @@ describe("PurchaseOrdersPage", () => {
     expect(within(detail).getByText(/not yet ordered/i)).toBeInTheDocument();
   });
 
-  it("cancels an open purchase order after an explicit confirm", async () => {
+  it("does not offer cancellation from the Warehouse procurement role alone", async () => {
     const user = userEvent.setup();
     renderWithProviders(<PurchaseOrdersPage />, { role: "procurement" });
     const list = await screen.findByLabelText("Purchase orders");
@@ -1009,16 +1009,7 @@ describe("PurchaseOrdersPage", () => {
     const detail = await screen.findByRole("dialog", {
       name: /MetroPrint Apparel/i,
     });
-    await user.click(
-      within(detail).getByRole("button", { name: /cancel po/i }),
-    );
-    await user.click(
-      within(detail).getByRole("button", { name: /confirm cancel/i }),
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText(/purchase order cancelled/i)).toBeInTheDocument();
-    });
+    expect(within(detail).queryByRole("button", { name: /cancel po|confirm cancel/i })).not.toBeInTheDocument();
   });
 
   it("keeps procurement-issued PO links inside the Warehouse workflow", async () => {

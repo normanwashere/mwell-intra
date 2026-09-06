@@ -41,9 +41,7 @@ const operationsPractice: RequirementDefinition = {
   title: "Operations practice",
   mandatory: true,
   prerequisiteIds: [orientation.id],
-  capabilityOutcomes: [
-    { module: "warehouse", capability: "receive_stock" },
-  ],
+  capabilityOutcomes: [{ module: "warehouse", capability: "receive_stock" }],
 };
 
 const sharedPolicy: RequirementDefinition = {
@@ -65,9 +63,7 @@ const correctiveReceiving: RequirementDefinition = {
   title: "Corrective receiving practice",
   mandatory: true,
   prerequisiteIds: [sharedPolicy.id],
-  capabilityOutcomes: [
-    { module: "warehouse", capability: "receive_stock" },
-  ],
+  capabilityOutcomes: [{ module: "warehouse", capability: "receive_stock" }],
 };
 
 const roleCurriculum = (
@@ -150,11 +146,7 @@ describe("resolveEffectiveCurriculum", () => {
       departmentAssignments: [],
       userAssignments: [],
       activeCertifications: [
-        certification(
-          "finance-role-1",
-          "procurement",
-          "approve_request",
-        ),
+        certification("finance-role-1", "procurement", "approve_request"),
       ],
       now: "2026-08-12T00:00:00.000Z",
     });
@@ -178,7 +170,7 @@ describe("resolveEffectiveCurriculum", () => {
     );
   });
 
-  it("shows one semantic orientation when multiple personas assign equivalent orientation records", () => {
+  it("keeps different orientation identities even when their titles match", () => {
     const secondOrientation: RequirementDefinition = {
       ...orientation,
       id: "internal.second-persona.orientation.v1",
@@ -205,7 +197,7 @@ describe("resolveEffectiveCurriculum", () => {
       activeCertifications: [],
     });
 
-    expect(result.requirements).toHaveLength(1);
+    expect(result.requirements).toHaveLength(2);
     expect(result.requirements[0]?.id).toBe(orientation.id);
   });
 
@@ -264,7 +256,13 @@ describe("resolveEffectiveCurriculum", () => {
 
   it("marks only the affected role capability as retraining required", () => {
     const result = resolveEffectiveCurriculum({
-      requirements: [orientation, financePractice, operationsPractice, correctiveReceiving, sharedPolicy],
+      requirements: [
+        orientation,
+        financePractice,
+        operationsPractice,
+        correctiveReceiving,
+        sharedPolicy,
+      ],
       roleCurricula: [
         {
           sourceRoleAssignmentId: "finance-role-1",
@@ -293,20 +291,14 @@ describe("resolveEffectiveCurriculum", () => {
           sourceId: "retraining-1",
           source: "retraining",
           sourceRoleAssignmentId: "operations-role-1",
-          curriculum: curriculum("receiving-retraining", [correctiveReceiving.id]),
+          curriculum: curriculum("receiving-retraining", [
+            correctiveReceiving.id,
+          ]),
         },
       ],
       activeCertifications: [
-        certification(
-          "finance-role-1",
-          "procurement",
-          "approve_request",
-        ),
-        certification(
-          "operations-role-1",
-          "warehouse",
-          "receive_stock",
-        ),
+        certification("finance-role-1", "procurement", "approve_request"),
+        certification("operations-role-1", "warehouse", "receive_stock"),
       ],
       now: "2026-08-12T00:00:00.000Z",
     });
@@ -337,7 +329,12 @@ describe("resolveEffectiveCurriculum", () => {
       operationsPractice.id,
     );
     const result = resolveEffectiveCurriculum({
-      requirements: [orientation, operationsPractice, sharedPolicy, correctiveReceiving],
+      requirements: [
+        orientation,
+        operationsPractice,
+        sharedPolicy,
+        correctiveReceiving,
+      ],
       roleCurricula: [
         {
           sourceRoleAssignmentId: "operations-role-1",
@@ -356,20 +353,14 @@ describe("resolveEffectiveCurriculum", () => {
           sourceId: "retraining-1",
           source: "retraining",
           sourceRoleAssignmentId: "operations-role-1",
-          curriculum: curriculum("receiving-retraining", [correctiveReceiving.id]),
+          curriculum: curriculum("receiving-retraining", [
+            correctiveReceiving.id,
+          ]),
         },
       ],
       activeCertifications: [
-        certification(
-          "operations-role-1",
-          "warehouse",
-          "receive_stock",
-        ),
-        certification(
-          "operations-role-2",
-          "warehouse",
-          "receive_stock",
-        ),
+        certification("operations-role-1", "warehouse", "receive_stock"),
+        certification("operations-role-2", "warehouse", "receive_stock"),
       ],
       now: "2026-08-12T00:00:00.000Z",
     });
