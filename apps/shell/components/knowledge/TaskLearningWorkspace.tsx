@@ -1,6 +1,6 @@
 "use client";
 
-import { useSearchParams, useRouter, usePathname } from "next/navigation";
+import { useSearchParams, usePathname } from "next/navigation";
 import { OnboardingCenter } from "@intra/learning";
 import { TaskStart } from "./TaskStart";
 import { useAvailableTasks } from "./TaskStartLoader";
@@ -8,14 +8,14 @@ import { useAvailableTasks } from "./TaskStartLoader";
 export function TaskLearningWorkspace({ audience = "internal" }: { audience?: "internal" | "vendor" }) {
   const tasks = useAvailableTasks();
   const params = useSearchParams();
-  const router = useRouter();
   const pathname = usePathname();
   const selectedTask = tasks.find((task) => task.id === params.get("task"));
   const chooser = <TaskStart tasks={tasks} selectedTaskId={selectedTask?.id} onSelect={(task) => {
     const next = new URLSearchParams(params.toString());
     next.set("task", task.id);
     next.set("next", task.actionHref);
-    router.replace(`${pathname}?${next}`, { scroll: false });
+    // Task selection is local view state; Next synchronizes native history with search params.
+    window.history.replaceState(null, "", `${pathname}?${next}`);
   }} />;
   return (
     <div className="space-y-6">

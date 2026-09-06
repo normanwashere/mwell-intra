@@ -7,7 +7,7 @@
 // app builds and runs with NO live backend.
 
 import { useEffect, useMemo, type ReactNode } from "react";
-import { SerwistProvider } from "@serwist/turbopack/react";
+import { SafeServiceWorker } from "@shell/components/SafeServiceWorker";
 import { SessionProvider, type AuthConfig } from "@intra/auth";
 import { LearningProvider } from "@intra/learning";
 import { registerWarehouseTrainingAdapters } from "@intra/warehouse/training";
@@ -120,7 +120,7 @@ export function Providers({ children }: { children: ReactNode }) {
 
   // Register only for explicit PWA deployments; otherwise clear stale local SWs.
   return swEnabled ? (
-    <SerwistProvider swUrl="/serwist/sw.js">{tree}</SerwistProvider>
+    <SafeServiceWorker>{tree}</SafeServiceWorker>
   ) : (
     <>
       <ServiceWorkerDevCleanup />
