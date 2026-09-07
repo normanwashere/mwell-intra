@@ -6,6 +6,17 @@ import {
 } from "./handbook-catalog.mjs";
 import { documentationSources } from "./build-app-documentation.mjs";
 
+test("embeds reviewed task training as a Roles & Training reference", () => {
+  const source = "docs/manual/REVIEWED_TASK_TRAINING.md";
+  assert.ok(documentationSources().includes(source));
+  const entry = HANDBOOK_DOCUMENTS.find((document) => document.source === source);
+  assert.ok(entry);
+  assert.equal(entry.primaryTab, "roles");
+  assert.equal(entry.contentType, "reference");
+  assert.equal(entry.collapse, "reference");
+  assert.ok(entry.relatedSources.includes("docs/manual/MWELL_INTRA_USER_MANUAL.md"));
+});
+
 test("classifies every current maintained source exactly once", () => {
   const sources = documentationSources();
   const result = resolveHandbookCatalog(sources);

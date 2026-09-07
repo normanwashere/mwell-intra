@@ -13,6 +13,20 @@ export const HANDBOOK_TABS = Object.freeze([
 ]);
 
 const CATALOG = [
+  {
+    source: "docs/manual/REVIEWED_TASK_TRAINING.md",
+    id: "reviewed-task-training",
+    title: "Reviewed Task Training",
+    primaryTab: "roles",
+    relatedTabs: ["workflows", "release"],
+    contentType: "reference",
+    audience: ["operator", "approver", "trainer", "release-reviewer"],
+    summary: "Assigned inspection, payment-readiness, putaway, pick/pack and vendor evidence learning, authority boundaries and dated release status.",
+    keywords: ["learning", "onboarding", "inspection", "payment", "putaway", "picking", "packing", "vendor", "automated review"],
+    sortOrder: 35,
+    collapse: "reference",
+    relatedSources: ["docs/manual/MWELL_INTRA_USER_MANUAL.md"],
+  },
   ...[
     ['procurement-legal', 'Procurement and Legal', 'SEP05_PROCUREMENT_LEGAL_CANDIDATE.md'],
     ['platform-finance', 'Platform and Finance', 'SEP05_PLATFORM_FINANCE_CANDIDATE.md'],

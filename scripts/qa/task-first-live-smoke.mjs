@@ -15,6 +15,7 @@ const allowedOrigins = new Set([
   "https://mwell-intra-6ena7ruqm-normans-projects-d718ecb1.vercel.app",
   "https://mwell-intra-k8udn3aka-normans-projects-d718ecb1.vercel.app",
   "https://mwell-intra-534eobi9l-normans-projects-d718ecb1.vercel.app",
+  "https://mwell-intra-6it3u4uze-normans-projects-d718ecb1.vercel.app",
 ]);
 const origin = process.env.AUDIT_BASE_URL?.replace(/\/$/, "");
 const protectionBypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;

@@ -1064,6 +1064,7 @@ function roleGuide(definition) {
 }
 
 const SOURCE_ROOT_HEADINGS = {
+  "reviewed-task-training": "Reviewed Task Training",
   "sep05-procurement-legal-candidate": "Procurement And Legal - September 05 Candidate",
   "sep05-platform-finance-candidate": "September 5 Platform and Finance Candidate",
   "sep05-warehouse-events-candidate": "Warehouse and Events Candidate",
@@ -1430,6 +1431,7 @@ const LEGACY_TARGET_BY_SOURCE_ID = {
   "cross-role-recovery-release": ["system", "release-qa", "source-references"],
   "sep05-uat-certification-followup": ["system", "release-qa", "source-references"],
   "action-scoped-onboarding-release": ["system", "training-operational-readiness", "source-references"],
+  "reviewed-task-training": ["system", "training-operational-readiness", "source-references"],
   "sep05-procurement-legal-candidate": ["system", "release-qa", "source-references"],
   "sep05-platform-finance-candidate": ["system", "release-qa", "source-references"],
   "sep05-warehouse-events-candidate": ["system", "release-qa", "source-references"],

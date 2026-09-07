@@ -109,6 +109,8 @@ In employee and vendor onboarding, read the coach's feedback before choosing aga
 
 Local demo or sandbox completion is practice evidence, not a live certification or a new permission. Existing completed onboarding also does not prove that a new attempt was completed during a later verification run.
 
+See [Reviewed Task Training](REVIEWED_TASK_TRAINING.md) for the four reviewed inspection, payment-readiness, putaway and pick/pack scenarios, the separate vendor evidence review, and the dated release-status snapshot. Coverage applies **when assigned**; learning does not replace operational authority. The content received independent automated review, not a human pilot.
+
 The candidate vendor evidence-responsibility review explains how to prepare evidence and keep legal declarations separate. It does not upload documents, sign an MNDA, acknowledge a purchase order, submit accreditation, or approve a vendor. Complete those steps in the actual vendor workflow. This new exercise is local catalog content until a reviewed version is published to the live learning curriculum.
 
 ## Navigation
