@@ -1,6 +1,7 @@
 import { CAPABILITY_CLASSIFICATIONS, roleCapabilities } from "@intra/rbac";
 
 import { OPERATING_PERSONA_IDS } from "./personas";
+import { SCOPED_READINESS_CANDIDATES } from "./scopedReadinessCandidates";
 import type {
   CurriculumDefinition,
   LearningCapability,
@@ -1008,6 +1009,7 @@ const rolePractices = OPERATING_PERSONA_IDS.map((personaId) => {
 });
 
 const simulations: readonly SimulationDefinition[] = [
+  ...SCOPED_READINESS_CANDIDATES,
   ...orientationSimulations,
   ...rolePractices.map((practice) => practice.simulation),
   {
@@ -1050,6 +1052,8 @@ export function simulationForRequirement(
   requirement: RequirementDefinition,
 ): SimulationDefinition | undefined {
   if (!requirement.simulationId) return undefined;
+  const scoped = SCOPED_READINESS_CANDIDATES.find((item) => item.id === requirement.simulationId);
+  if (scoped && (requirement.audience !== scoped.audience || requirement.kind !== "scenario")) return undefined;
   if (
     requirement.simulationId === "vendor-evidence-review-v1" &&
     (requirement.id !== VENDOR_EVIDENCE_REQUIREMENT_ID ||
