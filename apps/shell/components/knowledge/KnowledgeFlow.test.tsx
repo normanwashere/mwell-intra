@@ -11,6 +11,7 @@ import type {
 } from "@shell/lib/knowledge/types";
 import { GuidedDecisionPath } from "./GuidedDecisionPath";
 import { WorkflowNavigator } from "./WorkflowNavigator";
+import { KnowledgeFlow as KnowledgeFlowDisplay } from "./KnowledgeFlow";
 
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }
@@ -164,6 +165,7 @@ let container: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
+  vi.stubGlobal("React", React);
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -172,11 +174,25 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   container.remove();
+  vi.unstubAllGlobals();
 });
 
 function render(element: React.ReactNode) {
   act(() => root.render(element));
 }
+
+it("wraps long source tokens in the actual flow display without truncating guidance", () => {
+  const source = "modules/legal/src/vendorCaseWorkflow.ts";
+  const longFlow = { ...flow, nodes: flow.nodes.map(node => node.id === "choose" ? { ...node, body: source, policyBasis: source } : node) };
+  container.style.width = "390px";
+  render(<KnowledgeFlowDisplay flow={longFlow} selectedNodeId="choose" evidence={[]} rolesById={new Map([[role.id, role]])} onSelectNode={() => {}} />);
+  const display = container.querySelector<HTMLElement>('section[aria-labelledby="flow-title"]')!;
+  expect(display.style.overflowWrap).toBe("anywhere");
+  expect(display.classList.contains("min-w-0")).toBe(true);
+  expect(display.classList.contains("max-w-full")).toBe(true);
+  expect(display.textContent).toContain(source);
+  expect(display.style.overflow).not.toBe("hidden");
+});
 
 function button(name: string) {
   const match = [...container.querySelectorAll("button")].find((item) =>

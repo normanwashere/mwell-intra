@@ -106,6 +106,7 @@ test("feature guide renders only explicit policy and flow relationships", async 
   const referenceTab = page.getByRole("tab", { name: "Control reference", exact: true });
   await referenceTab.click();
   await expect(referenceTab).toHaveAttribute("aria-selected", "true");
+  await page.locator("#feature-policy details > summary").click();
   await expect(
     page.getByText(
       "Procurement policy requires threshold- and risk-appropriate sourcing, competition evidence, vendor eligibility, budget evidence, and active approval authority.",

@@ -18,13 +18,20 @@ describe("task coverage evidence boundary", () => {
     const result = validateTaskCoverage(KNOWLEDGE_CONTENT);
     expect(result.counts).toEqual({
       features: 68, controls: 280, liveFeatures: 59, limitedFeatures: 0,
-      comingSoonFeatures: 9, flows: 25, decisions: 54, policyReferences: 14,
+      comingSoonFeatures: 9, flows: 26, decisions: 58, policyReferences: 14,
       evidenceRecords: 53, controlEvidenceMatches: 0,
     });
     expect(result.unmappedLiveControls).toEqual([]);
     expect(result.unresolvedTargets).toEqual([]);
     expect(result.invalidDecisionBranches).toEqual([]);
-    expect(result.missingActionEvidence).toHaveLength(271);
+    expect(result.missingActionEvidence).toHaveLength(276);
+    expect(result.missingActionEvidence.filter(key => key.startsWith("vendor-application-submission:"))).toEqual([
+      "vendor-application-submission:vendor-self-case",
+      "vendor-application-submission:vendor-self-prepare",
+      "vendor-application-submission:vendor-self-recover",
+      "vendor-application-submission:vendor-self-submit",
+      "vendor-application-submission:vendor-self-legal",
+    ]);
     expect(result.counts.features).toBe(KNOWLEDGE_CONTENT.features.length);
     expect(result.counts.controls).toBe(KNOWLEDGE_CONTENT.features.reduce((n, f) => n + f.controls.length, 0));
     expect(result.inventory).toHaveLength(result.counts.controls);

@@ -1,8 +1,9 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { sharedCompletionKey } from "./requirementIdentity";
-import type { RequirementDefinition } from "./types";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Button } from "@intra/ui";
+import { sharedCompletionKey, requirementProgress } from "./requirementIdentity";
+import type { RequirementDefinition, RequirementProgress } from "./types";
 import type {
   SelectedLearningTask,
   TaskLearningProjection,
@@ -12,13 +13,51 @@ export interface TaskLearningSummaryProps {
   task: SelectedLearningTask;
   projection: TaskLearningProjection;
   renderRequirement?: (requirement: RequirementDefinition) => ReactNode;
+  progress?: readonly RequirementProgress[];
+  onRefresh?: () => Promise<void>;
+  loading?: boolean;
+  refreshError?: string | null;
 }
 
 export function TaskLearningSummary({
   task,
   projection,
   renderRequirement,
+  progress = [],
+  onRefresh,
+  loading = false,
+  refreshError,
 }: TaskLearningSummaryProps) {
+  const [refreshing, setRefreshing] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const generation = useRef(0);
+  const inFlight = useRef(false);
+  useEffect(() => {
+    generation.current += 1;
+    inFlight.current = false;
+    setRefreshing(false);
+    setFailed(false);
+    return () => { generation.current += 1; };
+  }, [task.id]);
+  const refresh = async () => {
+    if (!onRefresh || inFlight.current || loading) return;
+    const current = generation.current;
+    inFlight.current = true;
+    setRefreshing(true);
+    setFailed(false);
+    try { await onRefresh(); }
+    catch { if (current === generation.current) setFailed(true); }
+    finally {
+      if (current === generation.current) {
+        inFlight.current = false;
+        setRefreshing(false);
+      }
+    }
+  };
+  const completedOther = projection.otherRequired.filter((item) =>
+    ["passed", "waived"].includes(requirementProgress(item, progress)?.state ?? ""),
+  ).length;
+  const pending = refreshing || loading;
   const list = (items: readonly RequirementDefinition[]) => (
     <ul className="divide-y divide-line">
       {items.map((item) => (
@@ -51,13 +90,16 @@ export function TaskLearningSummary({
       </h2>
       <p className="mt-1 break-words text-sm text-muted">{task.outcome}</p>
       {projection.status === "unavailable" ? (
-        <p
-          role="alert"
-          className="mt-4 text-sm text-amber-800 dark:text-amber-300"
-        >
-          Task learning readiness is unavailable. Refresh learning status before
-          relying on it. Existing action controls still apply.
-        </p>
+        <div className="mt-4 space-y-3">
+          <p role={pending ? "status" : "alert"} className="text-sm text-amber-800 dark:text-amber-300">
+            {pending ? "Refreshing task readiness. Your task remains selected." : failed || refreshError
+              ? "Task readiness could not be refreshed. Try again. Existing action controls still apply."
+              : "Task learning readiness is unavailable. Refresh learning status before relying on it. Existing action controls still apply."}
+          </p>
+          {onRefresh && <Button type="button" variant="outline" icon="rotate" className="min-h-11" disabled={pending} onClick={() => void refresh()}>
+            {pending ? "Refreshing task readiness" : "Refresh task readiness"}
+          </Button>}
+        </div>
       ) : (
         <>
           <h3 className="mt-5 text-sm font-semibold text-ink">
@@ -73,7 +115,7 @@ export function TaskLearningSummary({
           )}
           <details className="mt-3 border-t border-line">
             <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-ink">
-              Other required learning ({projection.otherRequired.length})
+              Other required learning ({projection.otherRequired.length - completedOther} outstanding, {completedOther} completed)
             </summary>
             {list(projection.otherRequired)}
           </details>

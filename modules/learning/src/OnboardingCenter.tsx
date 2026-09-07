@@ -761,6 +761,10 @@ export function OnboardingCenter({
         <TaskLearningSummary
           task={selectedTask}
           projection={taskProjection}
+          progress={snapshot.progress}
+          onRefresh={refresh}
+          loading={loading}
+          refreshError={error}
           renderRequirement={(requirement) => (
             <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">

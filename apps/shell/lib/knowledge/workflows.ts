@@ -1,3 +1,4 @@
+import { VENDOR_APPLICATION_FLOW } from "./vendorApplicationFlow";
 import type {
   KnowledgeDecisionNode,
   KnowledgeFlow,
@@ -197,6 +198,7 @@ export const DOA_CONFIGURATION_ROLE_IDS = [
 export const DOA_REVIEW_ROLE_IDS = ["procurement_admin"] as const;
 
 export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
+  VENDOR_APPLICATION_FLOW,
   flow(
     "identity-and-access",
     "Identity and access",

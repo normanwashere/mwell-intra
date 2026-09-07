@@ -4,7 +4,7 @@ Date: 2026-09-06. Scope: Task7 shared guide composition and bounded Task2 conten
 
 ## Exact Baseline
 
-68 features:59 live,0 limited,9 coming soon. 280 documented controls:271 live and9 non-executable roadmap controls. 25 flows,54 decision nodes,14 distinct policy-reference strings,53 existing evidence records. Zero unresolved mapped flow/role targets and zero existing graph-validator errors in the focused baseline.
+68 features:59 live,0 limited,9 coming soon. 280 documented controls:271 live and9 non-executable roadmap controls. 26 flows,58 decision nodes,14 distinct policy-reference strings,53 existing evidence records. Zero unresolved mapped flow/role targets and zero existing graph-validator errors in the focused baseline.
 
 All271 live controls have written behavior/validation/result and an owned feature reference. **Zero exact control-name/hotspot evidence matches.** This does not mean53 images are absent: their recorded scope does not establish every control. All280 inventory rows remain unverified for release evidence. No new screenshots or capture dates were fabricated.
 
@@ -82,10 +82,10 @@ StepWorkspace retains exact branch callback identity and permission behavior. Ti
 | feature-legal-case-application | live | 2 | /legal/cases/:id/application | Legal | vendor-accreditation |
 | feature-legal-sign-instrument | live | 2 | /legal/cases/:id/sign/:code | Legal | vendor-accreditation |
 | feature-legal-invite-vendor | live | 3 | /legal/invites/new | Legal | vendor-accreditation |
-| feature-vendor-cases | live | 2 | /vendor | Legal | vendor-accreditation |
+| feature-vendor-cases | live | 2 | /vendor | Legal | vendor-accreditation, vendor-application-submission |
 | feature-vendor-purchase-orders | live | 1 | /vendor/purchase-orders | Legal | procure-to-pay |
-| feature-vendor-case-detail | live | 6 | /vendor/cases/:id | Legal | vendor-accreditation |
-| feature-vendor-application | live | 6 | /vendor/cases/:id/application | Legal | vendor-accreditation |
+| feature-vendor-case-detail | live | 6 | /vendor/cases/:id | Legal | vendor-accreditation, vendor-application-submission |
+| feature-vendor-application | live | 6 | /vendor/cases/:id/application | Legal | vendor-accreditation, vendor-application-submission |
 | feature-vendor-sign-instrument | live | 3 | /vendor/cases/:id/sign/:code | Legal | vendor-accreditation |
 | feature-vendor-invite-unavailable | live | 2 | /vendor/invites/new | Legal | vendor-accreditation, identity-and-access |
 | feature-cms | coming_soon | 1 | No executable route | Platform | Reference only |
@@ -127,8 +127,8 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
     "liveFeatures": 59,
     "limitedFeatures": 0,
     "comingSoonFeatures": 9,
-    "flows": 25,
-    "decisions": 54,
+    "flows": 26,
+    "decisions": 58,
     "policyReferences": 14,
     "evidenceRecords": 53,
     "controlEvidenceMatches": 0
@@ -3136,7 +3136,8 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
       "referenceId": "feature-vendor-cases",
       "availability": "live",
       "flowIds": [
-        "vendor-accreditation"
+        "vendor-accreditation",
+        "vendor-application-submission"
       ],
       "evidenceIds": [],
       "unverified": true
@@ -3146,7 +3147,8 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
       "referenceId": "feature-vendor-cases",
       "availability": "live",
       "flowIds": [
-        "vendor-accreditation"
+        "vendor-accreditation",
+        "vendor-application-submission"
       ],
       "evidenceIds": [],
       "unverified": true
@@ -3166,7 +3168,8 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
       "referenceId": "feature-vendor-case-detail",
       "availability": "live",
       "flowIds": [
-        "vendor-accreditation"
+        "vendor-accreditation",
+        "vendor-application-submission"
       ],
       "evidenceIds": [],
       "unverified": true
@@ -3176,7 +3179,8 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
       "referenceId": "feature-vendor-case-detail",
       "availability": "live",
       "flowIds": [
-        "vendor-accreditation"
+        "vendor-accreditation",
+        "vendor-application-submission"
       ],
       "evidenceIds": [],
       "unverified": true
@@ -3186,7 +3190,8 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
       "referenceId": "feature-vendor-case-detail",
       "availability": "live",
       "flowIds": [
-        "vendor-accreditation"
+        "vendor-accreditation",
+        "vendor-application-submission"
       ],
       "evidenceIds": [],
       "unverified": true
@@ -3196,7 +3201,8 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
       "referenceId": "feature-vendor-case-detail",
       "availability": "live",
       "flowIds": [
-        "vendor-accreditation"
+        "vendor-accreditation",
+        "vendor-application-submission"
       ],
       "evidenceIds": [],
       "unverified": true
@@ -3206,7 +3212,8 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
       "referenceId": "feature-vendor-case-detail",
       "availability": "live",
       "flowIds": [
-        "vendor-accreditation"
+        "vendor-accreditation",
+        "vendor-application-submission"
       ],
       "evidenceIds": [],
       "unverified": true
@@ -3216,7 +3223,8 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
       "referenceId": "feature-vendor-case-detail",
       "availability": "live",
       "flowIds": [
-        "vendor-accreditation"
+        "vendor-accreditation",
+        "vendor-application-submission"
       ],
       "evidenceIds": [],
       "unverified": true
@@ -3226,7 +3234,8 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
       "referenceId": "feature-vendor-application",
       "availability": "live",
       "flowIds": [
-        "vendor-accreditation"
+        "vendor-accreditation",
+        "vendor-application-submission"
       ],
       "evidenceIds": [],
       "unverified": true
@@ -3236,7 +3245,8 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
       "referenceId": "feature-vendor-application",
       "availability": "live",
       "flowIds": [
-        "vendor-accreditation"
+        "vendor-accreditation",
+        "vendor-application-submission"
       ],
       "evidenceIds": [],
       "unverified": true
@@ -3246,7 +3256,8 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
       "referenceId": "feature-vendor-application",
       "availability": "live",
       "flowIds": [
-        "vendor-accreditation"
+        "vendor-accreditation",
+        "vendor-application-submission"
       ],
       "evidenceIds": [],
       "unverified": true
@@ -3256,7 +3267,8 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
       "referenceId": "feature-vendor-application",
       "availability": "live",
       "flowIds": [
-        "vendor-accreditation"
+        "vendor-accreditation",
+        "vendor-application-submission"
       ],
       "evidenceIds": [],
       "unverified": true
@@ -3266,7 +3278,8 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
       "referenceId": "feature-vendor-application",
       "availability": "live",
       "flowIds": [
-        "vendor-accreditation"
+        "vendor-accreditation",
+        "vendor-application-submission"
       ],
       "evidenceIds": [],
       "unverified": true
@@ -3276,7 +3289,8 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
       "referenceId": "feature-vendor-application",
       "availability": "live",
       "flowIds": [
-        "vendor-accreditation"
+        "vendor-accreditation",
+        "vendor-application-submission"
       ],
       "evidenceIds": [],
       "unverified": true

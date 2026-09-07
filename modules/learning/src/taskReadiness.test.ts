@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { projectTaskLearning } from "./taskReadiness";
 import type { LearningSnapshot, RequirementDefinition } from "./types";
 import { OPERATING_PERSONAS } from "./personas";
+import { LEARNING_CATALOG, requiredCurriculaFor } from "./catalog";
 
 const receive = { module: "warehouse" as const, capability: "receive_stock" };
 const requirement = (
@@ -54,6 +55,64 @@ const snapshot = (
 });
 
 describe("projectTaskLearning", () => {
+  it.each([
+    { module: "warehouse" as const, capability: "inspect_quality" },
+    { module: "procurement" as const, capability: "review_payment_readiness" },
+  ])("keeps $module.$capability unavailable when its assignment mapping is missing", (action) => {
+    const input = snapshot();
+    const before = structuredClone(input);
+    expect(projectTaskLearning(input, "internal", [action], false)).toEqual({ status: "unavailable", neededNow: [], otherRequired: [], optional: [] });
+    input.lockedCapabilities = [{ capability: action, reason: "missing_certification", requirementIds: ["missing-assignment"], canRequestEmergencyException: false }];
+    expect(projectTaskLearning(input, "internal", [action], false).status).toBe("unavailable");
+    expect(input.progress).toEqual(before.progress);
+    expect(input.certifications).toEqual([]);
+  });
+
+  it.each([
+    { module: "warehouse" as const, capability: "inspect_quality" },
+    { module: "procurement" as const, capability: "review_payment_readiness" },
+  ])("projects real catalog obligations for $module.$capability without granting certification", (action) => {
+    const curricula = requiredCurriculaFor(action);
+    expect(curricula.length).toBeGreaterThan(0);
+    const ids = new Set(curricula.flatMap((item) => item.requirementIds));
+    const items = LEARNING_CATALOG.requirements.filter((item) => ids.has(item.id));
+    const input = snapshot(items);
+    const before = structuredClone(input);
+    const result = projectTaskLearning(input, "internal", [action], false);
+    expect(result.status).toBe("known");
+    expect(result.neededNow.some((item) => item.capabilityOutcomes.some((outcome) => outcome.module === action.module && outcome.capability === action.capability))).toBe(true);
+    expect(input).toEqual(before);
+    expect(input.certifications).toEqual([]);
+  });
+
+  it("keeps absent vendor lock requirements unavailable without borrowing employee progress", () => {
+    const input = snapshot();
+    const action = { module: "core" as const, capability: "manage_own_accreditation_draft" };
+    input.lockedCapabilities = [{ capability: action, reason: "missing_certification", requirementIds: ["vendor.vendor_representative.evidence-and-acknowledgments.v1"], canRequestEmergencyException: false }];
+    expect(projectTaskLearning(input, "vendor", [action], false).status).toBe("unavailable");
+    expect(input.certifications).toEqual([]);
+  });
+
+  it("retains incomplete, failed, and retried obligations until exact progress passes", () => {
+    const input = snapshot();
+    for (const state of ["not_started", "in_progress", "failed_retryable", "in_progress"] as const) {
+      input.progress[2]!.state = state;
+      input.progress[2]!.attemptCount += 1;
+      const before = structuredClone(input);
+      expect(projectTaskLearning(input, "internal", [receive], false).neededNow.map((item) => item.id)).toContain("receive");
+      expect(input).toEqual(before);
+    }
+    input.progress.forEach((item) => { item.state = "passed"; });
+    expect(projectTaskLearning(input, "internal", [receive], false).neededNow).toEqual([]);
+    expect(input.certifications).toEqual([]);
+  });
+
+  it("does not let a completed duplicate assignment hide an incomplete one", () => {
+    const input = snapshot();
+    input.progress[2]!.state = "passed";
+    input.progress = [...input.progress, { ...input.progress[2]!, assignmentRequirementId: "second-role-receive", state: "failed_retryable" }];
+    expect(projectTaskLearning(input, "internal", [receive], false).neededNow.map((item) => item.id)).toContain("receive");
+  });
   it("orders transitive prerequisites before the selected action without mutating input", () => {
     const input = snapshot();
     const before = structuredClone(input);

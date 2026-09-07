@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { CURRENT_LIVE_ROLES } from "./live-e2e-scenarios.mjs";
+import { eligibleTaskTargets, readinessDom, readinessStatus, summarizeTasks } from "./task-readiness-sweep.mjs";
 
 const require = createRequire(new URL("../../apps/shell/package.json", import.meta.url));
 const { chromium, expect: baseExpect } = require("@playwright/test");
@@ -19,13 +20,14 @@ const origin = process.env.AUDIT_BASE_URL?.replace(/\/$/, "");
 const protectionBypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
 const project = "kkoitlvydytdhlpxhuah";
 const serviceWorkers = process.env.AUDIT_SERVICE_WORKERS ?? "allow";
+const taskMode = process.env.AUDIT_TASK_MODE ?? "sampled";
 const output = path.resolve("outputs/task-first-candidate", `smoke-${serviceWorkers}-${new Date().toISOString().replace(/[:.]/g, "-")}`);
 const password = process.env.AUDIT_PASSWORD;
 const expectedSha = process.env.AUDIT_EXPECTED_SHA;
 const roles = process.env.AUDIT_ROLE ? CURRENT_LIVE_ROLES.filter(actor => actor.role === process.env.AUDIT_ROLE) : CURRENT_LIVE_ROLES;
 const views = [{ name: "desktop-1440", width: 1440, height: 900 }, { name: "mobile-390", width: 390, height: 844 }]
   .filter(view => !process.env.AUDIT_VIEWPORT || view.name === process.env.AUDIT_VIEWPORT);
-const report = { startedAt: new Date().toISOString(), baseUrl: origin, expectedSha,
+const report = { startedAt: new Date().toISOString(), baseUrl: origin, expectedSha, taskMode,
   targetKind: origin === "https://mwell-intra-uat.vercel.app" ? "public-uat" : "protected-candidate",
   serviceWorkers, protectionMode: protectionBypass ? "origin-scoped-header-and-browser-cookie" : "none", assertionTimeoutMs: 30000,
   adjustments: ["Normal service workers allowed by default; blocked-service-worker attempt preserved separately", "Assertions use approved 30000ms network budget instead of Playwright default 5000ms"],
@@ -69,7 +71,7 @@ async function ready(page) {
 }
 
 async function capture(page, item, label) {
-  if (item.screenshots.length >= 7 || new URL(page.url()).pathname === "/login") return;
+  if (item.screenshots.length >= (item.captureLimit ?? 7) || new URL(page.url()).pathname === "/login") return;
   const unavailable = await page.getByRole("alert").filter({ hasText: "Task learning readiness is unavailable" }).count();
   (item.readinessObservations ??= []).push({ label, unavailableAlerts: unavailable });
   // Mask entered text and password fields (including revealed passwords), not empty controls or choice states.
@@ -110,6 +112,7 @@ try {
   assert.equal(process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, ""), `https://${project}.supabase.co`);
   assert.equal(process.env.AUDIT_MUTATIONS, "false", "Explicit read-only mode is required");
   assert.ok(["allow", "block"].includes(serviceWorkers));
+  assert.ok(["sampled", "all-eligible"].includes(taskMode));
   assert.ok(roles.length > 0 && views.length > 0, "Unknown role or viewport filter");
   assert.match(expectedSha ?? "", /^[a-f0-9]{40}$/, "AUDIT_EXPECTED_SHA must be the full candidate SHA");
   assert.ok(password, "AUDIT_PASSWORD is required in process environment");
@@ -192,6 +195,50 @@ try {
         const { tasks } = await response.json();
         assert.ok(Array.isArray(tasks) && tasks.length > 0, "Actor must receive eligible tasks");
         item.availableTaskIds = tasks.map(task => task.id);
+        if (taskMode === "all-eligible") {
+          const targets = eligibleTaskTargets(tasks, origin, pathname);
+          item.captureLimit = targets.length * 2;
+          item.tasks = [];
+          for (const [index, target] of targets.entries()) {
+            if (stopRequested || existsSync(path.join(output, "STOP"))) break;
+            const result = { id: target.task.id, navigation: "unexecuted", readiness: "unexecuted", observations: [], screenshots: [] };
+            item.tasks.push(result);
+            const firstImage = item.screenshots.length;
+            try {
+              await page.goto(target.url, { waitUntil: "domcontentloaded" });
+              const region = page.getByRole("region", { name: "Task learning", exact: true });
+              await expect(region).toBeVisible();
+              await expect(region).toHaveAttribute("data-task-id", target.task.id);
+              await ready(page);
+              taskUrl(page, target.task, pathname);
+              result.observations.push(await readinessDom(page, target.task.id));
+              await capture(page, item, `task-${index + 1}-selected`);
+              await page.reload({ waitUntil: "domcontentloaded" });
+              await expect(region).toBeVisible();
+              await expect(region).toHaveAttribute("data-task-id", target.task.id);
+              await ready(page);
+              taskUrl(page, target.task, pathname);
+              result.observations.push(await readinessDom(page, target.task.id));
+              await capture(page, item, `task-${index + 1}-reloaded`);
+              result.navigation = "passed";
+            } catch (error) {
+              result.navigation = "failed";
+              result.failure = safeError(error);
+              result.failureUrl = redactedUrl(page.url());
+              if (item.screenshots.length - firstImage < 2) await capture(page, item, `task-${index + 1}-failure`).catch(() => {});
+            }
+            result.readiness = readinessStatus(result.observations, target.task.id);
+            result.screenshots = item.screenshots.slice(firstImage);
+            await persist();
+            if (new URL(page.url()).pathname === "/login") { stop = true; report.stopReason = "Session lost during task sweep"; break; }
+          }
+          item.taskSummary = summarizeTasks(item.tasks, targets.length);
+          item.navigationAborts = item.errors.filter(error => error.type === "requestfailed" && error.message === "net::ERR_ABORTED");
+          item.actionableErrors = item.errors.filter(error => !(error.type === "requestfailed" && error.message === "net::ERR_ABORTED"));
+          item.status = item.taskSummary.complete && item.taskSummary.navigationPassed === targets.length &&
+            item.taskSummary.readinessPassed === targets.length && item.actionableErrors.length === 0 ? "passed" : "failed";
+          continue;
+        }
         await expect(page.getByRole("heading", { name: "What are you working on?", exact: true })).toBeVisible();
         await ready(page);
         await capture(page, item, "chooser");

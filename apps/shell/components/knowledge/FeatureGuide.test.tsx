@@ -53,3 +53,69 @@ it("keeps branch callback identity and presents prerequisites before step eviden
   await React.act(() => button.click());
   expect(choose).toHaveBeenCalledExactlyOnceWith(edgeChoiceId(flow, flow.edges.find((edge) => edge.from === node.id)!));
 });
+
+it("puts the prerequisite jump before long collapsed metadata without dropping content", async () => {
+  root = createRoot(container);
+  const longFeature = { ...feature, purpose: "Long overview. ".repeat(80) };
+  await React.act(() => root.render(<FeatureGuide feature={longFeature} rolesById={rolesById} relatedArticles={[]} relatedFlows={flows} onBack={vi.fn()} onOpenArticle={vi.fn()} onOpenFlow={vi.fn()} />));
+  const header = container.querySelector("header")!;
+  const jump = header.querySelector<HTMLAnchorElement>('a[href="#feature-entry"]')!;
+  const metadata = header.querySelector("details")!;
+  expect(jump.textContent).toContain("Before you start");
+  expect(jump.classList.contains("dark:text-brand-300")).toBe(true);
+  expect(jump.compareDocumentPosition(metadata) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(metadata.open).toBe(false);
+  expect(metadata.textContent).toContain(longFeature.purpose);
+  expect(metadata.textContent).toContain(feature.owner);
+  expect(metadata.textContent).toContain(feature.reviewedAt);
+  expect(metadata.textContent).toContain(rolesById.get(feature.roleIds[0]!)!.label);
+  const policy = container.querySelector<HTMLDetailsElement>("#feature-policy details")!;
+  expect(policy.open).toBe(false);
+  for (const value of feature.policyBasis) expect(policy.textContent).toContain(value);
+  await React.act(() => { metadata.open = true; metadata.dispatchEvent(new Event("toggle")); });
+  expect(metadata.open).toBe(true);
+});
+
+it("returns from reference view to a focused prerequisite target without executing a workflow", async () => {
+  root = createRoot(container);
+  const open = vi.fn();
+  await React.act(() => root.render(<FeatureGuide feature={feature} rolesById={rolesById} relatedArticles={[]} relatedFlows={flows} onBack={vi.fn()} onOpenArticle={vi.fn()} onOpenFlow={open} />));
+  await React.act(() => (container.querySelectorAll<HTMLButtonElement>('[role="tab"]')[1]!).click());
+  expect(container.querySelector("#feature-entry")!.closest("[hidden]")).not.toBeNull();
+  await React.act(() => container.querySelector<HTMLAnchorElement>('a[href="#feature-entry"]')!.click());
+  expect(container.querySelector("#feature-entry")!.closest("[hidden]")).toBeNull();
+  expect(document.activeElement).toBe(container.querySelector("#feature-entry"));
+  expect(open).not.toHaveBeenCalled();
+});
+
+it("does not apply an old feature's pending jump to a newly selected feature", async () => {
+  root = createRoot(container);
+  const props = { rolesById, relatedArticles: [], relatedFlows: flows, onBack: vi.fn(), onOpenArticle: vi.fn(), onOpenFlow: vi.fn() };
+  await React.act(() => root.render(<FeatureGuide {...props} feature={feature} />));
+  const entry = container.querySelector<HTMLElement>("#feature-entry")!;
+  const focus = vi.spyOn(entry, "focus");
+  await React.act(() => {
+    container.querySelector<HTMLAnchorElement>('a[href="#feature-entry"]')!.click();
+    root.render(<FeatureGuide {...props} feature={{ ...feature, id: "different-feature", title: "Different feature" }} />);
+  });
+  expect(focus).not.toHaveBeenCalled();
+  expect(container.querySelector("h1")?.textContent).toBe("Different feature");
+  focus.mockRestore();
+});
+
+it("keeps both selected tabs readable in dark mode with a visible keyboard focus ring", async () => {
+  root = createRoot(container);
+  await React.act(() => root.render(<FeatureGuide feature={feature} rolesById={rolesById} relatedArticles={[]} relatedFlows={flows} onBack={vi.fn()} onOpenArticle={vi.fn()} onOpenFlow={vi.fn()} />));
+  const tabs = [...container.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+  for (const tab of tabs) {
+    await React.act(() => tab.click());
+    expect(tab.getAttribute("aria-selected")).toBe("true");
+    expect(tab.classList.contains("dark:text-brand-300")).toBe(true);
+    expect(tab.classList.contains("focus-visible:ring-2")).toBe(true);
+    expect(tab.classList.contains("dark:focus-visible:ring-brand-300")).toBe(true);
+    const other = tabs.find((item) => item !== tab)!;
+    expect(other.getAttribute("aria-selected")).toBe("false");
+    expect(other.classList.contains("text-muted")).toBe(true);
+    expect(other.classList.contains("hover:text-ink")).toBe(true);
+  }
+});

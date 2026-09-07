@@ -1,4 +1,5 @@
 import type { KnowledgeContent } from "./types";
+import { VENDOR_APPLICATION_FLOW_ID } from "./vendorApplicationFlow";
 
 export type KnowledgeAudience = "employee" | "vendor";
 
@@ -36,6 +37,13 @@ export function knowledgeContentForAudience(
   if (audience === "employee") return content;
 
   const roles = content.roles.filter((role) => role.id === "vendor_portal");
+  const flows = content.flows.filter(flow =>
+    flow.id === VENDOR_APPLICATION_FLOW_ID &&
+    flow.roles.length > 0 && flow.roles.every(id => id === "vendor_portal") &&
+    flow.nodes.every(node => node.ownerRoleIds.every(id => id === "vendor_portal") &&
+      (node.type !== "decision" || node.authorityRoleId === "vendor_portal")),
+  );
+  const flowIds = new Set(flows.map(flow => flow.id));
   const features = content.features
     .filter(
       (feature) =>
@@ -44,7 +52,7 @@ export function knowledgeContentForAudience(
     .map((feature) => ({
       ...feature,
       roleIds: feature.roleIds.filter((roleId) => roleId === "vendor_portal"),
-      relatedFlowIds: [],
+      relatedFlowIds: feature.relatedFlowIds.filter(id => flowIds.has(id)),
     }));
   const featureArticleIds = new Set(
     features.map((feature) => `feature-${feature.id}`),
@@ -71,7 +79,7 @@ export function knowledgeContentForAudience(
       relatedArticleIds: article.relatedArticleIds.filter(
         (id) => id === "role-vendor_portal" || featureArticleIds.has(id),
       ),
-      flowIds: [],
+      flowIds: article.flowIds.filter(id => flowIds.has(id)),
       liveRoutes: article.liveRoutes.filter(
         (route) =>
           route === "/login" ||
@@ -88,7 +96,7 @@ export function knowledgeContentForAudience(
     roles,
     features,
     articles,
-    flows: [],
+    flows,
     glossary: content.glossary.filter((entry) =>
       /accreditation|instrument|evidence|vendor|audit/i.test(
         `${entry.term} ${entry.definition}`,

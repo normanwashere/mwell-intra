@@ -59,7 +59,7 @@ export function evidenceRequirements(
   const evidenceById = new Map(content.evidence.map((item) => [item.id, item]));
 
   const flowRequirements = content.flows.flatMap((workflow) => {
-    if (workflow.availability !== "live") return [];
+    if ((workflow.availability ?? "live") !== "live") return [];
     return workflow.nodes
       .filter((node) => EXECUTABLE_NODE_TYPES.has(node.type))
       .map((node) => {

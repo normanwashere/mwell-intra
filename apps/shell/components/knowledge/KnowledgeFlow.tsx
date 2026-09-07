@@ -172,7 +172,11 @@ export function KnowledgeFlow({
   };
 
   return (
-    <section aria-labelledby="flow-title" className="space-y-6">
+    <section
+      aria-labelledby="flow-title"
+      className="min-w-0 max-w-full space-y-6"
+      style={{ overflowWrap: "anywhere" }}
+    >
       <header className="border-b border-line pb-5">
         <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">
           Guided workflow

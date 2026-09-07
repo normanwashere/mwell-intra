@@ -511,6 +511,7 @@ export function validateKnowledgeContent(content: KnowledgeContent): string[] {
           `${flow.id}:${item.id} references missing evidence ${item.evidenceId}`,
         );
       if (
+        (flow.availability ?? "live") === "live" &&
         EXECUTABLE_NODE_TYPES.has(item.type) &&
         item.ownerRoleIds.some(
           (roleId) =>

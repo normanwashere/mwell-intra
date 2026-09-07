@@ -406,15 +406,15 @@ const FEATURE_RELATIONSHIPS: Record<string, FeatureRelationship> = {
   },
   "vendor-cases": {
     policyBasis: [POLICY.vendorScope, POLICY.accreditation],
-    relatedFlowIds: ["vendor-accreditation"],
+    relatedFlowIds: ["vendor-accreditation", "vendor-application-submission"],
   },
   "vendor-case-detail": {
     policyBasis: [POLICY.vendorScope, POLICY.accreditation],
-    relatedFlowIds: ["vendor-accreditation"],
+    relatedFlowIds: ["vendor-accreditation", "vendor-application-submission"],
   },
   "vendor-application": {
     policyBasis: [POLICY.vendorScope, POLICY.accreditation],
-    relatedFlowIds: ["vendor-accreditation"],
+    relatedFlowIds: ["vendor-accreditation", "vendor-application-submission"],
   },
   "vendor-sign-instrument": {
     policyBasis: [POLICY.vendorScope, POLICY.accreditation],

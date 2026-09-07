@@ -588,7 +588,9 @@ export const KNOWLEDGE_EVIDENCE_SCENARIOS: Record<string, EvidenceScenario> = {
 };
 
 const executableNodes = KNOWLEDGE_FLOWS.flatMap((flow) =>
-  flow.nodes.filter((node) => executableTypes.has(node.type)),
+  (flow.availability ?? "live") === "live"
+    ? flow.nodes.filter((node) => executableTypes.has(node.type))
+    : [],
 );
 
 function buildEvidence(node: KnowledgeFlowNode): KnowledgeEvidence {

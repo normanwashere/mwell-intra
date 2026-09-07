@@ -52,12 +52,25 @@ export function FeatureGuide({
 }) {
   const isRoadmap = feature.availability === "coming_soon";
   const [view, setView] = React.useState<"guide" | "reference">("guide");
+  const articleRef = React.useRef<HTMLElement>(null);
+  const [jumpToEntry, setJumpToEntry] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (!jumpToEntry) return;
+    if (jumpToEntry !== feature.id || view !== "guide") {
+      setJumpToEntry(null);
+      return;
+    }
+    const target = articleRef.current?.querySelector<HTMLElement>("#feature-entry");
+    target?.focus({ preventScroll: true });
+    target?.scrollIntoView?.({ block: "start" });
+    setJumpToEntry(null);
+  }, [jumpToEntry, view, feature.id]);
   const exactFlows = relatedFlows.filter((flow) =>
     feature.relatedFlowIds.includes(flow.id),
   );
 
   return (
-    <article className="mx-auto max-w-5xl">
+    <article ref={articleRef} className="mx-auto min-w-0 max-w-5xl">
       <button
         type="button"
         className="btn-ghost btn-sm min-h-11"
@@ -75,16 +88,32 @@ export function FeatureGuide({
           </Badge>
           {isRoadmap && <Badge tone="slate">Reference only</Badge>}
         </div>
-        <h1 className="mt-3 text-3xl font-bold text-ink">{feature.title}</h1>
-        <p className="mt-2 max-w-3xl text-base leading-7 text-muted">
-          {feature.purpose}
-        </p>
+        <h1 className="mt-3 break-words text-2xl font-bold text-ink sm:text-3xl">{feature.title}</h1>
         {isRoadmap && (
           <p className="mt-4 border-l-4 border-amber-500 pl-4 text-sm font-medium leading-6 text-ink">
             Not available for live work. Routes and controls below describe
             planned behavior and do not execute an action.
           </p>
         )}
+        <a
+          href="#feature-entry"
+          className="mt-3 inline-flex min-h-11 max-w-full items-center gap-2 py-2 text-sm font-semibold text-brand-700 dark:text-brand-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+          onClick={(event) => {
+            event.preventDefault();
+            setView("guide");
+            setJumpToEntry(feature.id);
+          }}
+        >
+          {isRoadmap ? "Review planned prerequisites" : "Before you start"}
+          <Icon name="arrowRight" className="h-4 w-4 shrink-0" />
+        </a>
+        <details key={feature.id} className="mt-2 border-t border-line">
+          <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+            Overview and audience
+          </summary>
+          <p className="max-w-3xl text-sm leading-6 text-muted">
+            {feature.purpose}
+          </p>
         <dl className="mt-5 grid gap-4 border-y border-line py-4 sm:grid-cols-3">
           <Meta label="Audience">
             {feature.roleIds
@@ -98,6 +127,7 @@ export function FeatureGuide({
           entries={glossary}
           text={[feature.title, feature.purpose, ...feature.controls.flatMap((item) => [item.behavior, item.validation, item.result]), ...feature.fields?.flatMap((item) => [item.name, item.purpose, item.validation]) ?? [], ...feature.statuses, ...feature.exceptions].join(" ")}
         />
+        </details>
       </header>
 
       <div className="mt-6 inline-flex rounded-md border border-line bg-inset p-1" role="tablist" aria-label="Feature guide depth">
@@ -105,7 +135,7 @@ export function FeatureGuide({
           type="button"
           role="tab"
           aria-selected={view === "guide"}
-          className={`min-h-11 rounded px-4 text-sm font-semibold ${view === "guide" ? "bg-surface text-brand-700 shadow-e1" : "text-muted hover:text-ink"}`}
+          className={`min-h-11 rounded px-4 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:focus-visible:ring-brand-300 ${view === "guide" ? "bg-surface text-brand-700 dark:text-brand-300 shadow-e1" : "text-muted hover:text-ink"}`}
           onClick={() => setView("guide")}
         >
           Task guide
@@ -114,7 +144,7 @@ export function FeatureGuide({
           type="button"
           role="tab"
           aria-selected={view === "reference"}
-          className={`min-h-11 rounded px-4 text-sm font-semibold ${view === "reference" ? "bg-surface text-brand-700 shadow-e1" : "text-muted hover:text-ink"}`}
+          className={`min-h-11 rounded px-4 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:focus-visible:ring-brand-300 ${view === "reference" ? "bg-surface text-brand-700 dark:text-brand-300 shadow-e1" : "text-muted hover:text-ink"}`}
           onClick={() => setView("reference")}
         >
           Control reference
@@ -336,11 +366,14 @@ export function FeatureGuide({
         </GuideSection>
 
         <GuideSection id="feature-policy" title="Policy basis">
+          <details className="mt-3 border-y border-line">
+            <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">Policy references ({feature.policyBasis.length})</summary>
           <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-muted">
             {feature.policyBasis.map((policy) => (
               <li key={policy}>{policy}</li>
             ))}
           </ul>
+          </details>
         </GuideSection>
         </div>
 
@@ -388,7 +421,7 @@ function GuideSection({
   children: React.ReactNode;
 }) {
   return (
-    <section id={id} className="scroll-mt-24" aria-labelledby={`${id}-title`}>
+    <section id={id} tabIndex={-1} className="scroll-mt-24" aria-labelledby={`${id}-title`}>
       <h2 id={`${id}-title`} className="text-xl font-bold text-ink">
         {title}
       </h2>
