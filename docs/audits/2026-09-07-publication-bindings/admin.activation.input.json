@@ -1,0 +1,22 @@
+{
+  "key": "admin",
+  "baselineFingerprint": "0a4376c84b5a76f0823ffa177edf54ce",
+  "mode": "rehearsal",
+  "projectRef": "kkoitlvydytdhlpxhuah",
+  "candidate": "06c9b80bc6c09c343800756ebcadc0efdb88619f",
+  "ownerEmail": "intra.test.admin@mwell.com.ph",
+  "reviewerEmail": "intra.test.legal.lead@mwell.com.ph",
+  "reviewedAt": "2026-09-07T03:31:51Z",
+  "reviewMode": "automated",
+  "authorAgentId": "01a06fa0-d12a-73d0-a143-5e6c7f3a745e",
+  "reviewerAgentId": "01a06fa2-a909-7bd0-84a1-90c820ec9c5f",
+  "reviewArtifactPath": "docs/audits/2026-09-07-publication-bindings/admin.review.json",
+  "reviewArtifactSha256": "64f6752581be5f44df17fac687f0f39f96cb9c6ebe6f4c1614bbef252649c6cb",
+  "reviewedContentSha256": "901e4ee97aec872dd7efd4cc2d7975c59f15dfdedd8a29f986201d3072c6ac2b",
+  "userAuthorizationReference": "2026-09-07 current task explicit automated independent review and per-key publication binding request; no human signoff",
+  "publishedFingerprint": "abc130ab2d04227046c03d7b12b0fe3f",
+  "publicHealthPath": "docs/audits/2026-09-07-publication-bindings/public-health.json",
+  "publicHealthSha256": "c5376485b9b74b6a0f074b158f89916f0ff0fb7909ae3ea62496d7587c1687ac",
+  "activationReviewPath": "docs/audits/2026-09-07-publication-bindings/admin.activation.review.json",
+  "activationReviewSha256": "f1196a3cf927e790c4ba3f0cb8ee2a5ec36faee13c9445b03e66832303702e29"
+}

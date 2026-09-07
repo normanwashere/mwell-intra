@@ -1,0 +1,37 @@
+{
+  "reviewMode": "automated",
+  "verdict": "approved",
+  "executionApproved": true,
+  "key": "vendor_evidence",
+  "scope": "exact-vendor-activation-only",
+  "candidate": "06c9b80bc6c09c343800756ebcadc0efdb88619f",
+  "projectRef": "kkoitlvydytdhlpxhuah",
+  "reviewerAgentId": "01a06fa2-a909-7bd0-84a1-90c820ec9c5f",
+  "authorAgentId": "01a06fa0-d12a-73d0-a143-5e6c7f3a745e",
+  "authorAgentRole": "adaptation-and-review-preparer-not-original-catalog-author",
+  "originalCatalogAuthor": null,
+  "activationReviewSha256": "8c15016d5b52c71f5816dba915e1b5bf9d09d2003efc80d055e11a58789b4ad1",
+  "rehearsalSqlSha256": "c4132d612166de7ea79e11e9a366dfbcafe1fc7fb4d96535d66d5977d48c4438",
+  "baselineFingerprint": "eb8668999e6f7826e1ec8ebc05ef6a7a",
+  "publishedFingerprint": "23cc13c1eaaf65a3496222acc2e5609e",
+  "activationPolicy": "add_current_version_preserve_prior",
+  "reviewedAt": "2026-09-07T03:55:32Z",
+  "userAuthorizationReference": "2026-09-07 explicit user-authorized independent automated exact vendor activation execution approval request following live rollback",
+  "liveRehearsalEvidencePath": "docs/audits/2026-09-07-publication-bindings/vendor-live-activation-rehearsal.json",
+  "liveRehearsalEvidenceSha256": "d5b21b1062d0334e9ca01445af2f4d298da5bc0acd49822c4e943e7b74363aba",
+  "verification": [
+    "Independently rendered exact activation input; output byte-identical to saved SQL",
+    "Renderer validated bound review/public-health hashes and exact candidate",
+    "Saved live tool result isError=false; empty DO output expected",
+    "Post-rollback zero new vendor mappings reported separately by main; not present in saved tool result"
+  ],
+  "restrictions": [
+    "Use exact frozen activation renderer and inputs; preserve all baseline/shared-root guards",
+    "No original content or prior map/evidence deletion authorized",
+    "No human competency or broad operational certification"
+  ],
+  "postApplyChecks": [
+    "Read back vendor v2 mapping and preserved prior mapping",
+    "Rerun vendor desktop/mobile against activated graph; old-baseline sweep is not substitute"
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "reviewMode": "automated",
+  "verdict": "approved",
+  "executionApproved": true,
+  "key": "vendor_evidence",
+  "scope": "exact-inactive-vendor-publication-only",
+  "candidate": "06c9b80bc6c09c343800756ebcadc0efdb88619f",
+  "projectRef": "kkoitlvydytdhlpxhuah",
+  "baselineFingerprint": "eb8668999e6f7826e1ec8ebc05ef6a7a",
+  "authorAgentId": "01a06fa0-d12a-73d0-a143-5e6c7f3a745e",
+  "authorAgentRole": "adaptation-and-review-preparer-not-original-catalog-author",
+  "originalCatalogAuthor": null,
+  "reviewerAgentId": "01a06fa2-a909-7bd0-84a1-90c820ec9c5f",
+  "reviewedAt": "2026-09-07T03:51:02Z",
+  "reviewArtifactSha256": "1336bb8155c85a92e6cd4c60773dd8e462e753391a9446951b20d6dcd45edd74",
+  "activationPolicy": "publish_inactive_no_role_maps",
+  "userAuthorizationReference": "2026-09-07 explicit user-authorized automated independent vendor changed-graph publication binding review",
+  "rehearsalSqlSha256": "2d8e3d912cb20fdf76b04bc27db83a837cfd5ebe9f35eec9d64ec783a80b1d10",
+  "liveRehearsalEvidencePath": "docs/audits/2026-09-07-publication-bindings/vendor-live-rehearsal.json",
+  "liveRehearsalEvidenceSha256": "f3f56ca68e87a65b0302c01ec8f2bd5ca0c6d0db2fb3e23494d5d2393593bedf",
+  "activationApproved": false,
+  "verification": [
+    "Exact saved SQL independently re-rendered byte-for-byte; review artifact and candidate hashes validated",
+    "Saved tool result isError=false; final SELECT contains exactly edges1->0,2->0,2->1",
+    "Main separately reports post-rollback vendor v2 count0; not present in saved tool result and not independently queried by reviewer"
+  ],
+  "limitations": [
+    "Only final SELECT rows exposed; no claim of full member row readback during rehearsal",
+    "No live writes performed by reviewer",
+    "No human or operational certification"
+  ],
+  "requiredPostApplyChecks": [
+    "Full member readback: orientation, new evidence attestation, distinct cloned practice",
+    "Both new requirements and v2 published, expected pass rules, sole submit_accreditation outcome on practice",
+    "Zero new role maps, prior graph/evidence unchanged",
+    "Separate approval before vendor activation"
+  ]
+}

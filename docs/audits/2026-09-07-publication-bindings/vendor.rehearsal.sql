@@ -1,126 +1,4 @@
-#!/usr/bin/env node
-import { createHash } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-
-export const CANDIDATE = '0363ae28843d474bcb0efd4802bb91f15c9b135b';
-export const REQUIREMENT = 'vendor.vendor_representative.evidence-and-acknowledgments.v1';
-export const EVIDENCE_BACKED_PRACTICE = 'vendor.vendor_representative.evidence-backed-submission-practice.v1';
-export const PASS_RULES = {
-  required_checkpoints: ['review-evidence', 'complete'],
-  checkpoint_outcomes: { 'review-evidence': ['reviewed'], complete: ['reviewed'] },
-};
-const literal = (value) => `'${String(value).replaceAll("'", "''")}'`;
-
-export function vendorBaselineQuery() {
-  return `select md5(jsonb_build_object(
-    'root',to_jsonb(c),'version',to_jsonb(cv),
-    'members',(select jsonb_agg(to_jsonb(x) order by x.id) from learning.curriculum_requirements x where x.curriculum_version_id=cv.id),
-    'requirements',(select jsonb_agg(jsonb_build_object('root',to_jsonb(r),'version',to_jsonb(rv)) order by rv.id) from learning.curriculum_requirements m join learning.requirement_versions rv on rv.id=m.requirement_version_id join learning.requirements r on r.id=rv.requirement_id where m.curriculum_version_id=cv.id),
-    'edges',(select jsonb_agg(to_jsonb(x) order by x.id) from learning.curriculum_requirement_prerequisites x where x.curriculum_version_id=cv.id),
-    'outcomes',(select jsonb_agg(to_jsonb(x) order by x.id) from learning.curriculum_capability_outcomes x where x.curriculum_version_id=cv.id),
-    'maps',(select jsonb_agg(to_jsonb(x) order by x.id) from learning.role_curricula x where x.curriculum_version_id=cv.id)
-  )::text) as fingerprint from learning.curricula c join learning.curriculum_versions cv on cv.curriculum_id=c.id
-  where c.catalog_key='vendor.role.core.vendor_portal.capability-practice.v1.curriculum' and cv.version=1`;
-}
-
-// Preparation only: no connection, credentials, commit mode, approval or role-map writes.
-export function renderVendorEvidenceDryRun(input) {
-  if (!input || input.projectRef !== 'kkoitlvydytdhlpxhuah' || input.candidate !== CANDIDATE) {
-    throw new Error('Exact reviewed UAT project and candidate are required');
-  }
-  if (Object.keys(input).some((key) => !['projectRef', 'candidate', 'ownerEmail', 'reviewerEmail', 'reviewEvidence', 'reviewedAt', 'reviewConfirmed'].includes(key))) {
-    throw new Error('Unknown input; no commit or publication mode is supported');
-  }
-  const email = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i;
-  for (const value of [input.ownerEmail, input.reviewerEmail]) {
-    if (!email.test(value ?? '') || /(?:intra\.test|synthetic|example\.|test[+@])/i.test(value)) {
-      throw new Error('Explicit real owner and reviewer addresses are required; no test identities');
-    }
-  }
-  if (input.ownerEmail.toLowerCase() === input.reviewerEmail.toLowerCase()) throw new Error('Independent reviewer required');
-  if (input.reviewConfirmed !== true || !/^https:\/\/[^\s]+$/.test(input.reviewEvidence ?? '') ||
-      !Number.isFinite(Date.parse(input.reviewedAt)) || Date.parse(input.reviewedAt) > Date.now()) {
-    throw new Error('Actual completed review evidence and timestamp are required');
-  }
-  const catalog = execFileSync('git', ['show', `${CANDIDATE}:modules/learning/src/catalog.ts`], {
-    cwd: fileURLToPath(new URL('..', import.meta.url)), encoding: 'utf8',
-  });
-  const catalogHash = createHash('sha256').update(catalog).digest('hex');
-  if (catalogHash !== 'b43d781bb62ea4db83eac1f61eb3dc73e2338eb3685fb28e5b2f3efa8b0cee48') {
-    throw new Error('Reviewed catalog content hash mismatch');
-  }
-  const references = [{ type: 'application_catalog', commit: CANDIDATE,
-    path: 'modules/learning/src/catalog.ts', sha256: catalogHash,
-    simulation_id: 'vendor-evidence-review-v1', version: 1 },
-  { type: 'human_review_reference', reference: input.reviewEvidence, reviewed_at: input.reviewedAt }];
-  return renderDraftSql(input, references, false);
-}
-
-export function renderAutomatedVendorEvidenceDryRun(input) {
-  const allowed = ['projectRef','candidate','authorAgentId','reviewerAgentId','reviewArtifactPath','reviewArtifactSha256','userAuthorizationReference',
-    'mode','baselineFingerprint','executionApprovalPath','executionApprovalSha256'];
-  const mode = input?.mode ?? 'draft';
-  if (!input || Object.keys(input).some((k) => !allowed.includes(k)) || input.projectRef !== 'kkoitlvydytdhlpxhuah' ||
-      !/^[a-f0-9]{40}$/.test(input.candidate ?? '') ||
-      !/^[a-zA-Z0-9_.:-]{3,160}$/.test(input.authorAgentId ?? '') ||
-      !/^[a-zA-Z0-9_.:-]{3,160}$/.test(input.reviewerAgentId ?? '') || input.authorAgentId === input.reviewerAgentId ||
-      !/^[a-f0-9]{64}$/.test(input.reviewArtifactSha256 ?? '') ||
-      typeof input.userAuthorizationReference !== 'string' || input.userAuthorizationReference.trim().length < 12 ||
-      !['draft','publish-inactive-rehearsal','apply'].includes(mode)) {
-    throw new Error('Explicit independent automated UAT review and supported mode required');
-  }
-  const bytes = readFileSync(input.reviewArtifactPath);
-  const hash = (value) => createHash('sha256').update(value).digest('hex');
-  if (hash(bytes) !== input.reviewArtifactSha256) throw new Error('Review artifact hash mismatch');
-  const artifact = JSON.parse(bytes.toString('utf8'));
-  const catalog = execFileSync('git', ['show', `${input.candidate}:modules/learning/src/catalog.ts`], {
-    cwd: fileURLToPath(new URL('..', import.meta.url)), encoding: 'utf8',
-  });
-  if (artifact.reviewMode !== 'automated' || artifact.verdict !== 'approved' || artifact.key !== 'vendor_evidence' ||
-      artifact.projectRef !== input.projectRef || artifact.candidate !== input.candidate ||
-      artifact.authorAgentId !== input.authorAgentId || artifact.reviewerAgentId !== input.reviewerAgentId ||
-      artifact.userAuthorizationReference !== input.userAuthorizationReference ||
-      artifact.catalogSha256 !== hash(catalog) || artifact.passRulesSha256 !== hash(JSON.stringify(PASS_RULES)) ||
-      !Number.isFinite(Date.parse(artifact.reviewedAt)) || Date.parse(artifact.reviewedAt) > Date.now()) {
-    throw new Error('Automated artifact must approve exact vendor catalog, pass rules and candidate');
-  }
-  const references = [{ type: 'application_catalog', commit: input.candidate, path: 'modules/learning/src/catalog.ts',
-    sha256: hash(catalog), simulation_id: 'vendor-evidence-review-v1', version: 1 },
-  { type: 'automated_review_reference', review_mode: 'automated', reference: input.reviewArtifactPath,
-    artifact_sha256: input.reviewArtifactSha256, pass_rules_sha256: artifact.passRulesSha256,
-    author_agent_id: input.authorAgentId, reviewer_agent_id: input.reviewerAgentId,
-    reviewed_at: artifact.reviewedAt, user_authorization_reference: input.userAuthorizationReference,
-    custodian_attribution: 'Existing UAT test accounts are audit custodians only, not human authors or reviewers.', human_review_claimed: false }];
-  if (mode !== 'draft' && !/^[a-f0-9]{32}$/.test(input.baselineFingerprint ?? '')) throw new Error('Exact vendor baseline fingerprint required');
-  if (mode !== 'draft' && (artifact.baselineFingerprint !== input.baselineFingerprint ||
-      artifact.inactivePublicationPolicy !== 'publish_inactive_no_role_maps')) {
-    throw new Error('Review artifact must bind exact vendor baseline and inactive publication policy');
-  }
-  if (mode !== 'draft') references.push({
-    type: 'publication_baseline', baseline_fingerprint: input.baselineFingerprint,
-    activation_policy: 'publish_inactive_no_role_maps', human_review_claimed: false,
-  });
-  const sql = renderDraftSql({ ownerEmail: 'intra.test.admin@mwell.com.ph', reviewerEmail: 'intra.test.legal.lead@mwell.com.ph' }, references, true,
-    { publish: mode !== 'draft', baselineFingerprint: input.baselineFingerprint });
-  if (mode !== 'apply') return sql;
-  if (!/^[a-f0-9]{64}$/.test(input.executionApprovalSha256 ?? '')) throw new Error('Independent exact SQL execution approval required');
-  const executionBytes = readFileSync(input.executionApprovalPath);
-  if (hash(executionBytes) !== input.executionApprovalSha256) throw new Error('Execution approval hash mismatch');
-  const execution = JSON.parse(executionBytes.toString('utf8'));
-  if (execution.reviewMode !== 'automated' || execution.executionApproved !== true ||
-      execution.reviewerAgentId !== input.reviewerAgentId || execution.authorAgentId !== input.authorAgentId ||
-      execution.projectRef !== input.projectRef || execution.candidate !== input.candidate ||
-      execution.baselineFingerprint !== input.baselineFingerprint || execution.reviewArtifactSha256 !== input.reviewArtifactSha256 ||
-      execution.activationPolicy !== 'publish_inactive_no_role_maps' ||
-      execution.userAuthorizationReference !== input.userAuthorizationReference ||
-      execution.rehearsalSqlSha256 !== hash(sql)) throw new Error('Execution approval must bind exact inactive publication SQL and review');
-  return sql.slice(0, -'rollback;\n'.length) + 'commit;\n';
-}
-
-function renderDraftSql(input, references, automated, { publish = false, baselineFingerprint } = {}) {
-  return `-- UAT-only ${automated ? 'automated-review custodian' : 'human-review'} ${publish ? 'inactive publication rehearsal; no role mappings' : 'draft rehearsal; no approval fields'}.
+-- UAT-only automated-review custodian inactive publication rehearsal; no role mappings.
 -- Renderer only; execution requires separate authorization.
 begin isolation level read committed;
 set local lock_timeout = '5s';
@@ -133,10 +11,10 @@ declare owner_id uuid; reviewer_actor uuid; base learning.curriculum_versions%ro
   practice_root learning.requirements%rowtype; practice_version learning.requirement_versions%rowtype;
 begin
   select p.id into strict owner_id from core.profiles p
-    where lower(p.email)=lower(${literal(input.ownerEmail)}) and p.kind='employee' and p.status='active';
+    where lower(p.email)=lower('intra.test.admin@mwell.com.ph') and p.kind='employee' and p.status='active';
   select p.id into strict reviewer_actor from core.profiles p
-    where lower(p.email)=lower(${literal(input.reviewerEmail)}) and p.kind='employee' and p.status='active';
-  ${automated ? "if owner_id<>'5f86c147-34aa-4722-be5b-ed085caf97eb'::uuid or reviewer_actor<>'ab803856-0f20-4d1a-abe6-8444052725f2'::uuid then raise exception 'UAT custodian identity drift'; end if;" : ''}
+    where lower(p.email)=lower('intra.test.legal.lead@mwell.com.ph') and p.kind='employee' and p.status='active';
+  if owner_id<>'5f86c147-34aa-4722-be5b-ed085caf97eb'::uuid or reviewer_actor<>'ab803856-0f20-4d1a-abe6-8444052725f2'::uuid then raise exception 'UAT custodian identity drift'; end if;
   if owner_id=reviewer_actor then raise exception 'Independent reviewer required'; end if;
   if not exists(select 1 from core.user_roles ur join core.roles r on r.module=ur.module and r.role=ur.role
     where ur.user_id=owner_id and ur.module='core' and ur.role='platform_admin' and r.is_active
@@ -147,11 +25,19 @@ begin
       and c.audience='vendor' and c.governance_owner='platform' and c.status='active'
       and cv.version=1 and cv.status='published' and cv.effective_at<=statement_timestamp()
       and (cv.expires_at is null or cv.expires_at>statement_timestamp()) for share of cv,c;
-  ${publish ? `perform private.lock_learning_curriculum_graph(array[base.id]);
-  if (${vendorBaselineQuery()}) is distinct from ${literal(baselineFingerprint)} then raise exception 'Vendor baseline drift'; end if;` : ''}
+  perform private.lock_learning_curriculum_graph(array[base.id]);
+  if (select md5(jsonb_build_object(
+    'root',to_jsonb(c),'version',to_jsonb(cv),
+    'members',(select jsonb_agg(to_jsonb(x) order by x.id) from learning.curriculum_requirements x where x.curriculum_version_id=cv.id),
+    'requirements',(select jsonb_agg(jsonb_build_object('root',to_jsonb(r),'version',to_jsonb(rv)) order by rv.id) from learning.curriculum_requirements m join learning.requirement_versions rv on rv.id=m.requirement_version_id join learning.requirements r on r.id=rv.requirement_id where m.curriculum_version_id=cv.id),
+    'edges',(select jsonb_agg(to_jsonb(x) order by x.id) from learning.curriculum_requirement_prerequisites x where x.curriculum_version_id=cv.id),
+    'outcomes',(select jsonb_agg(to_jsonb(x) order by x.id) from learning.curriculum_capability_outcomes x where x.curriculum_version_id=cv.id),
+    'maps',(select jsonb_agg(to_jsonb(x) order by x.id) from learning.role_curricula x where x.curriculum_version_id=cv.id)
+  )::text) as fingerprint from learning.curricula c join learning.curriculum_versions cv on cv.curriculum_id=c.id
+  where c.catalog_key='vendor.role.core.vendor_portal.capability-practice.v1.curriculum' and cv.version=1) is distinct from 'eb8668999e6f7826e1ec8ebc05ef6a7a' then raise exception 'Vendor baseline drift'; end if;
   if exists(select 1 from learning.curriculum_versions cv where cv.curriculum_id=base.curriculum_id and cv.version>1)
-    or exists(select 1 from learning.requirements r where r.requirement_key=${literal(REQUIREMENT)})
-    ${publish ? `or exists(select 1 from learning.requirements r where r.requirement_key=${literal(EVIDENCE_BACKED_PRACTICE)})` : ''}
+    or exists(select 1 from learning.requirements r where r.requirement_key='vendor.vendor_representative.evidence-and-acknowledgments.v1')
+    or exists(select 1 from learning.requirements r where r.requirement_key='vendor.vendor_representative.evidence-backed-submission-practice.v1')
     then raise exception 'Draft or newer content already exists: review instead of overwriting'; end if;
   if (select jsonb_agg(jsonb_build_array(r.requirement_key,rv.version,rv.requirement_kind,cr.sort_order,cr.mandatory) order by cr.sort_order)
     from learning.curriculum_requirements cr join learning.requirement_versions rv on rv.id=cr.requirement_version_id
@@ -177,34 +63,34 @@ begin
   select cr.requirement_version_id into strict original_practice_id from learning.curriculum_requirements cr
     where cr.curriculum_version_id=base.id and cr.sort_order=1;
   practice_id := original_practice_id;
-  ${publish ? `
+  
   select rv.* into strict practice_version from learning.requirement_versions rv where rv.id=original_practice_id
     and rv.status='published' and rv.requirement_kind='scenario' and rv.effective_at<=statement_timestamp()
     and (rv.expires_at is null or rv.expires_at>statement_timestamp()) for share;
   select r.* into strict practice_root from learning.requirements r where r.id=practice_version.requirement_id for share;
   practice_root := jsonb_populate_record(practice_root,jsonb_build_object('id',gen_random_uuid(),
-    'requirement_key',${literal(EVIDENCE_BACKED_PRACTICE)},'created_by',owner_id,'created_at',statement_timestamp()));
+    'requirement_key','vendor.vendor_representative.evidence-backed-submission-practice.v1','created_by',owner_id,'created_at',statement_timestamp()));
   insert into learning.requirements select practice_root.*;
   practice_version := jsonb_populate_record(practice_version,jsonb_build_object('id',gen_random_uuid(),
     'requirement_id',practice_root.id,'version',1,'status','draft','owner_id',owner_id,
     'reviewer_id',null,'approved_at',null,'published_at',null,'effective_at',null,'expires_at',null,
     'created_at',statement_timestamp(),'supersedes_id',null,'materiality','material',
     'change_reason','Distinct evidence-backed practice identity; preserved prior content and certificates',
-    'source_references',practice_version.source_references || ${literal(JSON.stringify(references))}::jsonb));
+    'source_references',practice_version.source_references || '[{"type":"application_catalog","commit":"06c9b80bc6c09c343800756ebcadc0efdb88619f","path":"modules/learning/src/catalog.ts","sha256":"bce1c0278fdc7b4498ac42539497d004a4c980b1e56488f63c6fd4d01b9ea906","simulation_id":"vendor-evidence-review-v1","version":1},{"type":"automated_review_reference","review_mode":"automated","reference":"docs/audits/2026-09-07-publication-bindings/vendor.review.json","artifact_sha256":"1336bb8155c85a92e6cd4c60773dd8e462e753391a9446951b20d6dcd45edd74","pass_rules_sha256":"bcb08d0d5a727341ebb4ecf78e88dec547710407d901d5c92752b9bf3b1d9068","author_agent_id":"01a06fa0-d12a-73d0-a143-5e6c7f3a745e","reviewer_agent_id":"01a06fa2-a909-7bd0-84a1-90c820ec9c5f","reviewed_at":"2026-09-07T03:48:26Z","user_authorization_reference":"2026-09-07 explicit user-authorized automated independent vendor changed-graph publication binding review","custodian_attribution":"Existing UAT test accounts are audit custodians only, not human authors or reviewers.","human_review_claimed":false},{"type":"publication_baseline","baseline_fingerprint":"eb8668999e6f7826e1ec8ebc05ef6a7a","activation_policy":"publish_inactive_no_role_maps","human_review_claimed":false}]'::jsonb));
   insert into learning.requirement_versions select practice_version.*;
   practice_id := practice_version.id;
-  ` : ''}
+  
   insert into learning.requirements(requirement_key,audience,requirement_kind,governance_owner,created_by)
-    values(${literal(REQUIREMENT)},'vendor','attestation','platform',owner_id) returning id into root_id;
+    values('vendor.vendor_representative.evidence-and-acknowledgments.v1','vendor','attestation','platform',owner_id) returning id into root_id;
   insert into learning.requirement_versions(requirement_id,audience,requirement_kind,governance_owner,version,status,
     title,simulation_id,content_reference,pass_rules,estimated_minutes,waivable,change_reason,materiality,source_references,owner_id)
     values(root_id,'vendor','attestation','platform',1,'draft','Vendor evidence and acknowledgments',
-      'vendor-evidence-review-v1',null,${literal(JSON.stringify(PASS_RULES))}::jsonb,3,false,
+      'vendor-evidence-review-v1',null,'{"required_checkpoints":["review-evidence","complete"],"checkpoint_outcomes":{"review-evidence":["reviewed"],"complete":["reviewed"]}}'::jsonb,3,false,
       'Add vendor evidence learning review; no legal declaration or operational authority','material',
-      ${literal(JSON.stringify(references))}::jsonb,owner_id) returning id into requirement_id;
+      '[{"type":"application_catalog","commit":"06c9b80bc6c09c343800756ebcadc0efdb88619f","path":"modules/learning/src/catalog.ts","sha256":"bce1c0278fdc7b4498ac42539497d004a4c980b1e56488f63c6fd4d01b9ea906","simulation_id":"vendor-evidence-review-v1","version":1},{"type":"automated_review_reference","review_mode":"automated","reference":"docs/audits/2026-09-07-publication-bindings/vendor.review.json","artifact_sha256":"1336bb8155c85a92e6cd4c60773dd8e462e753391a9446951b20d6dcd45edd74","pass_rules_sha256":"bcb08d0d5a727341ebb4ecf78e88dec547710407d901d5c92752b9bf3b1d9068","author_agent_id":"01a06fa0-d12a-73d0-a143-5e6c7f3a745e","reviewer_agent_id":"01a06fa2-a909-7bd0-84a1-90c820ec9c5f","reviewed_at":"2026-09-07T03:48:26Z","user_authorization_reference":"2026-09-07 explicit user-authorized automated independent vendor changed-graph publication binding review","custodian_attribution":"Existing UAT test accounts are audit custodians only, not human authors or reviewers.","human_review_claimed":false},{"type":"publication_baseline","baseline_fingerprint":"eb8668999e6f7826e1ec8ebc05ef6a7a","activation_policy":"publish_inactive_no_role_maps","human_review_claimed":false}]'::jsonb,owner_id) returning id into requirement_id;
   insert into learning.curriculum_versions(curriculum_id,audience,version,status,change_reason,materiality,source_references,owner_id,supersedes_id)
     values(base.curriculum_id,'vendor',2,'draft','Add mandatory vendor evidence learning review','material',
-      ${literal(JSON.stringify(references))}::jsonb,owner_id,base.id) returning id into curriculum_id;
+      '[{"type":"application_catalog","commit":"06c9b80bc6c09c343800756ebcadc0efdb88619f","path":"modules/learning/src/catalog.ts","sha256":"bce1c0278fdc7b4498ac42539497d004a4c980b1e56488f63c6fd4d01b9ea906","simulation_id":"vendor-evidence-review-v1","version":1},{"type":"automated_review_reference","review_mode":"automated","reference":"docs/audits/2026-09-07-publication-bindings/vendor.review.json","artifact_sha256":"1336bb8155c85a92e6cd4c60773dd8e462e753391a9446951b20d6dcd45edd74","pass_rules_sha256":"bcb08d0d5a727341ebb4ecf78e88dec547710407d901d5c92752b9bf3b1d9068","author_agent_id":"01a06fa0-d12a-73d0-a143-5e6c7f3a745e","reviewer_agent_id":"01a06fa2-a909-7bd0-84a1-90c820ec9c5f","reviewed_at":"2026-09-07T03:48:26Z","user_authorization_reference":"2026-09-07 explicit user-authorized automated independent vendor changed-graph publication binding review","custodian_attribution":"Existing UAT test accounts are audit custodians only, not human authors or reviewers.","human_review_claimed":false},{"type":"publication_baseline","baseline_fingerprint":"eb8668999e6f7826e1ec8ebc05ef6a7a","activation_policy":"publish_inactive_no_role_maps","human_review_claimed":false}]'::jsonb,owner_id,base.id) returning id into curriculum_id;
   insert into learning.curriculum_requirements(curriculum_version_id,requirement_version_id,audience,sort_order,mandatory,created_by)
     select curriculum_id,case when cr.requirement_version_id=original_practice_id then practice_id else cr.requirement_version_id end,'vendor',case when cr.sort_order=0 then 0 else 2 end,cr.mandatory,owner_id
     from learning.curriculum_requirements cr where cr.curriculum_version_id=base.id;
@@ -235,8 +121,16 @@ begin
   if (select count(*) from learning.curriculum_capability_outcomes o where o.curriculum_version_id=curriculum_id)<>1
     or exists(select 1 from learning.curriculum_capability_outcomes o where o.curriculum_version_id=curriculum_id and o.requirement_version_id=requirement_id)
     then raise exception 'Vendor evidence must not grant authority'; end if;
-  ${publish ? `
-  if (${vendorBaselineQuery()}) is distinct from ${literal(baselineFingerprint)} then raise exception 'Vendor baseline changed'; end if;
+  
+  if (select md5(jsonb_build_object(
+    'root',to_jsonb(c),'version',to_jsonb(cv),
+    'members',(select jsonb_agg(to_jsonb(x) order by x.id) from learning.curriculum_requirements x where x.curriculum_version_id=cv.id),
+    'requirements',(select jsonb_agg(jsonb_build_object('root',to_jsonb(r),'version',to_jsonb(rv)) order by rv.id) from learning.curriculum_requirements m join learning.requirement_versions rv on rv.id=m.requirement_version_id join learning.requirements r on r.id=rv.requirement_id where m.curriculum_version_id=cv.id),
+    'edges',(select jsonb_agg(to_jsonb(x) order by x.id) from learning.curriculum_requirement_prerequisites x where x.curriculum_version_id=cv.id),
+    'outcomes',(select jsonb_agg(to_jsonb(x) order by x.id) from learning.curriculum_capability_outcomes x where x.curriculum_version_id=cv.id),
+    'maps',(select jsonb_agg(to_jsonb(x) order by x.id) from learning.role_curricula x where x.curriculum_version_id=cv.id)
+  )::text) as fingerprint from learning.curricula c join learning.curriculum_versions cv on cv.curriculum_id=c.id
+  where c.catalog_key='vendor.role.core.vendor_portal.capability-practice.v1.curriculum' and cv.version=1) is distinct from 'eb8668999e6f7826e1ec8ebc05ef6a7a' then raise exception 'Vendor baseline changed'; end if;
   if exists(select rv.requirement_id from learning.curriculum_requirements cr join learning.requirement_versions rv on rv.id=cr.requirement_version_id
     where cr.curriculum_version_id=curriculum_id group by rv.requirement_id having count(*)>1) then raise exception 'Duplicate vendor requirement roots'; end if;
   update learning.requirement_versions set status='in_review' where id in (vendor_publication.requirement_id,practice_id) and status='draft';
@@ -251,14 +145,22 @@ begin
     or not exists(select 1 from learning.requirement_versions rv where rv.id=practice_id and rv.status='published')
     or not exists(select 1 from learning.curriculum_versions cv where cv.id=vendor_publication.curriculum_id and cv.status='published')
     then raise exception 'Vendor inactive publication incomplete'; end if;
-  if (${vendorBaselineQuery()}) is distinct from ${literal(baselineFingerprint)} then raise exception 'Vendor publication modified baseline'; end if;
+  if (select md5(jsonb_build_object(
+    'root',to_jsonb(c),'version',to_jsonb(cv),
+    'members',(select jsonb_agg(to_jsonb(x) order by x.id) from learning.curriculum_requirements x where x.curriculum_version_id=cv.id),
+    'requirements',(select jsonb_agg(jsonb_build_object('root',to_jsonb(r),'version',to_jsonb(rv)) order by rv.id) from learning.curriculum_requirements m join learning.requirement_versions rv on rv.id=m.requirement_version_id join learning.requirements r on r.id=rv.requirement_id where m.curriculum_version_id=cv.id),
+    'edges',(select jsonb_agg(to_jsonb(x) order by x.id) from learning.curriculum_requirement_prerequisites x where x.curriculum_version_id=cv.id),
+    'outcomes',(select jsonb_agg(to_jsonb(x) order by x.id) from learning.curriculum_capability_outcomes x where x.curriculum_version_id=cv.id),
+    'maps',(select jsonb_agg(to_jsonb(x) order by x.id) from learning.role_curricula x where x.curriculum_version_id=cv.id)
+  )::text) as fingerprint from learning.curricula c join learning.curriculum_versions cv on cv.curriculum_id=c.id
+  where c.catalog_key='vendor.role.core.vendor_portal.capability-practice.v1.curriculum' and cv.version=1) is distinct from 'eb8668999e6f7826e1ec8ebc05ef6a7a' then raise exception 'Vendor publication modified baseline'; end if;
   if exists(select 1 from learning.role_curricula rc where rc.curriculum_version_id=curriculum_id) then raise exception 'Vendor publication must remain inactive'; end if;
-  ` : ''}
+  
 end;
 $vendor_draft$;
 select r.requirement_key,rv.status,rv.pass_rules,rv.content_reference,rv.source_references
   from learning.requirements r join learning.requirement_versions rv on rv.requirement_id=r.id
-  where r.requirement_key=${literal(REQUIREMENT)};
+  where r.requirement_key='vendor.vendor_representative.evidence-and-acknowledgments.v1';
 select child.sort_order as child_order,parent.sort_order as prerequisite_order
   from learning.curriculum_requirement_prerequisites e
   join learning.curriculum_requirements child on child.id=e.curriculum_requirement_id
@@ -268,10 +170,3 @@ select child.sort_order as child_order,parent.sort_order as prerequisite_order
   where c.catalog_key='vendor.role.core.vendor_portal.capability-practice.v1.curriculum' and cv.version=2
   order by child.sort_order,parent.sort_order;
 rollback;
-`;
-}
-
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  if (process.argv.length !== 3) throw new Error('Provide one local review-input JSON file; no defaults');
-  process.stdout.write(renderVendorEvidenceDryRun(JSON.parse(readFileSync(process.argv[2], 'utf8'))));
-}

@@ -1,0 +1,45 @@
+{
+  "reviewMode": "automated",
+  "verdict": "approved",
+  "key": "vendor_evidence",
+  "projectRef": "kkoitlvydytdhlpxhuah",
+  "candidate": "06c9b80bc6c09c343800756ebcadc0efdb88619f",
+  "authorAgentId": "01a06fa0-d12a-73d0-a143-5e6c7f3a745e",
+  "authorAgentLabel": "Curie",
+  "authorAgentRole": "adaptation-and-review-preparer-not-original-catalog-author",
+  "originalCatalogAuthor": null,
+  "reviewerAgentId": "01a06fa2-a909-7bd0-84a1-90c820ec9c5f",
+  "reviewerAgentLabel": "independent-content-reviewer",
+  "publisherAuthorLabel": "Schrodinger",
+  "publisherAuthorAgentId": null,
+  "userAuthorizationReference": "2026-09-07 explicit user-authorized automated independent vendor changed-graph publication binding review",
+  "reviewedAt": "2026-09-07T03:48:26Z",
+  "catalogSha256": "bce1c0278fdc7b4498ac42539497d004a4c980b1e56488f63c6fd4d01b9ea906",
+  "passRulesSha256": "bcb08d0d5a727341ebb4ecf78e88dec547710407d901d5c92752b9bf3b1d9068",
+  "baselineFingerprint": "eb8668999e6f7826e1ec8ebc05ef6a7a",
+  "inactivePublicationPolicy": "publish_inactive_no_role_maps",
+  "rendererFileSha256": "9aa2bd65e64cef1c79ec943af864b5f3eb72277d019127d56cd01d5b227bec01",
+  "scope": "exact-distinct-practice-graph-inactive-publication-rehearsal",
+  "executionApproved": false,
+  "activationApproved": false,
+  "graph": {
+    "newPracticeRoot": "vendor.vendor_representative.evidence-backed-submission-practice.v1",
+    "originalPracticeRootPreserved": true,
+    "originalContentAndPassRulesCloned": true,
+    "newEvidenceCapabilityOutcomes": [],
+    "prerequisiteEdges": 3,
+    "roleMapsWritten": 0
+  },
+  "verification": [
+    "Frozen renderer hash independently confirmed",
+    "Baseline and inactive-policy artifact comparisons now enforced; R3 resolved",
+    "New practice root separates changed prerequisites; old practice/root/certificates remain untouched",
+    "Independent actual-lifecycle PGlite test passed1/1 exit0; includes graph projection assertions",
+    "Fresh live baseline is main-reported; renderer checks it under lock"
+  ],
+  "limitations": [
+    "No live writes or human certification by reviewer",
+    "Live exact-SQL rollback rehearsal still required before execution approval",
+    "Original catalog authorship unknown; authorAgentId records adaptation preparer only"
+  ]
+}

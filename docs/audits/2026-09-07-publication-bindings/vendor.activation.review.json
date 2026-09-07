@@ -1,0 +1,36 @@
+{
+  "reviewMode": "automated",
+  "verdict": "approved",
+  "key": "vendor_evidence",
+  "scope": "vendor-activation-rehearsal-only",
+  "executionApproved": false,
+  "authorAgentId": "01a06fa0-d12a-73d0-a143-5e6c7f3a745e",
+  "authorAgentRole": "adaptation-and-review-preparer-not-original-catalog-author",
+  "originalCatalogAuthor": null,
+  "reviewerAgentId": "01a06fa2-a909-7bd0-84a1-90c820ec9c5f",
+  "candidate": "06c9b80bc6c09c343800756ebcadc0efdb88619f",
+  "projectRef": "kkoitlvydytdhlpxhuah",
+  "baselineFingerprint": "eb8668999e6f7826e1ec8ebc05ef6a7a",
+  "publishedFingerprint": "23cc13c1eaaf65a3496222acc2e5609e",
+  "publicHealthSha256": "c5376485b9b74b6a0f074b158f89916f0ff0fb7909ae3ea62496d7587c1687ac",
+  "reviewArtifactSha256": "1336bb8155c85a92e6cd4c60773dd8e462e753391a9446951b20d6dcd45edd74",
+  "userAuthorizationReference": "2026-09-07 explicit user-authorized automated independent vendor changed-graph publication binding review",
+  "activationPolicy": "add_current_version_preserve_prior",
+  "reviewedAt": "2026-09-07T03:52:56Z",
+  "rendererFileSha256": "e3e8191f88a3cf863a9754213c9313f247be101068ccf76f902af5e10cb7ef08",
+  "reviewedControls": [
+    "Locks active vendor root and both published graphs; compares exact v1/v2 fingerprints",
+    "Rejects newer versions, existing v2 mappings and changed shared-root obligations",
+    "Shared-root guard compares version identity, mandatory flag, prerequisites and outcomes",
+    "Distinct new practice root avoids old practice prerequisite conflict; orientation remains unchanged",
+    "Requires active pinned platform-admin custodian and active vendor source role mapping",
+    "Adds mapping preserving original mapping/expiry/department; no evidence reset"
+  ],
+  "evidenceProvenance": "Saved publication result independently inspected: isError=false and three expected edges. Full member readback, zero maps and v2 fingerprint supplied by main; not contained in this saved final-SELECT result. Public-health file independently inspected and hashed.",
+  "pending": [
+    "Exact saved activation SQL render",
+    "Live rollback rehearsal and zero persisted v2 maps confirmation",
+    "Separate exact SQL execution approval"
+  ],
+  "humanCertificationClaimed": false
+}

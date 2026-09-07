@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "artifactPurpose": "independent-content-review-not-publication-authorization",
+  "reviewMode": "automated",
+  "reviewerAgentId": "01a06fa2-a909-7bd0-84a1-90c820ec9c5f",
+  "reviewerAgentLabel": "independent-content-reviewer",
+  "agentIdentityKind": "agent-uuid-not-database-principal",
+  "identityProvenance": "Agent UUIDs supplied by user from tool context on 2026-09-07",
+  "draftSqlAuthorAgentId": "01a072be-8370-7621-8090-b3b44baa8cc6",
+  "draftSqlAuthorAgentLabel": "Godel",
+  "databaseBindingReview": "pending-separate-artifact",
+  "userAuthorizationReference": "2026-09-07 current task user directive: none...purely vibe coded...spawn separateagent review; explicit independent automated review authorized",
+  "candidate": null,
+  "baselineFingerprint": null,
+  "executablePublication": false,
+  "reviews": [
+    {
+      "correction": "warehouse-quality-inspection-review-v1",
+      "authorAgentId": "01a06fa0-d12a-73d0-a143-5e6c7f3a745e",
+      "authorAgentLabel": "Curie",
+      "reviewerAgentId": "01a06fa2-a909-7bd0-84a1-90c820ec9c5f",
+      "reviewerAgentLabel": "independent-content-reviewer",
+      "reviewMode": "automated",
+      "verdict": "approved",
+      "contentSha256": "03ac69bd9e0ecf09898af99ac706085ea17f1860b222c1b3fa36f98efed062c8",
+      "baselineFingerprint": null,
+      "candidate": null,
+      "scope": "runtime-registration-and-publication-content-not-execution",
+      "findings": ["R1 resolved: instruction, context, selected answer and feedback require exact-source readback for unknown commit outcome and retain custody restrictions"]
+    },
+    {
+      "correction": "procurement-payment-readiness-review-v1",
+      "authorAgentId": "01a06fa0-d12a-73d0-a143-5e6c7f3a745e",
+      "authorAgentLabel": "Curie",
+      "reviewerAgentId": "01a06fa2-a909-7bd0-84a1-90c820ec9c5f",
+      "reviewerAgentLabel": "independent-content-reviewer",
+      "reviewMode": "automated",
+      "verdict": "approved",
+      "contentSha256": "901e4ee97aec872dd7efd4cc2d7975c59f15dfdedd8a29f986201d3072c6ac2b",
+      "baselineFingerprint": null,
+      "candidate": null,
+      "scope": "runtime-registration-and-publication-content-not-execution",
+      "findings": ["All three keys and six feedback alternatives substantively acceptable; separate review, current evidence, uncertain response readback and release authority"]
+    },
+    {
+      "correction": "combined-candidate-server-rules",
+      "authorAgentId": "01a06fa0-d12a-73d0-a143-5e6c7f3a745e",
+      "authorAgentLabel": "Curie",
+      "reviewerAgentId": "01a06fa2-a909-7bd0-84a1-90c820ec9c5f",
+      "reviewerAgentLabel": "independent-content-reviewer",
+      "reviewMode": "automated",
+      "verdict": "approved",
+      "contentSha256": "deeb1dff8e5fa2998e59655bb66511a78a20becb5e01f8fafaaa8fd631f65a98",
+      "baselineFingerprint": null,
+      "candidate": null,
+      "scope": "runtime-registration-and-publication-content-not-execution",
+      "findings": ["R1 warehouse release feedback corrected; all six accepted choices and twelve negative feedback alternatives approved"]
+    }
+  ],
+  "vendorContent": {
+    "verdict": "approved",
+    "scope": "learning-attestation-content-only",
+    "contentSha256": "508c2518986fa444810c659fd55b846d22f3873f72a4149b67762c8e6cef9391",
+    "authorAgentId": null,
+    "authorIdentityStatus": "catalog-content-author-not-independently-established",
+    "passRules": {"required_checkpoints": ["review-evidence", "complete"], "checkpoint_outcomes": {"review-evidence": ["reviewed"], "complete": ["reviewed"]}},
+    "graphSemanticVerdict": "approved",
+    "executionApproved": false,
+    "findings": ["Three ordered prerequisite edges; evidence grants no capability; no learner completion, signature or accreditation fabricated"]
+  },
+  "runtimeIntegrationReview": {
+    "verdict": "approved",
+    "scope": "source-level-catalog-and-server-evaluator-wiring",
+    "focusedTests": "8/8 passed; two files; exit 0",
+    "productionBundleInspected": false,
+    "defaultRequirementsChanged": false
+  },
+  "publicationBindingReview": {
+    "verdict": "rejected",
+    "executionApproved": false,
+    "findings": ["R2: renderer pass_rules uses checkpoint-name step.outcomeId while API sends accepted choiceId; SQL exact outcome validation rejects all six", "Renderer runtime_status still claims unregistered; final provenance must match integration"]
+  },
+  "additionalOpsContentReview": {
+    "reviewMode": "automated",
+    "authorAgentId": "01a06fa0-d12a-73d0-a143-5e6c7f3a745e",
+    "authorAgentLabel": "Curie",
+    "reviewerAgentId": "01a06fa2-a909-7bd0-84a1-90c820ec9c5f",
+    "reviewerAgentLabel": "independent-content-reviewer",
+    "userAuthorizationReference": "2026-09-07 current task explicit independent automated review direction; additional Ops content review requested",
+    "scope": "content-and-future-runtime-registration-eligibility-not-execution",
+    "candidate": null,
+    "baselineFingerprint": null,
+    "registeredInRuntime9c9bef1": false,
+    "executionApproved": false,
+    "reviews": [
+      {"correction": "warehouse-putaway-review-v1", "verdict": "approved", "contentSha256": "444e9c98a0f18cd5099076a5b476b1d93d5fdf23c351dfad481c7d0674a5ba76"},
+      {"correction": "warehouse-pick-pack-review-v1", "verdict": "approved", "contentSha256": "d46411fbf73f14c9ef20cc8814e5733bd5fb6cddd65fb2c53c520993a5f31470"},
+      {"correction": "ops-custody-server-rules", "verdict": "approved", "contentSha256": "0353e6083a2f33d426a5078833451dfec6ec804546c022a62d70c605eda4e87f"}
+    ],
+    "verification": "Hashes independently reproduced; all six decisions and twelve feedback alternatives reviewed; six structural key/feedback assertions passed",
+    "findings": ["No blocking content findings", "Later integration and SQL binding must preserve role authority and use accepted choice IDs for pass rules", "No physical competency or live transaction certification"]
+  },
+  "sourceFindingsReport": "2026-09-07-AUTOMATED-CONTENT-REVIEW.md",
+  "historicalRejectedHashes": ["98da2e8123dde0b28b873335578cec1893b1bdb4ba9e9012bcde2d79bd8327a8", "716b2a3a408cf748fe1b0db7001374db9b6610a2f303a9b3afc72115b7a1c685", "0bfe99fbc8c3f3294783def56af07f52d7231bc50eb3e0cad3d1d9986a00e612"],
+  "bindingBlockers": ["final candidate commit unknown", "current baseline fingerprint unknown", "revised renderer and rendered SQL review pending", "runtime integration unverified", "audited database actor binding requires separate review artifact; agent UUIDs are not database principals"]
+}

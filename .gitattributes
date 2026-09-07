@@ -1,0 +1,9 @@
+# Preserve byte-level publication review hashes across Windows and CI checkouts.
+docs/audits/2026-09-07-publication-bindings/** text eol=lf
+docs/audits/2026-09-07-AUTOMATED-CONTENT-REVIEW.* text eol=lf
+docs/audits/2026-09-07-AUTOMATED-RUNTIME-REGISTRATION-REVIEW.json text eol=lf
+scripts/rehearse-learning-mapping-correction.mjs text eol=lf
+scripts/activate-learning-mapping-correction.mjs text eol=lf
+scripts/ops-mapping-additions.mjs text eol=lf
+scripts/publish-vendor-evidence-learning.mjs text eol=lf
+scripts/activate-vendor-evidence-learning.mjs text eol=lf

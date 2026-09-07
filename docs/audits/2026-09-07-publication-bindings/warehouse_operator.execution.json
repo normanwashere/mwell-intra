@@ -1,0 +1,36 @@
+{
+  "reviewMode": "automated",
+  "verdict": "approved",
+  "executionApproved": true,
+  "scope": "inactive-publication-only-no-role-activation",
+  "publicationPolicy": "publish_inactive_no_role_mapping",
+  "candidate": "06c9b80bc6c09c343800756ebcadc0efdb88619f",
+  "projectRef": "kkoitlvydytdhlpxhuah",
+  "key": "warehouse_operator",
+  "baselineFingerprint": "63bd32726b57af27856d732707a4a137",
+  "rehearsalSqlSha256": "b38f3d51218f6e74845cf399fec642057ff6bfae3415bf265147c731fdebf32b",
+  "reviewerAgentId": "01a06fa2-a909-7bd0-84a1-90c820ec9c5f",
+  "reviewerAgentLabel": "independent-content-reviewer",
+  "authorAgentId": "01a06fa0-d12a-73d0-a143-5e6c7f3a745e",
+  "sqlAuthorAgentId": "01a072be-8370-7621-8090-b3b44baa8cc6",
+  "reviewedAt": "2026-09-07T03:35:26Z",
+  "userAuthorizationReference": "2026-09-07 explicit user request for independent automated exact execution approval after successful live UAT rollback rehearsals",
+  "liveRehearsalEvidencePath": "docs/audits/2026-09-07-publication-bindings/live-rehearsal-results.json",
+  "liveRehearsalEvidenceSha256": "90679a67c623e015713d0755cf46d3c2770dda86b3ca315a0f31cbacbdb8b69c",
+  "evidenceProvenance": "Independently inspected saved main-executed tool results; reviewer did not execute live SQL",
+  "activationApproved": false,
+  "requiredBeforeExecution": [
+    "Main confirms rollback left no v2/additive roots before applying",
+    "Use frozen renderer apply mode and exact original review input; do not hand-edit SQL",
+    "SQL baseline and existing-version guards must pass; no override"
+  ],
+  "reviewLimitations": [
+    "Readback projection exposes primary requirement pass rules plus aggregate graph; Ops extra pass rules verified in exact SQL/helper, not separately returned as rows",
+    "No human review or learner operational certification"
+  ],
+  "expectedPostconditions": [
+    "Published v2 and new requirements exist",
+    "No new role mapping, learner evidence reset or role capability changes",
+    "Existing v1 graph remains unchanged"
+  ]
+}

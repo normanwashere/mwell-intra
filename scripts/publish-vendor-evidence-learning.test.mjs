@@ -63,6 +63,13 @@ test('actual content lifecycle accepts scoped drafts; rehearsal rolls back and p
       await db.query(`insert into learning.curriculum_requirements(curriculum_version_id,requirement_version_id,audience,sort_order,mandatory,created_by)
         values('00000000-0000-4000-8000-000000000004',$1,'vendor',$2,true,'00000000-0000-4000-8000-000000000001')`, [version, i]);
     }
+    await db.exec(`insert into learning.curriculum_requirement_prerequisites
+      select child.id,child.curriculum_version_id,child.requirement_version_id,parent.requirement_version_id,'vendor',child.created_by
+      from learning.curriculum_requirements child join learning.curriculum_requirements parent
+      on parent.curriculum_version_id=child.curriculum_version_id and parent.sort_order=0 where child.sort_order=1;
+      insert into learning.curriculum_capability_outcomes
+      select id,curriculum_version_id,requirement_version_id,'vendor','core','submit_accreditation',created_by
+      from learning.curriculum_requirements where sort_order=1;`);
     const start = foundation.indexOf('create or replace function learning.guard_content_lifecycle()');
     await db.exec(foundation.slice(start, foundation.indexOf('$$;', start) + 3));
     for (const table of ['requirement_versions', 'curriculum_versions']) {
@@ -75,8 +82,21 @@ test('actual content lifecycle accepts scoped drafts; rehearsal rolls back and p
       assert.equal(draft.status, 'draft');
       assert.deepEqual(draft.pass_rules, PASS_RULES);
       assert.equal(draft.content_reference, null);
+      const graph = results.find((result) => result.rows?.[0]?.child_order !== undefined)?.rows;
+      assert.deepEqual(graph, [
+        { child_order: 1, prerequisite_order: 0 },
+        { child_order: 2, prerequisite_order: 0 },
+        { child_order: 2, prerequisite_order: 1 },
+      ]);
       assert.equal((await db.query('select count(*)::int as n from learning.requirements')).rows[0].n, 2);
       assert.equal((await db.query('select count(*)::int as n from learning.curriculum_versions')).rows[0].n, 1);
+      assert.equal((await db.query('select count(*)::int as n from learning.curriculum_requirement_prerequisites')).rows[0].n, 1);
     }
+    await db.exec("update learning.curriculum_capability_outcomes set capability='admin'");
+    await assert.rejects(db.exec(sql), /Vendor base outcome drift/);
+    await db.exec('rollback');
+    await db.exec("update learning.curriculum_capability_outcomes set capability='submit_accreditation'; delete from learning.curriculum_requirement_prerequisites");
+    await assert.rejects(db.exec(sql), /Vendor base prerequisite drift/);
+    await db.exec('rollback');
   } finally { await db.close(); }
 });

@@ -1,0 +1,31 @@
+{
+  "surface": "public_alias",
+  "url": "https://mwell-intra-uat.vercel.app",
+  "healthy": true,
+  "projectRef": "kkoitlvydytdhlpxhuah",
+  "commit": "06c9b80bc6c09c343800756ebcadc0efdb88619f",
+  "observedAt": "2026-09-07T03:39:16.161Z",
+  "health": {
+    "status": "ok",
+    "timestamp": "2026-09-07T03:39:16.161Z",
+    "deployment": {
+      "appEnv": "uat",
+      "supabaseProjectRef": "kkoitlvydytdhlpxhuah"
+    },
+    "supabase": "reachable",
+    "clientAuth": "supabase-configured",
+    "staticAssets": {
+      "status": "reachable",
+      "asset": "/_next/static/chunks/3g3aab57pxy71.css",
+      "statusCode": 200,
+      "contentType": "text/css; charset=utf-8"
+    },
+    "features": {
+      "notifications": "configured",
+      "vendorInviteDelivery": "configured",
+      "legalDocumentDelivery": "configured",
+      "serviceWorker": "configured"
+    },
+    "commit": "06c9b80bc6c09c343800756ebcadc0efdb88619f"
+  }
+}

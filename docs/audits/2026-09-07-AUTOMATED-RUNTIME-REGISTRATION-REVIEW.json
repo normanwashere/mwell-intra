@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "reviewMode": "automated",
+  "verdict": "approved",
+  "scope": "committed-runtime-registration-only",
+  "candidate": "06c9b80bc6c09c343800756ebcadc0efdb88619f",
+  "authorAgentId": "01a06fa0-d12a-73d0-a143-5e6c7f3a745e",
+  "authorAgentLabel": "Curie",
+  "reviewerAgentId": "01a06fa2-a909-7bd0-84a1-90c820ec9c5f",
+  "reviewerAgentLabel": "independent-content-reviewer",
+  "userAuthorizationReference": "2026-09-07 current task explicit independent automated review directive and final registration review request",
+  "agentIdsAreDatabasePrincipals": false,
+  "contentReview": "2026-09-07-AUTOMATED-CONTENT-REVIEW.json",
+  "verification": {
+    "committedDiffReviewed": true,
+    "reviewedRuntimeFilesMatchCommit": true,
+    "focusedTestFiles": 3,
+    "focusedTestsPassed": 11,
+    "testExitCode": 0,
+    "newSimulationCount": 4,
+    "defaultRequirementsOrMappingsChanged": false,
+    "wrongAudienceAndKindRejected": true,
+    "rulesImportedByServerEvaluatorOnly": true,
+    "productionBundleInspected": false
+  },
+  "publicationApproved": false,
+  "executionApproved": false,
+  "deploymentHealthVerifiedByReviewer": false,
+  "pendingBindingPolicyObserved": "publish_inactive_no_role_mapping",
+  "bindingStatus": "await-final-renderer-and-exact-SQL-review",
+  "baselineEvidence": {
+    "provenance": "Main reports unchanged UAT v1-only baseline read around03:30; not independently queried by this reviewer",
+    "warehouse_operator": "63bd32726b57af27856d732707a4a137",
+    "finance": "deb60d391e7857938b0edc12ac346a71",
+    "admin": "0a4376c84b5a76f0823ffa177edf54ce"
+  }
+}

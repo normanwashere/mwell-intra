@@ -1,0 +1,12 @@
+{
+  "reviewMode": "automated",
+  "verdict": null,
+  "key": "warehouse_operator",
+  "candidate": "06c9b80bc6c09c343800756ebcadc0efdb88619f",
+  "projectRef": "kkoitlvydytdhlpxhuah",
+  "publishedFingerprint": "6a9727545ff5e910a0196d5fb87c63a3",
+  "baselineFingerprint": "63bd32726b57af27856d732707a4a137",
+  "reviewerAgentId": "01a06fa2-a909-7bd0-84a1-90c820ec9c5f",
+  "publicHealthSha256": "c5376485b9b74b6a0f074b158f89916f0ff0fb7909ae3ea62496d7587c1687ac",
+  "activationPolicy": "add_current_version_preserve_prior"
+}

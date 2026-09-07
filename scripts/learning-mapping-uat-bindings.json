@@ -1,0 +1,52 @@
+{
+  "purpose": "Verified UAT inputs; not execution approval",
+  "projectRef": "kkoitlvydytdhlpxhuah",
+  "observedDate": "2026-09-07",
+  "candidate": "06c9b80bc6c09c343800756ebcadc0efdb88619f",
+  "runtimeCandidate": null,
+  "executionApproved": false,
+  "rendererPath": "scripts/rehearse-learning-mapping-correction.mjs",
+  "rendererFileSha256": "5b65be6b6faee16016c61cee0baf30afb1c7a7f08c407015b89c960406f2bf42",
+  "opsHelperFileSha256": "a9827d2cd22b5e63fdd7685505b3937c7bc4afc9d0bf21dffe9cc00d5ef41839",
+  "activationRendererFileSha256": "985ea3d00aeaa9e0c321a672000fb89fe92dc411973f7bd9f9d2d27f8e4bd26b",
+  "publicationPolicy": "publish_inactive_no_role_mapping",
+  "activationRequires": "separate exact SQL approval and compatible public_alias health evidence",
+  "contentReviewPath": "docs/audits/2026-09-07-AUTOMATED-CONTENT-REVIEW.json",
+  "contentReviewFileSha256": "f4e1c27bcd8ecc094ff99d3831fd9caddef447300976504d2eae2a10b0f2d3f6",
+  "rulesSha256": "deeb1dff8e5fa2998e59655bb66511a78a20becb5e01f8fafaaa8fd631f65a98",
+  "bindings": [
+    {
+      "key": "warehouse_operator",
+      "applyHold": "Combined three-root Ops v2 prepared; bind newer runtime with all three IDs and independent review of expanded SQL before publication",
+      "opsRulesSha256": "0353e6083a2f33d426a5078833451dfec6ec804546c022a62d70c605eda4e87f",
+      "opsContentHashes": {
+        "warehouse-putaway-review-v1": "444e9c98a0f18cd5099076a5b476b1d93d5fdf23c351dfad481c7d0674a5ba76",
+        "warehouse-pick-pack-review-v1": "d46411fbf73f14c9ef20cc8814e5733bd5fb6cddd65fb2c53c520993a5f31470"
+      },
+      "baselineFingerprint": "63bd32726b57af27856d732707a4a137",
+      "contentSha256": "03ac69bd9e0ecf09898af99ac706085ea17f1860b222c1b3fa36f98efed062c8",
+      "simulationId": "warehouse-quality-inspection-review-v1",
+      "requirementKey": "internal.role.warehouse.warehouse_operator.quality-inspection.v1",
+      "requirementVersion": 1,
+      "curriculumVersion": 2
+    },
+    {
+      "key": "finance",
+      "baselineFingerprint": "deb60d391e7857938b0edc12ac346a71",
+      "contentSha256": "901e4ee97aec872dd7efd4cc2d7975c59f15dfdedd8a29f986201d3072c6ac2b",
+      "simulationId": "procurement-payment-readiness-review-v1",
+      "requirementKey": "internal.role.procurement.finance.payment-readiness.v1",
+      "requirementVersion": 1,
+      "curriculumVersion": 2
+    },
+    {
+      "key": "admin",
+      "baselineFingerprint": "0a4376c84b5a76f0823ffa177edf54ce",
+      "contentSha256": "901e4ee97aec872dd7efd4cc2d7975c59f15dfdedd8a29f986201d3072c6ac2b",
+      "simulationId": "procurement-payment-readiness-review-v1",
+      "requirementKey": "internal.role.procurement.admin.payment-readiness.v1",
+      "requirementVersion": 1,
+      "curriculumVersion": 2
+    }
+  ]
+}

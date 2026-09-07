@@ -1,0 +1,31 @@
+{
+  "reviewMode": "automated",
+  "verdict": "approved",
+  "scope": "activation-rehearsal-only",
+  "executionApproved": false,
+  "key": "warehouse_operator",
+  "candidate": "06c9b80bc6c09c343800756ebcadc0efdb88619f",
+  "projectRef": "kkoitlvydytdhlpxhuah",
+  "baselineFingerprint": "63bd32726b57af27856d732707a4a137",
+  "publishedFingerprint": "6a9727545ff5e910a0196d5fb87c63a3",
+  "reviewerAgentId": "01a06fa2-a909-7bd0-84a1-90c820ec9c5f",
+  "sqlAuthorAgentId": "01a072be-8370-7621-8090-b3b44baa8cc6",
+  "publicHealthSha256": "c5376485b9b74b6a0f074b158f89916f0ff0fb7909ae3ea62496d7587c1687ac",
+  "activationPolicy": "add_current_version_preserve_prior",
+  "reviewedAt": "2026-09-07T03:39:59Z",
+  "userAuthorizationReference": "2026-09-07 explicit user-authorized independent automated internal activation review after public UAT promotion",
+  "rendererFileSha256": "985ea3d00aeaa9e0c321a672000fb89fe92dc411973f7bd9f9d2d27f8e4bd26b",
+  "evidenceProvenance": "Reviewer inspected saved public-health.json; live fingerprints and promotion observed by main, not independently queried by reviewer",
+  "reviewedControls": [
+    "Exact public-alias candidate/project/digest binding",
+    "Both v1 and v2 graph fingerprints checked under lock; newer v3 rejected",
+    "Existing target mapping rejected; active source mappings only; department and expiry preserved",
+    "Insert-only role_curricula operation; no v1 deletion or learner evidence reset",
+    "Apply requires separate exact rehearsal SQL execution artifact"
+  ],
+  "residuals": [
+    "Live ROLLBACK rehearsal and no-persisted-mapping readback pending",
+    "No human pilot or operational competency certification",
+    "User-owned main alone executes live operations"
+  ]
+}

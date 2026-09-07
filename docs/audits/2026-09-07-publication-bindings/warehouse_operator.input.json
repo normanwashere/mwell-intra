@@ -1,0 +1,17 @@
+{
+  "key": "warehouse_operator",
+  "baselineFingerprint": "63bd32726b57af27856d732707a4a137",
+  "mode": "publish-rehearsal",
+  "projectRef": "kkoitlvydytdhlpxhuah",
+  "candidate": "06c9b80bc6c09c343800756ebcadc0efdb88619f",
+  "ownerEmail": "intra.test.admin@mwell.com.ph",
+  "reviewerEmail": "intra.test.legal.lead@mwell.com.ph",
+  "reviewedAt": "2026-09-07T03:31:51Z",
+  "reviewMode": "automated",
+  "authorAgentId": "01a06fa0-d12a-73d0-a143-5e6c7f3a745e",
+  "reviewerAgentId": "01a06fa2-a909-7bd0-84a1-90c820ec9c5f",
+  "reviewArtifactPath": "docs/audits/2026-09-07-publication-bindings/warehouse_operator.review.json",
+  "reviewArtifactSha256": "e1668c8b107237d8d82d42756abf282f21264142019173474092564bc7e9d26e",
+  "reviewedContentSha256": "03ac69bd9e0ecf09898af99ac706085ea17f1860b222c1b3fa36f98efed062c8",
+  "userAuthorizationReference": "2026-09-07 current task explicit automated independent review and per-key publication binding request; no human signoff"
+}

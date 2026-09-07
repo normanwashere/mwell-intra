@@ -1,0 +1,16 @@
+{
+  "projectRef": "kkoitlvydytdhlpxhuah",
+  "candidate": "06c9b80bc6c09c343800756ebcadc0efdb88619f",
+  "authorAgentId": "01a06fa0-d12a-73d0-a143-5e6c7f3a745e",
+  "reviewerAgentId": "01a06fa2-a909-7bd0-84a1-90c820ec9c5f",
+  "reviewArtifactPath": "docs/audits/2026-09-07-publication-bindings/vendor.review.json",
+  "reviewArtifactSha256": "1336bb8155c85a92e6cd4c60773dd8e462e753391a9446951b20d6dcd45edd74",
+  "userAuthorizationReference": "2026-09-07 explicit user-authorized automated independent vendor changed-graph publication binding review",
+  "mode": "rehearsal",
+  "baselineFingerprint": "eb8668999e6f7826e1ec8ebc05ef6a7a",
+  "publishedFingerprint": "23cc13c1eaaf65a3496222acc2e5609e",
+  "publicHealthPath": "docs/audits/2026-09-07-publication-bindings/public-health.json",
+  "publicHealthSha256": "c5376485b9b74b6a0f074b158f89916f0ff0fb7909ae3ea62496d7587c1687ac",
+  "activationReviewPath": "docs/audits/2026-09-07-publication-bindings/vendor.activation.review.json",
+  "activationReviewSha256": "8c15016d5b52c71f5816dba915e1b5bf9d09d2003efc80d055e11a58789b4ad1"
+}

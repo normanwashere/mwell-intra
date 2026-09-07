@@ -1,0 +1,33 @@
+{
+  "reviewMode": "automated",
+  "verdict": "approved",
+  "executionApproved": true,
+  "scope": "exact-internal-activation-only",
+  "key": "warehouse_operator",
+  "candidate": "06c9b80bc6c09c343800756ebcadc0efdb88619f",
+  "projectRef": "kkoitlvydytdhlpxhuah",
+  "reviewerAgentId": "01a06fa2-a909-7bd0-84a1-90c820ec9c5f",
+  "sqlAuthorAgentId": "01a072be-8370-7621-8090-b3b44baa8cc6",
+  "reviewedAt": "2026-09-07T03:43:00Z",
+  "rehearsalSqlSha256": "f48ee4487091b12fe7a0cca637413a6beaa2bd5a8aa999667417222ebaca9de7",
+  "activationPolicy": "add_current_version_preserve_prior",
+  "publicHealthSha256": "c5376485b9b74b6a0f074b158f89916f0ff0fb7909ae3ea62496d7587c1687ac",
+  "liveRehearsalEvidencePath": "docs/audits/2026-09-07-publication-bindings/live-activation-rehearsal-results.json",
+  "liveRehearsalEvidenceSha256": "450a6db6f906ecb537a564e0b77b9f18bad0f8e19a76f56f0368b8abff2c209f",
+  "userAuthorizationReference": "2026-09-07 explicit user request for independent automated exact internal activation execution approvals following live rollback rehearsals",
+  "verification": [
+    "Saved SQL independently re-rendered byte-for-byte from final inputs with review and health digest validation",
+    "All three saved live tool results isError=false with empty DO result expected",
+    "Main-recorded postRollbackNewRoleMappings=0; not independently live queried by reviewer"
+  ],
+  "restrictions": [
+    "Only frozen activation renderer apply mode for this exact input",
+    "Preserve SQL baseline/newer-version/no-existing-map guards",
+    "No vendor activation or publication authorized",
+    "No learner evidence reset or human competency certification"
+  ],
+  "postApplyChecks": [
+    "Confirm v2 role maps and preserved v1 maps",
+    "Perform planned eleven-role sweep; activation success alone is not acceptance"
+  ]
+}
