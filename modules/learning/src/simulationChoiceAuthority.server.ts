@@ -1,4 +1,5 @@
 import { SCOPED_READINESS_CANDIDATE_RULES } from "./scopedReadinessCandidateAuthority.server";
+import { OPS_CUSTODY_CANDIDATE_RULES } from "./opsCustodyCandidateAuthority.server";
 
 export interface SimulationChoiceAuthorityInput {
   simulationId: string;
@@ -21,6 +22,7 @@ const rule = (
 
 const CHOICE_RULES: Readonly<Record<string, ChoiceRule>> = {
   ...SCOPED_READINESS_CANDIDATE_RULES,
+  ...OPS_CUSTODY_CANDIDATE_RULES,
   "platform-access-governance-v1:review-access-scope": rule("verify-role", {
     "grant-admin":
       "Platform Administrator does not provide operational approval authority and would violate least privilege.",
