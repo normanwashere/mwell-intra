@@ -19,6 +19,13 @@ describe('EvidenceGallery', () => {
       expect(dialog.parentElement).toBe(document.body);
       expect(document.querySelector('button button')).toBeNull();
       const close = within(dialog).getByRole('button', { name: 'Close' });
+      expect(close).toHaveClass('h-11', 'w-11', 'z-10');
+      expect(within(dialog).getByRole('img', { name: 'Evidence' })).toHaveClass(
+        'max-h-[calc(100vh-2rem)]',
+        'supports-[height:100dvh]:max-h-[calc(100dvh-2rem)]',
+        'max-w-[calc(100vw-2rem)]',
+        'object-contain',
+      );
       expect(close).toHaveFocus();
       fireEvent.click(close);
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();

@@ -171,7 +171,7 @@ function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
         ref={closeButton}
         type="button"
         aria-label="Close"
-        className="absolute right-4 top-4 grid h-10 w-10 place-items-center rounded-full bg-white/15 text-white"
+        className="absolute right-4 top-4 z-10 grid h-11 w-11 place-items-center rounded-full bg-white/15 text-white"
         onClick={onClose}
       >
         <Icon name="x" />
@@ -179,7 +179,7 @@ function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
       <img
         src={src}
         alt="Evidence"
-        className="max-h-full max-w-full rounded-2xl object-contain"
+        className="h-auto w-auto max-h-[calc(100vh-2rem)] max-w-[calc(100vw-2rem)] rounded-2xl object-contain supports-[height:100dvh]:max-h-[calc(100dvh-2rem)]"
         onClick={(e) => e.stopPropagation()}
       />
     </div>,
