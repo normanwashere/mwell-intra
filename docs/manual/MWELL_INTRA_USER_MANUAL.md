@@ -92,6 +92,26 @@ These procedures describe the remediation candidate. They are not proof of live 
 4. **Complete governed PO receiving:** Desktop uses a wider dialog. Expand the item line you are working on and collapse other lines to reduce scrolling. The fixed footer lists missing requirements; select a requirement to reach its field or line. Complete delivery evidence and line corrections before confirming. Save progress remains a draft, not a receipt.
 5. **Use help without losing your place:** Contextual help stays within the viewport. Dismiss it with Escape or an outside click. Help does not change permission or transaction state.
 
+### September 7 Feedback: Merchandise Barcodes and Quantities
+
+Merchandise configured as non-serialized is quantity-controlled. A product barcode identifies the product variant, not one individual piece. For example, all identical tumblers can use one product barcode; jacket S, M and L must use three different product identities and barcodes. Follow the product's configured tracking policy, not its name alone. Serialized devices still require a unique serial for every physically present unit.
+
+For a delivery of 1,000 identical non-serialized tumblers, identify the tumbler product and record the counted quantity as 1,000. Do not scan 1,000 invented serials. For a request of ten tumblers, identify the same product and use quantity 10. Product identification does not prove physical quantity: the operator must count the units. A scan is not a receipt, inspection, approval or release.
+
+In direct receiving, the initial merchandise scan uses the entered quantity. Scanning the same product again verifies its existing draft line without adding that quantity a second time; deliberately edit the line or use Add to receipt for an additional quantity. Governed PO receiving keeps its condition quantities separate: verifying the product does not rewrite the clean, damaged or other outcome counts. During picking, verify the directed bin first where required, then the product barcode and exact requested whole quantity. Use the backorder process for a partial pick. Barcode verification is a local form check; the saved movement records product, quantity and custody context, not independent evidence that a physical scan occurred.
+
+**Receiving:** Open the matching eligible PO in Receive and inspect. Confirm the product variant, delivery date, quantities and required evidence. Keep jacket sizes on separate lines. Record the actual condition breakdown; do not mark damaged units as accepted. Complete governed receipt and Quality inspection, then Put away accepted stock into the correct bin. Stock in inspection or on hold is not automatically available for requests.
+
+**Marketing through Allocations:** Reserve the product quantity for the intended event with the correct Selling or Giveaway purpose. The authorized Operations user issues the reservation to the recorded recipient. Marketing reservation permission does not grant stock-issue or approval permission.
+
+**Marketing through Pick & Pack:** Submit the department stock request with its products, quantities, department and purpose. A separate authorized decision owner approves it. Operations allocates available stock, confirms the source bin and item identity, picks and packs it, and completes the authorized release and recipient handover. Do not issue the same physical stock again through Allocations merely because the other path exists. Test the two paths with separate quantities and references.
+
+**September 7 sample-data specification:** `UAT-SEP07-PO-0005` represents Company D with Jacket S 100, M 100 and L 100; `UAT-SEP07-PO-0006` represents Company E with Tumbler 300. The earlier 1,000-tumbler description is a workflow example, not an extra delivery. These are synthetic receiving fixtures, not supplier commitments, real approvals or purchasing-price guidance. Consult the dated feedback response for seed and deployment verification; this paragraph alone does not establish that a fixture is live.
+
+Never repeat receipt of an already consumed test PO. Use its remaining balance or request a new clearly labelled fixture. Existing tester stock and progress must not be reset to make the scenario repeatable.
+
+**September 4 carryover corrections:** New demand drafts receive an editable `ORD-` reference automatically. Keep an external shop reference when required; resuming a draft retains its existing reference. Leave the bundle option off for ordinary items; only real bundle sets need set codes. For serialized bin-to-bin relocation, choose the source warehouse and bin, scan the exact units to move, then choose the destination. The quantity comes from the selected serials. Changing the source clears those selections. A held, unavailable or wrong-bin unit remains blocked; do not remove a hold merely to complete a test. If a move is not confirmed, read back the original units before retrying.
+
 ### Safe Attachments and Interrupted Work
 
 1. Open the intended record before attaching evidence. An upload started for one record cannot satisfy another record's evidence requirement.

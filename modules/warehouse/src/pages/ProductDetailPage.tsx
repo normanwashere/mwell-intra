@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useWarehouse } from '@/app/store';
 import { WAREHOUSE_MUTATION_CAPABILITIES } from '@/app/authorization';
@@ -33,7 +33,7 @@ import { ExpiryBadge } from '@/components/ExpiryStatus';
 import { EvidenceGallery } from '@/components/EvidenceGallery';
 import { PriceEditorSheet } from '@/components/PriceEditorSheet';
 import { ProductEditorSheet } from '@/components/ProductEditorSheet';
-import { WarehouseScanFlow } from '@/components/camera/WarehouseScanFlow';
+import { WarehouseScanFlow, resolveWarehouseScan } from '@/components/camera/WarehouseScanFlow';
 
 const UNIT_TONE: Record<UnitStatus, Tone> = {
   in_stock: 'emerald',
@@ -57,6 +57,9 @@ export function ProductDetailPage() {
   const [relTo, setRelTo] = useState('');
   const [relQty, setRelQty] = useState(1);
   const [relErr, setRelErr] = useState<string | null>(null);
+  const [relSerials, setRelSerials] = useState<string[]>([]);
+  const [relSaving, setRelSaving] = useState(false);
+  const relInFlight = useRef(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [fromLoc, setFromLoc] = useState('');
   const [toLoc, setToLoc] = useState('');
@@ -205,11 +208,13 @@ export function ProductDetailPage() {
     setRelFrom('');
     setRelTo('');
     setRelQty(1);
+    setRelSerials([]);
     setRelErr(null);
     setRelocateOpen(true);
   };
 
   const submitRelocate = async () => {
+    if (relInFlight.current) return;
     setRelErr(null);
     if (!relLoc) {
       setRelErr('Choose a warehouse.');
@@ -219,18 +224,38 @@ export function ProductDetailPage() {
       setRelErr('Source and destination bins must differ.');
       return;
     }
-    const ok = await relocate({
-      productId: product.id,
-      locationId: relLoc,
-      fromBinId: relFrom || undefined,
-      toBinId: relTo || undefined,
-      quantity: relQty,
-    });
-    if (!ok) return;
-    toast.success(
-      `Moved ${relQty}× ${product.name} to ${binLabel(relTo || undefined)}`,
-    );
-    setRelocateOpen(false);
+    const quantity = product.serialized ? relSerials.length : relQty;
+    if (!Number.isInteger(quantity) || quantity < 1) {
+      setRelErr(product.serialized ? 'Scan the exact units to move.' : 'Quantity must be a positive whole number.');
+      return;
+    }
+    for (const code of product.serialized ? relSerials : []) {
+      const result = resolveWarehouseScan({ data, context: 'transfer', code,
+        expectedProductId: product.id, expectedLocationId: relLoc, expectedBinId: relFrom || null });
+      if (!result.ok) { setRelErr(result.message); return; }
+    }
+    relInFlight.current = true;
+    setRelSaving(true);
+    try {
+      const ok = await relocate({
+        productId: product.id,
+        locationId: relLoc,
+        fromBinId: relFrom || undefined,
+        toBinId: relTo || undefined,
+        quantity,
+        serialNumbers: product.serialized ? relSerials : undefined,
+      });
+      if (!ok) { setRelErr('Move not confirmed. Keep these exact units selected and review the reported error before continuing.'); return; }
+      toast.success(
+        `Moved ${quantity}× ${product.name} to ${binLabel(relTo || undefined)}`,
+      );
+      setRelocateOpen(false);
+    } catch {
+      setRelErr('Move not confirmed. Read back these exact units before retrying.');
+    } finally {
+      relInFlight.current = false;
+      setRelSaving(false);
+    }
   };
 
   const submitTransfer = async () => {
@@ -761,16 +786,16 @@ export function ProductDetailPage() {
       {/* Relocate (bin-to-bin within a warehouse) sheet */}
       <Sheet
         open={relocateOpen}
-        onOpenChange={setRelocateOpen}
+        onOpenChange={(open) => { if (!relInFlight.current) setRelocateOpen(open); }}
         title="Relocate stock"
         description={`Move ${product.name} between storage areas.`}
         footer={
-          <button type="button" className="btn-primary w-full" onClick={() => void submitRelocate()}>
+          <button type="button" className="btn-primary w-full" disabled={relSaving || (product.serialized && relSerials.length === 0)} onClick={() => void submitRelocate()}>
             Move stock
           </button>
         }
       >
-        <div className="space-y-3">
+        <fieldset className="space-y-3" disabled={relSaving}>
           {warehouseIds.size > 1 && (
             <Field label="Warehouse" htmlFor="rel-wh">
               <select
@@ -781,6 +806,7 @@ export function ProductDetailPage() {
                   setRelLoc(e.target.value);
                   setRelFrom('');
                   setRelTo('');
+                  setRelSerials([]);
                 }}
               >
                 {data.locations
@@ -798,7 +824,7 @@ export function ProductDetailPage() {
               id="rel-from"
               className="input"
               value={relFrom}
-              onChange={(e) => setRelFrom(e.target.value)}
+              onChange={(e) => { setRelFrom(e.target.value); setRelSerials([]); }}
             >
               <option value="">General area (unassigned)</option>
               {relBins.map((b) => (
@@ -825,7 +851,27 @@ export function ProductDetailPage() {
               ))}
             </select>
           </Field>
-          <Field label="Quantity" htmlFor="rel-qty">
+          {product.serialized ? (
+            <Field label="Serialized units" hint={`${relSerials.length} selected`}>
+              <WarehouseScanFlow
+                key={`${relocateOpen}:${relLoc}:${relFrom || 'general'}`}
+                data={data}
+                context="transfer"
+                expectedProductId={product.id}
+                expectedLocationId={relLoc}
+                expectedBinId={relFrom || null}
+                scannedCodes={relSerials}
+                label="Scan relocation serial"
+                batch
+                complete={relSaving}
+                onResolved={(resolution) => {
+                  if (relInFlight.current || !resolution.serialNumber) return;
+                  const serial = resolution.serialNumber;
+                  setRelSerials((current) => current.includes(serial) ? current : [...current, serial]);
+                }}
+              />
+            </Field>
+          ) : <Field label="Quantity" htmlFor="rel-qty">
             <QuantityStepper
               id="rel-qty"
               aria-label="Relocate quantity"
@@ -833,7 +879,7 @@ export function ProductDetailPage() {
               onChange={setRelQty}
               min={1}
             />
-          </Field>
+          </Field>}
           {relBins.length === 0 && (
             <p className="text-sm text-muted">
               No storage areas set up for this warehouse yet. Add bins on the
@@ -845,7 +891,7 @@ export function ProductDetailPage() {
               {relErr}
             </p>
           )}
-        </div>
+        </fieldset>
       </Sheet>
 
       {/* Unit timeline sheet */}

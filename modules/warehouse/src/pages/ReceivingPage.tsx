@@ -14,6 +14,7 @@ import {
 } from "@intra/learning";
 import { useWarehouse } from "@/app/store";
 import { actorName, formatWhen } from "@/domain/format";
+import { isStockQuantity, resolveProductScan } from "@/domain/productScan";
 import {
   Badge,
   Card,
@@ -303,6 +304,11 @@ export function ReceivingPageSurface({
   const totalItems = lines.reduce((s, l) => s + l.quantity, 0);
 
   const addOrIncrement = (productId: string, qty = 1) => {
+    const total = (lines.find((line) => line.productId === productId)?.quantity ?? 0) + qty;
+    if (!isStockQuantity(qty) || !isStockQuantity(total)) {
+      toast.error("Enter a positive whole quantity within the supported range.");
+      return false;
+    }
     setLines((prev) => {
       const existing = prev.find((l) => l.productId === productId);
       if (existing) {
@@ -324,6 +330,7 @@ export function ReceivingPageSurface({
         },
       ];
     });
+    return true;
   };
 
   const setLineField = (
@@ -344,7 +351,7 @@ export function ReceivingPageSurface({
   };
 
   const setLineQuantity = (productId: string, quantity: number) => {
-    if (Number.isNaN(quantity) || quantity < 1) return;
+    if (!isStockQuantity(quantity)) return;
     setLines((prev) =>
       prev.map((l) => (l.productId === productId ? { ...l, quantity } : l)),
     );
@@ -378,7 +385,11 @@ export function ReceivingPageSurface({
 
   const addSelected = () => {
     if (!selectedProduct) return;
-    addOrIncrement(selectedProduct.id, Math.max(1, newQty));
+    if (!isStockQuantity(newQty)) {
+      toast.error("Enter a positive whole quantity within the supported range.");
+      return;
+    }
+    if (!addOrIncrement(selectedProduct.id, newQty)) return;
     toast.success(`Added ${newQty} × ${selectedProduct.name}`);
     setNewQty(1);
   };
@@ -412,10 +423,20 @@ export function ReceivingPageSurface({
   };
 
   const handleScan = (code: string) => {
-    const matched = products.find((p) => p.barcode === code);
+    const matched = resolveProductScan(products, code);
     if (matched && !training) {
+      const quantity = matched.serialized ? 1 : newQty;
+      if (!isStockQuantity(quantity)) {
+        toast.error("Enter a positive whole quantity within the supported range.");
+        return;
+      }
       setSelectedProductId(matched.id);
-      addOrIncrement(matched.id, 1);
+      if (!matched.serialized && lines.some((line) => line.productId === matched.id)) {
+        toast.success(`Product verified: ${matched.name}`);
+        return;
+      }
+      if (!addOrIncrement(matched.id, quantity)) return;
+      setNewQty(1);
       toast.success(`Added ${matched.name}`);
       return;
     }

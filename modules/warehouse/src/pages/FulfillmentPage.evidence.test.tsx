@@ -73,6 +73,15 @@ async function openAction(kind: "pick" | "pack" | "delivery") {
     }),
   );
   const dialog = await screen.findByRole("dialog");
+  if (kind === "pick") {
+    for (const id of ["doctor-token", "shirt-l"]) {
+      const product = data.products.find(row => row.id === id)!;
+      const code = within(dialog).getByLabelText(`Product barcode for ${product.name}`);
+      fireEvent.change(code, { target: { value: product.barcode || product.sku } });
+      fireEvent.keyDown(code, { key: "Enter" });
+      fireEvent.change(within(dialog).getByLabelText(`Picked quantity for ${product.name}`), { target: { value: "1" } });
+    }
+  }
   if (kind === "pack")
     fireEvent.change(within(dialog).getByLabelText("Recipient name"), {
       target: { value: "Maya Santos" },
@@ -135,6 +144,8 @@ describe("Fulfillment evidence commit gates", () => {
     await waitFor(() => expect(uploadEvidence).toHaveBeenCalledTimes(1));
     upload(dialog, "Attach pick evidence for Event Shirt (L)");
     await waitFor(() => expect(uploadEvidence).toHaveBeenCalledTimes(2));
+    expect(within(dialog).getByLabelText("Picked quantity for Doctor Token")).toBeDisabled();
+    expect(within(dialog).getByLabelText("Product barcode for Doctor Token")).toBeDisabled();
     expect(
       within(dialog).getByRole("button", { name: "Uploading evidence..." }),
     ).toBeDisabled();
@@ -147,6 +158,7 @@ describe("Fulfillment evidence commit gates", () => {
     fireEvent.submit(dialog.querySelector("form")!);
     expect(advance).not.toHaveBeenCalled();
     await act(async () => second.resolve("pick/second.jpg"));
+    expect(within(dialog).getByLabelText("Picked quantity for Doctor Token")).toBeEnabled();
     fireEvent.click(
       within(dialog).getByRole("button", { name: "Confirm pick" }),
     );
@@ -159,6 +171,24 @@ describe("Fulfillment evidence commit gates", () => {
         ],
       }),
     );
+  });
+
+  it("freezes merchandise capture during saving and uncertain recovery, then retries the same payload", async () => {
+    const { dialog, advance } = await openAction("pick");
+    let reject!: (error: Error) => void;
+    advance.mockImplementationOnce(() => new Promise((_resolve, rej) => { reject = rej; }));
+    fireEvent.submit(dialog.querySelector("form")!);
+    await waitFor(() => expect(advance).toHaveBeenCalledOnce());
+    const quantity = within(dialog).getByLabelText("Picked quantity for Doctor Token");
+    expect(quantity).toBeDisabled();
+    expect(within(dialog).getByLabelText("Product barcode for Doctor Token")).toBeDisabled();
+    const original = structuredClone(advance.mock.calls[0]![0]);
+    await act(async () => reject(new Error("Response lost")));
+    expect(quantity).toBeDisabled();
+    expect(quantity).toHaveValue(1);
+    fireEvent.submit(dialog.querySelector("form")!);
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    expect(advance.mock.calls[1]![0]).toEqual(original);
   });
 
   it("blocks packing while an optional handover photo uploads", async () => {

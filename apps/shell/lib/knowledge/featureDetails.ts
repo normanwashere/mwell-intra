@@ -957,7 +957,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         field(
           "Quantity",
-          "Records units physically received for the selected line.",
+          "Records units physically received for the selected line. Quantity-controlled merchandise uses one product barcode per variant plus the counted quantity, not a serial for every piece.",
           true,
           "Use a positive value no greater than remaining quantity.",
         ),
@@ -983,7 +983,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Serial number",
           "Captures unit identity when the product uses serial tracking.",
           false,
-          "Each serial must be non-empty and globally unique.",
+          "For serialized products, each physically received unit needs a non-empty globally unique serial. Do not invent serials for quantity-controlled merchandise. Jacket sizes are separate product variants with separate barcodes.",
         ),
         field(
           "Expiry date",
@@ -1055,7 +1055,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Quantity",
           "Sets the reservation or issue quantity.",
           true,
-          "Use a positive value within current availability or reservation.",
+          "Use a positive value within current availability or reservation. Ten non-serialized tumblers means quantity 10 of the same product, not ten different serial numbers. Select each jacket size separately.",
         ),
         field(
           "Recipient",
@@ -1136,7 +1136,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         control(
           "Confirm pick",
           "Shows the recommended source location as step one, requires the rack/bin scan before item capture, supports camera or manual serial scanning for every unit, and accepts optional line photo evidence for bundle, damage, or exception traceability.",
-          "Every line must be complete; the scanned bin must be active at the source warehouse and hold the requested quantity or every scanned serial. Serialized products require one unique eligible serial per unit.",
+          "Every line must be complete; the scanned bin must be active at the source warehouse and hold the requested quantity or every scanned serial. Serialized products require one unique eligible serial per unit. Quantity-controlled merchandise uses its product identity and requested quantity; each size or variant remains a separate line.",
           "The order advances to Packing with traceable picked identities, physical source bin, and any attached line evidence recorded together.",
         ),
         control(

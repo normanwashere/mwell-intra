@@ -617,6 +617,7 @@ describe("FulfillmentPage", () => {
       within(dialog).getByLabelText("Demand source"),
       "third_party",
     );
+    await user.clear(within(dialog).getByLabelText("Order reference"));
     await user.type(
       within(dialog).getByLabelText("Order reference"),
       "EVENT-SALE-2201",
@@ -708,6 +709,7 @@ describe("FulfillmentPage", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "Create order or fulfillment demand",
     });
+    await user.clear(within(dialog).getByLabelText("Order reference"));
     await user.type(
       within(dialog).getByLabelText("Order reference"),
       "WEB-2201",
@@ -816,6 +818,7 @@ describe("FulfillmentPage", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "Create order or fulfillment demand",
     });
+    await user.clear(within(dialog).getByLabelText("Order reference"));
     await user.type(
       within(dialog).getByLabelText("Order reference"),
       "WEB-BUNDLE-01",

@@ -183,7 +183,7 @@ function render(element: React.ReactNode) {
 
 it("wraps long source tokens in the actual flow display without truncating guidance", () => {
   const source = "modules/legal/src/vendorCaseWorkflow.ts";
-  const longFlow = { ...flow, nodes: flow.nodes.map(node => node.id === "choose" ? { ...node, body: source, policyBasis: source } : node) };
+  const longFlow: KnowledgeFlow = { ...flow, nodes: flow.nodes.map(node => node.type === "decision" && node.id === "choose" ? { ...node, body: source, policyBasis: source } : node) };
   container.style.width = "390px";
   render(<KnowledgeFlowDisplay flow={longFlow} selectedNodeId="choose" evidence={[]} rolesById={new Map([[role.id, role]])} onSelectNode={() => {}} />);
   const display = container.querySelector<HTMLElement>('section[aria-labelledby="flow-title"]')!;

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { inboundQueue, isReceivableInbound } from "@/domain/workQueues";
+import { resolveProductScan } from "@/domain/productScan";
 import { Link, useSearchParams } from "react-router-dom";
 import { useSession } from "@intra/auth";
 import { CertifiedAction } from "@intra/learning";
@@ -226,12 +227,14 @@ export function PurchaseOrdersPage() {
   const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
   const [restoredPhotos, setRestoredPhotos] = useState<string[]>([]);
   const receivingStateRef = useRef({
+    bridgeProducts,
     bridgeSerials,
     bridgeOutcomes,
     bridgeSelected,
     restoredPhotos,
   });
   receivingStateRef.current = {
+    bridgeProducts,
     bridgeSerials,
     bridgeOutcomes,
     bridgeSelected,
@@ -646,6 +649,11 @@ export function PurchaseOrdersPage() {
         lineErrors.push(message);
         fieldErrors.push({ message, target, lineId: line.id });
       };
+      for (const outcome of ["clean", "damaged", "unidentified", "short", "excess"] as const) {
+        if (!Number.isSafeInteger(quantities[outcome]) || quantities[outcome] < 0) {
+          addError("Enter a nonnegative whole quantity within the supported range.", `${outcome}-quantity-${line.id}`);
+        }
+      }
       const reconciled =
         quantities.clean +
         quantities.damaged +
@@ -1838,6 +1846,27 @@ export function PurchaseOrdersPage() {
                           }
                           placeholder="Map identified units to Warehouse product"
                         />
+                        {(!mappedProduct || !mappedProduct.serialized) && (
+                          <BarcodeScanner
+                            label={`Scan product for ${line.description}`}
+                            manualLabel={`Product barcode for ${line.description}`}
+                            manualActionLabel="Use product"
+                            disabled={bridgeBusy}
+                            onDetected={(code) => {
+                              if (!mountedRef.current || receivingRequest?.session !== receivingSessionRef.current || bridgeSubmitting.current) return;
+                              const latest = receivingStateRef.current;
+                              if (!latest.bridgeSelected[line.id]) return;
+                              const product = resolveProductScan(data.products, code);
+                              const expected = line.productId || latest.bridgeProducts[line.id];
+                              if (!product || (expected && product.id !== expected)) {
+                                toast.error(`Wrong or ambiguous product barcode for ${line.description}.`);
+                                return;
+                              }
+                              setBridgeProducts((current) => ({ ...current, [line.id]: product.id }));
+                              toast.success(`Product verified: ${product.name}`);
+                            }}
+                          />
+                        )}
                         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                           {(
                             [
@@ -1860,6 +1889,7 @@ export function PurchaseOrdersPage() {
                                 type="number"
                                 inputMode="numeric"
                                 min={0}
+                                step={1}
                                 max={
                                   outcome === "excess" ? undefined : remaining
                                 }
@@ -1872,7 +1902,7 @@ export function PurchaseOrdersPage() {
                                     [line.id]: {
                                       ...quantities,
                                       [outcome]: Number.isFinite(next)
-                                        ? Math.max(0, Math.trunc(next))
+                                        ? next
                                         : 0,
                                     },
                                   }));

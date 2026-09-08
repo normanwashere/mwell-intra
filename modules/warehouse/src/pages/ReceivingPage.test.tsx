@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { screen, within, waitFor } from "@testing-library/react";
+import { fireEvent, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { TrainingContextValue } from "@intra/learning";
 import { ReceivingPage, ReceivingPageSurface } from "./ReceivingPage";
@@ -23,6 +23,42 @@ async function evidenceDirectReceipt(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("ReceivingPage", () => {
+  it("does not apply a bulk merchandise quantity to a serialized product barcode", async () => {
+    const repo = makeRepo();
+    const receive = vi.spyOn(repo, "receiveStock");
+    const user = userEvent.setup();
+    renderWithProviders(<ReceivingPage />, { repo });
+    await screen.findByLabelText("Quantity to add");
+    fireEvent.change(screen.getByLabelText("Quantity to add"), { target: { value: "1000" } });
+    await user.type(screen.getByLabelText(/enter barcode manually/i), "480001001{Enter}");
+    expect(screen.getByText(/Qty 1.*serialized/)).toBeVisible();
+    await evidenceDirectReceipt(user);
+    await user.click(screen.getByRole("button", { name: /receive .*item/i }));
+    expect(receive).not.toHaveBeenCalled();
+    expect(await screen.findByText(/Scan exactly 1 serial number/)).toBeVisible();
+  });
+  it("scans one merchandise code with quantity 1000 and submits one bulk line without serials", async () => {
+    const repo = makeRepo();
+    const product = (await repo.getData()).products.find(row => row.id === "doctor-token")!;
+    const receive = vi.spyOn(repo, "receiveStock");
+    const user = userEvent.setup();
+    renderWithProviders(<ReceivingPage />, { repo });
+    await screen.findByLabelText("Quantity to add");
+    fireEvent.change(screen.getByLabelText("Quantity to add"), { target: { value: "1000" } });
+    await user.type(screen.getByLabelText(/enter barcode manually/i), `${product.barcode || product.sku}{Enter}`);
+    expect(within(screen.getByLabelText("Receipt lines")).getByLabelText("Quantity for Doctor Token")).toHaveValue(1000);
+    expect(screen.getByLabelText("Quantity to add")).toHaveValue(1);
+    expect(receive).not.toHaveBeenCalled();
+    await user.type(screen.getByLabelText(/enter barcode manually/i), `${product.barcode || product.sku}{Enter}`);
+    expect(within(screen.getByLabelText("Receipt lines")).getByLabelText("Quantity for Doctor Token")).toHaveValue(1000);
+    await user.type(screen.getByLabelText(/enter barcode manually/i), "NOT-A-PRODUCT{Enter}");
+    expect(within(screen.getByLabelText("Receipt lines")).getByLabelText("Quantity for Doctor Token")).toHaveValue(1000);
+    expect(receive).not.toHaveBeenCalled();
+    await evidenceDirectReceipt(user);
+    await user.click(screen.getByRole("button", { name: /receive .*item/i }));
+    await waitFor(() => expect(receive).toHaveBeenCalledOnce());
+    expect(receive.mock.calls[0]![0].lines).toEqual([expect.objectContaining({ productId: product.id, quantity: 1000, serialNumbers: undefined })]);
+  });
   it("makes direct receiving an evidenced exception after the PO-first route", async () => {
     renderWithProviders(<ReceivingPage />);
 

@@ -123,6 +123,7 @@ function ScopedOrderIntake({
   const [saving, setSaving] = useState(false);
   const [initial] = useState(() => ({
     ...Object.fromEntries(TEXT_FIELDS.map((field) => [field, ""])),
+    reference: `ORD-${crypto.randomUUID()}`,
     source: "ecommerce", paymentMethod: "cash", paymentProviderStatus: "paid",
     locationId: locations.find((location) => location.type === "warehouse")?.id ?? "",
     lines: [newLine(products, "ecommerce")],
@@ -135,6 +136,7 @@ function ScopedOrderIntake({
     saving,
   );
   const inFlight = useRef(false);
+  const clearDraft = () => draft.clear({ ...initial, reference: `ORD-${crypto.randomUUID()}` });
   const [confirmed, setConfirmed] = useState(false);
   const field = <K extends keyof OrderDraft>(key: K): [OrderDraft[K], (value: SetStateAction<OrderDraft[K]>) => void] => [
     draft.value[key], (value) => {
@@ -285,7 +287,7 @@ function ScopedOrderIntake({
       })),
     });
     if (ok) {
-      const cleaned = draft.clear();
+      const cleaned = clearDraft();
       if (!draft.mounted.current) return;
       setConfirmed(!cleaned);
       toast.success(
@@ -346,13 +348,13 @@ function ScopedOrderIntake({
         </div>
       }
     >
-      <IntakeDraftActions draft={{ ...draft, resume: () => {
+      <IntakeDraftActions draft={{ ...draft, clear: clearDraft, resume: () => {
         const resumed = draft.resume();
         if (resumed) setConfirmed(false);
         return resumed;
       } }} busy={saving} locked={confirmed} />
       {confirmed && <button type="button" className="btn-ghost" disabled={draft.conflict} onClick={() => {
-        if (draft.clear()) { setConfirmed(false); onOpenChange(false); }
+        if (clearDraft()) { setConfirmed(false); onOpenChange(false); }
       }}>Retry draft cleanup</button>}
       {staleReferences && !draft.needsResume && <p role="alert" className="text-sm text-amber-700">Select a current product, event, and location before creating demand.</p>}
       <form

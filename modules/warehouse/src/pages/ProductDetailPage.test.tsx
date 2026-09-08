@@ -1,6 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+import { buildSeed } from "@intra/data-kit";
 import { Route, Routes } from "react-router-dom";
-import { screen, within, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ProductDetailPage } from "./ProductDetailPage";
 import { renderWithProviders } from "@/test/renderWithProviders";
@@ -18,6 +19,95 @@ function renderDetail(id: string, role: Role = "logistics_supervisor") {
 }
 
 describe("ProductDetailPage", () => {
+  it("relocates only the scanned serial from the exact source bin", async () => {
+    const user = userEvent.setup();
+    const seed = structuredClone(buildSeed());
+    const target = seed.units.find((unit) => unit.serialNumber === "SMART-WATCH-SN0001")!;
+    const other = seed.units.find((unit) => unit.productId === target.productId && unit.serialNumber !== target.serialNumber)!;
+    target.binId = undefined;
+    other.locationId = target.locationId;
+    other.binId = "bin-pasig-a1";
+    const repo = makeRepo(seed);
+    const move = vi.spyOn(repo, "relocate");
+    renderWithProviders(<Routes><Route path="/inventory/:id" element={<ProductDetailPage />} /></Routes>, { repo, route: "/inventory/smart-watch" });
+    await user.click(await screen.findByRole("button", { name: /relocate/i }));
+    const dialog = await screen.findByRole("dialog", { name: "Relocate stock" });
+    const submit = within(dialog).getByRole("button", { name: "Move stock" });
+    expect(submit).toBeDisabled();
+    const scan = async (serial: string) => {
+      await user.type(within(dialog).getByLabelText("Enter barcode manually"), serial);
+      await user.click(within(dialog).getByRole("button", { name: "Add" }));
+    };
+    await scan(other.serialNumber);
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(/source bin/i);
+    expect(submit).toBeDisabled();
+    await scan(target.serialNumber);
+    await scan(target.serialNumber);
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(/already scanned/i);
+    await user.selectOptions(within(dialog).getByLabelText("To bin"), "bin-pasig-a1");
+    await user.click(submit);
+    await waitFor(() => expect(move).toHaveBeenCalledTimes(1));
+    expect(move).toHaveBeenCalledWith(expect.objectContaining({ productId: target.productId, locationId: target.locationId, fromBinId: undefined, toBinId: "bin-pasig-a1", quantity: 1, serialNumbers: [target.serialNumber] }));
+    expect((await repo.getData()).units.find((unit) => unit.serialNumber === target.serialNumber)?.binId).toBe("bin-pasig-a1");
+  });
+
+  it("clears relocation serials when the source bin changes", async () => {
+    const user = userEvent.setup();
+    renderDetail("smart-watch");
+    await user.click(await screen.findByRole("button", { name: /relocate/i }));
+    const dialog = await screen.findByRole("dialog", { name: "Relocate stock" });
+    await user.type(within(dialog).getByLabelText("Enter barcode manually"), "SMART-WATCH-SN0001");
+    await user.click(within(dialog).getByRole("button", { name: "Add" }));
+    expect(within(dialog).getByRole("list", { name: "Accepted scans" })).toHaveTextContent("SMART-WATCH-SN0001");
+    await user.selectOptions(within(dialog).getByLabelText("From bin"), "bin-pasig-a1");
+    expect(within(dialog).queryByRole("list", { name: "Accepted scans" })).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Move stock" })).toBeDisabled();
+  });
+
+  it("keeps exact relocation custody frozen while saving and preserves server rejection", async () => {
+    const user = userEvent.setup();
+    const repo = makeRepo();
+    let rejectMove!: (reason: Error) => void;
+    const move = vi.spyOn(repo, "relocate").mockImplementation(() => new Promise((_resolve, reject) => { rejectMove = reject; }));
+    renderWithProviders(<Routes><Route path="/inventory/:id" element={<ProductDetailPage />} /></Routes>, { repo, route: "/inventory/smart-watch" });
+    await user.click(await screen.findByRole("button", { name: /relocate/i }));
+    const dialog = await screen.findByRole("dialog", { name: "Relocate stock" });
+    await user.type(within(dialog).getByLabelText("Enter barcode manually"), "SMART-WATCH-SN0001");
+    await user.click(within(dialog).getByRole("button", { name: "Add" }));
+    await user.selectOptions(within(dialog).getByLabelText("To bin"), "bin-pasig-a1");
+    const submit = within(dialog).getByRole("button", { name: "Move stock" });
+    fireEvent.click(submit);
+    fireEvent.click(submit);
+    expect(move).toHaveBeenCalledTimes(1);
+    expect(within(dialog).getByLabelText("From bin")).toBeDisabled();
+    expect(within(dialog).getByLabelText("To bin")).toBeDisabled();
+    await user.keyboard("{Escape}");
+    expect(dialog).toBeInTheDocument();
+    await act(async () => rejectMove(new Error("Held serialized inventory cannot be transferred")));
+    await screen.findByText("Held serialized inventory cannot be transferred");
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(/not confirmed/i);
+    expect(within(dialog).getByRole("list", { name: "Accepted scans" })).toHaveTextContent("SMART-WATCH-SN0001");
+    expect((await repo.getData()).units.find((unit) => unit.serialNumber === "SMART-WATCH-SN0001")?.binId).toBeUndefined();
+  });
+
+  it("rejects wrong-product and unavailable serials before relocating", async () => {
+    const user = userEvent.setup();
+    const seed = structuredClone(buildSeed());
+    seed.units.find((unit) => unit.serialNumber === "SMART-WATCH-SN0001")!.status = "pending_inspection";
+    const repo = makeRepo(seed);
+    const move = vi.spyOn(repo, "relocate");
+    renderWithProviders(<Routes><Route path="/inventory/:id" element={<ProductDetailPage />} /></Routes>, { repo, route: "/inventory/smart-watch" });
+    await user.click(await screen.findByRole("button", { name: /relocate/i }));
+    const dialog = await screen.findByRole("dialog", { name: "Relocate stock" });
+    for (const serial of ["ECG-RING-6-SN0003", "SMART-WATCH-SN0001"]) {
+      await user.type(within(dialog).getByLabelText("Enter barcode manually"), serial);
+      await user.click(within(dialog).getByRole("button", { name: "Add" }));
+      expect(within(dialog).getByRole("alert")).toBeInTheDocument();
+      expect(within(dialog).getByRole("button", { name: "Move stock" })).toBeDisabled();
+    }
+    expect(move).not.toHaveBeenCalled();
+  });
+
   it("shows product header, stock by location and serialized units", async () => {
     renderDetail("ecg-ring-10");
     expect(

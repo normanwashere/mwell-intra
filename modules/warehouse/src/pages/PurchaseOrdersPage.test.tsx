@@ -200,6 +200,38 @@ class LiveProcurementRepository extends InMemoryRepository {
 }
 
 describe("PurchaseOrdersPage", () => {
+  it("verifies one merchandise barcode and submits bulk outcome quantities without serials", async () => {
+    const repo = new LiveProcurementRepository(1000);
+    const product = (await repo.getData()).products.find(row => row.id === "doctor-token")!;
+    const [po] = await repo.getReceivableProcurementPOs();
+    vi.spyOn(repo, "getReceivableProcurementPOs").mockResolvedValue([{ ...po!, lines: [{ ...po!.lines[0]!, productId: product.id, description: "Merchandise", quantity: 1000 }] }]);
+    const receive = vi.spyOn(repo, "receiveProcurementPO");
+    const user = userEvent.setup();
+    renderReceiving(repo);
+    const dialog = await openReceiving(user);
+    const mapping = within(dialog).getByLabelText("Map Merchandise");
+    const code = within(dialog).getByLabelText("Product barcode for Merchandise");
+    await user.type(code, "WRONG-CODE{Enter}");
+    expect(mapping).toHaveValue(product.id);
+    const otherProduct = (await repo.getData()).products.find(row => row.id === "shirt-l")!;
+    await user.type(code, `${otherProduct.barcode || otherProduct.sku}{Enter}`);
+    expect(mapping).toHaveValue(product.id);
+    await user.type(code, `${product.barcode || product.sku}{Enter}`);
+    await user.type(code, `${product.barcode || product.sku}{Enter}`);
+    expect(within(dialog).getByLabelText("clean quantity for Merchandise")).toHaveValue(1000);
+    expect(within(dialog).queryByLabelText(/clean serials/i)).not.toBeInTheDocument();
+    expect(receive).not.toHaveBeenCalled();
+    fireEvent.change(within(dialog).getByLabelText("Delivery evidence URL"), { target: { value: "evidence/merchandise.jpg" } });
+    for (const value of ["1000.5", "-1", "1001", "9007199254740992"]) {
+      fireEvent.change(within(dialog).getByLabelText("clean quantity for Merchandise"), { target: { value } });
+      expect(within(dialog).getByRole("button", { name: "Confirm governed receipt" })).toBeDisabled();
+      expect(receive).not.toHaveBeenCalled();
+    }
+    fireEvent.change(within(dialog).getByLabelText("clean quantity for Merchandise"), { target: { value: "1000" } });
+    await user.click(within(dialog).getByRole("button", { name: "Confirm governed receipt" }));
+    await waitFor(() => expect(receive).toHaveBeenCalledOnce());
+    expect(receive.mock.calls[0]![0]).toMatchObject({ mode: "breakdown", lines: [{ productId: product.id, outcomes: { clean: { quantity: 1000, serialNumbers: [] } } }] });
+  });
   const largeNames = Array.from({ length: 4 }, (_, index) =>
     `Clinical wearable collection ${index + 1} with extended supplier model and traceability description`,
   );

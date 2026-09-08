@@ -59,6 +59,26 @@ async function selectThirdPartySource() {
 }
 
 describe("OrderIntakeSheet third-party event intake", () => {
+  it("generates a unique editable order reference without changing it on source switches", async () => {
+    const user = userEvent.setup();
+    const first = mountDraft();
+    const reference = await screen.findByLabelText("Order reference");
+    const generated = (reference as HTMLInputElement).value;
+    expect(generated).toMatch(/^ORD-[0-9a-f-]{36}$/i);
+    await user.selectOptions(screen.getByLabelText("Demand source"), "event");
+    expect(reference).toHaveValue(generated);
+    await user.clear(reference);
+    await user.type(reference, "EXTERNAL-ORDER-17");
+    await user.selectOptions(screen.getByLabelText("Demand source"), "third_party");
+    expect(reference).toHaveValue("EXTERNAL-ORDER-17");
+    first.unmount();
+    const other = mountDraft(undefined, "warehouse_operator");
+    const next = (await screen.findByLabelText("Order reference") as HTMLInputElement).value;
+    expect(next).toMatch(/^ORD-[0-9a-f-]{36}$/i);
+    expect(next).not.toBe(generated);
+    other.unmount();
+  });
+
   function mountDraft(create = vi.fn().mockResolvedValue(false), role: Role = "operations") {
     const view = renderWithProviders(<OrderIntakeSheet open onOpenChange={vi.fn()} products={[product]} locations={[warehouse, externalLocation]} events={events} create={create} />, { role });
     return { ...view, create };
@@ -67,13 +87,14 @@ describe("OrderIntakeSheet third-party event intake", () => {
   it("resumes a long order only for its owner and discards it durably", async () => {
     const user = userEvent.setup();
     const first = mountDraft();
-    await user.type(await screen.findByLabelText("Order reference"), "DRAFT-OWNER-A");
+    await user.clear(await screen.findByLabelText("Order reference"));
+    await user.type(screen.getByLabelText("Order reference"), "DRAFT-OWNER-A");
     expect(screen.getByText(/drafts are stored only in this browser/i)).toHaveTextContent(/customer addresses/i);
     await user.type(screen.getByLabelText("Order instructions"), "Keep both sets together");
     await user.type(screen.getByLabelText("Shipping fee"), "120");
     first.unmount();
     const other = mountDraft(undefined, "warehouse_operator");
-    expect(await screen.findByLabelText("Order reference")).toHaveValue("");
+    expect((await screen.findByLabelText("Order reference") as HTMLInputElement).value).toMatch(/^ORD-[0-9a-f-]{36}$/i);
     expect(screen.queryByRole("button", { name: "Resume draft" })).not.toBeInTheDocument();
     other.unmount();
     const owner = mountDraft();
@@ -83,10 +104,10 @@ describe("OrderIntakeSheet third-party event intake", () => {
     expect(screen.getByLabelText("Shipping fee")).toHaveValue(120);
     expect(owner.create).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Discard draft" }));
-    expect(screen.getByLabelText("Order reference")).toHaveValue("");
+    expect((screen.getByLabelText("Order reference") as HTMLInputElement).value).toMatch(/^ORD-[0-9a-f-]{36}$/i);
     owner.unmount();
     mountDraft();
-    expect(await screen.findByLabelText("Order reference")).toHaveValue("");
+    expect((await screen.findByLabelText("Order reference") as HTMLInputElement).value).toMatch(/^ORD-[0-9a-f-]{36}$/i);
     expect(screen.queryByRole("button", { name: "Resume draft" })).not.toBeInTheDocument();
   });
 
@@ -98,6 +119,7 @@ describe("OrderIntakeSheet third-party event intake", () => {
     }).mockResolvedValue(true);
     const first = mountDraft(create);
     await user.selectOptions(await screen.findByLabelText("Demand source"), "event");
+    await user.clear(screen.getByLabelText("Order reference"));
     await user.type(screen.getByLabelText("Order reference"), "PRESERVE-ME");
     await user.selectOptions(screen.getByLabelText("Event"), "evt-makati");
     await user.click(screen.getByRole("button", { name: "Create demand" }));
@@ -110,7 +132,7 @@ describe("OrderIntakeSheet third-party event intake", () => {
     await screen.findByText("Demand added to the fulfillment queue.");
     retry.unmount();
     mountDraft(create);
-    expect(await screen.findByLabelText("Order reference")).toHaveValue("");
+    expect((await screen.findByLabelText("Order reference") as HTMLInputElement).value).toMatch(/^ORD-[0-9a-f-]{36}$/i);
     expect(screen.queryByRole("button", { name: "Resume draft" })).not.toBeInTheDocument();
     expect(create).toHaveBeenCalledTimes(2);
   });
@@ -120,7 +142,8 @@ describe("OrderIntakeSheet third-party event intake", () => {
     const create = vi.fn(() => new Promise<boolean>((resolve) => { finish = resolve; }));
     mountDraft(create);
     const user = userEvent.setup();
-    await user.type(await screen.findByLabelText("Order reference"), "ONE-INTENT");
+    await user.clear(await screen.findByLabelText("Order reference"));
+    await user.type(screen.getByLabelText("Order reference"), "ONE-INTENT");
     const form = screen.getByLabelText("Order reference").closest("form")!;
     fireEvent.submit(form);
     fireEvent.submit(form);
@@ -226,6 +249,7 @@ describe("OrderIntakeSheet third-party event intake", () => {
     expect(location).toBeRequired();
     expect(grossSales).toBeRequired();
 
+    await user.clear(within(dialog).getByLabelText("Order reference"));
     await user.type(within(dialog).getByLabelText("Order reference"), "SALE-2408");
     await user.selectOptions(within(dialog).getByLabelText("Event"), "evt-makati");
     await user.selectOptions(location, "loc-event-makati");

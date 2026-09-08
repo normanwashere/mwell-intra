@@ -23,6 +23,7 @@ import type {
 import { normalizeSafeHttpsUrl } from "@intra/data-kit";
 import { useWarehouse } from "@/app/store";
 import { FLOOR_WORK_PATH, isFloorWork, isReleasedFollowUp } from "@/domain/workQueues";
+import { isStockQuantity, resolveProductScan } from "@/domain/productScan";
 import {
   Badge,
   EmptyState,
@@ -1428,6 +1429,8 @@ function PickSheet({
   const { advanceFulfillmentOrder } = warehouse;
   const toast = useToast();
   const [serials, setSerials] = useState<Record<string, string>>({});
+  const [productCodes, setProductCodes] = useState<Record<string, string>>({});
+  const [pickedQuantities, setPickedQuantities] = useState<Record<string, string>>({});
   const pendingCommand = useRef<Parameters<typeof advanceFulfillmentOrder>[0] | null>(null);
   const [binCodes, setBinCodes] = useState<Record<string, string>>({});
   const [pickEvidence, setPickEvidence] = useState<Record<string, string[]>>(
@@ -1481,7 +1484,7 @@ function PickSheet({
   };
   const requestClose = () => {
     if (queued || submitting.current || evidence.pendingKeys.current.size > 0) return;
-    if (Object.values(serials).some(Boolean) || Object.values(binCodes).some(Boolean) || Object.values(pickEvidence).some((urls) => urls.length)) {
+    if (Object.values(serials).some(Boolean) || Object.values(productCodes).some(Boolean) || Object.values(pickedQuantities).some(Boolean) || Object.values(binCodes).some(Boolean) || Object.values(pickEvidence).some((urls) => urls.length)) {
       setDiscardRequested(true);
     } else onClose();
   };
@@ -1501,6 +1504,17 @@ function PickSheet({
         .split(/[\n,]/)
         .map((value) => value.trim())
         .filter(Boolean);
+      if (product && !product.serialized) {
+        if (resolveProductScan(products, productCodes[product.id] ?? "")?.id !== product.id) {
+          setValidationError(`Scan the product barcode for ${product.name}.`);
+          return;
+        }
+        const quantity = Number(pickedQuantities[product.id]);
+        if (!isStockQuantity(quantity) || quantity !== line.quantity) {
+          setValidationError(`Confirm exactly ${line.quantity} whole units for ${product.name}. Use split backorder for a partial pick.`);
+          return;
+        }
+      }
       if (product?.serialized && capturedSerials.length !== line.quantity) {
         setValidationError(
           `Scan exactly ${line.quantity} serial number(s) for ${product.name}. ${capturedSerials.length} captured.`,
@@ -1737,6 +1751,37 @@ function PickSheet({
                     }
                     required
                   />
+                </div>
+              )}
+              {product && !product.serialized && (
+                <div className="mt-3 space-y-3 border-t border-line pt-3">
+                  <BarcodeScanner
+                    label={`Scan product for ${product.name}`}
+                    manualLabel={`Product barcode for ${product.name}`}
+                    manualActionLabel="Use product"
+                    disabled={saving || evidence.pending || queued || unconfirmed || (Boolean(suggestion) && !verifiedBin(product.id))}
+                    onDetected={(code) => {
+                      if (resolveProductScan(products, code)?.id !== product.id) {
+                        setProductCodes((current) => ({ ...current, [product.id]: "" }));
+                        setValidationError(`Wrong or ambiguous product barcode. Scan ${product.name}.`);
+                        return;
+                      }
+                      setValidationError("");
+                      setProductCodes((current) => ({ ...current, [product.id]: code.trim() }));
+                    }}
+                  />
+                  {productCodes[product.id] && <p className="text-sm text-muted">Product verified: {product.name}</p>}
+                  <Field label="Picked quantity" htmlFor={`picked-quantity-${product.id}`}>
+                    <input
+                      id={`picked-quantity-${product.id}`}
+                      aria-label={`Picked quantity for ${product.name}`}
+                      type="number" inputMode="numeric" min={1} max={line.quantity} step={1}
+                      className="input"
+                      value={pickedQuantities[product.id] ?? ""}
+                      disabled={saving || evidence.pending || queued || unconfirmed || !productCodes[product.id] || (Boolean(suggestion) && !verifiedBin(product.id))}
+                      onChange={(event) => setPickedQuantities((current) => ({ ...current, [product.id]: event.target.value }))}
+                    />
+                  </Field>
                 </div>
               )}
               <div className="mt-3 border-t border-line pt-3">

@@ -1685,7 +1685,7 @@ export class SupabaseRepository implements WarehouseControlRepository {
         quantity: line.quantity,
         pickedQuantity: 0,
         pickedSerialNumbers: [],
-        ...(line.bundleSetCodes ? { bundleSetCodes: line.bundleSetCodes } : {}),
+        ...(line.bundleSetCodes?.length ? { bundleSetCodes: line.bundleSetCodes } : {}),
         ...(line.variant ? { variant: line.variant } : {}),
         ...(line.unitPrice !== undefined ? { unitPrice: line.unitPrice } : {}),
         ...(line.discountAmount !== undefined
