@@ -1,5 +1,7 @@
 # September 7 Merchandise: Live Transaction Verification
 
+Subsequent remediation: the four software follow-ups at the end of this historical run passed focused UAT retesting, with final viewer checks on `f01b21831b85db49f36e51cad351848fcea282a1`. See [current open-items verification](2026-09-08-SEPT7-OPEN-ITEMS-REMEDIATION.md). This original transaction record and its screenshots retain their original evidence limits; unknown historical dates and old evidence were not rewritten.
+
 Target: https://mwell-intra-uat.vercel.app, frontend `a377d6fff79f7a8eb8d85e079b01c14ec513d3ee`, Supabase `kkoitlvydytdhlpxhuah`. Production was not changed. This is an automated browser transaction using UAT accounts and explicitly synthetic evidence, not a physical-goods or human-pilot certification.
 
 ## Completed Journey
