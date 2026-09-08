@@ -273,6 +273,7 @@ interface ReceiveProcurementPOBaseInput {
   idempotencyKey: string;
   poId: string;
   locationId: string;
+  actualDeliveryDate?: string;
   binId?: string;
   evidenceUrls?: string[];
 }

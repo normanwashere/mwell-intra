@@ -6,30 +6,22 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 // (`VITE_*`) prefixes. In memory/demo mode none are set → `hasSupabaseConfig()`
 // is false and no client is ever constructed.
 //
-// NOTE (parent/next agent): when the shell mounts this module it should own
-// Supabase client construction and inject it (see @intra/auth + data-kit's
-// `createSupabaseRepository` seam). This standalone client is retained only so
-// the evidence-upload path keeps parity for the module's own live mode.
+// Legacy standalone adapter only. Evidence uses the authenticated client from
+// @intra/auth and must never construct a second auth client here.
 
 let cached: SupabaseClient | null = null;
 
-function readEnv(key: string): string | undefined {
-  if (typeof process !== 'undefined' && process.env) {
-    return process.env[key];
-  }
-  return undefined;
-}
-
 export function getSupabaseConfig() {
+  // Next only inlines literal public environment property accesses.
   return {
-    url: readEnv('NEXT_PUBLIC_SUPABASE_URL') ?? readEnv('VITE_SUPABASE_URL'),
+    url: process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.VITE_SUPABASE_URL,
     anonKey:
-      readEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY') ?? readEnv('VITE_SUPABASE_ANON_KEY'),
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY,
     // The app's tables live in a dedicated `warehouse` schema so they never
     // collide with other apps sharing the same Supabase project.
     schema:
-      readEnv('NEXT_PUBLIC_SUPABASE_SCHEMA') ??
-      readEnv('VITE_SUPABASE_SCHEMA') ??
+      process.env.NEXT_PUBLIC_SUPABASE_SCHEMA ??
+      process.env.VITE_SUPABASE_SCHEMA ??
       'warehouse',
   };
 }

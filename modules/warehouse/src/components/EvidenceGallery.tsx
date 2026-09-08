@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { useSession } from '@intra/auth';
 import { resolveEvidenceUrl } from '@/data/supabase/evidence';
 import { Icon } from './Icon';
 
@@ -19,26 +20,32 @@ export function EvidenceGallery({
   size = 'grid',
   className,
 }: EvidenceGalleryProps) {
-  const list = urls ?? [];
+  const { supabaseClient, profile, mode } = useSession();
+  const listKey = JSON.stringify(urls ?? []);
+  const list = useMemo<string[]>(() => JSON.parse(listKey), [listKey]);
   const [resolved, setResolved] = useState<Record<string, string | null>>({});
   const [lightbox, setLightbox] = useState<string | null>(null);
+
+  useLayoutEffect(() => {
+    setResolved({});
+    setLightbox(null);
+  }, [supabaseClient, profile?.id, mode, list]);
 
   useEffect(() => {
     let active = true;
     (async () => {
       const entries: [string, string | null][] = [];
       for (const u of list) {
-        if (resolved[u] !== undefined) continue;
-        entries.push([u, await resolveEvidenceUrl(u)]);
+        entries.push([u, await resolveEvidenceUrl(u, profile ? supabaseClient : null)]);
       }
       if (active && entries.length > 0) {
-        setResolved((prev) => ({ ...prev, ...Object.fromEntries(entries) }));
+        setResolved(Object.fromEntries(entries));
       }
     })();
     return () => {
       active = false;
     };
-  }, [list, resolved]);
+  }, [list, supabaseClient, profile?.id, mode]);
 
   if (list.length === 0) return null;
 

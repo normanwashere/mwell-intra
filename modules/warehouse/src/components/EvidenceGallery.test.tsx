@@ -2,9 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { EvidenceGallery } from './EvidenceGallery';
 
-// The evidence module reads Supabase config from import.meta.env. In the test
-// environment VITE_SUPABASE_URL is unset, so hasSupabaseConfig() returns false
-// and resolveEvidenceUrl treats unknown strings as direct URLs / data URLs.
+// Explicit memory sessions preserve existing inline and trusted app evidence.
+vi.mock('@intra/auth', () => ({ useSession: () => ({ mode: 'memory', supabaseClient: null, profile: null }) }));
 
 describe('EvidenceGallery', () => {
   beforeEach(() => {

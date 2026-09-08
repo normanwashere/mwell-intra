@@ -16,6 +16,7 @@ import type {
   StockLevel,
   WarehouseEvent,
 } from "../domain/types";
+import { validateActualDeliveryDate } from "../domain/deliveryDate";
 import {
   normalizePageQuery,
   type CreateVendorReturnInput,
@@ -275,7 +276,7 @@ export class SupabaseRepository implements WarehouseControlRepository {
       this.select("operation_routes", rowToOperationRoute),
       this.select("fulfillment_orders", rowToFulfillmentOrder),
       this.select("fulfillment_reservations", rowToFulfillmentReservation),
-      this.select("department_stock_requests", rowToDepartmentStockRequest),
+      this.selectDepartmentStockRequests(),
       this.select("department_request_options", rowToDepartmentRequestOption),
       this.select("customer_return_cases", rowToCustomerReturnCase),
       this.select("kit_definitions", rowToKitDefinition),
@@ -310,6 +311,26 @@ export class SupabaseRepository implements WarehouseControlRepository {
 
   async getStockState() {
     return toStockState(await this.getData());
+  }
+
+  private async selectDepartmentStockRequests() {
+    const requests = await this.select("department_stock_requests", rowToDepartmentStockRequest);
+    for (let offset = 0; offset < requests.length; offset += 200) {
+      const batch = requests.slice(offset, offset + 200);
+      const { data, error } = await this.db.rpc("department_request_actor_names", {
+        p_request_ids: batch.map((request) => request.id),
+      });
+      if (error) throw new Error(`department_request_actor_names: ${error.message}`);
+      const names = new Map<string, { requested_by_name?: string; approved_by_name?: string }>(
+        (data ?? []).map((row: { request_id: string; requested_by_name?: string; approved_by_name?: string }) => [row.request_id, row]),
+      );
+      for (const request of batch) {
+        const row = names.get(request.id);
+        request.requestedByName = row?.requested_by_name?.trim() || undefined;
+        request.approvedByName = row?.approved_by_name?.trim() || undefined;
+      }
+    }
+    return requests;
   }
 
   async getProfiles() {
@@ -649,11 +670,13 @@ export class SupabaseRepository implements WarehouseControlRepository {
   async receiveProcurementPO(
     input: ReceiveProcurementPOInput,
   ): Promise<Receipt> {
+    validateActualDeliveryDate(input.actualDeliveryDate);
     const response = await this.callRpc("receive_procurement_po", {
       idempotency_key: input.idempotencyKey,
       po_id: input.poId,
       location_id: input.locationId,
       bin_id: input.binId ?? null,
+      ...(input.actualDeliveryDate !== undefined ? { actual_delivery_date: input.actualDeliveryDate } : {}),
       ...(input.mode === "breakdown"
         ? { exception_reason: input.exceptionReason ?? null }
         : {}),

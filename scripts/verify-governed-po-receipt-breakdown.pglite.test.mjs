@@ -479,6 +479,77 @@ function serials(prefix, count) {
   );
 }
 
+async function installDeliveryDate(db) {
+  const original = await readFile(new URL(
+    "../supabase/migrations/20260710170000_warehouse_w1_imports_po_and_reporting.sql", import.meta.url,
+  ), "utf8");
+  await db.exec(functionDefinition(original, "private.warehouse_receive_procurement_po(payload jsonb)")
+    .replace("function private.warehouse_receive_procurement_po(", "function private.warehouse_receive_procurement_po_legacy("));
+  await db.exec("alter table warehouse.receipts add column actual_delivery_date date");
+  await db.exec(await readFile(new URL(
+    "../supabase/migrations/20260908042504_governed_receipt_actual_delivery_date.sql", import.meta.url,
+  ), "utf8"));
+}
+
+test("actual delivery date migration persists date, preserves exact replay and rejects changed-date replay", async () => {
+  const db = await createDatabase();
+  try {
+    await installDeliveryDate(db);
+    const input = payload({ actual_delivery_date: "2026-07-01" });
+    const receive = () => db.query("select warehouse.receive_procurement_po($1::jsonb) response", [JSON.stringify(input)]);
+    const first = await receive();
+    assert.equal(first.rows[0].response.receipt.actual_delivery_date, "2026-07-01");
+    assert.deepEqual(await receive(), first);
+    assert.equal((await db.query("select actual_delivery_date::text value from warehouse.receipts")).rows[0].value, "2026-07-01");
+    input.actual_delivery_date = "2026-07-02";
+    await assert.rejects(receive, /different payload/i);
+  } finally { await db.close(); }
+});
+
+test("actual delivery date migration leaves historical no-date exact replay unchanged", async () => {
+  const db = await createDatabase();
+  try {
+    const input = payload();
+    const receive = () => db.query("select warehouse.receive_procurement_po($1::jsonb) response", [JSON.stringify(input)]);
+    const historical = await receive();
+    await installDeliveryDate(db);
+    assert.deepEqual(await receive(), historical);
+    assert.equal((await db.query("select actual_delivery_date from warehouse.receipts")).rows[0].actual_delivery_date, null);
+  } finally { await db.close(); }
+});
+
+test("new governed receipts reject absent, invalid and future delivery dates atomically", async () => {
+  const db = await createDatabase();
+  try {
+    await installDeliveryDate(db);
+    for (const date of [undefined, null, "", "2026-02-29", "2026-13-01", "2026-7-1", "0000-01-01", "2999-01-01"]) {
+      await assert.rejects(db.query("select warehouse.receive_procurement_po($1::jsonb)", [
+        JSON.stringify(payload({ actual_delivery_date: date })),
+      ]), /Actual delivery date/);
+      for (const table of ["receipts", "command_log", "inventory_units", "inventory_holds", "movements", "quality_inspections"]) {
+        assert.equal((await db.query(`select count(*)::int n from warehouse.${table}`)).rows[0].n, 0, `${table} rolled back`);
+      }
+      assert.equal((await db.query("select received_quantity from procurement.purchase_order_lines where id='line-0001'")).rows[0].received_quantity, 0);
+    }
+  } finally { await db.close(); }
+});
+
+test("legacy receipt poster requires actual delivery date and retains it on replay", async () => {
+  const db = await createDatabase();
+  try {
+    await installDeliveryDate(db);
+    await db.exec("alter table warehouse.inventory_units add column lot_id text; alter table warehouse.movements add column lot_id text;");
+    const input = payload({ lines: [{ line_id: "line-0001", product_id: "smart-watch", quantity: 1, serial_numbers: ["DATE-LEGACY-1"] }] });
+    const receive = () => db.query("select private.warehouse_receive_procurement_po_legacy($1::jsonb) response", [JSON.stringify(input)]);
+    await assert.rejects(receive, /Actual delivery date is required/);
+    assert.equal((await db.query("select count(*)::int n from warehouse.inventory_units")).rows[0].n, 0);
+    input.actual_delivery_date = "2026-07-01";
+    const first = await receive();
+    assert.equal(first.rows[0].response.receipt.actual_delivery_date, "2026-07-01");
+    assert.deepEqual(await receive(), first);
+  } finally { await db.close(); }
+});
+
 async function actAs(db, id, email) {
   await db.query("select set_config('request.jwt.claim.sub',$1,false)", [id]);
   await db.query("select set_config('request.jwt.claim.email',$1,false)", [email]);

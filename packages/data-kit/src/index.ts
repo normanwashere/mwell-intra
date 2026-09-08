@@ -20,6 +20,7 @@ export * from "./domain/wms";
 export * from "./domain/imports";
 export * from "./domain/metrics";
 export * from "./domain/urlSafety";
+export * from "./domain/deliveryDate";
 
 // --- Repository PORT + input DTOs + WarehouseData read model + toStockState ---
 export * from "./repository";

@@ -312,12 +312,12 @@ export function ProductDetailPage() {
           aria-hidden
           className="pointer-events-none absolute inset-y-0 left-0 w-1 rounded-l-3xl bg-gradient-to-b from-brand-500 to-brand-700"
         />
-        <div className="relative flex items-start justify-between gap-3 pl-2">
+        <div className="relative flex flex-wrap items-start justify-between gap-3 pl-2">
           <div className="flex min-w-0 items-start gap-3">
             <ProductThumb product={product} size="lg" />
           <div className="min-w-0">
-            <h1 className="font-display text-xl font-extrabold text-ink sm:text-2xl">{product.name}</h1>
-            <p className="font-mono text-sm text-muted">{product.sku}</p>
+            <h1 className="font-display text-xl font-extrabold text-ink [overflow-wrap:anywhere] sm:text-2xl">{product.name}</h1>
+            <p className="font-mono text-sm text-muted [overflow-wrap:anywhere]">{product.sku}</p>
             <div className="mt-2 flex flex-wrap gap-1.5">
               <span className="chip bg-brand-500/10 text-brand-700 dark:text-brand-300">
                 {statusLabel(product.category)}
@@ -325,11 +325,6 @@ export function ProductDetailPage() {
               {product.serialized && (
                 <span className="chip bg-inset text-muted">Serialized</span>
               )}
-              {Object.entries(product.attributes).map(([k, v]) => (
-                <span key={k} className="chip bg-inset text-muted">
-                  {k}: {v}
-                </span>
-              ))}
               {product.promotional && (
                 <span className="chip bg-amber-500/15 text-amber-800 dark:text-amber-300">Promo</span>
               )}
@@ -337,11 +332,23 @@ export function ProductDetailPage() {
             </div>
           </div>
           </div>
-          <div className="text-right">
+          <div className="shrink-0 text-right">
             <p className="tnum font-display text-3xl font-extrabold text-ink">{available}</p>
             <p className="text-xs text-faint">available</p>
           </div>
         </div>
+        {Object.keys(product.attributes).length > 0 && (
+          <section aria-label="Product details" className="relative mt-4 min-w-0 border-t border-line pl-2 pt-3">
+            <dl className="grid min-w-0 gap-x-6 gap-y-3 sm:grid-cols-2">
+              {Object.entries(product.attributes).map(([key, value]) => (
+                <div key={key} className="min-w-0">
+                  <dt className="text-xs font-medium text-muted [overflow-wrap:anywhere]">{key}</dt>
+                  <dd className="mt-1 whitespace-pre-wrap text-sm text-ink [overflow-wrap:anywhere]">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+        )}
         <div className="relative mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 pl-2">
           {canViewFinancials && (
             <span className="text-sm text-muted">

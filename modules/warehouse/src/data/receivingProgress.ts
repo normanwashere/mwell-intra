@@ -2,6 +2,7 @@ import type { ReceivingDraftBody } from "./receivingDrafts";
 
 export type ReceivingProgress = ReceivingDraftBody & {
   locationId: string;
+  actualDeliveryDate?: string;
   binId: string;
   evidenceLink: string;
   evidencePhotos: string[];
@@ -29,6 +30,7 @@ export function readReceivingProgress(
   const object = (value: unknown): value is Record<string, unknown> =>
     value !== null && typeof value === "object" && !Array.isArray(value);
   if (
+    (body.actualDeliveryDate !== undefined && typeof body.actualDeliveryDate !== "string") ||
     strings.some((key) => typeof body[key] !== "string") ||
     !Array.isArray(body.evidencePhotos) ||
     !body.evidencePhotos.every((value) => typeof value === "string") ||

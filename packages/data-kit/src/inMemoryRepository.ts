@@ -14,6 +14,7 @@ import type {
   WarehouseEvent,
 } from "./domain/types";
 import { ReturnRejectedError } from "./returnOutcome";
+import { validateActualDeliveryDate } from "./domain/deliveryDate";
 import {
   uncommittedAvailable,
   validateReservation,
@@ -3867,6 +3868,7 @@ export class InMemoryRepository implements WarehouseControlRepository {
   async receiveProcurementPO(
     input: ReceiveProcurementPOInput,
   ): Promise<Receipt> {
+    validateActualDeliveryDate(input.actualDeliveryDate);
     return this.idempotent(
       "receive_procurement_po",
       input.idempotencyKey,
@@ -3876,6 +3878,7 @@ export class InMemoryRepository implements WarehouseControlRepository {
           (row) => row.id === input.poId,
         );
         if (!purchaseOrder) throw new Error("Procurement purchase order not found.");
+        if (!input.actualDeliveryDate) throw new Error("Actual delivery date is required for a new governed receipt.");
         const cleanLines = input.lines
           .map((line, lineIndex) => {
             const quantity =
@@ -3957,6 +3960,7 @@ export class InMemoryRepository implements WarehouseControlRepository {
         const receipt = this.receiveStockOnce(
           {
             locationId: input.locationId,
+            actualDeliveryDate: input.actualDeliveryDate,
             lines: cleanLines,
             evidenceUrls: input.evidenceUrls,
             actor: "demo-procurement-receiver",

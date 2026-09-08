@@ -1354,6 +1354,7 @@ export function ReceivingPageSurface({
                         {formatWhen(r.createdAt)}
                       </span>
                     </div>
+                    <p className="mt-1 text-sm text-muted">Actual delivery date: {r.actualDeliveryDate ?? "Not recorded"}</p>
                     <p className="mt-0.5 text-xs text-faint">
                       {sup ? sup.name : "No supplier"} · by {actorName(r.actor)}
                     </p>

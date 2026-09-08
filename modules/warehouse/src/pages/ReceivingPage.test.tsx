@@ -23,6 +23,17 @@ async function evidenceDirectReceipt(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("ReceivingPage", () => {
+  it("reads actual delivery date separately from posting time without inventing legacy dates", async () => {
+    const data = await makeRepo().getData();
+    data.receipts = [
+      { id: "dated", locationId: "loc-wh", actualDeliveryDate: "2026-08-27", createdAt: "2026-09-08T00:00:00Z", actor: "receiver", lines: [] },
+      { id: "legacy", locationId: "loc-wh", createdAt: "2026-09-08T00:00:00Z", actor: "receiver", lines: [] },
+    ];
+    renderWithProviders(<ReceivingPage />, { repo: makeRepo(data) });
+    const receipts = await screen.findByLabelText("Receipts");
+    expect(within(receipts).getByText("Actual delivery date: 2026-08-27")).toBeVisible();
+    expect(within(receipts).getByText("Actual delivery date: Not recorded")).toBeVisible();
+  });
   it("does not apply a bulk merchandise quantity to a serialized product barcode", async () => {
     const repo = makeRepo();
     const receive = vi.spyOn(repo, "receiveStock");

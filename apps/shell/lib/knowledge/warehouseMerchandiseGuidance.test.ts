@@ -10,6 +10,12 @@ const control = (feature: string, name: string) => {
 const receiptFlow = KNOWLEDGE_FLOWS.find(flow => flow.id === "receive-to-putaway")!;
 
 describe("Warehouse merchandise guidance", () => {
+  it("explains durable photo evidence and failed-upload recovery", () => {
+    const attachment = control("warehouse-quality", "Attach inspection evidence");
+    expect(attachment.behavior).toContain("private storage");
+    expect(attachment.validation).toContain("Failed uploads do not satisfy");
+    expect(attachment.result).toContain("linked to readable records");
+  });
   it("explains bulk receiving and picking without waiving serialized identity", () => {
     const quantity = EXPLICIT_FEATURE_DETAILS["warehouse-receiving"]!.fields.find(row => row.name === "Quantity")!;
     expect(quantity.purpose).toContain("1000 nonserialized tumblers");
@@ -65,15 +71,17 @@ describe("Warehouse merchandise guidance", () => {
     expect(trace.body).toContain("PO0006 / Company E has Tumbler 300");
     expect(trace.body).toContain("run owner's approval");
   });
-  it("requires issued POs and limits the receiving metadata gap to actual delivery date", () => {
+  it("requires issued POs and distinguishes actual delivery date from expected arrival", () => {
     const receive = control("warehouse-purchase-orders", "Receive order");
     expect(receive.behavior).toContain("Receive approved procurement PO");
     expect(receive.validation).toContain("must be issued with remaining quantity");
     expect(receive.validation).toContain("approval alone is not sufficient");
-    expect(receive.result).toContain("Actual delivery-date capture/readback remains an open metadata item");
+    expect(receive.result).toContain("Enter the actual delivery date before confirmation");
+    expect(receive.result).toContain("Check Actual delivery in receipt history");
     expect(receive.result).toContain("posting timestamp is not the actual physical delivery date");
     expect(receive.result).not.toMatch(/receiver.name|requested.by|handover recipient/i);
-    expect(receive.result).toContain("does not claim every reported UI issue is resolved");
+    expect(receive.result).toContain("do not invent historical dates");
+    expect(EXPLICIT_FEATURE_DETAILS["warehouse-purchase-orders"]!.fields.find(row => row.name === "Actual delivery date")!.validation).toContain("no later than today in the Philippines");
     expect(EXPLICIT_FEATURE_DETAILS["warehouse-purchase-orders"]!.fields.find(row => row.name === "Expected date")!.purpose).toContain("not the actual physical delivery date");
   });
 });

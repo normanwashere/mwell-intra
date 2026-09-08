@@ -19,6 +19,21 @@ function renderDetail(id: string, role: Role = "logistics_supervisor") {
 }
 
 describe("ProductDetailPage", () => {
+  it("presents complete long product metadata as labeled details rather than status chips", async () => {
+    const seed = structuredClone(buildSeed());
+    const product = seed.products.find((item) => item.id === "smart-watch")!;
+    const purpose = "Synthetic departmental merchandise for accountable handover and reconciliation";
+    const costBasis = "SEED-COST-BASIS-".repeat(12);
+    product.attributes = { purpose, cost_basis: costBasis };
+    renderWithProviders(<Routes><Route path="/inventory/:id" element={<ProductDetailPage />} /></Routes>, { repo: makeRepo(seed), route: "/inventory/smart-watch" });
+    const metadata = await screen.findByRole("region", { name: "Product details" });
+    expect(within(metadata).getByText("purpose").tagName).toBe("DT");
+    expect(within(metadata).getByText(purpose).tagName).toBe("DD");
+    expect(within(metadata).getByText(costBasis).tagName).toBe("DD");
+    expect(within(metadata).getByText(costBasis)).not.toHaveClass("chip");
+    expect(screen.getByRole("heading", { name: product.name, level: 1 })).toBeVisible();
+  });
+
   it("relocates only the scanned serial from the exact source bin", async () => {
     const user = userEvent.setup();
     const seed = structuredClone(buildSeed());

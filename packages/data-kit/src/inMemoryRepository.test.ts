@@ -1489,6 +1489,7 @@ describe("receiveProcurementPO", () => {
     const input = {
       mode: "breakdown" as const,
       idempotencyKey: "memory-po-breakdown-0001",
+      actualDeliveryDate: "2026-07-01",
       poId: "po-0001",
       locationId: "loc-wh",
       binId: "bin-a",
@@ -1519,6 +1520,7 @@ describe("receiveProcurementPO", () => {
     const first = await repository.receiveProcurementPO(input);
     const replay = await repository.receiveProcurementPO(input);
     expect(replay).toEqual(first);
+    expect(first.actualDeliveryDate).toBe("2026-07-01");
     expect(first.lines).toEqual([
       expect.objectContaining({
         productId: "ring",
@@ -1549,6 +1551,7 @@ describe("receiveProcurementPO", () => {
       repository.receiveProcurementPO({
         mode: "breakdown",
         idempotencyKey: "memory-po-breakdown-0002",
+        actualDeliveryDate: "2026-07-01",
         poId: "po-0002",
         locationId: "loc-wh",
         binId: "bin-a",

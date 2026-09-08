@@ -2597,7 +2597,8 @@ function RequestsWorkspace({
     source,
   } = useWarehouse();
   const { profile } = useSession();
-  const requesterName = (id: string) => {
+  const requesterName = (id: string, projectedName?: string) => {
+    if (projectedName?.trim()) return projectedName.trim();
     if (
       profile?.name &&
       [profile.id, profile.email, actor, identityId].includes(id)
@@ -2825,10 +2826,10 @@ function RequestsWorkspace({
               ["Cost center", detailRequest.costCenter],
               ["Required date", requestDate(detailRequest.requiredDate, true)],
               ["Expense treatment", titleCase(detailRequest.expenseTreatment)],
-              ["Requested by", requesterName(detailRequest.requestedBy)],
+              ["Requested by", requesterName(detailRequest.requestedBy, detailRequest.requestedByName)],
               ["Requested at", requestDate(detailRequest.requestedAt)],
               ...(detailRequest.approvedBy
-                ? [["Approved by", requesterName(detailRequest.approvedBy)]]
+                ? [["Approved by", requesterName(detailRequest.approvedBy, detailRequest.approvedByName)]]
                 : []),
               ...(detailRequest.approvedAt
                 ? [["Approved at", requestDate(detailRequest.approvedAt)]]

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { inboundQueue, isReceivableInbound } from "@/domain/workQueues";
 import { resolveProductScan } from "@/domain/productScan";
+import { deliveryToday, validateActualDeliveryDate } from "@intra/data-kit";
 import { Link, useSearchParams } from "react-router-dom";
 import { useSession } from "@intra/auth";
 import { CertifiedAction } from "@intra/learning";
@@ -219,6 +220,12 @@ export function PurchaseOrdersPage() {
   const lastQuantityField = useRef<Record<string, ReceiptOutcome>>({});
   const [requirementsAnnouncement, setRequirementsAnnouncement] = useState('');
   const [bridgeLocation, setBridgeLocation] = useState("");
+  const [bridgeDeliveryDate, setBridgeDeliveryDate] = useState("");
+  const deliveryDateError = (() => {
+    if (!bridgeDeliveryDate) return "Enter the actual delivery date.";
+    try { validateActualDeliveryDate(bridgeDeliveryDate); return ""; }
+    catch (error) { return error instanceof Error ? error.message : "Check the actual delivery date."; }
+  })();
   const [bridgeBin, setBridgeBin] = useState("");
   const [bridgeEvidence, setBridgeEvidence] = useState("");
   const [bridgePhotos, setBridgePhotos] = useState<string[]>([]);
@@ -317,6 +324,7 @@ export function PurchaseOrdersPage() {
           ? readReceivingProgress(record.body)
           : null;
         setBridgeReceivePO(currentPO);
+        setBridgeDeliveryDate(progress?.actualDeliveryDate ?? "");
         setDraftVersion(record.version);
         if (progress) {
           setBridgeLocation(progress.locationId);
@@ -594,6 +602,7 @@ export function PurchaseOrdersPage() {
     setDraftLoading(true);
     receiptAttemptRef.current = null;
     setBridgeReceivePO(handoff);
+    setBridgeDeliveryDate("");
     setBridgeLocation(warehouses[0]?.id ?? "");
     setBridgeBin("");
     setBridgeEvidence("");
@@ -845,6 +854,7 @@ export function PurchaseOrdersPage() {
     setDraftLoading(true);
     receiptAttemptRef.current = null;
     setBridgeReceivePO(po);
+    setBridgeDeliveryDate("");
     setBridgeLocation(warehouses[0]?.id ?? "");
     setBridgeBin("");
     setBridgeEvidence("");
@@ -888,6 +898,7 @@ export function PurchaseOrdersPage() {
 
   const receivingProgress = (): ReceivingProgress => ({
     version: 1,
+    actualDeliveryDate: bridgeDeliveryDate,
     locationId: bridgeLocation,
     binId: bridgeBin,
     evidenceLink: bridgeEvidence,
@@ -970,7 +981,7 @@ export function PurchaseOrdersPage() {
   };
 
   const submitBridgeReceive = async () => {
-    if (evidenceBusy) return;
+    if (evidenceBusy || deliveryDateError) return;
     if (
       !bridgeReceivePO ||
       !bridgeLocation ||
@@ -1046,6 +1057,7 @@ export function PurchaseOrdersPage() {
       mode: "breakdown" as const,
       poId: bridgeReceivePO.id,
       locationId: bridgeLocation,
+      actualDeliveryDate: bridgeDeliveryDate,
       binId: bridgeBin || undefined,
       lines,
       exceptionReason: bridgeExceptionReason.trim() || undefined,
@@ -1540,6 +1552,7 @@ export function PurchaseOrdersPage() {
             <div role="region" aria-label="Receipt requirements" className="max-h-24 overflow-y-auto text-sm text-rose-700 dark:text-rose-300">
               {[
                 ...(!bridgeLocation ? [{ text: 'Choose a receiving location', target: 'bridge-receive-location' }] : []),
+                ...(deliveryDateError ? [{ text: deliveryDateError, target: 'bridge-actual-delivery-date' }] : []),
                 ...(!bridgeEvidenceUrls.length || bridgeEvidenceError ? [{ text: bridgeEvidenceError ? 'Correct the delivery evidence link' : 'Attach delivery evidence', target: 'bridge-receive-evidence' }] : []),
                 ...(bridgeReceiptValidation.hasExceptions && !bridgeExceptionReason.trim() ? [{ text: 'Add the exception reason', target: 'bridge-exception-reason' }] : []),
                 ...bridgeReceiptValidation.fieldErrors.map(({ message, target, lineId }) => ({ text: lineId ? `${bridgeReceivePO?.lines.find(line => line.id === lineId)?.description ?? 'Receipt line'}: ${message}` : message, target })),
@@ -1578,6 +1591,7 @@ export function PurchaseOrdersPage() {
                 draftLoading ||
                 !!draftError ||
                 !bridgeReceiptValidation.valid ||
+                !!deliveryDateError ||
                 (bridgeReceiptValidation.hasExceptions &&
                   !bridgeExceptionReason.trim())
               }
@@ -1593,6 +1607,7 @@ export function PurchaseOrdersPage() {
           <div className="space-y-3" onBlurCapture={() => {
             const messages = [
               ...(!bridgeLocation ? ['Choose a receiving location.'] : []),
+              ...(deliveryDateError ? [deliveryDateError] : []),
               ...(!bridgeEvidenceUrls.length || bridgeEvidenceError ? ['Delivery evidence needs attention.'] : []),
               ...(bridgeReceiptValidation.hasExceptions && !bridgeExceptionReason.trim() ? ['Add the exception reason.'] : []),
               ...bridgeReceiptValidation.fieldErrors.map(error => error.message),
@@ -1673,6 +1688,12 @@ export function PurchaseOrdersPage() {
                 Select the items you are receiving. Other operators can receive
                 the remaining items with their own accounts.
               </p>
+              <Field label="Actual delivery date" htmlFor="bridge-actual-delivery-date" hint="Date the goods physically arrived, not the PO expected date or posting date (Philippines).">
+                <input id="bridge-actual-delivery-date" className="input" type="date" required
+                  max={deliveryToday()} value={bridgeDeliveryDate}
+                  aria-invalid={!!deliveryDateError}
+                  onChange={(event) => setBridgeDeliveryDate(event.target.value)} />
+              </Field>
               <Field label="Receive into" htmlFor="bridge-receive-location">
                 <select
                   id="bridge-receive-location"

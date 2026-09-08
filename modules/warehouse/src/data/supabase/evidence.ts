@@ -1,4 +1,4 @@
-import { getSupabaseClient, hasSupabaseConfig } from './client';
+import type { SessionValue } from '@intra/auth';
 import { normalizeSafeHttpsUrl } from '@intra/data-kit';
 
 /**
@@ -18,9 +18,7 @@ import { normalizeSafeHttpsUrl } from '@intra/data-kit';
 const BUCKET = 'evidence';
 const SIGNED_URL_TTL_SECONDS = 60 * 60; // 1 hour
 
-function isDataUrl(s: string): boolean {
-  return s.startsWith('data:');
-}
+export type EvidenceSession = Pick<SessionValue, 'mode' | 'supabaseClient'>;
 
 function isSafeRasterDataUrl(value: string): boolean {
   return /^data:image\/(?:png|jpe?g|gif|webp);base64,[a-z0-9+/=\s]+$/i.test(value);
@@ -44,23 +42,27 @@ function storageObjectPath(value: string): string | null {
 
 /**
  * Uploads one photo and returns the value to persist. Returns a base64 data URL
- * when storage is unavailable so the caller can always store a string per photo.
+ * only in explicitly selected memory mode. Live storage failures never fall back.
  */
 export async function uploadEvidence(
   dataUrl: string,
   reference: string,
+  session: EvidenceSession,
 ): Promise<string> {
-  if (!hasSupabaseConfig() || isDataUrl(dataUrl) === false) {
-    return dataUrl; // memory mode, or already a non-data value
-  }
-  const client = getSupabaseClient();
+  if (!isSafeRasterDataUrl(dataUrl)) throw new Error('Evidence must be PNG, JPEG, WebP or GIF.');
   const base64 = dataUrl.split(',')[1] ?? '';
-  const mime = (dataUrl.match(/^data:(.+);/) ?? [])[1] ?? 'image/jpeg';
-  const ext = mime === 'image/png' ? 'png' : 'jpg';
+  const bytes = decodeBase64(base64);
+  if (bytes.length > 8 * 1024 * 1024) throw new Error('Evidence exceeds 8 MiB.');
+  if (session?.mode === 'memory') return dataUrl;
+  const client = session?.supabaseClient;
+  if (session?.mode !== 'supabase' || !client) throw new Error('Authenticated evidence storage is unavailable.');
+  const mime = dataUrl.slice(5, dataUrl.indexOf(';')).toLowerCase();
+  const ext = mime === 'image/jpeg' || mime === 'image/jpg' ? 'jpg' : mime.slice(6);
   const path = `${reference}/${crypto.randomUUID()}.${ext}`;
+  if (!storageObjectPath(path)) throw new Error('Invalid evidence reference.');
   const { error } = await client.storage
     .from(BUCKET)
-    .upload(path, decodeBase64(base64), {
+    .upload(path, bytes, {
       contentType: mime,
       upsert: false,
     });
@@ -74,8 +76,9 @@ export async function uploadEvidence(
 export async function uploadEvidenceBatch(
   dataUrls: string[],
   reference: string,
+  session: EvidenceSession,
 ): Promise<string[]> {
-  return Promise.all(dataUrls.map((u) => uploadEvidence(u, reference)));
+  return Promise.all(dataUrls.map((u) => uploadEvidence(u, reference, session)));
 }
 
 /**
@@ -83,18 +86,17 @@ export async function uploadEvidenceBatch(
  * an <img> can render. Storage paths become short-lived signed URLs; data URLs
  * pass through. Returns null if a signed URL can't be created.
  */
-export async function resolveEvidenceUrl(value: string): Promise<string | null> {
+export async function resolveEvidenceUrl(value: string, client: SessionValue['supabaseClient'] = null): Promise<string | null> {
   if (isSafeRasterDataUrl(value) || isTrustedAppEvidencePath(value)) return value;
   const storagePath = storageObjectPath(value);
   if (!storagePath) return normalizeSafeHttpsUrl(value);
-  if (!hasSupabaseConfig()) return null;
+  if (!client) return null;
   try {
-    const client = getSupabaseClient();
     const { data, error } = await client.storage
       .from(BUCKET)
       .createSignedUrl(storagePath, SIGNED_URL_TTL_SECONDS);
     if (error) return null;
-    return data.signedUrl;
+    return data?.signedUrl ?? null;
   } catch {
     return null;
   }

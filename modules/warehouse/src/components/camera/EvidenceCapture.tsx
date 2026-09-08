@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Icon } from "../Icon";
-import { resolveDataSource } from "@/data/createRepository";
+import { useSession } from "@intra/auth";
 import { uploadEvidence } from "@/data/supabase/evidence";
 
 interface EvidenceCaptureProps {
@@ -54,7 +54,7 @@ export function EvidenceCapture({
   callbacks.current = { onChange, onBusyChange };
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const source = resolveDataSource();
+  const { mode, supabaseClient, profile } = useSession();
 
   // A finished upload must never notify the next record or an unmounted form.
   useLayoutEffect(() => {
@@ -69,7 +69,7 @@ export function EvidenceCapture({
       inFlight.current = false;
       callbacks.current.onBusyChange?.(false);
     };
-  }, [reference]);
+  }, [reference, mode, supabaseClient, profile?.id]);
 
   useLayoutEffect(() => {
     if (value !== undefined) {
@@ -102,7 +102,7 @@ export function EvidenceCapture({
           setError(`Up to ${maxPhotos} photo${maxPhotos === 1 ? "" : "s"}.`);
           break;
         }
-        if (!file.type.startsWith("image/")) {
+        if (!/^image\/(png|jpeg|gif|webp)$/.test(file.type)) {
           rejected++;
           continue;
         }
@@ -119,15 +119,15 @@ export function EvidenceCapture({
       if (!active()) return;
       if (rejected > 0) {
         setError(
-          `Skipped ${rejected} file(s): images up to ${MAX_SIZE_MB}MB only.`,
+          `Skipped ${rejected} file(s): PNG, JPEG, WebP or GIF up to ${MAX_SIZE_MB}MB only.`,
         );
       }
 
       let persisted: string[] = toUpload;
-      if (source === "supabase" && toUpload.length > 0) {
+      if (toUpload.length > 0) {
         const ref = reference ?? `capture-${Date.now()}`;
         const results = await Promise.allSettled(
-          toUpload.map((u, i) => uploadEvidence(u, `${ref}/${i}`)),
+          toUpload.map((u, i) => uploadEvidence(u, `${ref}/${i}`, { mode, supabaseClient: profile ? supabaseClient : null })),
         );
         if (!active()) return;
         persisted = results.flatMap((result) => {
@@ -173,7 +173,7 @@ export function EvidenceCapture({
       <input
         ref={inputRef}
         type="file"
-        accept="image/*"
+        accept="image/png,image/jpeg,image/webp,image/gif"
         capture="environment"
         multiple={maxPhotos > 1}
         disabled={uploading}
@@ -215,6 +215,7 @@ export function EvidenceCapture({
 /** Renders a captured evidence value inline (data URL now; storage paths
  * resolve to a signed URL for the preview). */
 function CapturedThumb({ url }: { url: string }) {
+  const { supabaseClient, profile } = useSession();
   const [src, setSrc] = useState<string | null>(
     url.startsWith("data:") ? url : null,
   );
@@ -222,13 +223,13 @@ function CapturedThumb({ url }: { url: string }) {
     let active = true;
     setSrc(url.startsWith("data:") ? url : null);
     if (!url.startsWith("data:"))
-      void resolveEvidenceUrlSafe(url).then((u) => {
+      void resolveEvidenceUrlSafe(url, profile ? supabaseClient : null).then((u) => {
         if (active) setSrc(u);
       });
     return () => {
       active = false;
     };
-  }, [url]);
+  }, [url, supabaseClient, profile?.id]);
   if (!src) {
     return (
       <span className="grid aspect-square w-full place-items-center rounded-xl bg-inset text-faint ring-1 ring-line">
@@ -245,10 +246,10 @@ function CapturedThumb({ url }: { url: string }) {
   );
 }
 
-async function resolveEvidenceUrlSafe(value: string): Promise<string | null> {
+async function resolveEvidenceUrlSafe(value: string, client: ReturnType<typeof useSession>['supabaseClient']): Promise<string | null> {
   try {
     const { resolveEvidenceUrl } = await import("@/data/supabase/evidence");
-    return resolveEvidenceUrl(value);
+    return resolveEvidenceUrl(value, client);
   } catch {
     return null;
   }

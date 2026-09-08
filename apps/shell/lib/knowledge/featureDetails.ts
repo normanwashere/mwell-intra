@@ -1833,7 +1833,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Receive order",
           "Opens Receive approved procurement PO with exact line context. Verify the product barcode once, then reconcile counted clean, damaged, unidentified and short quantities; excess follows its governed exception path. Product-scan feedback appears inline beside the line without changing its quantities.",
           "The governed PO must be issued with remaining quantity; approval alone is not sufficient. Counts must be nonnegative whole numbers and reconcile to the expected balance. Preserve each jacket size as its own line. Delivery evidence and required exception reasons must be complete before confirmation.",
-          "Confirmation posts the governed receipt for Quality review; product verification and Save progress do not make stock available. Actual delivery-date capture/readback remains an open metadata item: an expected date or posting timestamp is not the actual physical delivery date. This guidance does not claim every reported UI issue is resolved.",
+          "Enter the actual delivery date before confirmation. Confirmation posts the governed receipt and its actual delivery date for Quality review; product verification and Save progress do not make stock available. Check Actual delivery in receipt history after posting. An expected date or posting timestamp is not the actual physical delivery date. Older receipts without a recorded date remain unknown; do not invent historical dates.",
         ),
       ],
       fields: [
@@ -1860,6 +1860,12 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Records expected warehouse arrival, not the actual physical delivery date.",
           false,
           "Use a valid calendar date.",
+        ),
+        field(
+          "Actual delivery date",
+          "Records when the goods physically arrived for this governed receipt, separately from the PO expected date.",
+          true,
+          "Enter a real calendar date no later than today in the Philippines. Confirm it against the delivery evidence; do not use an expected date as a substitute.",
         ),
         field(
           "Order status",
@@ -1954,6 +1960,12 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Loads a pending receipt or return into the inspection sheet.",
           "The item must still require inspection.",
           "Checklist and disposition controls appear.",
+        ),
+        control(
+          "Attach inspection evidence",
+          "Uploads a PNG, JPEG, WebP or GIF photo to private storage using your signed-in account. Wait for the preview before submitting the inspection.",
+          "Each photo must be at most 8 MB. Failed uploads do not satisfy required evidence; retry the failed file. Uploading does not submit the inspection.",
+          "After submission, reopen the saved evidence. Authorized reviewers can open attachments linked to readable records. Older inline attachments remain historical evidence, not newly uploaded files.",
         ),
         control(
           "Accept stock",

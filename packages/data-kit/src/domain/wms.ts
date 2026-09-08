@@ -311,8 +311,10 @@ export interface DepartmentStockRequest {
   status: DepartmentRequestStatus;
   lines: DepartmentStockRequestLine[];
   requestedBy: string;
+  requestedByName?: string;
   requestedAt: string;
   approvedBy?: string;
+  approvedByName?: string;
   approvedAt?: string;
   fulfillmentOrderId?: string;
 }

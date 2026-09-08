@@ -101,6 +101,7 @@ function renderReceiving(repo = new LiveProcurementRepository()) {
 async function openReceiving(
   user: ReturnType<typeof userEvent.setup>,
   index = 0,
+  fillDate = true,
 ) {
   await user.click(
     within(await screen.findByLabelText("Purchase orders")).getAllByRole(
@@ -116,6 +117,9 @@ async function openReceiving(
       within(dialog).getByRole("button", { name: /save progress/i }),
     ).toBeEnabled(),
   );
+  if (fillDate && !(within(dialog).getByLabelText("Actual delivery date") as HTMLInputElement).value) {
+    fireEvent.change(within(dialog).getByLabelText("Actual delivery date"), { target: { value: "2026-08-27" } });
+  }
   return dialog;
 }
 
@@ -200,6 +204,30 @@ class LiveProcurementRepository extends InMemoryRepository {
 }
 
 describe("PurchaseOrdersPage", () => {
+  it("requires an explicit actual delivery date, saves it in progress and sends it on receipt", async () => {
+    const repo = new LiveProcurementRepository();
+    const receive = vi.spyOn(repo, "receiveProcurementPO");
+    const user = userEvent.setup();
+    renderReceiving(repo);
+    let dialog = await openReceiving(user, 0, false);
+    const date = within(dialog).getByLabelText("Actual delivery date");
+    expect(date).toHaveValue("");
+    completeReceipt(dialog);
+    expect(within(dialog).getByRole("button", { name: "Confirm governed receipt" })).toBeDisabled();
+    fireEvent.change(date, { target: { value: "2999-01-01" } });
+    expect(within(dialog).getByRole("button", { name: "Confirm governed receipt" })).toBeDisabled();
+    expect(receive).not.toHaveBeenCalled();
+    fireEvent.change(date, { target: { value: "2026-08-27" } });
+    await user.click(within(dialog).getByRole("button", { name: /save progress/i }));
+    await waitFor(() => expect(JSON.parse(localStorage.getItem(draftKey)!).body.actualDeliveryDate).toBe("2026-08-27"));
+    await user.click(within(dialog).getByRole("button", { name: /^close$/i }));
+    dialog = await openReceiving(user, 0, false);
+    expect(within(dialog).getByLabelText("Actual delivery date")).toHaveValue("2026-08-27");
+    await user.click(within(dialog).getByRole("button", { name: "Confirm governed receipt" }));
+    await waitFor(() => expect(receive).toHaveBeenCalledOnce());
+    expect(receive.mock.calls[0]![0].actualDeliveryDate).toBe("2026-08-27");
+    expect((await repo.getData()).receipts.at(-1)?.actualDeliveryDate).toBe("2026-08-27");
+  });
   it.each([0, 1])("clears product-scan feedback when opening receipt session %s", async (nextIndex) => {
     const repo = new LiveProcurementRepository(1000);
     const product = (await repo.getData()).products.find(row => row.id === "doctor-token")!;
@@ -891,6 +919,7 @@ describe("PurchaseOrdersPage", () => {
       within(dialog).getByLabelText(/delivery evidence url/i),
       "evidence/subset.jpg",
     );
+    fireEvent.change(within(dialog).getByLabelText("Actual delivery date"), { target: { value: "2026-08-27" } });
     await user.click(
       within(dialog).getByRole("button", { name: /confirm governed receipt/i }),
     );
@@ -1274,6 +1303,7 @@ describe("PurchaseOrdersPage", () => {
       within(dialog).getByLabelText(/exception reason/i),
       "Mixed delivery condition documented at receiving",
     );
+    fireEvent.change(within(dialog).getByLabelText("Actual delivery date"), { target: { value: "2026-08-27" } });
 
     expect(
       within(dialog).getByText(/80 physical.*20 short.*0 excess/i),
@@ -1433,6 +1463,7 @@ describe("PurchaseOrdersPage", () => {
       within(dialog).getByLabelText(/delivery evidence url/i),
       "evidence/live.jpg",
     );
+    fireEvent.change(within(dialog).getByLabelText("Actual delivery date"), { target: { value: "2026-08-27" } });
     fireEvent.change(
       within(dialog).getByLabelText(/clean serials for smart watches/i),
       { target: { value: "LIVE-001\nLIVE-002" } },

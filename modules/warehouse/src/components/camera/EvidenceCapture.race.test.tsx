@@ -5,8 +5,8 @@ import userEvent from "@testing-library/user-event";
 import { EvidenceCapture } from "@/components/camera/EvidenceCapture";
 
 const { upload } = vi.hoisted(() => ({ upload: vi.fn() }));
-vi.mock("@/data/createRepository", () => ({
-  resolveDataSource: () => "supabase",
+vi.mock("@intra/auth", () => ({
+  useSession: () => ({ mode: "supabase", supabaseClient: null, profile: { id: "actor-A" } }),
 }));
 vi.mock("@/data/supabase/evidence", () => ({
   uploadEvidence: upload,
