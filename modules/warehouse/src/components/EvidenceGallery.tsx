@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useSession } from '@intra/auth';
 import { resolveEvidenceUrl } from '@/data/supabase/evidence';
 import { Icon } from './Icon';
@@ -56,6 +57,7 @@ export function EvidenceGallery({
       return <UnavailableEvidence className={className} />;
     }
     return (
+      <>
       <button
         type="button"
         onClick={() => src && setLightbox(src)}
@@ -81,10 +83,9 @@ export function EvidenceGallery({
             {list.length}
           </span>
         )}
-        {lightbox && (
-          <Lightbox src={lightbox} onClose={() => setLightbox(null)} />
-        )}
       </button>
+      {lightbox && <Lightbox src={lightbox} onClose={() => setLightbox(null)} />}
+      </>
     );
   }
 
@@ -142,14 +143,32 @@ function UnavailableEvidence({ className }: { className?: string }) {
 }
 
 function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
-  return (
+  const closeButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const previous = document.activeElement;
+    closeButton.current?.focus();
+    return () => { if (previous instanceof HTMLElement && previous.isConnected) previous.focus(); };
+  }, []);
+  return createPortal(
     <div
       role="dialog"
+      aria-modal="true"
       aria-label="Evidence photo"
       className="fixed inset-0 z-[60] grid place-items-center bg-black/80 p-4"
       onClick={onClose}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          event.stopPropagation();
+          onClose();
+        } else if (event.key === 'Tab') {
+          event.preventDefault();
+          closeButton.current?.focus();
+        }
+      }}
     >
       <button
+        ref={closeButton}
         type="button"
         aria-label="Close"
         className="absolute right-4 top-4 grid h-10 w-10 place-items-center rounded-full bg-white/15 text-white"
@@ -163,6 +182,7 @@ function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
         className="max-h-full max-w-full rounded-2xl object-contain"
         onClick={(e) => e.stopPropagation()}
       />
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -1965,7 +1965,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Attach inspection evidence",
           "Uploads a PNG, JPEG, WebP or GIF photo to private storage using your signed-in account. Wait for the preview before submitting the inspection.",
           "Each photo must be at most 8 MB. Failed uploads do not satisfy required evidence; retry the failed file. Uploading does not submit the inspection.",
-          "After submission, reopen the saved evidence. Authorized reviewers can open attachments linked to readable records. Older inline attachments remain historical evidence, not newly uploaded files.",
+          "After submission, select Completed in Quality Control, find the product and source reference, and open that inspection's evidence thumbnail. Authorized reviewers can open attachments linked to readable records. Older inline attachments remain historical evidence, not newly uploaded files.",
         ),
         control(
           "Accept stock",

@@ -13,6 +13,25 @@ import * as dataSource from "@/data/createRepository";
 afterEach(() => vi.restoreAllMocks());
 
 describe("ReturnsPage", () => {
+  it.each(["ascending", "descending", "mixed"])("orders %s return history newest first without changing repository data", async (order) => {
+    const data = await makeRepo().getData();
+    const records = Array.from({ length: 12 }, (_, index) => ({
+      id: `return-${String(index).padStart(2, "0")}`, source: "customer" as const,
+      createdAt: `2026-09-${String(Math.min(index + 1, 11)).padStart(2, "0")}T00:00:00Z`,
+      actor: "receiver", lines: [],
+    }));
+    data.returns = order === "ascending" ? records : order === "descending" ? [...records].reverse()
+      : [5, 11, 2, 8, 0, 10, 4, 7, 1, 9, 3, 6].map((index) => records[index]!);
+    const originalOrder = data.returns.map((record) => record.id);
+    const repo = makeRepo(data);
+    vi.spyOn(repo, "getData").mockResolvedValue(data);
+    renderWithProviders(<ReturnsPage />, { repo });
+    const history = await screen.findByLabelText("Returns");
+    expect(Array.from(history.children).map((node) => node.id)).toEqual(
+      [10, 11, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0].map((index) => `return-return-${String(index).padStart(2, "0")}`),
+    );
+    expect(data.returns.map((record) => record.id)).toEqual(originalOrder);
+  });
   it("keeps an earlier unknown return frozen after a typed recovery rejection", async () => {
     const repo = makeRepo();
     const original = repo.recordReturn.bind(repo);

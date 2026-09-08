@@ -1,4 +1,5 @@
 import { useRef, useState, type SetStateAction } from "react";
+import { newestFirst } from "@/domain/historyOrder";
 import { Link } from "react-router-dom";
 import { useWarehouse } from "@/app/store";
 import type { ReturnSource } from "@/domain/types";
@@ -379,7 +380,7 @@ function ReturnsIntake({ scope }: { scope: string }) {
             <ul className="space-y-2" aria-label="Returns">
               {data.returns
                 .slice()
-                .reverse()
+                .sort(newestFirst)
                 .map((r) => (
                   <li key={r.id} id={`return-${r.id}`} className="rounded-xl bg-inset p-3">
                     <div className="flex items-center justify-between">

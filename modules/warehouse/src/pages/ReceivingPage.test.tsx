@@ -23,6 +23,27 @@ async function evidenceDirectReceipt(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("ReceivingPage", () => {
+  it.each(["ascending", "descending", "mixed"])("shows the newest eight receipts from %s repository history without mutating it", async (order) => {
+    const data = await makeRepo().getData();
+    const receipts = Array.from({ length: 12 }, (_, index) => ({
+      id: `receipt-${String(index).padStart(2, "0")}`,
+      locationId: "loc-wh",
+      actualDeliveryDate: `2026-08-${String(index + 1).padStart(2, "0")}`,
+      createdAt: `2026-09-${String(Math.min(index + 1, 11)).padStart(2, "0")}T00:00:00Z`,
+      actor: "receiver", lines: [],
+    }));
+    data.receipts = order === "ascending" ? receipts : order === "descending" ? [...receipts].reverse()
+      : [5, 11, 2, 8, 0, 10, 4, 7, 1, 9, 3, 6].map((index) => receipts[index]!);
+    const originalOrder = data.receipts.map((receipt) => receipt.id);
+    const repo = makeRepo(data);
+    vi.spyOn(repo, "getData").mockResolvedValue(data);
+    renderWithProviders(<ReceivingPage />, { repo });
+    const history = await screen.findByLabelText("Receipts");
+    const dates = within(history).getAllByText(/^Actual delivery date:/).map((node) => node.textContent);
+    expect(dates).toEqual([11, 12, 10, 9, 8, 7, 6, 5].map((day) => `Actual delivery date: 2026-08-${String(day).padStart(2, "0")}`));
+    expect(within(history).getByText("Actual delivery date: 2026-08-12")).toBeVisible();
+    expect(data.receipts.map((receipt) => receipt.id)).toEqual(originalOrder);
+  });
   it("reads actual delivery date separately from posting time without inventing legacy dates", async () => {
     const data = await makeRepo().getData();
     data.receipts = [

@@ -24,7 +24,9 @@ describe('authenticated evidence transport', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     state.mode = 'supabase'; state.actor = 'actor-A'; state.available = true;
-    state.upload.mockResolvedValue({ data: {}, error: null });
+    state.upload.mockImplementation(async (path: string) => /^[a-zA-Z0-9._/-]+$/.test(path)
+      ? { data: {}, error: null }
+      : { data: null, error: { message: 'InvalidKey' } });
     state.sign.mockResolvedValue({ data: { signedUrl: 'https://storage.example/signed.png' }, error: null });
   });
   it('uploads through the injected client without environment configuration and persists a path', async () => {

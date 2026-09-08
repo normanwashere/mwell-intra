@@ -1,11 +1,36 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { EvidenceGallery } from './EvidenceGallery';
 
 // Explicit memory sessions preserve existing inline and trusted app evidence.
 vi.mock('@intra/auth', () => ({ useSession: () => ({ mode: 'memory', supabaseClient: null, profile: null }) }));
 
 describe('EvidenceGallery', () => {
+  it.each(['thumb', 'grid'] as const)('portals %s lightbox outside buttons, closes with Close/Escape and restores focus without warnings', async (size) => {
+    const errors = vi.spyOn(console, 'error');
+    try {
+      const { container } = render(<EvidenceGallery urls={['data:image/png;base64,eA==']} size={size} />);
+      await screen.findByRole('img', { name: 'Evidence' });
+      const trigger = screen.getByRole('button', { name: /view.*evidence photo/i });
+      trigger.focus();
+      fireEvent.click(trigger);
+      let dialog = await screen.findByRole('dialog', { name: 'Evidence photo' });
+      expect(container).not.toContainElement(dialog);
+      expect(dialog.parentElement).toBe(document.body);
+      expect(document.querySelector('button button')).toBeNull();
+      const close = within(dialog).getByRole('button', { name: 'Close' });
+      expect(close).toHaveFocus();
+      fireEvent.click(close);
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(trigger).toHaveFocus();
+      fireEvent.click(trigger);
+      dialog = await screen.findByRole('dialog', { name: 'Evidence photo' });
+      fireEvent.keyDown(within(dialog).getByRole('button', { name: 'Close' }), { key: 'Escape' });
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(trigger).toHaveFocus();
+      expect(errors).not.toHaveBeenCalled();
+    } finally { errors.mockRestore(); }
+  });
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
   });

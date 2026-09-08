@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { newestFirst } from "@/domain/historyOrder";
 import { clsx } from "clsx";
 import { Link, useLocation } from "react-router-dom";
 import {
@@ -1338,7 +1339,7 @@ export function ReceivingPageSurface({
           <ul className="space-y-2" aria-label="Receipts">
             {data.receipts
               .slice()
-              .reverse()
+              .sort(newestFirst)
               .slice(0, 8)
               .map((r) => {
                 const loc = data.locations.find((l) => l.id === r.locationId);

@@ -8,6 +8,7 @@ import { WAREHOUSE_MUTATION_CAPABILITIES } from '@/app/authorization';
 import { Badge, EmptyState, PageHeader, SegmentedControl } from '@/components/ui';
 import { InspectionSheet } from '@/components/quality/InspectionSheet';
 import { HoldReleaseSheet } from '@/components/quality/HoldReleaseSheet';
+import { EvidenceGallery } from '@/components/EvidenceGallery';
 import { pendingQualityWork, type PendingInspection } from '@/domain/controlQueues';
 import { loadQualityControlPopulation } from '@/domain/qualityControlLoad';
 
@@ -263,9 +264,17 @@ export function QualityPage() {
       ) : completed.length === 0 ? <EmptyState icon="clipboard" title="No completed inspections" /> : (
         <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface" aria-label="Completed inspections">
           {completed.map((inspection) => (
-            <li key={inspection.id} className="flex min-h-16 items-center justify-between gap-3 px-4 py-3">
-              <div className="min-w-0"><p className="truncate text-sm font-semibold text-ink">{productName(inspection.productId)}</p><p className="text-xs text-faint">{inspection.quantity} unit(s) · {inspection.inspectedAt.slice(0, 10)}</p></div>
-              <Badge tone={inspection.disposition === 'accepted' ? 'emerald' : 'amber'}>{inspection.disposition.replace('_', ' ')}</Badge>
+            <li key={inspection.id} aria-label={`Inspection ${inspection.id}`} className="grid min-w-0 gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+              <div className="min-w-0">
+                <p className="break-words text-sm font-semibold text-ink">{productName(inspection.productId)}</p>
+                <p className="text-xs text-faint">{inspection.quantity} unit(s) · <time dateTime={inspection.inspectedAt}>{inspection.inspectedAt.slice(0, 10)}</time></p>
+                <p className="break-all text-xs text-muted">{inspection.sourceType}: {inspection.sourceId}</p>
+                <p className="break-all text-xs text-muted">Inspection: {inspection.id}</p>
+              </div>
+              <div className="flex min-w-0 flex-wrap items-center gap-3">
+                <Badge tone={inspection.disposition === 'accepted' ? 'emerald' : 'amber'}>{inspection.disposition.replace('_', ' ')}</Badge>
+                <EvidenceGallery urls={inspection.evidenceUrls} size="thumb" className="shrink-0" />
+              </div>
             </li>
           ))}
         </ul>

@@ -128,6 +128,10 @@ Never repeat receipt of an already consumed test PO. Use its remaining balance o
 
 **Warehouse photo evidence:** In live UAT, photo capture uploads PNG, JPEG, WebP or GIF files up to 8 MB to private storage using your signed-in account. Wait for the preview and successful upload before submitting. If upload fails, retry the failed file; an error does not count as evidence. A successful upload is not a submitted inspection. After the business action succeeds, reopen its evidence to check the saved attachment. Authorized handover roles can view evidence linked to their readable records, not arbitrary files belonging to another user. Older inline evidence remains historical evidence; it is not presented as a newly uploaded file. The separate document controls below have their own limits.
 
+**Finding a posted record:** Recent receipts and returns show the newest posting first. The receipt's actual delivery date is a separate field and can be earlier than the posting date. Reload to confirm the saved record and its evidence; do not submit the same delivery again merely because an old screen was open.
+
+**Reviewing an inspection:** Open Quality Control, select **Completed**, and find the product and source reference. Open the evidence thumbnail on that inspection to view the saved photo. This is a read-only review; opening the image does not repeat or change the inspection. If evidence is unavailable, report the exact source rather than uploading a replacement under another record.
+
 **Requester and product details:** Authorized department-request reviewers see the requester name attached to that request without access to the full profile directory. If no name is available, do not infer an identity. Product attributes appear as labelled details rather than one-line badges, so long values can wrap on mobile; category and serialization remain separate status labels.
 
 1. Open the intended record before attaching evidence. An upload started for one record cannot satisfy another record's evidence requirement.
