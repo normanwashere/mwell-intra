@@ -1264,6 +1264,10 @@ test("publishes the maintained governance search intent vocabulary", () => {
 test("renders scoped explainable search without navigation reloads", () => {
   const html = buildDocumentationHtml();
 
+  const roleRecovery = html.match(/<a\b[^>]*href="([^"]+)"[^>]*>Browse role guides<\/a>/g) ?? [];
+  assert.equal(roleRecovery.length, 1);
+  assert.match(roleRecovery[0], /href="#mode=roles" data-route-link/);
+
   assert.match(html, /data-current-mode-label/);
   assert.match(html, /data-search-scope="tab"/);
   assert.match(html, /data-search-scope="all"/);

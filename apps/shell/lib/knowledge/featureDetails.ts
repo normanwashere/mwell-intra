@@ -957,7 +957,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         field(
           "Quantity",
-          "Records units physically received for the selected line. Quantity-controlled merchandise uses one product barcode per variant plus the counted quantity, not a serial for every piece.",
+          "Records units physically received for the selected line. For 1000 nonserialized tumblers, scan one product barcode and record quantity 1000; scanning alone does not post a receipt or approve Quality. Repeated merchandise scans do not add another 1000 units. Review the line quantity before confirming.",
           true,
           "Use a positive value no greater than remaining quantity.",
         ),
@@ -1135,9 +1135,9 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         control(
           "Confirm pick",
-          "Shows the recommended source location as step one, requires the rack/bin scan before item capture, supports camera or manual serial scanning for every unit, and accepts optional line photo evidence for bundle, damage, or exception traceability.",
-          "Every line must be complete; the scanned bin must be active at the source warehouse and hold the requested quantity or every scanned serial. Serialized products require one unique eligible serial per unit. Quantity-controlled merchandise uses its product identity and requested quantity; each size or variant remains a separate line.",
-          "The order advances to Packing with traceable picked identities, physical source bin, and any attached line evidence recorded together.",
+          "Verify the source rack/bin first. For 10 nonserialized tumblers, scan one matching product barcode and confirm picked quantity 10. Serialized products still require one eligible serial per unit. Optional line photos support exception traceability.",
+          "Every line must be complete in the active source bin. Wrong or ambiguous product codes are rejected. Jacket S, M and L are separate variants, not interchangeable stock. Use a positive whole quantity equal to the order line; use Split backorder for a partial pick. Capture stays locked during upload, saving or uncertain-response recovery.",
+          "The order advances to Packing with quantity, picked serials when applicable, source bin and line evidence. Product-code verification is a local check, not separately persisted scan proof.",
         ),
         control(
           "Confirm pack",
@@ -1148,8 +1148,8 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         control(
           "Release order",
           "Posts final serialized or quantity stock issue and packaging-consumption movements after physical dispatch or handover.",
-          "The order must be Ready and fully picked; the releasing operator cannot be the recorded packer.",
-          "The order becomes Released with attributable movements; handovers still await recipient acknowledgment.",
+          "The order must be Ready and fully picked; the releasing operator cannot be the recorded packer. A recorded picked bin is binding: if bin B is held, missing, inactive or short of stock, do not substitute stock from A. Review the order, source-bin balance and holds with the supervisor before retrying; do not clear the bin to bypass the failure.",
+          "The order becomes Released with movements from the recorded picked bin; a rejected release leaves stock and order status unchanged. If acknowledgment is uncertain, verify status and movements before retrying the same action. Legacy records without a picked bin retain their existing source rules, not an explicit General Area instruction. Handovers still await recipient acknowledgment.",
         ),
         control(
           "Acknowledge receipt",
@@ -1537,9 +1537,9 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         control(
           "Put away stock",
-          "Opens controlled putaway for eligible received stock.",
-          "The role needs receiving or transfer authority and a valid route.",
-          "A putaway draft opens with source and destination context.",
+          "Opens putaway for accepted, unheld stock in the selected warehouse's general area. Ordinary barcode entry starts quantity at 1: explicitly enter 1000 to put away 1000 nonserialized units; an exact task link may prefill its quantity.",
+          "Quality acceptance and sufficient eligible unbinned stock are prerequisites. Use a positive whole quantity within the displayed eligible balance and an active destination bin in the same warehouse. Stock already assigned to a bin needs the appropriate bin-to-bin movement, not general-area putaway.",
+          "Only confirmation moves the chosen quantity into the destination bin. A scan is not a movement or a Quality approval.",
         ),
         control(
           "Transfer bin stock",
@@ -1831,9 +1831,9 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         control(
           "Receive order",
-          "Opens receiving with the selected eligible order.",
-          "The order must be approved with remaining quantity.",
-          "Receiving opens with order context selected.",
+          "Opens Receive approved procurement PO with exact line context. Verify the product barcode once, then reconcile counted clean, damaged, unidentified and short quantities; excess follows its governed exception path. Product-scan feedback appears inline beside the line without changing its quantities.",
+          "The governed PO must be issued with remaining quantity; approval alone is not sufficient. Counts must be nonnegative whole numbers and reconcile to the expected balance. Preserve each jacket size as its own line. Delivery evidence and required exception reasons must be complete before confirmation.",
+          "Confirmation posts the governed receipt for Quality review; product verification and Save progress do not make stock available. Actual delivery-date capture/readback remains an open metadata item: an expected date or posting timestamp is not the actual physical delivery date. This guidance does not claim every reported UI issue is resolved.",
         ),
       ],
       fields: [
@@ -1857,7 +1857,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         field(
           "Expected date",
-          "Records expected warehouse arrival.",
+          "Records expected warehouse arrival, not the actual physical delivery date.",
           false,
           "Use a valid calendar date.",
         ),

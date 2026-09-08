@@ -19,6 +19,19 @@ const {
 
 const root = path.resolve(fileURLToPath(new URL("../../", import.meta.url)));
 
+test("September 7 merchandise guidance is reachable from both receiving and departmental release", () => {
+  for (const id of ["stock-receiving-putaway", "department-inventory-release"]) {
+    const guide = HANDBOOK_GUIDES.find((item) => item.id === id);
+    assert.ok(guide, id);
+    assert.ok(guide.keywords.includes("tumbler"));
+    assert.ok(guide.sourceSections.some((section) => JSON.stringify(section).includes("September 7 Feedback: Merchandise Barcodes and Quantities")));
+  }
+  const release = HANDBOOK_GUIDES.find((item) => item.id === "department-inventory-release");
+  assert.ok(release.participatingRoles.includes("operations_associate"));
+  assert.ok(release.participatingRoles.includes("marketing_events_lead"));
+  assert.match(release.recovery, /cannot substitute another bin/);
+});
+
 const EXPECTED_TASK_IDS = [
   "procurement-request-approval",
   "vendor-accreditation-renewal",

@@ -888,7 +888,7 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
   flow(
     "receive-to-putaway",
     "Receive to putaway",
-    "Verify PO eligibility and traceability before receiving into a valid putaway bin.",
+    "Verify PO eligibility, post the receipt, complete Quality acceptance, then put away eligible stock into an active bin.",
     [
       "warehouse_procurement",
       "warehouse_operator",
@@ -918,7 +918,7 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
         "receive-traceability",
         "Is required traceability complete?",
         ["warehouse_logistics_supervisor"],
-        "Capture quantity, serials for serialized items, lot or batch details, delivery evidence, and recipient custody.",
+        "Capture counted quantity, serials only for serialized items, lot or batch details where required, and delivery evidence. For nonserialized merchandise use one product barcode per variant: 1000 tumblers is quantity 1000, not 1000 serials. Synthetic tester references only: PO0005 / Company D has Jacket S, M and L at 100 each; PO0006 / Company E has Tumbler 300. Do not treat the 1000-unit example as that PO's balance or consume a shared fixture without the run owner's approval.",
         "warehouse_logistics_supervisor",
         "Warehouse traceability control: product, quantity, serial or lot identity, source, and evidence must be attributable before posting.",
       ),
@@ -935,33 +935,33 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       ),
       decision(
         "receive-bin-ready",
-        "Is a valid putaway bin ready?",
+        "Are Quality acceptance and a valid bin confirmed?",
         ["warehouse_logistics_supervisor", "warehouse_admin"],
-        "Validate the destination bin is active, belongs to the site, supports the stock state, and is allowed by the operation route.",
+        "Complete the receipt's Quality inspection with an authorized inspector and confirm that its hold is released. Check eligible stock in the general area and an active destination bin at the same warehouse. Held or pending stock must not enter the ordinary putaway path.",
         "warehouse_logistics_supervisor",
         "Warehouse storage and route control: putaway requires an active compatible bin and permitted source-to-destination route.",
         {
           destinationNodeId: "receive-escalated",
           justification:
-            "Missing routes and restricted destinations both preserve stock in controlled staging for the same accountable configuration escalation.",
+            "Pending Quality, active holds and invalid destinations all stop putaway without moving stock; the recovery terminal distinguishes Quality disposition from destination configuration.",
         },
       ),
       process(
         "receive-putaway",
         "action",
-        "Stage received stock",
+        "Put away accepted stock",
         ["warehouse_logistics_supervisor", "warehouse_operations"],
-        "Scan the receiving destination and move unavailable units into controlled staging while preserving custody and traceability.",
+        "Scan the nonserialized product once, enter the counted quantity and scan the active destination bin. Ordinary entry defaults to 1; explicitly enter 1000 for a 1000-unit move and verify the eligible balance before confirmation. Use the bin-to-bin path for stock already assigned to a bin.",
         {
           databaseEffect:
-            "Pending-inspection stock location and bin balances move into the controlled receiving destination without increasing availability.",
+            "Accepted, unheld stock moves from the general area to the chosen bin; the movement preserves its product and quantity without creating new stock.",
         },
       ),
       terminal(
         "receive-complete",
-        "Receipt pending Quality inspection",
+        "Accepted receipt put away",
         ["warehouse_logistics_supervisor", "warehouse_operations"],
-        "The eligible, traceable receipt is unavailable in a valid receiving bin and linked to its independent Quality workflow.",
+        "The accepted receipt is stored in its confirmed bin. Allocation, picking, packing and release remain separate governed actions; putaway is not permission to issue stock.",
         "complete",
       ),
       terminal(
@@ -980,9 +980,9 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       ),
       terminal(
         "receive-escalated",
-        "Putaway route escalated",
+        "Quality or putaway blocked",
         ["warehouse_admin", "warehouse_logistics_supervisor"],
-        "Keep stock in controlled staging and escalate the missing, restricted, or invalid destination route.",
+        "Do not move stock. For pending Quality or an active hold, return to the authorized Quality owner for inspection or hold disposition and recheck eligibility. For a missing, restricted or invalid destination, ask the storage administrator to correct the configuration. Resume only after stock is accepted and unheld and the destination is valid.",
         "escalated",
       ),
     ],
@@ -1011,13 +1011,19 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       edge(
         "receive-bin-ready",
         "receive-putaway",
-        "Active compatible bin",
+        "Accepted, unheld stock and valid bin",
         "success",
       ),
       edge(
         "receive-bin-ready",
         "receive-escalated",
         "No valid bin or route",
+        "exception",
+      ),
+      edge(
+        "receive-bin-ready",
+        "receive-escalated",
+        "Quality not accepted or hold active",
         "exception",
       ),
       edge(
