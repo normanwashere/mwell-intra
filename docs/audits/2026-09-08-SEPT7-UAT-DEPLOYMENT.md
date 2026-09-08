@@ -1,5 +1,15 @@
 # September 7 Feedback UAT Deployment
 
+## Current live revision
+
+The inline-feedback follow-up `a377d6fff79f7a8eb8d85e079b01c14ec513d3ee` supersedes the initial deployment below. Vercel deployment `dpl_3H2MsUdxooWWmXTKZccnCLSoSoqc` completed its remote build and TypeScript checks and was promoted to the UAT alias. Public health at September 8, 2026, 02:59 UTC confirmed this exact commit, UAT Supabase `kkoitlvydytdhlpxhuah`, database reachability and stylesheet HTTP 200.
+
+This follow-up replaces only the new PO barcode toasts with receipt-line inline feedback. Its 38 PO-screen tests and type check passed; an independent focused review passed three tests (35 intentionally excluded, not counted as passed). The initial mobile toast screenshots remain rejected evidence rather than being retroactively certified. Final replacement browser evidence is recorded below when reviewed.
+
+Final live run finished at 03:02 UTC: six of six cases passed on this exact revision (Operations Associate, Operations Lead and Marketing, desktop 1440px and mobile 390px). No business or learning submissions occurred and all browser contexts closed. See [final live report](../../outputs/sep08-merch-live/REPORT-a377d6f.md). Independent review opened and accepted four original mobile wrong/correct scan frames across both Operations roles: inline feedback was readable, success replaced error, and evidence/footer actions remained unobscured. See [image review and hashes](../../outputs/sep08-merch-live/capture-a377d6ff-2026-09-08T02-59-24-337Z/independent-review.md). This certifies the selected states, not every screenshot, physical scanner or completed stock transaction.
+
+## Initial deployment
+
 - Verified public target: https://mwell-intra-uat.vercel.app
 - Deployed commit: `d9b1edb0203aad1f0b045d571e59395f79f4a4ca`.
 - Vercel deployment: `dpl_HUK3GeC9d95BH2GS7DRRrRGDjZwT`, Ready.

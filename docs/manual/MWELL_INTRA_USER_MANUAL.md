@@ -106,7 +106,19 @@ In direct receiving, the initial merchandise scan uses the entered quantity. Sca
 
 **Marketing through Pick & Pack:** Submit the department stock request with its products, quantities, department and purpose. A separate authorized decision owner approves it. Operations allocates available stock, confirms the source bin and item identity, picks and packs it, and completes the authorized release and recipient handover. Do not issue the same physical stock again through Allocations merely because the other path exists. Test the two paths with separate quantities and references.
 
-**September 7 sample-data specification:** `UAT-SEP07-PO-0005` represents Company D with Jacket S 100, M 100 and L 100; `UAT-SEP07-PO-0006` represents Company E with Tumbler 300. The earlier 1,000-tumbler description is a workflow example, not an extra delivery. These are synthetic receiving fixtures, not supplier commitments, real approvals or purchasing-price guidance. Consult the dated feedback response for seed and deployment verification; this paragraph alone does not establish that a fixture is live.
+Release must use available stock in the exact picked bin. If that bin does not have the required available quantity, release is rejected; there is no fallback to another bin or general-area stock. Review the recorded pick, holds and bin balance, and resolve the discrepancy through the authorized workflow before retrying. Stock elsewhere does not justify releasing from the recorded bin.
+
+**September 8 tester PO sets:** Six untouched tester POs are reserved across the three sets below. Each Company D jacket PO contains S 100, M 100 and L 100; each Company E tumbler PO contains 300. Together they provide **900 jackets and 900 tumblers** of ordered receiving capacity, not already accepted or available stock.
+
+| Tester set | Company D jacket PO | Company E tumbler PO |
+| --- | --- | --- |
+| Original September 7 | `UAT-SEP07-PO-0005` | `UAT-SEP07-PO-0006` |
+| Repeat set 1 | `UAT-SEP08-TESTER1-PO-0005` | `UAT-SEP08-TESTER1-PO-0006` |
+| Repeat set 2 | `UAT-SEP08-TESTER2-PO-0005` | `UAT-SEP08-TESTER2-PO-0006` |
+
+Each set uses its own product variants and product barcodes. These are synthetic receiving fixtures, not supplier commitments, real approvals or purchasing-price guidance. Before testing, check the selected PO's current remaining quantity; the untouched baseline does not promise that another tester has not subsequently used it.
+
+**Verification records are not tester stock:** Do not use `UAT-SEP08-VERIFY-PO-0005` or `UAT-SEP08-VERIFY-PO-0006`, their separate products, or bin `S8V-STOCK` for repeat tester scenarios. On September 8, the automated UAT tumbler journey completed receipt/QC/putaway of 1,000 and departmental release of 10 through separate Operations actors. Database readback confirmed 990 remaining in the same picked bin. This is software transaction evidence using synthetic records, not a physical delivery or real-user pilot. Repeat the process with an untouched tester set.
 
 Never repeat receipt of an already consumed test PO. Use its remaining balance or request a new clearly labelled fixture. Existing tester stock and progress must not be reset to make the scenario repeatable.
 

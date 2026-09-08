@@ -1,0 +1,942 @@
+{
+  "status": "prepared_not_applied_by_author",
+  "projectRef": "kkoitlvydytdhlpxhuah",
+  "transactionScope": {
+    "poId": "UAT-SEP08-VERIFY-PO-0006",
+    "lineId": "UAT-SEP08-VERIFY-PO-0006-LINE-1",
+    "productId": "uat-sep08-verify-tumbler",
+    "barcode": "MWUAT-SEP08-VERIFY-TUMBLER",
+    "receive": 1000,
+    "qcAccept": 1000,
+    "putaway": 1000,
+    "release": 10,
+    "retained": 990,
+    "receivingBinId": null,
+    "locationId": "uat-aug24-pasig-main",
+    "destinationBinId": "uat-sep08-verify-storage",
+    "destinationBinCode": "S8V-STOCK"
+  },
+  "protectedScopes": [
+    "UAT-SEP07",
+    "UAT-SEP08-VERIFY-PO-0005",
+    "UAT-SEP08-TESTER1",
+    "UAT-SEP08-TESTER2"
+  ],
+  "files": [
+    {
+      "path": "scripts/qa/uat-sep08-merch-fixtures.mjs",
+      "sha256": "3719305e7b41d49fef8383ff77c13e68efcf27788af4fac56b24c4f9835702b2"
+    },
+    {
+      "path": "scripts/qa/render-uat-sep08-merch-sql.mjs",
+      "sha256": "2b3b22b8735d211722b936fe087446c927c649fff4065f201b645efae051ad27"
+    },
+    {
+      "path": "scripts/qa/uat-sep08-merch.rehearse.sql",
+      "sha256": "1bd1b6286b50e673ed254e88c686e2e10e890b9340ee261b49546d924497f53c"
+    },
+    {
+      "path": "scripts/qa/uat-sep08-merch.apply.sql",
+      "sha256": "320c8a3eb20301648ba419ec6f206c58a05722e175b6d8bbbdf4d70fe6aa4d46"
+    }
+  ],
+  "fixtures": [
+    {
+      "schema": "warehouse",
+      "table": "storage_areas",
+      "identity": [
+        "location_id",
+        "code",
+        "label",
+        "zone"
+      ],
+      "unique": [
+        "code"
+      ],
+      "rows": [
+        {
+          "id": "uat-sep08-verify-storage",
+          "location_id": "uat-aug24-pasig-main",
+          "code": "S8V-STOCK",
+          "label": "Sep8 verification putaway and release only",
+          "zone": "UAT-SEP08-VERIFY-v1",
+          "active": true
+        }
+      ]
+    },
+    {
+      "schema": "warehouse",
+      "table": "products",
+      "rows": [
+        {
+          "id": "uat-sep08-verify-jacket-s",
+          "sku": "UAT-SEP08-VERIFY-JACKET-S",
+          "name": "UAT-SEP08-VERIFY Jacket - S",
+          "category": "merchandise",
+          "merchandise_type": "other",
+          "serialized": false,
+          "serialization_policy": "none",
+          "item_class": "merchandise",
+          "uom": "piece",
+          "barcode": "MWUAT-SEP08-VERIFY-JACKET-S",
+          "attributes": {
+            "seed": "UAT-SEP08-VERIFY-v1",
+            "size": "S",
+            "costBasis": "synthetic PHP placeholder; not supplier quotation",
+            "purpose": "automated receiving-to-release verification only; intended receipt 1000 tumblers and release 10 tumblers, retaining 990 accepted units"
+          },
+          "unit_cost": 500,
+          "price": 500,
+          "reorder_point": 0,
+          "promotional": false,
+          "expiry_tracked": false,
+          "shelf_life_warning_days": 30
+        },
+        {
+          "id": "uat-sep08-verify-jacket-m",
+          "sku": "UAT-SEP08-VERIFY-JACKET-M",
+          "name": "UAT-SEP08-VERIFY Jacket - M",
+          "category": "merchandise",
+          "merchandise_type": "other",
+          "serialized": false,
+          "serialization_policy": "none",
+          "item_class": "merchandise",
+          "uom": "piece",
+          "barcode": "MWUAT-SEP08-VERIFY-JACKET-M",
+          "attributes": {
+            "seed": "UAT-SEP08-VERIFY-v1",
+            "size": "M",
+            "costBasis": "synthetic PHP placeholder; not supplier quotation",
+            "purpose": "automated receiving-to-release verification only; intended receipt 1000 tumblers and release 10 tumblers, retaining 990 accepted units"
+          },
+          "unit_cost": 500,
+          "price": 500,
+          "reorder_point": 0,
+          "promotional": false,
+          "expiry_tracked": false,
+          "shelf_life_warning_days": 30
+        },
+        {
+          "id": "uat-sep08-verify-jacket-l",
+          "sku": "UAT-SEP08-VERIFY-JACKET-L",
+          "name": "UAT-SEP08-VERIFY Jacket - L",
+          "category": "merchandise",
+          "merchandise_type": "other",
+          "serialized": false,
+          "serialization_policy": "none",
+          "item_class": "merchandise",
+          "uom": "piece",
+          "barcode": "MWUAT-SEP08-VERIFY-JACKET-L",
+          "attributes": {
+            "seed": "UAT-SEP08-VERIFY-v1",
+            "size": "L",
+            "costBasis": "synthetic PHP placeholder; not supplier quotation",
+            "purpose": "automated receiving-to-release verification only; intended receipt 1000 tumblers and release 10 tumblers, retaining 990 accepted units"
+          },
+          "unit_cost": 500,
+          "price": 500,
+          "reorder_point": 0,
+          "promotional": false,
+          "expiry_tracked": false,
+          "shelf_life_warning_days": 30
+        },
+        {
+          "id": "uat-sep08-verify-tumbler",
+          "sku": "UAT-SEP08-VERIFY-TUMBLER",
+          "name": "UAT-SEP08-VERIFY Tumbler",
+          "category": "merchandise",
+          "merchandise_type": "other",
+          "serialized": false,
+          "serialization_policy": "none",
+          "item_class": "merchandise",
+          "uom": "piece",
+          "barcode": "MWUAT-SEP08-VERIFY-TUMBLER",
+          "attributes": {
+            "seed": "UAT-SEP08-VERIFY-v1",
+            "costBasis": "synthetic PHP placeholder; not supplier quotation",
+            "purpose": "automated receiving-to-release verification only; intended receipt 1000 tumblers and release 10 tumblers, retaining 990 accepted units"
+          },
+          "unit_cost": 150,
+          "price": 150,
+          "reorder_point": 0,
+          "promotional": false,
+          "expiry_tracked": false,
+          "shelf_life_warning_days": 30
+        },
+        {
+          "id": "uat-sep08-tester1-jacket-s",
+          "sku": "UAT-SEP08-TESTER1-JACKET-S",
+          "name": "UAT-SEP08-TESTER1 Jacket - S",
+          "category": "merchandise",
+          "merchandise_type": "other",
+          "serialized": false,
+          "serialization_policy": "none",
+          "item_class": "merchandise",
+          "uom": "piece",
+          "barcode": "MWUAT-SEP08-TESTER1-JACKET-S",
+          "attributes": {
+            "seed": "UAT-SEP08-TESTER1-v1",
+            "size": "S",
+            "costBasis": "synthetic PHP placeholder; not supplier quotation",
+            "purpose": "untouched repeat tester capacity 1"
+          },
+          "unit_cost": 500,
+          "price": 500,
+          "reorder_point": 0,
+          "promotional": false,
+          "expiry_tracked": false,
+          "shelf_life_warning_days": 30
+        },
+        {
+          "id": "uat-sep08-tester1-jacket-m",
+          "sku": "UAT-SEP08-TESTER1-JACKET-M",
+          "name": "UAT-SEP08-TESTER1 Jacket - M",
+          "category": "merchandise",
+          "merchandise_type": "other",
+          "serialized": false,
+          "serialization_policy": "none",
+          "item_class": "merchandise",
+          "uom": "piece",
+          "barcode": "MWUAT-SEP08-TESTER1-JACKET-M",
+          "attributes": {
+            "seed": "UAT-SEP08-TESTER1-v1",
+            "size": "M",
+            "costBasis": "synthetic PHP placeholder; not supplier quotation",
+            "purpose": "untouched repeat tester capacity 1"
+          },
+          "unit_cost": 500,
+          "price": 500,
+          "reorder_point": 0,
+          "promotional": false,
+          "expiry_tracked": false,
+          "shelf_life_warning_days": 30
+        },
+        {
+          "id": "uat-sep08-tester1-jacket-l",
+          "sku": "UAT-SEP08-TESTER1-JACKET-L",
+          "name": "UAT-SEP08-TESTER1 Jacket - L",
+          "category": "merchandise",
+          "merchandise_type": "other",
+          "serialized": false,
+          "serialization_policy": "none",
+          "item_class": "merchandise",
+          "uom": "piece",
+          "barcode": "MWUAT-SEP08-TESTER1-JACKET-L",
+          "attributes": {
+            "seed": "UAT-SEP08-TESTER1-v1",
+            "size": "L",
+            "costBasis": "synthetic PHP placeholder; not supplier quotation",
+            "purpose": "untouched repeat tester capacity 1"
+          },
+          "unit_cost": 500,
+          "price": 500,
+          "reorder_point": 0,
+          "promotional": false,
+          "expiry_tracked": false,
+          "shelf_life_warning_days": 30
+        },
+        {
+          "id": "uat-sep08-tester1-tumbler",
+          "sku": "UAT-SEP08-TESTER1-TUMBLER",
+          "name": "UAT-SEP08-TESTER1 Tumbler",
+          "category": "merchandise",
+          "merchandise_type": "other",
+          "serialized": false,
+          "serialization_policy": "none",
+          "item_class": "merchandise",
+          "uom": "piece",
+          "barcode": "MWUAT-SEP08-TESTER1-TUMBLER",
+          "attributes": {
+            "seed": "UAT-SEP08-TESTER1-v1",
+            "costBasis": "synthetic PHP placeholder; not supplier quotation",
+            "purpose": "untouched repeat tester capacity 1"
+          },
+          "unit_cost": 150,
+          "price": 150,
+          "reorder_point": 0,
+          "promotional": false,
+          "expiry_tracked": false,
+          "shelf_life_warning_days": 30
+        },
+        {
+          "id": "uat-sep08-tester2-jacket-s",
+          "sku": "UAT-SEP08-TESTER2-JACKET-S",
+          "name": "UAT-SEP08-TESTER2 Jacket - S",
+          "category": "merchandise",
+          "merchandise_type": "other",
+          "serialized": false,
+          "serialization_policy": "none",
+          "item_class": "merchandise",
+          "uom": "piece",
+          "barcode": "MWUAT-SEP08-TESTER2-JACKET-S",
+          "attributes": {
+            "seed": "UAT-SEP08-TESTER2-v1",
+            "size": "S",
+            "costBasis": "synthetic PHP placeholder; not supplier quotation",
+            "purpose": "untouched repeat tester capacity 2"
+          },
+          "unit_cost": 500,
+          "price": 500,
+          "reorder_point": 0,
+          "promotional": false,
+          "expiry_tracked": false,
+          "shelf_life_warning_days": 30
+        },
+        {
+          "id": "uat-sep08-tester2-jacket-m",
+          "sku": "UAT-SEP08-TESTER2-JACKET-M",
+          "name": "UAT-SEP08-TESTER2 Jacket - M",
+          "category": "merchandise",
+          "merchandise_type": "other",
+          "serialized": false,
+          "serialization_policy": "none",
+          "item_class": "merchandise",
+          "uom": "piece",
+          "barcode": "MWUAT-SEP08-TESTER2-JACKET-M",
+          "attributes": {
+            "seed": "UAT-SEP08-TESTER2-v1",
+            "size": "M",
+            "costBasis": "synthetic PHP placeholder; not supplier quotation",
+            "purpose": "untouched repeat tester capacity 2"
+          },
+          "unit_cost": 500,
+          "price": 500,
+          "reorder_point": 0,
+          "promotional": false,
+          "expiry_tracked": false,
+          "shelf_life_warning_days": 30
+        },
+        {
+          "id": "uat-sep08-tester2-jacket-l",
+          "sku": "UAT-SEP08-TESTER2-JACKET-L",
+          "name": "UAT-SEP08-TESTER2 Jacket - L",
+          "category": "merchandise",
+          "merchandise_type": "other",
+          "serialized": false,
+          "serialization_policy": "none",
+          "item_class": "merchandise",
+          "uom": "piece",
+          "barcode": "MWUAT-SEP08-TESTER2-JACKET-L",
+          "attributes": {
+            "seed": "UAT-SEP08-TESTER2-v1",
+            "size": "L",
+            "costBasis": "synthetic PHP placeholder; not supplier quotation",
+            "purpose": "untouched repeat tester capacity 2"
+          },
+          "unit_cost": 500,
+          "price": 500,
+          "reorder_point": 0,
+          "promotional": false,
+          "expiry_tracked": false,
+          "shelf_life_warning_days": 30
+        },
+        {
+          "id": "uat-sep08-tester2-tumbler",
+          "sku": "UAT-SEP08-TESTER2-TUMBLER",
+          "name": "UAT-SEP08-TESTER2 Tumbler",
+          "category": "merchandise",
+          "merchandise_type": "other",
+          "serialized": false,
+          "serialization_policy": "none",
+          "item_class": "merchandise",
+          "uom": "piece",
+          "barcode": "MWUAT-SEP08-TESTER2-TUMBLER",
+          "attributes": {
+            "seed": "UAT-SEP08-TESTER2-v1",
+            "costBasis": "synthetic PHP placeholder; not supplier quotation",
+            "purpose": "untouched repeat tester capacity 2"
+          },
+          "unit_cost": 150,
+          "price": 150,
+          "reorder_point": 0,
+          "promotional": false,
+          "expiry_tracked": false,
+          "shelf_life_warning_days": 30
+        }
+      ],
+      "identity": [
+        "sku",
+        "barcode",
+        "serialized",
+        "serialization_policy",
+        "attributes"
+      ],
+      "unique": [
+        "sku",
+        "barcode"
+      ]
+    },
+    {
+      "schema": "procurement",
+      "table": "requests",
+      "rows": [
+        {
+          "id": "UAT-SEP08-VERIFY-REQ-0005",
+          "title": "UAT-SEP08-VERIFY Company D merchandise",
+          "description": "UAT-SEP08-VERIFY-v1: automated receiving-to-release verification only; intended receipt 1000 tumblers and release 10 tumblers, retaining 990 accepted units. Preconfigured issued state is synthetic UAT setup, not actual human approval. Expected arrival 2026-09-08 and PHP costs are synthetic placeholders, not delivery confirmation or supplier quotes. Linked draft goods request is setup context, not approval evidence.",
+          "department": "operations",
+          "category": "goods",
+          "status": "draft",
+          "core_vendor_id": "a9079000-0000-4000-8000-000000000005",
+          "vendor_name": "Company D",
+          "estimated_amount": 30000,
+          "attachments": [],
+          "lines": [
+            {
+              "id": "UAT-SEP08-VERIFY-REQ-0005-LINE-1",
+              "productId": "uat-sep08-verify-jacket-s",
+              "description": "UAT-SEP08-VERIFY Jacket - S",
+              "quantity": 20,
+              "receivedQuantity": 0,
+              "unitPrice": 500,
+              "uom": "piece"
+            },
+            {
+              "id": "UAT-SEP08-VERIFY-REQ-0005-LINE-2",
+              "productId": "uat-sep08-verify-jacket-m",
+              "description": "UAT-SEP08-VERIFY Jacket - M",
+              "quantity": 20,
+              "receivedQuantity": 0,
+              "unitPrice": 500,
+              "uom": "piece"
+            },
+            {
+              "id": "UAT-SEP08-VERIFY-REQ-0005-LINE-3",
+              "productId": "uat-sep08-verify-jacket-l",
+              "description": "UAT-SEP08-VERIFY Jacket - L",
+              "quantity": 20,
+              "receivedQuantity": 0,
+              "unitPrice": 500,
+              "uom": "piece"
+            }
+          ]
+        },
+        {
+          "id": "UAT-SEP08-VERIFY-REQ-0006",
+          "title": "UAT-SEP08-VERIFY Company E merchandise",
+          "description": "UAT-SEP08-VERIFY-v1: automated receiving-to-release verification only; intended receipt 1000 tumblers and release 10 tumblers, retaining 990 accepted units. Preconfigured issued state is synthetic UAT setup, not actual human approval. Expected arrival 2026-09-08 and PHP costs are synthetic placeholders, not delivery confirmation or supplier quotes. Linked draft goods request is setup context, not approval evidence.",
+          "department": "operations",
+          "category": "goods",
+          "status": "draft",
+          "core_vendor_id": "a9079000-0000-4000-8000-000000000006",
+          "vendor_name": "Company E",
+          "estimated_amount": 150000,
+          "attachments": [],
+          "lines": [
+            {
+              "id": "UAT-SEP08-VERIFY-REQ-0006-LINE-1",
+              "productId": "uat-sep08-verify-tumbler",
+              "description": "UAT-SEP08-VERIFY Tumbler",
+              "quantity": 1000,
+              "receivedQuantity": 0,
+              "unitPrice": 150,
+              "uom": "piece"
+            }
+          ]
+        },
+        {
+          "id": "UAT-SEP08-TESTER1-REQ-0005",
+          "title": "UAT-SEP08-TESTER1 Company D merchandise",
+          "description": "UAT-SEP08-TESTER1-v1: untouched repeat tester capacity 1. Preconfigured issued state is synthetic UAT setup, not actual human approval. Expected arrival 2026-09-08 and PHP costs are synthetic placeholders, not delivery confirmation or supplier quotes. Linked draft goods request is setup context, not approval evidence.",
+          "department": "operations",
+          "category": "goods",
+          "status": "draft",
+          "core_vendor_id": "a9079000-0000-4000-8000-000000000005",
+          "vendor_name": "Company D",
+          "estimated_amount": 150000,
+          "attachments": [],
+          "lines": [
+            {
+              "id": "UAT-SEP08-TESTER1-REQ-0005-LINE-1",
+              "productId": "uat-sep08-tester1-jacket-s",
+              "description": "UAT-SEP08-TESTER1 Jacket - S",
+              "quantity": 100,
+              "receivedQuantity": 0,
+              "unitPrice": 500,
+              "uom": "piece"
+            },
+            {
+              "id": "UAT-SEP08-TESTER1-REQ-0005-LINE-2",
+              "productId": "uat-sep08-tester1-jacket-m",
+              "description": "UAT-SEP08-TESTER1 Jacket - M",
+              "quantity": 100,
+              "receivedQuantity": 0,
+              "unitPrice": 500,
+              "uom": "piece"
+            },
+            {
+              "id": "UAT-SEP08-TESTER1-REQ-0005-LINE-3",
+              "productId": "uat-sep08-tester1-jacket-l",
+              "description": "UAT-SEP08-TESTER1 Jacket - L",
+              "quantity": 100,
+              "receivedQuantity": 0,
+              "unitPrice": 500,
+              "uom": "piece"
+            }
+          ]
+        },
+        {
+          "id": "UAT-SEP08-TESTER1-REQ-0006",
+          "title": "UAT-SEP08-TESTER1 Company E merchandise",
+          "description": "UAT-SEP08-TESTER1-v1: untouched repeat tester capacity 1. Preconfigured issued state is synthetic UAT setup, not actual human approval. Expected arrival 2026-09-08 and PHP costs are synthetic placeholders, not delivery confirmation or supplier quotes. Linked draft goods request is setup context, not approval evidence.",
+          "department": "operations",
+          "category": "goods",
+          "status": "draft",
+          "core_vendor_id": "a9079000-0000-4000-8000-000000000006",
+          "vendor_name": "Company E",
+          "estimated_amount": 45000,
+          "attachments": [],
+          "lines": [
+            {
+              "id": "UAT-SEP08-TESTER1-REQ-0006-LINE-1",
+              "productId": "uat-sep08-tester1-tumbler",
+              "description": "UAT-SEP08-TESTER1 Tumbler",
+              "quantity": 300,
+              "receivedQuantity": 0,
+              "unitPrice": 150,
+              "uom": "piece"
+            }
+          ]
+        },
+        {
+          "id": "UAT-SEP08-TESTER2-REQ-0005",
+          "title": "UAT-SEP08-TESTER2 Company D merchandise",
+          "description": "UAT-SEP08-TESTER2-v1: untouched repeat tester capacity 2. Preconfigured issued state is synthetic UAT setup, not actual human approval. Expected arrival 2026-09-08 and PHP costs are synthetic placeholders, not delivery confirmation or supplier quotes. Linked draft goods request is setup context, not approval evidence.",
+          "department": "operations",
+          "category": "goods",
+          "status": "draft",
+          "core_vendor_id": "a9079000-0000-4000-8000-000000000005",
+          "vendor_name": "Company D",
+          "estimated_amount": 150000,
+          "attachments": [],
+          "lines": [
+            {
+              "id": "UAT-SEP08-TESTER2-REQ-0005-LINE-1",
+              "productId": "uat-sep08-tester2-jacket-s",
+              "description": "UAT-SEP08-TESTER2 Jacket - S",
+              "quantity": 100,
+              "receivedQuantity": 0,
+              "unitPrice": 500,
+              "uom": "piece"
+            },
+            {
+              "id": "UAT-SEP08-TESTER2-REQ-0005-LINE-2",
+              "productId": "uat-sep08-tester2-jacket-m",
+              "description": "UAT-SEP08-TESTER2 Jacket - M",
+              "quantity": 100,
+              "receivedQuantity": 0,
+              "unitPrice": 500,
+              "uom": "piece"
+            },
+            {
+              "id": "UAT-SEP08-TESTER2-REQ-0005-LINE-3",
+              "productId": "uat-sep08-tester2-jacket-l",
+              "description": "UAT-SEP08-TESTER2 Jacket - L",
+              "quantity": 100,
+              "receivedQuantity": 0,
+              "unitPrice": 500,
+              "uom": "piece"
+            }
+          ]
+        },
+        {
+          "id": "UAT-SEP08-TESTER2-REQ-0006",
+          "title": "UAT-SEP08-TESTER2 Company E merchandise",
+          "description": "UAT-SEP08-TESTER2-v1: untouched repeat tester capacity 2. Preconfigured issued state is synthetic UAT setup, not actual human approval. Expected arrival 2026-09-08 and PHP costs are synthetic placeholders, not delivery confirmation or supplier quotes. Linked draft goods request is setup context, not approval evidence.",
+          "department": "operations",
+          "category": "goods",
+          "status": "draft",
+          "core_vendor_id": "a9079000-0000-4000-8000-000000000006",
+          "vendor_name": "Company E",
+          "estimated_amount": 45000,
+          "attachments": [],
+          "lines": [
+            {
+              "id": "UAT-SEP08-TESTER2-REQ-0006-LINE-1",
+              "productId": "uat-sep08-tester2-tumbler",
+              "description": "UAT-SEP08-TESTER2 Tumbler",
+              "quantity": 300,
+              "receivedQuantity": 0,
+              "unitPrice": 150,
+              "uom": "piece"
+            }
+          ]
+        }
+      ],
+      "identity": [
+        "description",
+        "core_vendor_id"
+      ],
+      "unique": []
+    },
+    {
+      "schema": "procurement",
+      "table": "purchase_orders",
+      "rows": [
+        {
+          "id": "UAT-SEP08-VERIFY-PO-0005",
+          "po_number": "UAT-SEP08-VERIFY-PO-0005",
+          "request_id": "UAT-SEP08-VERIFY-REQ-0005",
+          "core_vendor_id": "a9079000-0000-4000-8000-000000000005",
+          "vendor_name": "Company D",
+          "status": "issued",
+          "expected_date": "2026-09-08",
+          "issued_at": "2026-09-08T08:00:00.000Z",
+          "origin": "procurement",
+          "notes": "UAT-SEP08-VERIFY-v1: automated receiving-to-release verification only; intended receipt 1000 tumblers and release 10 tumblers, retaining 990 accepted units. Preconfigured issued state is synthetic UAT setup, not actual human approval. Expected arrival 2026-09-08 and PHP costs are synthetic placeholders, not delivery confirmation or supplier quotes. Linked draft goods request is setup context, not approval evidence.",
+          "total": 30000,
+          "lines": [
+            {
+              "id": "UAT-SEP08-VERIFY-PO-0005-LINE-1",
+              "productId": "uat-sep08-verify-jacket-s",
+              "description": "UAT-SEP08-VERIFY Jacket - S",
+              "quantity": 20,
+              "receivedQuantity": 0,
+              "unitPrice": 500,
+              "uom": "piece"
+            },
+            {
+              "id": "UAT-SEP08-VERIFY-PO-0005-LINE-2",
+              "productId": "uat-sep08-verify-jacket-m",
+              "description": "UAT-SEP08-VERIFY Jacket - M",
+              "quantity": 20,
+              "receivedQuantity": 0,
+              "unitPrice": 500,
+              "uom": "piece"
+            },
+            {
+              "id": "UAT-SEP08-VERIFY-PO-0005-LINE-3",
+              "productId": "uat-sep08-verify-jacket-l",
+              "description": "UAT-SEP08-VERIFY Jacket - L",
+              "quantity": 20,
+              "receivedQuantity": 0,
+              "unitPrice": 500,
+              "uom": "piece"
+            }
+          ]
+        },
+        {
+          "id": "UAT-SEP08-VERIFY-PO-0006",
+          "po_number": "UAT-SEP08-VERIFY-PO-0006",
+          "request_id": "UAT-SEP08-VERIFY-REQ-0006",
+          "core_vendor_id": "a9079000-0000-4000-8000-000000000006",
+          "vendor_name": "Company E",
+          "status": "issued",
+          "expected_date": "2026-09-08",
+          "issued_at": "2026-09-08T08:00:00.000Z",
+          "origin": "procurement",
+          "notes": "UAT-SEP08-VERIFY-v1: automated receiving-to-release verification only; intended receipt 1000 tumblers and release 10 tumblers, retaining 990 accepted units. Preconfigured issued state is synthetic UAT setup, not actual human approval. Expected arrival 2026-09-08 and PHP costs are synthetic placeholders, not delivery confirmation or supplier quotes. Linked draft goods request is setup context, not approval evidence.",
+          "total": 150000,
+          "lines": [
+            {
+              "id": "UAT-SEP08-VERIFY-PO-0006-LINE-1",
+              "productId": "uat-sep08-verify-tumbler",
+              "description": "UAT-SEP08-VERIFY Tumbler",
+              "quantity": 1000,
+              "receivedQuantity": 0,
+              "unitPrice": 150,
+              "uom": "piece"
+            }
+          ]
+        },
+        {
+          "id": "UAT-SEP08-TESTER1-PO-0005",
+          "po_number": "UAT-SEP08-TESTER1-PO-0005",
+          "request_id": "UAT-SEP08-TESTER1-REQ-0005",
+          "core_vendor_id": "a9079000-0000-4000-8000-000000000005",
+          "vendor_name": "Company D",
+          "status": "issued",
+          "expected_date": "2026-09-08",
+          "issued_at": "2026-09-08T08:00:00.000Z",
+          "origin": "procurement",
+          "notes": "UAT-SEP08-TESTER1-v1: untouched repeat tester capacity 1. Preconfigured issued state is synthetic UAT setup, not actual human approval. Expected arrival 2026-09-08 and PHP costs are synthetic placeholders, not delivery confirmation or supplier quotes. Linked draft goods request is setup context, not approval evidence.",
+          "total": 150000,
+          "lines": [
+            {
+              "id": "UAT-SEP08-TESTER1-PO-0005-LINE-1",
+              "productId": "uat-sep08-tester1-jacket-s",
+              "description": "UAT-SEP08-TESTER1 Jacket - S",
+              "quantity": 100,
+              "receivedQuantity": 0,
+              "unitPrice": 500,
+              "uom": "piece"
+            },
+            {
+              "id": "UAT-SEP08-TESTER1-PO-0005-LINE-2",
+              "productId": "uat-sep08-tester1-jacket-m",
+              "description": "UAT-SEP08-TESTER1 Jacket - M",
+              "quantity": 100,
+              "receivedQuantity": 0,
+              "unitPrice": 500,
+              "uom": "piece"
+            },
+            {
+              "id": "UAT-SEP08-TESTER1-PO-0005-LINE-3",
+              "productId": "uat-sep08-tester1-jacket-l",
+              "description": "UAT-SEP08-TESTER1 Jacket - L",
+              "quantity": 100,
+              "receivedQuantity": 0,
+              "unitPrice": 500,
+              "uom": "piece"
+            }
+          ]
+        },
+        {
+          "id": "UAT-SEP08-TESTER1-PO-0006",
+          "po_number": "UAT-SEP08-TESTER1-PO-0006",
+          "request_id": "UAT-SEP08-TESTER1-REQ-0006",
+          "core_vendor_id": "a9079000-0000-4000-8000-000000000006",
+          "vendor_name": "Company E",
+          "status": "issued",
+          "expected_date": "2026-09-08",
+          "issued_at": "2026-09-08T08:00:00.000Z",
+          "origin": "procurement",
+          "notes": "UAT-SEP08-TESTER1-v1: untouched repeat tester capacity 1. Preconfigured issued state is synthetic UAT setup, not actual human approval. Expected arrival 2026-09-08 and PHP costs are synthetic placeholders, not delivery confirmation or supplier quotes. Linked draft goods request is setup context, not approval evidence.",
+          "total": 45000,
+          "lines": [
+            {
+              "id": "UAT-SEP08-TESTER1-PO-0006-LINE-1",
+              "productId": "uat-sep08-tester1-tumbler",
+              "description": "UAT-SEP08-TESTER1 Tumbler",
+              "quantity": 300,
+              "receivedQuantity": 0,
+              "unitPrice": 150,
+              "uom": "piece"
+            }
+          ]
+        },
+        {
+          "id": "UAT-SEP08-TESTER2-PO-0005",
+          "po_number": "UAT-SEP08-TESTER2-PO-0005",
+          "request_id": "UAT-SEP08-TESTER2-REQ-0005",
+          "core_vendor_id": "a9079000-0000-4000-8000-000000000005",
+          "vendor_name": "Company D",
+          "status": "issued",
+          "expected_date": "2026-09-08",
+          "issued_at": "2026-09-08T08:00:00.000Z",
+          "origin": "procurement",
+          "notes": "UAT-SEP08-TESTER2-v1: untouched repeat tester capacity 2. Preconfigured issued state is synthetic UAT setup, not actual human approval. Expected arrival 2026-09-08 and PHP costs are synthetic placeholders, not delivery confirmation or supplier quotes. Linked draft goods request is setup context, not approval evidence.",
+          "total": 150000,
+          "lines": [
+            {
+              "id": "UAT-SEP08-TESTER2-PO-0005-LINE-1",
+              "productId": "uat-sep08-tester2-jacket-s",
+              "description": "UAT-SEP08-TESTER2 Jacket - S",
+              "quantity": 100,
+              "receivedQuantity": 0,
+              "unitPrice": 500,
+              "uom": "piece"
+            },
+            {
+              "id": "UAT-SEP08-TESTER2-PO-0005-LINE-2",
+              "productId": "uat-sep08-tester2-jacket-m",
+              "description": "UAT-SEP08-TESTER2 Jacket - M",
+              "quantity": 100,
+              "receivedQuantity": 0,
+              "unitPrice": 500,
+              "uom": "piece"
+            },
+            {
+              "id": "UAT-SEP08-TESTER2-PO-0005-LINE-3",
+              "productId": "uat-sep08-tester2-jacket-l",
+              "description": "UAT-SEP08-TESTER2 Jacket - L",
+              "quantity": 100,
+              "receivedQuantity": 0,
+              "unitPrice": 500,
+              "uom": "piece"
+            }
+          ]
+        },
+        {
+          "id": "UAT-SEP08-TESTER2-PO-0006",
+          "po_number": "UAT-SEP08-TESTER2-PO-0006",
+          "request_id": "UAT-SEP08-TESTER2-REQ-0006",
+          "core_vendor_id": "a9079000-0000-4000-8000-000000000006",
+          "vendor_name": "Company E",
+          "status": "issued",
+          "expected_date": "2026-09-08",
+          "issued_at": "2026-09-08T08:00:00.000Z",
+          "origin": "procurement",
+          "notes": "UAT-SEP08-TESTER2-v1: untouched repeat tester capacity 2. Preconfigured issued state is synthetic UAT setup, not actual human approval. Expected arrival 2026-09-08 and PHP costs are synthetic placeholders, not delivery confirmation or supplier quotes. Linked draft goods request is setup context, not approval evidence.",
+          "total": 45000,
+          "lines": [
+            {
+              "id": "UAT-SEP08-TESTER2-PO-0006-LINE-1",
+              "productId": "uat-sep08-tester2-tumbler",
+              "description": "UAT-SEP08-TESTER2 Tumbler",
+              "quantity": 300,
+              "receivedQuantity": 0,
+              "unitPrice": 150,
+              "uom": "piece"
+            }
+          ]
+        }
+      ],
+      "identity": [
+        "po_number",
+        "request_id",
+        "core_vendor_id",
+        "notes"
+      ],
+      "unique": [
+        "po_number"
+      ]
+    },
+    {
+      "schema": "procurement",
+      "table": "purchase_order_lines",
+      "rows": [
+        {
+          "id": "UAT-SEP08-VERIFY-PO-0005-LINE-1",
+          "purchase_order_id": "UAT-SEP08-VERIFY-PO-0005",
+          "line_no": 1,
+          "description": "UAT-SEP08-VERIFY Jacket - S",
+          "quantity": 20,
+          "uom": "piece",
+          "unit_price": 500,
+          "received_quantity": 0,
+          "warehouse_product_id": "uat-sep08-verify-jacket-s",
+          "receiving_status": "open"
+        },
+        {
+          "id": "UAT-SEP08-VERIFY-PO-0005-LINE-2",
+          "purchase_order_id": "UAT-SEP08-VERIFY-PO-0005",
+          "line_no": 2,
+          "description": "UAT-SEP08-VERIFY Jacket - M",
+          "quantity": 20,
+          "uom": "piece",
+          "unit_price": 500,
+          "received_quantity": 0,
+          "warehouse_product_id": "uat-sep08-verify-jacket-m",
+          "receiving_status": "open"
+        },
+        {
+          "id": "UAT-SEP08-VERIFY-PO-0005-LINE-3",
+          "purchase_order_id": "UAT-SEP08-VERIFY-PO-0005",
+          "line_no": 3,
+          "description": "UAT-SEP08-VERIFY Jacket - L",
+          "quantity": 20,
+          "uom": "piece",
+          "unit_price": 500,
+          "received_quantity": 0,
+          "warehouse_product_id": "uat-sep08-verify-jacket-l",
+          "receiving_status": "open"
+        },
+        {
+          "id": "UAT-SEP08-VERIFY-PO-0006-LINE-1",
+          "purchase_order_id": "UAT-SEP08-VERIFY-PO-0006",
+          "line_no": 1,
+          "description": "UAT-SEP08-VERIFY Tumbler",
+          "quantity": 1000,
+          "uom": "piece",
+          "unit_price": 150,
+          "received_quantity": 0,
+          "warehouse_product_id": "uat-sep08-verify-tumbler",
+          "receiving_status": "open"
+        },
+        {
+          "id": "UAT-SEP08-TESTER1-PO-0005-LINE-1",
+          "purchase_order_id": "UAT-SEP08-TESTER1-PO-0005",
+          "line_no": 1,
+          "description": "UAT-SEP08-TESTER1 Jacket - S",
+          "quantity": 100,
+          "uom": "piece",
+          "unit_price": 500,
+          "received_quantity": 0,
+          "warehouse_product_id": "uat-sep08-tester1-jacket-s",
+          "receiving_status": "open"
+        },
+        {
+          "id": "UAT-SEP08-TESTER1-PO-0005-LINE-2",
+          "purchase_order_id": "UAT-SEP08-TESTER1-PO-0005",
+          "line_no": 2,
+          "description": "UAT-SEP08-TESTER1 Jacket - M",
+          "quantity": 100,
+          "uom": "piece",
+          "unit_price": 500,
+          "received_quantity": 0,
+          "warehouse_product_id": "uat-sep08-tester1-jacket-m",
+          "receiving_status": "open"
+        },
+        {
+          "id": "UAT-SEP08-TESTER1-PO-0005-LINE-3",
+          "purchase_order_id": "UAT-SEP08-TESTER1-PO-0005",
+          "line_no": 3,
+          "description": "UAT-SEP08-TESTER1 Jacket - L",
+          "quantity": 100,
+          "uom": "piece",
+          "unit_price": 500,
+          "received_quantity": 0,
+          "warehouse_product_id": "uat-sep08-tester1-jacket-l",
+          "receiving_status": "open"
+        },
+        {
+          "id": "UAT-SEP08-TESTER1-PO-0006-LINE-1",
+          "purchase_order_id": "UAT-SEP08-TESTER1-PO-0006",
+          "line_no": 1,
+          "description": "UAT-SEP08-TESTER1 Tumbler",
+          "quantity": 300,
+          "uom": "piece",
+          "unit_price": 150,
+          "received_quantity": 0,
+          "warehouse_product_id": "uat-sep08-tester1-tumbler",
+          "receiving_status": "open"
+        },
+        {
+          "id": "UAT-SEP08-TESTER2-PO-0005-LINE-1",
+          "purchase_order_id": "UAT-SEP08-TESTER2-PO-0005",
+          "line_no": 1,
+          "description": "UAT-SEP08-TESTER2 Jacket - S",
+          "quantity": 100,
+          "uom": "piece",
+          "unit_price": 500,
+          "received_quantity": 0,
+          "warehouse_product_id": "uat-sep08-tester2-jacket-s",
+          "receiving_status": "open"
+        },
+        {
+          "id": "UAT-SEP08-TESTER2-PO-0005-LINE-2",
+          "purchase_order_id": "UAT-SEP08-TESTER2-PO-0005",
+          "line_no": 2,
+          "description": "UAT-SEP08-TESTER2 Jacket - M",
+          "quantity": 100,
+          "uom": "piece",
+          "unit_price": 500,
+          "received_quantity": 0,
+          "warehouse_product_id": "uat-sep08-tester2-jacket-m",
+          "receiving_status": "open"
+        },
+        {
+          "id": "UAT-SEP08-TESTER2-PO-0005-LINE-3",
+          "purchase_order_id": "UAT-SEP08-TESTER2-PO-0005",
+          "line_no": 3,
+          "description": "UAT-SEP08-TESTER2 Jacket - L",
+          "quantity": 100,
+          "uom": "piece",
+          "unit_price": 500,
+          "received_quantity": 0,
+          "warehouse_product_id": "uat-sep08-tester2-jacket-l",
+          "receiving_status": "open"
+        },
+        {
+          "id": "UAT-SEP08-TESTER2-PO-0006-LINE-1",
+          "purchase_order_id": "UAT-SEP08-TESTER2-PO-0006",
+          "line_no": 1,
+          "description": "UAT-SEP08-TESTER2 Tumbler",
+          "quantity": 300,
+          "uom": "piece",
+          "unit_price": 150,
+          "received_quantity": 0,
+          "warehouse_product_id": "uat-sep08-tester2-tumbler",
+          "receiving_status": "open"
+        }
+      ],
+      "identity": [
+        "purchase_order_id",
+        "line_no",
+        "warehouse_product_id"
+      ],
+      "unique": []
+    }
+  ]
+}
