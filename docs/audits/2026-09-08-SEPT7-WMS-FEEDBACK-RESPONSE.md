@@ -22,6 +22,7 @@ The UAT namespace distinguishes synthetic testing from genuine purchasing commit
 1. Receiving's product scan used quantity 1 instead of the selected bulk quantity.
 2. Pick & Pack exposed item scanning only for serialized products.
 3. Governed PO receiving needed a quantity-controlled product identification path alongside serial capture.
+4. The first live visual review found the new scan notifications overlapping the mobile evidence link. The follow-up uses inline feedback beside the affected receipt line, scoped to that PO session and product; success replaces the error without covering the footer.
 
 Keep source-bin checks, eligible-stock limits, Quality inspection, required learning and separate release authority. A product scan does not confirm receipt or release by itself.
 
@@ -37,6 +38,8 @@ Keep source-bin checks, eligible-stock limits, Quality inspection, required lear
 ## Further input
 
 No clarification is required to prepare this UAT scenario. Before using real purchasing data, confirm actual supplier names, supplier/product barcode standards, jacket color/size variants, unit costs and the intended destination event/department. The fixtures deliberately do not claim those business details are final.
+
+For the historical September 4 receiving screenshot, the displayed counts are 92 clean + 6 damaged + 1 unidentified = 99 of 100. If the tester still reports that issue, ask whether the remaining unit was short or belongs to another physical condition; do not invent its disposition. Earlier automatic Maya-report reconciliation also needs a separate confirmed integration/data-source scope before it can be called complete. Neither question blocks the September 7 merchandise fixtures.
 
 ## Earlier dates
 

@@ -193,6 +193,17 @@ export function PurchaseOrdersPage() {
   const [bridgeProducts, setBridgeProducts] = useState<Record<string, string>>(
     {},
   );
+  const [productScanFeedback, setProductScanFeedback] = useState<Record<string, {
+    session: number; productId: string; role: "alert" | "status"; message: string;
+  }>>({});
+  useEffect(() => {
+    setProductScanFeedback((current) => {
+      const entries = Object.entries(current).filter(([lineId, feedback]) =>
+        feedback.session === receivingRequest?.session && feedback.productId === (bridgeProducts[lineId] ?? ""),
+      );
+      return entries.length === Object.keys(current).length ? current : Object.fromEntries(entries);
+    });
+  }, [receivingRequest?.session, bridgeProducts]);
   const [bridgeObservedDescriptions, setBridgeObservedDescriptions] = useState<
     Record<string, string>
   >({});
@@ -1801,6 +1812,7 @@ export function PurchaseOrdersPage() {
                     quantities.excess;
                   const lineErrors =
                     bridgeReceiptValidation.errors[line.id] ?? [];
+                  const scanFeedback = productScanFeedback[line.id];
                   return (
                     <li
                       key={line.id}
@@ -1838,12 +1850,17 @@ export function PurchaseOrdersPage() {
                           aria-label={`Map ${line.description}`}
                           products={data.products}
                           value={bridgeProducts[line.id] ?? ""}
-                          onChange={(productId) =>
+                          onChange={(productId) => {
+                            setProductScanFeedback((current) => {
+                              const next = { ...current };
+                              delete next[line.id];
+                              return next;
+                            });
                             setBridgeProducts((current) => ({
                               ...current,
                               [line.id]: productId,
-                            }))
-                          }
+                            }));
+                          }}
                           placeholder="Map identified units to Warehouse product"
                         />
                         {(!mappedProduct || !mappedProduct.serialized) && (
@@ -1859,13 +1876,26 @@ export function PurchaseOrdersPage() {
                               const product = resolveProductScan(data.products, code);
                               const expected = line.productId || latest.bridgeProducts[line.id];
                               if (!product || (expected && product.id !== expected)) {
-                                toast.error(`Wrong or ambiguous product barcode for ${line.description}.`);
+                                setProductScanFeedback((current) => ({ ...current, [line.id]: {
+                                  session: receivingSessionRef.current, productId: latest.bridgeProducts[line.id] ?? "",
+                                  role: "alert", message: `Wrong or ambiguous product barcode for ${line.description}.`,
+                                } }));
                                 return;
                               }
                               setBridgeProducts((current) => ({ ...current, [line.id]: product.id }));
-                              toast.success(`Product verified: ${product.name}`);
+                              setProductScanFeedback((current) => ({ ...current, [line.id]: {
+                                session: receivingSessionRef.current, productId: product.id,
+                                role: "status", message: `Product verified: ${product.name}`,
+                              } }));
                             }}
                           />
+                        )}
+                        {scanFeedback && scanFeedback.session === receivingRequest?.session && scanFeedback.productId === (bridgeProducts[line.id] ?? "") && (
+                          <p role={scanFeedback.role} className={scanFeedback.role === "alert"
+                            ? "break-words text-sm text-rose-700 dark:text-rose-300"
+                            : "break-words text-sm text-muted"}>
+                            {scanFeedback.message}
+                          </p>
                         )}
                         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                           {(

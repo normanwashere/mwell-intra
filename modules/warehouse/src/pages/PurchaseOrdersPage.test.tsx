@@ -200,6 +200,26 @@ class LiveProcurementRepository extends InMemoryRepository {
 }
 
 describe("PurchaseOrdersPage", () => {
+  it.each([0, 1])("clears product-scan feedback when opening receipt session %s", async (nextIndex) => {
+    const repo = new LiveProcurementRepository(1000);
+    const product = (await repo.getData()).products.find(row => row.id === "doctor-token")!;
+    const [po] = await repo.getReceivableProcurementPOs();
+    const lines = [{ ...po!.lines[0]!, productId: product.id, description: "Merchandise", quantity: 1000 }];
+    vi.spyOn(repo, "getReceivableProcurementPOs").mockResolvedValue([
+      { ...po!, lines }, { ...po!, id: "other-merch-po", poNumber: "OTHER-MERCH", lines },
+    ]);
+    const receive = vi.spyOn(repo, "receiveProcurementPO");
+    const user = userEvent.setup();
+    renderReceiving(repo);
+    let dialog = await openReceiving(user);
+    await user.type(within(dialog).getByLabelText("Product barcode for Merchandise"), `${product.barcode || product.sku}{Enter}`);
+    expect(within(dialog).getByText(`Product verified: ${product.name}`)).toBeVisible();
+    await user.click(within(dialog).getByRole("button", { name: /^close$/i }));
+    dialog = await openReceiving(user, nextIndex);
+    expect(within(dialog).queryByText(`Product verified: ${product.name}`)).not.toBeInTheDocument();
+    expect(within(dialog).getByLabelText("clean quantity for Merchandise")).toHaveValue(1000);
+    expect(receive).not.toHaveBeenCalled();
+  });
   it("verifies one merchandise barcode and submits bulk outcome quantities without serials", async () => {
     const repo = new LiveProcurementRepository(1000);
     const product = (await repo.getData()).products.find(row => row.id === "doctor-token")!;
@@ -212,12 +232,22 @@ describe("PurchaseOrdersPage", () => {
     const mapping = within(dialog).getByLabelText("Map Merchandise");
     const code = within(dialog).getByLabelText("Product barcode for Merchandise");
     await user.type(code, "WRONG-CODE{Enter}");
+    const line = code.closest("li")!;
+    expect(within(line).getByRole("alert")).toHaveTextContent("Wrong or ambiguous product barcode for Merchandise.");
+    expect(screen.getAllByText("Wrong or ambiguous product barcode for Merchandise.")).toHaveLength(1);
     expect(mapping).toHaveValue(product.id);
     const otherProduct = (await repo.getData()).products.find(row => row.id === "shirt-l")!;
     await user.type(code, `${otherProduct.barcode || otherProduct.sku}{Enter}`);
     expect(mapping).toHaveValue(product.id);
     await user.type(code, `${product.barcode || product.sku}{Enter}`);
     await user.type(code, `${product.barcode || product.sku}{Enter}`);
+    expect(within(line).queryByRole("alert")).not.toBeInTheDocument();
+    expect(within(line).getByRole("status")).toHaveTextContent(`Product verified: ${product.name}`);
+    expect(screen.getAllByText(`Product verified: ${product.name}`)).toHaveLength(1);
+    await user.selectOptions(mapping, otherProduct.id);
+    expect(within(line).queryByRole("status")).not.toBeInTheDocument();
+    await user.selectOptions(mapping, product.id);
+    expect(within(line).queryByRole("status")).not.toBeInTheDocument();
     expect(within(dialog).getByLabelText("clean quantity for Merchandise")).toHaveValue(1000);
     expect(within(dialog).queryByLabelText(/clean serials/i)).not.toBeInTheDocument();
     expect(receive).not.toHaveBeenCalled();
