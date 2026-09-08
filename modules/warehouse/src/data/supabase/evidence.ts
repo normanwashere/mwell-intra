@@ -58,8 +58,13 @@ export async function uploadEvidence(
   if (session?.mode !== 'supabase' || !client) throw new Error('Authenticated evidence storage is unavailable.');
   const mime = dataUrl.slice(5, dataUrl.indexOf(';')).toLowerCase();
   const ext = mime === 'image/jpeg' || mime === 'image/jpg' ? 'jpg' : mime.slice(6);
-  const path = `${reference}/${crypto.randomUUID()}.${ext}`;
-  if (!storageObjectPath(path)) throw new Error('Invalid evidence reference.');
+  if (!storageObjectPath(`${reference}/photo`)) throw new Error('Invalid evidence reference.');
+  // UI references may encode full inspection context. Storage rejects percent
+  // keys; keep that context in the UI and persist only safe opaque segments.
+  const prefix = reference.split('/').map(segment =>
+    /^[a-zA-Z0-9._-]{1,128}$/.test(segment) ? segment : `ref-${crypto.randomUUID()}`,
+  ).join('/');
+  const path = `${prefix}/${crypto.randomUUID()}.${ext}`;
   const { error } = await client.storage
     .from(BUCKET)
     .upload(path, bytes, {

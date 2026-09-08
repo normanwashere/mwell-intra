@@ -2,6 +2,24 @@ import { describe, expect, it, vi } from 'vitest';
 import { resolveEvidenceUrl, uploadEvidence, type EvidenceSession } from './evidence';
 
 describe('evidence storage boundary', () => {
+  it('maps encoded inspection JSON to an opaque key accepted by Storage without losing random uniqueness', async () => {
+    const upload = vi.fn(async (path: string) => /^[a-zA-Z0-9._/-]+$/.test(path)
+      ? { error: null } : { error: { message: 'InvalidKey' } });
+    const client = { storage: { from: () => ({ upload }) } } as unknown as EvidenceSession['supabaseClient'];
+    const reference = `inspection/${encodeURIComponent(JSON.stringify(['receipt', 'receipt-A', 'shirt-s', null, null, null, 20]))}/0`;
+    const session: EvidenceSession = { mode: 'supabase', supabaseClient: client };
+    const first = await uploadEvidence('data:image/png;base64,eA==', reference, session);
+    const second = await uploadEvidence('data:image/png;base64,eA==', reference, session);
+    expect(first).toMatch(/^inspection\/ref-[a-f0-9-]+\/0\/[a-f0-9-]+\.png$/);
+    expect(first).not.toBe(second);
+    expect(first).not.toContain('%');
+  });
+  it('preserves an existing safe receiving reference exactly', async () => {
+    const upload = vi.fn().mockResolvedValue({ error: null });
+    const client = { storage: { from: () => ({ upload }) } } as unknown as EvidenceSession['supabaseClient'];
+    const prefix = 'procurement-receiving/UAT-SEP08-VERIFY-PO-0005/0';
+    expect(await uploadEvidence('data:image/png;base64,eA==', prefix, { mode: 'supabase', supabaseClient: client })).toMatch(new RegExp(`^${prefix}/[a-f0-9-]+\\.png$`));
+  });
   it.each(['svg+xml', 'heic', 'avif'])('rejects unsupported image/%s before storage', async mime => {
     await expect(uploadEvidence(`data:image/${mime};base64,eA==`, 'receipt/1', { mode: 'memory', supabaseClient: null })).rejects.toThrow('PNG, JPEG');
   });
