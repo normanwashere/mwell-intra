@@ -4,15 +4,15 @@ This responds to the September 9 comments on pages 1-5 of `wms comments (6).pdf`
 
 ## The Short Answer
 
-We found issues that needed code changes, not just better instructions. Those changes are now implemented and tested locally. **They are not on UAT yet, so the tester can still encounter the old behavior there.** We should not call the feedback fully resolved until the changes are deployed and checked on UAT.
+**The code changes are now live on UAT.** Revision `044ee26` was promoted on September 10 at 14:32 UTC (22:32 Singapore/Philippines), together with both database updates. Operations Associate sign-in, returns guidance, receiving validation and desktop/mobile receiving layout were checked on the live site. This is a deployment smoke check, not completion of every transaction scenario.
 
-The rejected Jacket-S barcode also remains open: we improved the error message, but have not verified or corrected that product's live barcode mapping. Stock holds and missing historical customer details need record-specific follow-up; they cannot be fixed by bypassing checks or guessing information.
+The rejected Jacket-S barcode still needs the reported label matched to its PO: the live product table was checked, and `MW-JCKT-333354` is not registered. We improved the error message but did not guess or replace the product mapping. Stock holds and missing historical customer details need record-specific follow-up; they cannot be fixed by bypassing checks or guessing information.
 
 Existing tester data has not been deleted or rewritten.
 
 ## What We Changed And How To Continue
 
-The instructions below describe the updated behavior **after the UAT rollout**, unless stated otherwise.
+The instructions below describe the update now available at https://mwell-intra-uat.vercel.app. If an existing tab shows **A new version is available**, use its **Reload** button before retesting.
 
 ### 1. What Does Exception Reason Mean?
 
@@ -28,13 +28,13 @@ We made the missing-information list compact and expandable. Selecting an item t
 
 Use **Save progress** when you are not finished. Use **Confirm** when the receipt is complete and ready to record. Saving a draft does not add stock to inventory.
 
-**Resolution: layout and navigation changed in code; awaiting UAT rollout.**
+**Resolution: layout and navigation changed in code; now deployed to UAT.**
 
 ### 3. Why Is The Jacket-S Barcode Rejected?
 
 We changed the message to show which product and mapped barcode the app expects. It still rejects a code for the wrong size or product.
 
-**The specific code `MW-JCKT-333354` is not resolved yet.** It was not in the source and sample-data mappings we reviewed, but that alone does not tell us what is stored in UAT. We still need to check the live product record against the PO and physical label. A better error message is not a correction to that mapping.
+**The specific code `MW-JCKT-333354` is not resolved yet.** It is absent from the live UAT product barcode table. The sample Jacket-S records use set-specific codes, such as `MWUAT-SEP07-JACKET-S` and `MWUAT-SEP08-TESTER1-JACKET-S`. We still need the reported PO and physical label to establish which mapping should apply. A better error message is not a correction to that mapping.
 
 For this item, please provide the PO number, exact line/size, scanned value and a photo of the label if those are not already available in the report. We can then determine whether the product mapping needs correction or the label belongs to a different item. Do not use another size's barcode just to continue.
 
@@ -42,7 +42,7 @@ For this item, please provide the PO number, exact line/size, scanned value and 
 
 We added a removal control beside each selected serial. You can remove just the wrong one without restarting the entire move, and scan it again if needed.
 
-**Resolution: individual scan correction added; awaiting UAT rollout.**
+**Resolution: individual scan correction added; now deployed to UAT.**
 
 ### 5. My Relocation Progress Disappeared
 
@@ -72,7 +72,7 @@ Older saved items with no recorded owner need a separate check. The administrato
 
 Selecting the bin count now filters the serial list to that bin. We also added **Load more**, so the list no longer stops at the first 30 units. You can use the bin and text filters together.
 
-**Resolution: bin filtering and access to the remaining serials added; awaiting UAT rollout.**
+**Resolution: bin filtering and access to the remaining serials added; now deployed to UAT.**
 
 ### 9. It Says Evidence Is Attached, But Where Is The Delivery Photo?
 
@@ -88,7 +88,7 @@ The replacement flow now shows the original order and return reference. You choo
 
 The replacement saves its own confirmed destination without changing the original order. We also fixed a retry issue that could reopen a closed case and record a second return movement.
 
-**Resolution: replacement details and retry handling fixed in code; database update and UAT rollout pending.** Older orders with missing addresses still need the customer's confirmed destination. We have not filled them with guessed details.
+**Resolution: replacement details and retry handling fixed in code; database update and UAT rollout complete.** Older orders with missing addresses still need the customer's confirmed destination. We have not filled them with guessed details.
 
 ### 11. Who Should Acknowledge Receipt? Can They Attach A Photo?
 
@@ -96,7 +96,7 @@ Release and acknowledgment are separate actions. The person releasing the goods 
 
 For an internal, event or third-party handover, the eligible requester or an authorized person other than the releaser can record acceptance and attach evidence. For a courier shipment, use **Update delivery** with proof instead; handover acknowledgment must not bypass delivery proof.
 
-**Resolution: evidence upload and access handling changed; awaiting the database update and UAT rollout.** One rule needs to be explicit: the current system allows an authorized person to record acceptance on the recipient's behalf. If Legal or Operations requires only the named recipient to sign personally, that is a further policy and identity-check change, not something already implemented.
+**Resolution: evidence upload and access handling changed; database update and UAT rollout complete.** One rule needs to be explicit: the current system allows an authorized person to record acceptance on the recipient's behalf. If Legal or Operations requires only the named recipient to sign personally, that is a further policy and identity-check change, not something already implemented.
 
 ### 12. Should I Use Allocation Return Or Returns Receiving?
 
@@ -120,13 +120,13 @@ Please share only the relevant record details, not passwords or a full customer 
 
 ## What Happens Next
 
-**The remaining rollout is development work, not something the warehouse tester needs to do.**
+**The deployment is complete. The remaining work is transaction retesting and the record-specific follow-up below.**
 
-1. Apply the two UAT database changes for replacement delivery details and handover acknowledgment, then deploy the matching app to UAT. Production is not the target.
+1. Completed: both database changes and the matching app are on UAT. Production was not changed.
 2. Repeat the reported receiving, relocation, account-switching, inventory, delivery-photo, replacement and acknowledgment scenarios on UAT, on desktop and mobile. Check the saved records after reload, not just the success message.
-3. Verify the Jacket-S live mapping against the reported label and PO. Correct the mapping only if that comparison confirms it is wrong.
-4. Send a short follow-up showing what passed on UAT and anything still open, with screenshots from that environment. Only then ask the tester to retry the updated flow.
+3. The live barcode lookup is complete. Match the reported label to its PO before deciding whether the mapping needs correction.
+4. Testers can now retry the updated flows. Keep any remaining failure tied to its PO/order, exact step and screenshot; the deployment does not close an untested transaction automatically.
 
-For the deployment team, the pending migrations are `20260910133142_replacement_delivery_confirmation.sql` and `20260910140118_fulfillment_handover_acknowledgment_guard.sql`. They do not repair historical orders automatically.
+For the deployment team, the installed migrations are `20260910133142_replacement_delivery_confirmation.sql` and `20260910140118_fulfillment_handover_acknowledgment_guard.sql`. They do not repair historical orders automatically.
 
-**Bottom line: the code changes are prepared, but the September 9 feedback is not fully closed on UAT.** Local tests and screenshots support the changes; they do not prove the live rollout, physical-label scan, uploaded delivery evidence or real recipient acceptance has passed.
+**Bottom line: the update is live and ready for tester use, but the feedback is not fully closed.** Full live transaction retesting, the physical-label match, uploaded delivery evidence and real recipient acceptance remain separate checks. The deployment smoke checks did not consume seeded stock.

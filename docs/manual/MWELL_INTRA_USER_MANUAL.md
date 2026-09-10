@@ -1,6 +1,6 @@
 # Mwell Intra Standalone Operating Handbook
 
-**September 9 feedback candidate:** The receiving, relocation, replacement-delivery and recipient-acknowledgment refinements described below are local development changes awaiting a matching UAT migration/deployment and live retest. They do not change the release status of the September 8 update.
+**September 9 feedback update, live on UAT:** Revision `044ee26` and both required database updates were deployed September 10. Operations Associate access, receiving validation and desktop/mobile receiving layout, returns guidance and the Pick & Pack queue received live smoke checks. Full transaction retesting and the reported physical Jacket-S label match remain open. Use Reload if an existing tab announces an available update.
 
 **September 8 UAT update:** Revision `4459b4d` includes scoped requester names in request review, wrapping product attributes, required actual delivery dates for new governed receipts, private photo storage, newest-first receipt/return history, and saved-photo review under Quality Control > Completed. The actual delivery date is separate from the posting timestamp. Previously saved records are not assigned invented dates or replacement evidence. The focused release evidence is in the September 8 open-items remediation report; earlier dated audit snapshots below retain their original scope and do not describe the latest fix status. These changes target UAT, not the main production app.
 

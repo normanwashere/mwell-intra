@@ -2,7 +2,7 @@
 
 ## September 9 Feedback: Receiving And Return Clarifications
 
-These instructions describe the controls reviewed on September 10. Related UI refinements are local candidates until verified on a matching UAT deployment.
+These refinements are deployed to UAT in revision `044ee26` on September 10, with both required database updates. Live checks covered Operations Associate access, receiving validation and desktop/mobile receiving layout, returns guidance and the Pick & Pack queue. Full transaction retesting remains separate.
 
 1. **Exception, not exemption:** In governed PO receiving, record an Exception reason when quantities include damaged, short, excess or unidentified items. For example: "Expected 100 jackets; received 95 clean and 5 damaged. Delivery photos attached." A clean receipt does not need an exception reason. Do not enter a made-up reason simply to continue.
 2. **Merchandise barcode:** Use the barcode mapped to the exact merchandise product and size, then enter quantity for non-serialized stock. A barcode on a different jacket variant is not interchangeable. If the label is rejected, give the Warehouse lead the PO, line, scanned value and label photo so the product mapping can be checked. Do not create replacement product records or invent serials.
