@@ -291,6 +291,44 @@ describe("runAction offline queuing (supabase mode)", () => {
 });
 
 describe("replay + sync", () => {
+  it('stops before the next command when its active scope expires, retaining the completed receipt', async () => {
+    const first = await enqueue('transfer', { actor: 'alice', idempotencyKey: 'scope-first' });
+    const second = await enqueue('transfer', { actor: 'alice', idempotencyKey: 'scope-second' });
+    let active = true;
+    let release!: () => void;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    const transfer = vi.fn(async () => { await held; });
+    const refresh = vi.fn(async () => {});
+    const refreshPending = vi.fn(async () => {});
+    const syncing = syncNow({ repo: { transfer } as never, actor: 'alice', isActive: () => active,
+      pending: [first, second], refresh, refreshPending });
+    await vi.waitFor(() => expect(transfer).toHaveBeenCalledOnce());
+    active = false;
+    release();
+    await syncing;
+    expect(transfer).toHaveBeenCalledOnce();
+    expect(await allPending('alice')).toEqual([second]);
+    expect(first.status).toBe('committed');
+    expect(refresh).not.toHaveBeenCalled();
+    expect(refreshPending).not.toHaveBeenCalled();
+  });
+
+  it('does not replay or mutate an entry for an inactive scope', async () => {
+    const entry = await enqueue('transfer', { actor: 'alice', idempotencyKey: 'inactive' });
+    const transfer = vi.fn();
+    expect(await replayEntry({ repo: { transfer } as never, actor: 'alice', isActive: () => false }, entry)).toBe(false);
+    expect(transfer).not.toHaveBeenCalled();
+    expect(entry.status).toBe('pending');
+  });
+
+  it('does not refresh counters if the scope expires during data refresh', async () => {
+    let active = true;
+    const entry = await enqueue('transfer', { actor: 'alice', idempotencyKey: 'refresh-scope' });
+    const refreshPending = vi.fn(async () => {});
+    await syncNow({ repo: { transfer: async () => {} } as never, actor: 'alice', isActive: () => active,
+      pending: [entry], refresh: async () => { active = false; }, refreshPending });
+    expect(refreshPending).not.toHaveBeenCalled();
+  });
   it.each([{}, { actor: 'current' }, { idempotencyKey: 'legacy-command-0001' }])('holds legacy unowned/unkeyed intents for reconciliation: %j', async (identity) => {
     const transfer = vi.fn();
     const payload = { productId: 'shirt', quantity: 2, fromLocationId: 'loc-wh', toLocationId: 'loc-cebu', ...identity };

@@ -93,6 +93,7 @@ export function ReturnIntakeProduct({
         <Field
           label={line.quantity === 1 ? "Serial number" : "Serial numbers"}
           htmlFor={`${prefix}-serial`}
+          hint="Use the existing serial on the physical returned unit or its original issue/order record. Do not create a new serial. A serial already listed here does not need to be scanned again."
         >
           <textarea
             id={`${prefix}-serial`}

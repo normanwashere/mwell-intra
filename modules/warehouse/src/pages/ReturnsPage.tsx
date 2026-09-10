@@ -185,6 +185,12 @@ function ReturnsIntake({ scope }: { scope: string }) {
         subtitle="Receive customer, vendor, and event stock into a controlled inspection location"
       />
 
+      <details className="border-b border-line pb-3 text-sm text-muted">
+        <summary className="min-h-11 cursor-pointer py-3 font-semibold text-ink">Which return flow should I use?</summary>
+        <p>Use Allocation Return from the original issued allocation when returning its event stock; this retains the allocation and custody link. Use Returns receiving for the physical intake of customer, vendor, or event returns. Do not record the same physical return in both places.</p>
+        <p className="mt-2">A customer replacement or refund decision belongs to its customer return case in Fulfillment. Receiving the unit into quarantine does not approve a replacement, refund, or release from Quality Control.</p>
+      </details>
+
       <div className="flex flex-col gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="font-semibold">Inspection required before putaway</p>

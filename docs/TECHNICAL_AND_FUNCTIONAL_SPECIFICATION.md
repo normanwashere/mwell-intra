@@ -1,5 +1,11 @@
 # Mwell Intra Technical and Functional Specification
 
+## September 9 WMS Release Candidate
+
+Receiving uses a compact field-linked validation summary and distinct draft-save versus stock-confirm actions. Relocation supports per-serial removal, account/product/browser-scoped draft recovery, stale-draft review and complete active-hold preflight. Inventory bin counts filter serialized units, with incremental loading beyond 30 records. Offline pending work and conflict actions are actor-scoped; account/lifecycle changes stop remaining replay, while unowned legacy work requires reconciliation rather than automatic reassignment.
+
+Order evidence uses a dismissible image gallery. Replacement confirmation stores original/new destination selection atomically with the existing authorized resolution chain; completed-case replay must not reopen custody or duplicate movements. The original order remains unchanged and historical destinations are not invented. Recipient acknowledgment retains existing actor and non-releaser checks, accepts uploaded evidence, and is limited to internal/event/third-party handovers. Courier shipments require delivery proof. The two September 10 migrations must precede the matching UAT app promotion. This section describes release content, not a full live transaction certificate; see the dated deployment receipt for rollout status.
+
 ## PO Receipt and Closure Presentation Follow-up
 
 The CI157 follow-up candidate reads physical received counts from normalized `procurement.purchase_order_lines` under the existing browser user's SELECT/RLS, matching both PO ID and line ID. The embedded `purchase_orders.lines` snapshot is not receipt authority. Initial and refresh failures, permission denials, hidden/missing lines, or invalid counts produce **Unknown**, never fabricated zero/completion or a fallback to the stale embedded count. Successful refresh replaces Unknown with the governed count; a later failed refresh clears the previous count. This is a display/read-path correction, not a database or authorization change.

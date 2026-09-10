@@ -2621,6 +2621,39 @@ describe("W1 control parity", () => {
       customerClosedBy: "customer-service",
     });
   });
+  it.each(['original', 'new'] as const)("persists the confirmed %s replacement destination without altering the source", async (mode) => {
+    const repo = new InMemoryRepository(miniData());
+    const source = await repo.createFulfillmentOrder({ source: 'ecommerce', externalReference: 'SOURCE-1',
+      lines: [{ productId: 'ring', quantity: 1 }], actor: 'test' });
+    const seed = await repo.getData();
+    Object.assign(seed.fulfillmentOrders.find(row => row.id === source.id)!, {
+      customerName: 'Original recipient', customerContact: '09170000000', customerEmail: 'original@example.test',
+      deliveryAddress: { addressLine: '1 Test Street', city: 'Makati', province: 'Metro Manila', postalCode: '1200' },
+    });
+    const controlled = new InMemoryRepository(seed);
+    const opened = await controlled.createCustomerReturnCase({ sourceOrderId: source.id, productId: 'ring', serialNumber: 'SN1',
+      defectDescription: 'Charging defect', actor: 'test' });
+    const replacementDelivery = mode === 'original' ? { mode } : { mode, customerName: 'New recipient',
+      customerContactNumber: '09171111111', customerEmail: 'new@example.test', reason: 'Customer confirmed new address',
+      deliveryAddress: { addressLine: '2 Test Street', city: 'Pasig', province: 'Metro Manila', postalCode: '1600' } };
+    await expect(controlled.resolveCustomerReturnCase({ returnCaseId: opened.id, resolution: 'replacement',
+      quarantineBinId: 'missing', replacementDelivery, actor: 'test' })).rejects.toThrow(/quarantine bin/);
+    expect((await controlled.getData()).fulfillmentOrders).toHaveLength(1);
+    if (mode === 'new') {
+      await expect(controlled.resolveCustomerReturnCase({ returnCaseId: opened.id, resolution: 'replacement',
+        quarantineBinId: 'bin-a', replacementDelivery: { ...replacementDelivery, reason: '' }, actor: 'test' })).rejects.toThrow(/reason/);
+      expect((await controlled.getData()).fulfillmentOrders).toHaveLength(1);
+    }
+    const result = await controlled.resolveCustomerReturnCase({ returnCaseId: opened.id, resolution: 'replacement',
+      quarantineBinId: 'bin-a', replacementDelivery, actor: 'test' });
+    const data = await controlled.getData();
+    expect(data.fulfillmentOrders.find(row => row.id === source.id)).toEqual(seed.fulfillmentOrders.find(row => row.id === source.id));
+    const replacement = data.fulfillmentOrders.find(row => row.id === result.replacementOrderId)!;
+    expect(replacement).toMatchObject({ customerName: mode === 'original' ? 'Original recipient' : 'New recipient',
+      deliveryAddress: { city: mode === 'original' ? 'Makati' : 'Pasig' } });
+    expect(replacement.orderNotes).toContain('SOURCE-1');
+  });
+
   it("creates the replacement order and requires supplier RMA evidence", async () => {
     const replacementRepo = new InMemoryRepository(miniData(), {
       now: () => "2026-08-04T12:00:00Z",

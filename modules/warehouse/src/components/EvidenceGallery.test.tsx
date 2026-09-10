@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { EvidenceGallery } from './EvidenceGallery';
 
 // Explicit memory sessions preserve existing inline and trusted app evidence.
@@ -29,12 +29,12 @@ describe('EvidenceGallery', () => {
       expect(close).toHaveFocus();
       fireEvent.click(close);
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-      expect(trigger).toHaveFocus();
+      await waitFor(() => expect(trigger).toHaveFocus());
       fireEvent.click(trigger);
       dialog = await screen.findByRole('dialog', { name: 'Evidence photo' });
       fireEvent.keyDown(within(dialog).getByRole('button', { name: 'Close' }), { key: 'Escape' });
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-      expect(trigger).toHaveFocus();
+      await waitFor(() => expect(trigger).toHaveFocus());
       expect(errors).not.toHaveBeenCalled();
     } finally { errors.mockRestore(); }
   });

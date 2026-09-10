@@ -33,6 +33,7 @@ import {
   findIntent,
   intentIdentity,
   markCommitted,
+  hasReplayIdentity,
   removeEntry as outboxRemove,
   type OutboxEntry,
   type QueueableMethod,
@@ -272,6 +273,8 @@ export interface ReplayContext {
   repo: WarehouseRepository;
   /** Actor stamped onto the replayed mutation (the signed-in user). */
   actor: string;
+  /** Live lifecycle guard; false stops further commands without abandoning an in-flight receipt. */
+  isActive?: () => boolean;
   isNetworkError?: (e: unknown) => boolean;
   markConflict?: (id: string, error: string) => Promise<void>;
   removeEntry?: (id: string) => Promise<void>;
@@ -282,10 +285,11 @@ export async function replayEntry(
   ctx: ReplayContext,
   entry: OutboxEntry,
 ): Promise<boolean> {
+  if (ctx.isActive?.() === false) return false;
   const networkError = ctx.isNetworkError ?? isNetworkError;
   const markConflict = ctx.markConflict ?? outboxMarkConflict;
   const removeEntry = ctx.removeEntry ?? markCommitted;
-  if (!entry.input.actor || !entry.input.idempotencyKey) {
+  if (!hasReplayIdentity(entry)) {
     await markConflict(entry.id, 'Legacy queued action has no original actor or replay key. Ask a Warehouse lead to reconcile this payload against server receipts and movements before any retry or discard.');
     return false;
   }
@@ -341,11 +345,14 @@ export async function syncNow(
 ): Promise<void> {
   if (ctx.pending.length === 0) return;
   for (const entry of ctx.pending) {
+    if (ctx.isActive?.() === false) return;
     if (entry.input.actor && entry.input.actor !== ctx.actor) continue;
     const okOne = await replayEntry(ctx, entry);
     if (!okOne) break; // stop on the first conflict; remaining stay queued
   }
+  if (ctx.isActive?.() === false) return;
   await ctx.refresh();
+  if (ctx.isActive?.() === false) return;
   await ctx.refreshPending();
 }
 

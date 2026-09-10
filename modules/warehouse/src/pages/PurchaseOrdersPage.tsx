@@ -81,6 +81,13 @@ const PHYSICAL_OUTCOMES: readonly PhysicalReceiptOutcome[] = [
   "excess",
 ];
 
+const EXCEPTION_EXAMPLES = {
+  damaged: "2 units arrived with torn packaging; photos attached.",
+  unidentified: "1 item has no readable label; held for identification.",
+  short: "3 ordered units were missing from the delivery.",
+  excess: "2 extra units arrived beyond the PO balance; held for review.",
+};
+
 function parseSerials(value: string): string[] {
   return value
     .split(/[\n,]+/)
@@ -760,6 +767,18 @@ export function PurchaseOrdersPage() {
     bridgeSelected,
     data?.products,
   ]);
+
+  const exceptionOutcomes = (Object.keys(EXCEPTION_EXAMPLES) as Array<keyof typeof EXCEPTION_EXAMPLES>)
+    .filter(outcome => bridgeReceivePO?.lines.some(line =>
+      bridgeSelected[line.id] && (bridgeOutcomes[line.id]?.[outcome] ?? 0) > 0,
+    ));
+  const receiptRequirements = [
+    ...(!bridgeLocation ? [{ text: 'Choose a receiving location', target: 'bridge-receive-location' }] : []),
+    ...(deliveryDateError ? [{ text: deliveryDateError, target: 'bridge-actual-delivery-date' }] : []),
+    ...(!bridgeEvidenceUrls.length || bridgeEvidenceError ? [{ text: bridgeEvidenceError ? 'Correct the delivery evidence link' : 'Attach delivery evidence', target: 'bridge-receive-evidence' }] : []),
+    ...(bridgeReceiptValidation.hasExceptions && !bridgeExceptionReason.trim() ? [{ text: 'Add the exception reason', target: 'bridge-exception-reason' }] : []),
+    ...bridgeReceiptValidation.fieldErrors.map(({ message, target, lineId }) => ({ text: lineId ? `${bridgeReceivePO?.lines.find(line => line.id === lineId)?.description ?? 'Receipt line'}: ${message}` : message, target })),
+  ];
 
   if (!data) return null;
   // Live Warehouse consumes the governed Procurement handoff only. Seeded
@@ -1549,15 +1568,16 @@ export function PurchaseOrdersPage() {
         footer={
           <div className="w-full space-y-2">
             <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">{requirementsAnnouncement}</p>
-            <div role="region" aria-label="Receipt requirements" className="max-h-24 overflow-y-auto text-sm text-rose-700 dark:text-rose-300">
-              {[
-                ...(!bridgeLocation ? [{ text: 'Choose a receiving location', target: 'bridge-receive-location' }] : []),
-                ...(deliveryDateError ? [{ text: deliveryDateError, target: 'bridge-actual-delivery-date' }] : []),
-                ...(!bridgeEvidenceUrls.length || bridgeEvidenceError ? [{ text: bridgeEvidenceError ? 'Correct the delivery evidence link' : 'Attach delivery evidence', target: 'bridge-receive-evidence' }] : []),
-                ...(bridgeReceiptValidation.hasExceptions && !bridgeExceptionReason.trim() ? [{ text: 'Add the exception reason', target: 'bridge-exception-reason' }] : []),
-                ...bridgeReceiptValidation.fieldErrors.map(({ message, target, lineId }) => ({ text: lineId ? `${bridgeReceivePO?.lines.find(line => line.id === lineId)?.description ?? 'Receipt line'}: ${message}` : message, target })),
-              ].map(({ text, target }, index) => (
-                <button key={`${target}-${index}`} type="button" className="block min-h-11 text-left underline underline-offset-2" onClick={() => {
+            <div role="region" aria-label="Receipt requirements" className="text-xs">
+              <details key={receivingRequest?.session}>
+                <summary className="min-h-11 cursor-pointer py-3 font-medium text-muted">
+                  {receiptRequirements.length
+                    ? `${receiptRequirements.length} requirement${receiptRequirements.length === 1 ? '' : 's'} before confirmation`
+                    : 'Receipt requirements satisfied.'}
+                </summary>
+                <div className="max-h-24 overflow-y-auto text-rose-700 dark:text-rose-300">
+              {receiptRequirements.map(({ text, target }, index) => (
+                <button key={`${target}-${index}`} type="button" className="block min-h-11 w-full break-words text-left underline underline-offset-2" onClick={() => {
                   const element = document.getElementById(target);
                   const details = element?.closest('details');
                   if (details) details.open = true;
@@ -1565,11 +1585,13 @@ export function PurchaseOrdersPage() {
                   (element?.querySelector<HTMLElement>('input:not([disabled]), select:not([disabled]), textarea:not([disabled])') ?? element)?.focus();
                 }}>{text}</button>
               ))}
+                </div>
+              </details>
             </div>
-            <div className="flex flex-wrap justify-end gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
             <button
               type="button"
-              className="btn-ghost"
+              className="btn-ghost w-full justify-center whitespace-normal sm:w-auto"
               disabled={
                 bridgeBusy || evidenceBusy || draftLoading || !!draftError || draftConflict
               }
@@ -1581,7 +1603,7 @@ export function PurchaseOrdersPage() {
             </button>
             <button
               type="button"
-              className="btn-primary w-full"
+              className="btn-primary w-full justify-center whitespace-normal sm:w-auto"
               disabled={
                 !bridgeLocation ||
                 evidenceBusy ||
@@ -1688,17 +1710,22 @@ export function PurchaseOrdersPage() {
                 Select the items you are receiving. Other operators can receive
                 the remaining items with their own accounts.
               </p>
-              <Field label="Actual delivery date" htmlFor="bridge-actual-delivery-date" hint="Date the goods physically arrived, not the PO expected date or posting date (Philippines).">
+              <Field label="Actual delivery date" htmlFor="bridge-actual-delivery-date">
                 <input id="bridge-actual-delivery-date" className="input" type="date" required
                   max={deliveryToday()} value={bridgeDeliveryDate}
                   aria-invalid={!!deliveryDateError}
+                  aria-describedby="bridge-delivery-date-hint bridge-delivery-date-error"
                   onChange={(event) => setBridgeDeliveryDate(event.target.value)} />
+                <p id="bridge-delivery-date-hint" className="mt-1 text-xs text-faint">Required: date the goods physically arrived (Philippines).</p>
+                <p id="bridge-delivery-date-error" className="text-xs text-rose-700 dark:text-rose-300">{deliveryDateError}</p>
               </Field>
               <Field label="Receive into" htmlFor="bridge-receive-location">
                 <select
                   id="bridge-receive-location"
                   className="input"
                   value={bridgeLocation}
+                  required
+                  aria-invalid={!bridgeLocation}
                   onChange={(event) => {
                     setBridgeLocation(event.target.value);
                     setBridgeBin("");
@@ -1779,9 +1806,12 @@ export function PurchaseOrdersPage() {
                   id="bridge-receive-evidence"
                   className="input"
                   value={bridgeEvidence}
+                  aria-invalid={!bridgeEvidenceUrls.length || !!bridgeEvidenceError}
+                  aria-describedby="bridge-evidence-hint"
                   onChange={(event) => setBridgeEvidence(event.target.value)}
                   placeholder="Optional HTTPS link to a delivery document"
                 />
+                <p id="bridge-evidence-hint" className="mt-1 text-xs text-muted">Required: upload a delivery note or provide a secure evidence link.</p>
               </Field>
               {bridgeEvidenceError && (
                 <p
@@ -1791,6 +1821,9 @@ export function PurchaseOrdersPage() {
                   {bridgeEvidenceError}
                 </p>
               )}
+              <p id="bridge-exception-guidance" className="text-xs text-muted">
+                Damaged, unidentified, short, and excess quantities require an exception reason. Clean-only receipts do not.
+              </p>
               {bridgeReceiptValidation.hasExceptions && (
                 <Field
                   label="Exception reason"
@@ -1800,11 +1833,20 @@ export function PurchaseOrdersPage() {
                     id="bridge-exception-reason"
                     className="input"
                     rows={3}
+                    required
+                    aria-invalid={!bridgeExceptionReason.trim()}
+                    aria-describedby="bridge-exception-hint bridge-exception-error"
                     value={bridgeExceptionReason}
                     onChange={(event) =>
                       setBridgeExceptionReason(event.target.value)
                     }
                   />
+                  <p id="bridge-exception-hint" className="mt-1 text-xs text-muted">
+                    Required for this receipt: {exceptionOutcomes.join(', ')}. Example: {exceptionOutcomes.map(outcome => EXCEPTION_EXAMPLES[outcome]).join(' ')}
+                  </p>
+                  <p id="bridge-exception-error" className="text-xs text-rose-700 dark:text-rose-300">
+                    {!bridgeExceptionReason.trim() ? 'Required: explain the exception.' : ''}
+                  </p>
                 </Field>
               )}
               <ul
@@ -1897,9 +1939,13 @@ export function PurchaseOrdersPage() {
                               const product = resolveProductScan(data.products, code);
                               const expected = line.productId || latest.bridgeProducts[line.id];
                               if (!product || (expected && product.id !== expected)) {
+                                const expectedProduct = data.products.find(item => item.id === expected);
+                                const recovery = expectedProduct
+                                  ? `Expected ${expectedProduct.name}. ${expectedProduct.barcode ? `Barcode: ${expectedProduct.barcode}.` : `SKU: ${expectedProduct.sku}; no barcode is registered.`} Check the product label and scan again.`
+                                  : 'Check the PO item and its Warehouse product mapping, then scan the product label again.';
                                 setProductScanFeedback((current) => ({ ...current, [line.id]: {
                                   session: receivingSessionRef.current, productId: latest.bridgeProducts[line.id] ?? "",
-                                  role: "alert", message: `Wrong or ambiguous product barcode for ${line.description}.`,
+                                  role: "alert", message: `Wrong or ambiguous product barcode for ${line.description}. ${recovery}`,
                                 } }));
                                 return;
                               }

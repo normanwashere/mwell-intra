@@ -3589,10 +3589,31 @@ export class InMemoryRepository implements WarehouseControlRepository {
       );
     }
     let replacementOrderId = input.replacementOrderId;
+    if (input.replacementDelivery && replacementOrderId) {
+      throw new Error('Delivery confirmation is only supported when creating a new replacement order.');
+    }
     if (input.resolution === "replacement" && !replacementOrderId) {
       const sourceOrder = this.data.fulfillmentOrders.find(
         (order) => order.id === record.sourceOrderId,
       );
+      const delivery = input.replacementDelivery;
+      const destination = delivery?.mode === 'original' ? {
+        customerName: sourceOrder?.customerName, customerContact: sourceOrder?.customerContact,
+        customerEmail: sourceOrder?.customerEmail, deliveryAddress: sourceOrder?.deliveryAddress,
+      } : delivery?.mode === 'new' ? {
+        customerName: delivery.customerName?.trim(), customerContact: delivery.customerContactNumber?.trim(),
+        customerEmail: delivery.customerEmail?.trim(), deliveryAddress: delivery.deliveryAddress,
+      } : undefined;
+      if (delivery && (!destination?.customerName?.trim() || !destination.customerContact?.trim() ||
+        !destination.deliveryAddress?.addressLine?.trim() || !destination.deliveryAddress.city?.trim() ||
+        !destination.deliveryAddress.province?.trim() || !destination.deliveryAddress.postalCode?.trim())) {
+        throw new Error('Confirm complete replacement customer and delivery details.');
+      }
+      if (delivery?.mode === 'new' && !delivery.reason?.trim()) throw new Error('A reason is required for a new replacement destination.');
+      if (destination?.customerEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(destination.customerEmail)) throw new Error('Customer email is invalid.');
+      // Validate custody before creating a second order; rejected resolutions must not leave an orphan.
+      if (!this.data.storageAreas.some(row => row.id === input.quarantineBinId && row.active)) throw new Error('Active quarantine bin not found.');
+      if (record.serialNumber && !this.data.units.some(row => row.productId === record.productId && row.serialNumber === record.serialNumber)) throw new Error('Returned serial is no longer recognized.');
       const replacement = await this.createFulfillmentOrder({
         source: "ecommerce",
         externalReference: "REPL-" + record.id,
@@ -3602,6 +3623,11 @@ export class InMemoryRepository implements WarehouseControlRepository {
         actor: input.actor,
       });
       replacementOrderId = replacement.id;
+      if (destination) {
+        const stored = this.data.fulfillmentOrders.find(order => order.id === replacement.id)!;
+        Object.assign(stored, clone(destination));
+        stored.orderNotes = `Replacement for ${sourceOrder?.externalReference ?? record.sourceOrderId ?? record.id}. Delivery: ${delivery!.mode}.${delivery?.reason ? ' Reason: ' + delivery.reason.trim() : ''}`;
+      }
     }
     record.status = "resolved";
     record.resolution = input.resolution;

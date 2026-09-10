@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { _resetMemoryQueue, allPending, replayEntry } from '@intra/data-kit';
+import { _resetMemoryQueue, allPending, allConflicts, enqueue, markConflict, replayEntry } from '@intra/data-kit';
+import * as dataKit from '@intra/data-kit';
 import { ToastProvider } from '@/components/ui';
 import { makeRepo } from '@/test/renderWithProviders';
 import { InMemoryRepository } from '@/data/inMemoryRepository';
@@ -43,6 +44,183 @@ function IdentityProbe({
 }
 
 const repo = makeRepo();
+
+function QueuePrivacyProbe({ foreignId }: { foreignId: string }) {
+  const warehouse = useWarehouse();
+  return <>
+    <output aria-label="Queue conflicts">{warehouse.conflicts.map(e => e.error).join(',')}</output>
+    <button onClick={() => void warehouse.discardConflict(foreignId)}>Discard foreign conflict</button>
+  </>;
+}
+
+function QueueScopeProbe({ onQueue }: { onQueue: (queue: ReturnType<typeof useWarehouse>) => void }) {
+  const queue = useWarehouse();
+  useEffect(() => { onQueue(queue); });
+  return <output aria-label="Unresolved legacy count">{queue.unresolvedLegacyCount}</output>;
+}
+
+it.each(['switch', 'unmount', 'switch-back'] as const)('stops queued replay after %s while the first command is in flight', async (change) => {
+  _resetMemoryQueue();
+  await enqueue('transfer', { actor: 'alice', idempotencyKey: 'first-scope' });
+  const second = await enqueue('transfer', { actor: 'alice', idempotencyKey: 'second-scope' });
+  const repo = makeRepo();
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  const transfer = vi.spyOn(repo, 'transfer').mockImplementation(async () => { await held; return []; });
+  let queue!: ReturnType<typeof useWarehouse>;
+  const onQueue = (next: typeof queue) => { queue = next; };
+  const view = (actor: string) => <ToastProvider><WarehouseProvider repo={repo} source="memory" actor={actor}>
+    <QueueScopeProbe onQueue={onQueue} />
+  </WarehouseProvider></ToastProvider>;
+  const rendered = render(view('alice'));
+  let replay!: Promise<void>;
+  await act(async () => { replay = queue.syncNow(); });
+  await waitFor(() => expect(transfer).toHaveBeenCalledOnce());
+  if (change === 'unmount') rendered.unmount();
+  else {
+    rendered.rerender(view('bob'));
+    if (change === 'switch-back') rendered.rerender(view('alice'));
+  }
+  await act(async () => { release(); await replay; });
+  expect(transfer).toHaveBeenCalledOnce();
+  expect(await allPending('alice')).toEqual([second]);
+  rendered.unmount();
+  _resetMemoryQueue();
+});
+
+it.each(['repository', 'source'] as const)('invalidates the replay scope on %s replacement', async (change) => {
+  _resetMemoryQueue();
+  await enqueue('transfer', { actor: 'alice', idempotencyKey: 'environment-first' });
+  const second = await enqueue('transfer', { actor: 'alice', idempotencyKey: 'environment-second' });
+  const original = makeRepo();
+  const replacement = makeRepo();
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  const transfer = vi.spyOn(original, 'transfer').mockImplementation(async () => { await held; return []; });
+  const nextTransfer = vi.spyOn(replacement, 'transfer').mockResolvedValue([]);
+  let queue!: ReturnType<typeof useWarehouse>;
+  const view = (repo: typeof original, source: 'memory' | 'supabase') => <ToastProvider>
+    <WarehouseProvider repo={repo} source={source} actor="alice">
+      <QueueScopeProbe onQueue={next => { queue = next; }} />
+    </WarehouseProvider>
+  </ToastProvider>;
+  const rendered = render(view(original, change === 'source' ? 'supabase' : 'memory'));
+  let replay: Promise<void> | undefined;
+  if (change === 'repository') await act(async () => { replay = queue.syncNow(); });
+  await waitFor(() => expect(transfer).toHaveBeenCalledOnce());
+  const stale = queue;
+  rendered.rerender(view(change === 'repository' ? replacement : original, 'memory'));
+  await act(async () => { release(); await replay; await stale.syncNow(); });
+  await waitFor(async () => expect(await allPending('alice')).toEqual([second]));
+  expect(transfer).toHaveBeenCalledOnce();
+  expect(queue.source).toBe('memory');
+  if (change === 'repository') {
+    await act(async () => { await queue.syncNow(); });
+    expect(nextTransfer).toHaveBeenCalledOnce();
+    expect(transfer).toHaveBeenCalledOnce();
+  }
+  rendered.unmount();
+  _resetMemoryQueue();
+});
+
+it.each(['switch', 'unmount'] as const)('ignores an outbox read that resolves after %s', async (change) => {
+  _resetMemoryQueue();
+  const entry = await enqueue('transfer', { actor: 'alice', idempotencyKey: 'delayed-read' });
+  const repo = makeRepo();
+  const transfer = vi.spyOn(repo, 'transfer').mockResolvedValue([]);
+  let queue!: ReturnType<typeof useWarehouse>;
+  const onQueue = (next: typeof queue) => { queue = next; };
+  const view = (actor: string) => <ToastProvider><WarehouseProvider repo={repo} source="memory" actor={actor}>
+    <QueueScopeProbe onQueue={onQueue} />
+  </WarehouseProvider></ToastProvider>;
+  const rendered = render(view('alice'));
+  let release!: (entries: typeof entry[]) => void;
+  const pending = vi.spyOn(dataKit, 'allPending').mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
+  let replay!: Promise<void>;
+  await act(async () => { replay = queue.syncNow(); });
+  if (change === 'unmount') rendered.unmount();
+  else rendered.rerender(view('bob'));
+  await act(async () => { release([entry]); await replay; });
+  expect(transfer).not.toHaveBeenCalled();
+  pending.mockRestore();
+  expect(await allPending('alice')).toEqual([entry]);
+  rendered.unmount();
+  _resetMemoryQueue();
+});
+
+it('rejects stale replay and discard callbacks after a same-actor profile change or unmount', async () => {
+  _resetMemoryQueue();
+  const pending = await enqueue('transfer', { actor: 'alice', idempotencyKey: 'profile-pending' });
+  const conflict = await enqueue('transfer', { actor: 'alice', idempotencyKey: 'profile-conflict' });
+  await markConflict(conflict.id, 'Private conflict');
+  const repo = makeRepo();
+  const transfer = vi.spyOn(repo, 'transfer').mockResolvedValue([]);
+  let queue!: ReturnType<typeof useWarehouse>;
+  const view = (identityId: string) => <ToastProvider><WarehouseProvider repo={repo} source="memory" actor="alice" identityId={identityId}>
+    <QueueScopeProbe onQueue={next => { queue = next; }} />
+  </WarehouseProvider></ToastProvider>;
+  const rendered = render(view('profile-a'));
+  const stale = queue;
+  rendered.rerender(view('profile-b'));
+  await act(async () => { await stale.syncNow(); await stale.discardConflict(conflict.id); });
+  const current = queue;
+  rendered.unmount();
+  await act(async () => { await current.syncNow(); await current.discardConflict(conflict.id); });
+  expect(transfer).not.toHaveBeenCalled();
+  expect(await allPending('alice')).toEqual([pending]);
+  expect(await allConflicts('alice')).toEqual([conflict]);
+  _resetMemoryQueue();
+});
+
+it('reports legacy counts and recovery guidance without exposing or discarding unsafe payloads', async () => {
+  _resetMemoryQueue();
+  const unowned = await enqueue('transfer', { secret: 'unowned secret' });
+  const unkeyed = await enqueue('transfer', { actor: 'alice', secret: 'unkeyed secret' });
+  await markConflict(unkeyed.id, 'legacy private failure');
+  const foreign = await enqueue('transfer', { actor: 'bob', idempotencyKey: 'foreign', secret: 'Bob secret' });
+  await markConflict(foreign.id, 'Bob private failure');
+  let queue!: ReturnType<typeof useWarehouse>;
+  const repo = makeRepo();
+  const transfer = vi.spyOn(repo, 'transfer');
+  const rendered = render(<ToastProvider><WarehouseProvider repo={repo} source="memory" actor="alice">
+    <QueueScopeProbe onQueue={next => { queue = next; }} />
+  </WarehouseProvider></ToastProvider>);
+  await waitFor(() => expect(screen.getByLabelText('Unresolved legacy count')).toHaveTextContent('2'));
+  expect(document.body).not.toHaveTextContent(/unowned secret|unkeyed secret|legacy private failure|Bob secret|Bob private failure/);
+  expect(queue.conflicts).toEqual([]);
+  expect(queue.pendingSync).toBe(0);
+  await act(async () => {
+    await queue.syncNow();
+    await queue.discardConflict(unowned.id);
+    await queue.discardConflict(unkeyed.id);
+    await queue.discardConflict(foreign.id);
+  });
+  expect(transfer).not.toHaveBeenCalled();
+  expect(await allPending()).toEqual([unowned]);
+  expect(await allConflicts()).toEqual([unkeyed, foreign]);
+  rendered.unmount();
+  _resetMemoryQueue();
+});
+
+it('does not expose or discard another actor conflict after switching account', async () => {
+  _resetMemoryQueue();
+  const a = await enqueue('transfer', { actor: 'alice', idempotencyKey: 'qa' });
+  const b = await enqueue('transfer', { actor: 'bob', idempotencyKey: 'qb' });
+  await markConflict(a.id, 'Alice private conflict');
+  await markConflict(b.id, 'Bob private conflict');
+  const view = (actor: string) => <ToastProvider><WarehouseProvider repo={makeRepo()} source="memory" actor={actor}>
+    <QueuePrivacyProbe foreignId={a.id} />
+  </WarehouseProvider></ToastProvider>;
+  const rendered = render(view('alice'));
+  await waitFor(() => expect(screen.getByLabelText('Queue conflicts')).toHaveTextContent('Alice private conflict'));
+  rendered.rerender(view('bob'));
+  expect(screen.getByLabelText('Queue conflicts')).not.toHaveTextContent('Alice');
+  await waitFor(() => expect(screen.getByLabelText('Queue conflicts')).toHaveTextContent('Bob private conflict'));
+  fireEvent.click(screen.getByText('Discard foreign conflict'));
+  await waitFor(async () => expect(await allConflicts('alice')).toHaveLength(1));
+  rendered.unmount();
+  _resetMemoryQueue();
+});
 
 function OfflineProbe({ onResult }: { onResult: (value: unknown) => void }) {
   const warehouse = useWarehouse();

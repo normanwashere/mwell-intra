@@ -303,10 +303,12 @@ export const TROUBLESHOOTING_GUIDES: TroubleshootingGuide[] = [
     ],
     safeRecovery: [
       "Open the inspection and hold reason",
+      "A received item in General area is not automatically QC accepted. Complete the linked inspection through the authorized Quality owner before ordinary relocation",
       "Confirm the receipt or return remains in quarantine and unavailable",
       "Attach permitted corrective evidence",
       "Route to the authorized Quality disposition owner",
       "Release, continue hold, or return only through the recorded decision",
+      "If relocation says stock is held, keep the exact serial/bin/lot reference and resolve its hold. Do not create a second receipt or move it to another bin to escape the hold",
     ],
     dataImpact:
       "Held units remain unavailable and must not be allocated, issued, or counted as usable stock.",
@@ -348,6 +350,9 @@ export const TROUBLESHOOTING_GUIDES: TroubleshootingGuide[] = [
       "Stop movements for the affected scope",
       "Recount and inspect ledger/activity",
       "Record the variance reason and evidence",
+      "In governed PO receiving, Exception reason explains damaged, short, excess or unidentified quantities; it is not an exemption. Example: expected 100 jackets, received 95 clean and 5 damaged; delivery photos attached",
+      "For non-serialized merchandise, scan the barcode mapped to the exact product or size and enter quantity. A wrong barcode is not a reason to invent serials or bypass the product check",
+      "A return serial is the existing serial on the physical unit or its original issue/order record, not a new return number. Already scanned means it is already listed in this intake",
       "Use the applicable approval and adjustment or reconciliation flow",
     ],
     dataImpact:

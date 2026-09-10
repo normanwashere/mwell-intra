@@ -21,6 +21,7 @@ import {
   type ReactNode,
 } from "react";
 import { useToast } from "@intra/ui";
+import { receiptAcknowledgmentBlockReason } from "@/domain/fulfillmentAcknowledgment";
 import {
   applyOverlay,
   createRepository,
@@ -33,7 +34,7 @@ import {
   relocateOverlay,
   allConflicts,
   allPending,
-  pendingCount as outboxPendingCount,
+  readOutboxCounts,
   removeEntry as outboxRemove,
   DATA_STORAGE_KEY,
   ReturnRejectedError,
@@ -133,6 +134,8 @@ interface WarehouseContextValue {
   lastActionStatus: 'committed' | 'queued' | 'failed' | null;
   /** Number of floor-op mutations queued offline, awaiting sync. */
   pendingSync: number;
+  /** Device-local count only; legacy identities never enter actor payload lists. */
+  unresolvedLegacyCount: number;
   /** Conflicted outbox entries the user can retry or discard. */
   conflicts: OutboxEntry[];
   /** Discard a conflicted entry from the outbox. */
@@ -317,20 +320,17 @@ export function WarehouseProvider({
   /** Maximum initial/read refresh wait before the UI offers recovery. */
   loadTimeoutMs?: number;
 }) {
-  const created = useRef<{
+  const created = useMemo<{
     repo: WarehouseControlRepository;
     source: DataSource;
-  } | null>(null);
-  if (!created.current) {
-    created.current = injectedRepo
+  }>(() => injectedRepo
       ? { repo: injectedRepo, source: injectedSource ?? "memory" }
       : createRepository({
           dataSource: injectedSource,
           supabaseClient,
-        });
-  }
-  const repo = created.current.repo;
-  const source = created.current.source;
+        }), [injectedRepo, injectedSource, supabaseClient]);
+  const repo = created.repo;
+  const source = created.source;
   const toast = useToast();
 
   const [data, setData] = useState<WarehouseData | null>(null);
@@ -340,6 +340,7 @@ export function WarehouseProvider({
     loadInitialRole(initialRole),
   );
   const [pendingSync, setPendingSync] = useState(0);
+  const [unresolvedLegacyCount, setUnresolvedLegacyCount] = useState(0);
   const [lastActionStatus, setLastActionStatus] = useState<'committed' | 'queued' | 'failed' | null>(null);
   const lastActionStatusRef = useRef(lastActionStatus);
   const [conflicts, setConflicts] = useState<OutboxEntry[]>([]);
@@ -351,6 +352,20 @@ export function WarehouseProvider({
     [providedActor, role],
   );
   const identityId = providedIdentityId ?? actor;
+  // Object identity rejects switch-back callbacks; generation also rejects prior effect lifetimes.
+  const queueScope = useMemo(() => ({ actor, identityId, repo, source, active: false, generation: 0 }), [actor, identityId, repo, source]);
+  const activeQueueScope = useRef(queueScope);
+  activeQueueScope.current = queueScope;
+  const [queueReadScope, setQueueReadScope] = useState<typeof queueScope | null>(null);
+  useEffect(() => {
+    queueScope.active = true;
+    queueScope.generation += 1;
+    return () => { queueScope.active = false; };
+  }, [queueScope]);
+  const captureQueueScope = useCallback(() => {
+    const generation = queueScope.generation;
+    return () => queueScope.active && activeQueueScope.current === queueScope && queueScope.generation === generation;
+  }, [queueScope]);
   const roleCode = providedRoleCode ?? role;
   const roleProfile = ROLES[role];
   const roleLabel =
@@ -395,9 +410,16 @@ export function WarehouseProvider({
   );
 
   const refreshPending = useCallback(async () => {
-    setPendingSync(await outboxPendingCount());
-    setConflicts(await allConflicts());
-  }, []);
+    const isActive = captureQueueScope();
+    if (!isActive()) return;
+    const counts = await readOutboxCounts(actor);
+    const entries = await allConflicts(actor);
+    if (!isActive()) return;
+    setQueueReadScope(queueScope);
+    setPendingSync(counts.pendingCount);
+    setUnresolvedLegacyCount(counts.unresolvedLegacyCount);
+    setConflicts(entries);
+  }, [actor, captureQueueScope, queueScope]);
 
   // Initial loads and retries are bounded so a slow backend cannot strand the
   // route in a shell-only state. Post-mutation refreshes keep existing data on
@@ -439,9 +461,13 @@ export function WarehouseProvider({
 
   /** Replay all pending entries in FIFO order, then refresh. */
   const syncNow = useCallback(async () => {
-    const pending = await allPending();
-    await dkSyncNow({ repo, actor, pending, refresh, refreshPending });
-  }, [repo, actor, refresh, refreshPending]);
+    const isActive = captureQueueScope();
+    if (!isActive()) return;
+    const pending = await allPending(actor);
+    if (!isActive()) return;
+    if (!pending.length) { await refreshPending(); return; }
+    await dkSyncNow({ repo, actor, pending, refresh, refreshPending, isActive });
+  }, [repo, actor, refresh, refreshPending, captureQueueScope]);
 
   // Replay on reconnect and once on mount (in case the app was closed offline).
   useEffect(() => {
@@ -456,10 +482,15 @@ export function WarehouseProvider({
 
   const discardConflict = useCallback(
     async (id: string) => {
-      await outboxRemove(id);
+      const isActive = captureQueueScope();
+      if (!isActive()) return;
+      const owned = await allConflicts(actor);
+      if (!isActive() || !owned.some(entry => entry.id === id)) return;
+      await outboxRemove(id, isActive);
+      if (!isActive()) return;
       await refreshPending();
     },
-    [refreshPending],
+    [actor, refreshPending, captureQueueScope],
   );
 
   /**
@@ -555,9 +586,10 @@ export function WarehouseProvider({
     actor,
     identityId,
     refresh,
-    pendingSync,
+    pendingSync: queueReadScope === queueScope ? pendingSync : 0,
+    unresolvedLegacyCount: queueReadScope === queueScope ? unresolvedLegacyCount : 0,
     get lastActionStatus() { return lastActionStatusRef.current; },
-    conflicts,
+    conflicts: queueReadScope === queueScope ? conflicts : [],
     discardConflict,
     syncNow,
     receiveStock: (input) =>
@@ -722,12 +754,26 @@ export function WarehouseProvider({
       runAuthorizedAction("request_fulfillment", "other", () =>
         repo.createFulfillmentOrder({ ...input, actor }),
       ),
-    advanceFulfillmentOrder: (input) =>
-      runAuthorizedAction(
+    advanceFulfillmentOrder: (input) => {
+      if (input.action === "acknowledge_receipt") {
+        const blocked = receiptAcknowledgmentBlockReason(
+          data?.fulfillmentOrders.find((order) => order.id === input.orderId),
+          { actorIds: [actor, identityId], can, requests: data?.departmentStockRequests },
+        );
+        if (blocked) {
+          lastActionStatusRef.current = 'failed';
+          setLastActionStatus('failed');
+          toast.error(blocked);
+          return Promise.resolve(false);
+        }
+        return runAction("other", () => repo.advanceFulfillmentOrder({ ...input, actor }));
+      }
+      return runAuthorizedAction(
         WAREHOUSE_MUTATION_CAPABILITIES.advanceFulfillment,
         "other",
         () => repo.advanceFulfillmentOrder({ ...input, actor }),
-      ),
+      );
+    },
     createDepartmentStockRequest: (input) =>
       runAuthorizedAction("request_stock", "other", () =>
         repo.createDepartmentStockRequest({ ...input, actor }),

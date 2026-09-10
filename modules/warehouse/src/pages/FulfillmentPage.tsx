@@ -22,6 +22,7 @@ import type {
 } from "@intra/data-kit";
 import { normalizeSafeHttpsUrl } from "@intra/data-kit";
 import { useWarehouse } from "@/app/store";
+import { receiptAcknowledgmentBlockReason } from "@/domain/fulfillmentAcknowledgment";
 import { FLOOR_WORK_PATH, isFloorWork, isReleasedFollowUp } from "@/domain/workQueues";
 import { isStockQuantity, resolveProductScan } from "@/domain/productScan";
 import {
@@ -35,6 +36,7 @@ import {
 import { Icon } from "@/components/Icon";
 import { BarcodeScanner } from "@/components/camera/BarcodeScanner";
 import { EvidenceCapture } from "@/components/camera/EvidenceCapture";
+import { EvidenceGallery } from "@/components/EvidenceGallery";
 import { BulkOrderImportSheet } from "@/components/fulfillment/BulkOrderImportSheet";
 import { OrderIntakeSheet } from "@/components/fulfillment/OrderIntakeSheet";
 import { downloadText } from "@/app/download";
@@ -51,6 +53,18 @@ function useEvidencePending() {
     setPending(pendingKeys.current.size > 0);
   }, []);
   return { pending, pendingKeys, onBusyChange };
+}
+
+function receiptAcknowledgmentUnavailable(
+  order: FulfillmentOrder,
+  warehouse: ReturnType<typeof useWarehouse>,
+  profileId?: string,
+) {
+  return receiptAcknowledgmentBlockReason(order, {
+    actorIds: [warehouse.actor, warehouse.identityId, profileId],
+    can: warehouse.can,
+    requests: warehouse.data?.departmentStockRequests,
+  });
 }
 
 function requestDate(value: string, dateOnly = false) {
@@ -438,7 +452,6 @@ export function FulfillmentPage() {
           stockLevels={data.stockLevels}
           canCreate={canCreateOrder}
           canExecute={canExecute}
-          canAcknowledge={canCreateOrder || canRequestStock || canExecute}
           actorIds={[actor, identityId]}
           floorMode={isFloorOperator}
         />
@@ -492,7 +505,6 @@ function OrdersWorkspace({
   orders,
   canCreate,
   canExecute,
-  canAcknowledge,
   actorIds,
   storageAreas,
   units,
@@ -505,14 +517,15 @@ function OrdersWorkspace({
   orders: FulfillmentOrder[];
   canCreate: boolean;
   canExecute: boolean;
-  canAcknowledge: boolean;
   actorIds: string[];
   storageAreas: StorageArea[];
   units: InventoryUnit[];
   stockLevels: StockLevel[];
   floorMode: boolean;
 }) {
-  const { createFulfillmentOrder, advanceFulfillmentOrder } = useWarehouse();
+  const warehouse = useWarehouse();
+  const { createFulfillmentOrder, advanceFulfillmentOrder } = warehouse;
+  const { profile } = useSession();
   const [orderSearchParams] = useSearchParams();
   const toast = useToast();
   const [createOpen, setCreateOpen] = useState(false);
@@ -906,9 +919,13 @@ function OrdersWorkspace({
                     </button>
                   </div>
                 )}
-              {canAcknowledge &&
-                order.status === "released" &&
+              {order.status === "released" &&
                 order.deliveryMethod !== "shipment" && (
+                  receiptAcknowledgmentUnavailable(order, warehouse, profile?.id) ? (
+                    <p className="mt-3 text-sm text-muted">
+                      {receiptAcknowledgmentUnavailable(order, warehouse, profile?.id)}
+                    </p>
+                  ) : (
                   <button
                     type="button"
                     className="btn-primary mt-4 w-full sm:w-auto"
@@ -916,6 +933,7 @@ function OrdersWorkspace({
                   >
                     Acknowledge receipt
                   </button>
+                  )
                 )}
               {canExecute &&
                 order.status === "released" &&
@@ -983,6 +1001,7 @@ function OrdersWorkspace({
         onClose={() => setCancelOrder(undefined)}
       />
       <AcknowledgeReceiptSheet
+        key={acknowledgeOrder?.id}
         order={acknowledgeOrder}
         onClose={() => setAcknowledgeOrder(undefined)}
       />
@@ -992,7 +1011,11 @@ function OrdersWorkspace({
         onClose={() => setTrackingOrder(undefined)}
       />
       <OrderDetailsSheet
+        key={detailOrder?.id}
         order={detailOrder}
+        orders={orders}
+        returnCases={warehouse.data?.customerReturnCases ?? []}
+        onOpenOrder={setDetailOrder}
         products={products}
         storageAreas={storageAreas}
         showCommercial={!floorMode}
@@ -1004,12 +1027,18 @@ function OrdersWorkspace({
 
 function OrderDetailsSheet({
   order,
+  orders,
+  returnCases,
+  onOpenOrder,
   products,
   storageAreas,
   showCommercial,
   onClose,
 }: {
   order?: FulfillmentOrder;
+  orders: FulfillmentOrder[];
+  returnCases: CustomerReturnCase[];
+  onOpenOrder: (order: FulfillmentOrder) => void;
   products: Product[];
   storageAreas: StorageArea[];
   showCommercial: boolean;
@@ -1018,6 +1047,7 @@ function OrderDetailsSheet({
   if (!order) return null;
   const safeDeliveryLink = normalizeSafeHttpsUrl(order.deliveryLink);
   const address = order.deliveryAddress;
+  const replacementCases = returnCases.filter((record) => record.replacementOrderId === order.id);
   const subtotal = order.lines.reduce(
     (sum, line) => sum + (line.unitPrice ?? 0) * line.quantity,
     0,
@@ -1046,6 +1076,33 @@ function OrderDetailsSheet({
           {order.deliveryMethod === "shipment" && <p className="break-words">{order.courier ?? "Courier not provided"} / {order.waybillNumber ?? "Waybill not provided"}</p>}
           {order.status === "ready" && <p>Next owner: a warehouse operator other than the packer.</p>}
         </section>
+        {replacementCases.length > 0 && (
+          <section aria-label="Replacement linkage" className="space-y-3 border-b border-line pb-3 text-sm">
+            <h3 className="font-semibold text-ink">Replacement linkage</h3>
+            {replacementCases.map((record) => {
+              const original = orders.find((candidate) => candidate.id === record.sourceOrderId);
+              return (
+                <div key={record.id} className="min-w-0 space-y-2">
+                  <p className="break-all">Return case: <span>{record.id}</span></p>
+                  <p>{titleCase(record.status)} / {titleCase(record.resolution)}</p>
+                  <p className="break-words">{record.defectDescription}</p>
+                  {original ? (
+                    <button type="button" className="btn-outline max-w-full whitespace-normal text-left" onClick={() => onOpenOrder(original)}>
+                      View original order {original.externalReference}
+                    </button>
+                  ) : (
+                    <p className="break-all text-muted">Original order: {record.sourceOrderId ? `${record.sourceOrderId} (not available in this view)` : "Not linked"}</p>
+                  )}
+                </div>
+              );
+            })}
+            {!address && (
+              <p role="alert" className="text-amber-800 dark:text-amber-300">
+                Replacement delivery address is not recorded. Ask Customer Service and a warehouse supervisor to confirm the destination before dispatch. The original order's address is not a confirmed replacement destination.
+              </p>
+            )}
+          </section>
+        )}
         <dl className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-xl border border-line bg-inset p-4 text-sm">
           <div>
             <dt className="text-xs text-faint">Channel</dt>
@@ -1339,6 +1396,22 @@ function OrderDetailsSheet({
           </section>
         )}
 
+        {(order.proofOfDeliveryReference || order.proofOfDeliveryEvidenceUrl) && (
+          <section aria-label="Proof of delivery" className="space-y-2">
+            <h3 className="font-display text-base font-bold text-ink">Proof of delivery</h3>
+            {order.proofOfDeliveryReference && <p className="break-words text-sm">{order.proofOfDeliveryReference}</p>}
+            {order.proofOfDeliveryEvidenceUrl ? (
+              <EvidenceGallery urls={[order.proofOfDeliveryEvidenceUrl]} />
+            ) : <p className="text-sm text-muted">No proof-of-delivery evidence recorded.</p>}
+          </section>
+        )}
+        {(order.acknowledgementReference || order.acknowledgementEvidenceUrl) && (
+          <section aria-label="Recipient acknowledgment" className="space-y-2">
+            <h3 className="font-display text-base font-bold text-ink">Recipient acknowledgment</h3>
+            {order.acknowledgementReference && <p className="break-words text-sm">{order.acknowledgementReference}</p>}
+            <EvidenceGallery urls={order.acknowledgementEvidenceUrl ? [order.acknowledgementEvidenceUrl] : []} />
+          </section>
+        )}
         <section aria-labelledby="shipment-timeline-title">
           <h3
             id="shipment-timeline-title"
@@ -1375,9 +1448,7 @@ function OrderDetailsSheet({
                     </p>
                   )}
                   {event.evidenceUrl && (
-                    <p className="mt-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
-                      Evidence attached
-                    </p>
+                    <EvidenceGallery urls={[event.evidenceUrl]} className="mt-2" />
                   )}
                 </li>
               ))}
@@ -2365,76 +2436,141 @@ function AcknowledgeReceiptSheet({
   order?: FulfillmentOrder;
   onClose: () => void;
 }) {
-  const { advanceFulfillmentOrder } = useWarehouse();
+  const warehouse = useWarehouse();
+  const { advanceFulfillmentOrder } = warehouse;
+  const { profile } = useSession();
   const toast = useToast();
   const [reference, setReference] = useState("");
-  const [evidenceUrl, setEvidenceUrl] = useState("");
+  const [evidenceUrls, setEvidenceUrls] = useState<string[]>([]);
+  const evidence = useEvidencePending();
+  const inFlight = useRef(false);
+  const pendingCommand = useRef<
+    Parameters<typeof advanceFulfillmentOrder>[0] | null
+  >(null);
+  const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   if (!order) return null;
+  const currentOrder = warehouse.data?.fulfillmentOrders.find(
+    (candidate) => candidate.id === order.id,
+  );
+  const unavailable = currentOrder
+    ? receiptAcknowledgmentUnavailable(currentOrder, warehouse, profile?.id)
+    : "This order is no longer available. Refresh the queue before recording receipt.";
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (
+      inFlight.current ||
+      evidence.pendingKeys.current.size > 0 ||
+      unavailable
+    )
+      return;
+    if (!reference.trim() || !evidenceUrls[0]) return;
+    inFlight.current = true;
     setSaving(true);
-    const ok = await advanceFulfillmentOrder({
+    setError("");
+    pendingCommand.current ??= {
       orderId: order.id,
       action: "acknowledge_receipt",
-      acknowledgementReference: reference,
-      acknowledgementEvidenceUrl: evidenceUrl,
-    });
-    setSaving(false);
-    if (ok) {
-      toast.success("Receipt acknowledged and the linked request closed.");
-      onClose();
-      setReference("");
-      setEvidenceUrl("");
+      acknowledgementReference: reference.trim(),
+      acknowledgementEvidenceUrl: evidenceUrls[0],
+    };
+    try {
+      const ok = await advanceFulfillmentOrder(pendingCommand.current);
+      if (ok) {
+        toast.success("Recipient acceptance recorded.");
+        onClose();
+      } else {
+        setError(
+          "Receipt was not confirmed. Your evidence is retained. Check the order status and your access before retrying; ask a warehouse supervisor if acknowledgment remains unavailable.",
+        );
+      }
+    } catch {
+      setError(
+        "Receipt was not confirmed. Your evidence is retained. Check the order status and your access before retrying; ask a warehouse supervisor if acknowledgment remains unavailable.",
+      );
+    } finally {
+      inFlight.current = false;
+      setSaving(false);
     }
   };
   return (
     <Sheet
       open
       onOpenChange={(open) => {
-        if (!open) onClose();
+        if (!open && !inFlight.current) onClose();
       }}
       title={`Acknowledge receipt / ${order.externalReference}`}
-      description="Confirm that the recipient or delivery destination accepted the released inventory."
+      description="Record recipient acceptance, not warehouse release. The releasing operator cannot acknowledge receipt."
       footer={
         <button
           type="submit"
           form="acknowledge-order-form"
           className="btn-primary w-full"
-          disabled={saving}
+          disabled={
+            saving ||
+            evidence.pending ||
+            !!unavailable ||
+            !reference.trim() ||
+            evidenceUrls.length === 0
+          }
         >
-          {saving ? "Saving..." : "Confirm receipt"}
+          {saving
+            ? "Saving..."
+            : evidence.pending
+              ? "Uploading evidence..."
+              : "Confirm receipt"}
         </button>
       }
     >
       <form
         id="acknowledge-order-form"
+        aria-busy={saving || evidence.pending}
         className="space-y-4"
         onSubmit={(event) => void submit(event)}
       >
-        <Field label="Acknowledgment reference" htmlFor="ack-reference">
-          <input
-            id="ack-reference"
-            className="input"
-            value={reference}
-            onChange={(event) => setReference(event.target.value)}
-            required
-          />
-        </Field>
-        <Field
-          label="Acceptance evidence URL"
-          htmlFor="ack-evidence"
-          hint="Attach a signed handover, delivery proof, or recipient confirmation."
+        <p className="break-words text-sm text-ink">
+          Recipient: {order.handoverRecipientName ?? "Not recorded"}
+          {order.handoverRecipientDepartment
+            ? ` / ${order.handoverRecipientDepartment}`
+            : ""}
+        </p>
+        {(unavailable || error) && (
+          <p
+            role="alert"
+            className="text-sm text-amber-800 dark:text-amber-300"
+          >
+            {unavailable || error}
+          </p>
+        )}
+        <fieldset
+          disabled={
+            saving ||
+            evidence.pending ||
+            !!pendingCommand.current ||
+            !!unavailable
+          }
+          className="min-w-0 space-y-4"
         >
-          <input
-            id="ack-evidence"
-            className="input"
-            type="url"
-            value={evidenceUrl}
-            onChange={(event) => setEvidenceUrl(event.target.value)}
-            required
+          <Field label="Acknowledgment reference" htmlFor="ack-reference">
+            <input
+              id="ack-reference"
+              className="input"
+              value={reference}
+              onChange={(event) => setReference(event.target.value)}
+              required
+            />
+          </Field>
+          <EvidenceCapture
+            label="Upload recipient acknowledgment evidence"
+            value={evidenceUrls}
+            onChange={setEvidenceUrls}
+            onBusyChange={(busy) =>
+              evidence.onBusyChange("acknowledgment", busy)
+            }
+            maxPhotos={1}
+            reference={`acknowledgment-${order.id}`}
           />
-        </Field>
+        </fieldset>
       </form>
     </Sheet>
   );
@@ -3313,6 +3449,7 @@ function ReturnsWorkspace({
         create={createCustomerReturnCase}
       />
       <ResolveReturnSheet
+        key={selected?.id}
         record={selected}
         bins={bins}
         resolve={resolveCustomerReturnCase}
@@ -3514,6 +3651,32 @@ function ResolveReturnSheet({
   onClose: () => void;
 }) {
   const toast = useToast();
+  const { data } = useWarehouse();
+  const originalOrder = data?.fulfillmentOrders.find(
+    (order) => order.id === record?.sourceOrderId,
+  );
+  const originalAddress = originalOrder?.deliveryAddress;
+  const originalAvailable = !!(
+    originalOrder?.customerName?.trim() &&
+    originalOrder.customerContact?.trim() &&
+    originalAddress?.addressLine?.trim() &&
+    originalAddress.city?.trim() &&
+    originalAddress.province?.trim() &&
+    originalAddress.postalCode?.trim()
+  );
+  const [deliveryMode, setDeliveryMode] = useState<"original" | "new">(
+    originalAvailable ? "original" : "new",
+  );
+  const [deliveryFields, setDeliveryFields] = useState({
+    customerName: "",
+    customerContactNumber: "",
+    customerEmail: "",
+    addressLine: "",
+    city: "",
+    province: "",
+    postalCode: "",
+    reason: "",
+  });
   const [resolution, setResolution] = useState<
     Exclude<ReturnResolution, "pending">
   >(mode === "finance" ? "refund" : "replacement");
@@ -3521,26 +3684,72 @@ function ResolveReturnSheet({
   const [reference, setReference] = useState("");
   const [financeEvidenceUrl, setFinanceEvidenceUrl] = useState("");
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const inFlight = useRef(false);
+  const pendingCommand = useRef<Parameters<typeof resolve>[0] | null>(null);
+  const deliveryValid =
+    deliveryMode === "original"
+      ? originalAvailable
+      : Object.entries(deliveryFields).every(
+          ([key, value]) => key === "customerEmail" || value.trim().length > 0,
+        );
   if (!record) return null;
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (inFlight.current || (resolution === "replacement" && !deliveryValid))
+      return;
+    if (!(event.currentTarget as HTMLFormElement).reportValidity()) return;
+    inFlight.current = true;
     setSaving(true);
-    const ok = await resolve({
+    setError("");
+    pendingCommand.current ??= {
       returnCaseId: record.id,
       resolution,
       quarantineBinId: binId || undefined,
       refundReference: resolution === "refund" ? reference : undefined,
       replacementOrderId: undefined,
+      replacementDelivery:
+        resolution !== "replacement"
+          ? undefined
+          : deliveryMode === "original"
+            ? { mode: "original" }
+            : {
+                mode: "new",
+                customerName: deliveryFields.customerName.trim(),
+                customerContactNumber:
+                  deliveryFields.customerContactNumber.trim(),
+                customerEmail: deliveryFields.customerEmail.trim() || undefined,
+                deliveryAddress: {
+                  addressLine: deliveryFields.addressLine.trim(),
+                  city: deliveryFields.city.trim(),
+                  province: deliveryFields.province.trim(),
+                  postalCode: deliveryFields.postalCode.trim(),
+                },
+                reason: deliveryFields.reason.trim(),
+              },
       supplierReference:
         resolution === "vendor_return" ? reference || undefined : undefined,
       financeEvidenceUrl: ["refund", "write_off"].includes(resolution)
         ? financeEvidenceUrl || undefined
         : undefined,
-    });
-    setSaving(false);
-    if (ok) {
-      toast.success("Return resolution recorded.");
-      onClose();
+    };
+    try {
+      const ok = await resolve(pendingCommand.current);
+      if (ok) {
+        toast.success("Return resolution recorded.");
+        onClose();
+      } else {
+        setError(
+          "Resolution was not confirmed. The submitted details are retained. Check the return case before retrying the same submission.",
+        );
+      }
+    } catch {
+      setError(
+        "Resolution was not confirmed. The submitted details are retained. Check the return case before retrying the same submission.",
+      );
+    } finally {
+      inFlight.current = false;
+      setSaving(false);
     }
   };
   const needsBin = true;
@@ -3548,7 +3757,7 @@ function ResolveReturnSheet({
     <Sheet
       open
       onOpenChange={(open) => {
-        if (!open) onClose();
+        if (!open && !inFlight.current) onClose();
       }}
       title={
         mode === "finance" ? "Record finance refund" : "Resolve return case"
@@ -3559,7 +3768,7 @@ function ResolveReturnSheet({
           type="submit"
           form="resolve-return-form"
           className="btn-primary w-full"
-          disabled={saving}
+          disabled={saving || (resolution === "replacement" && !deliveryValid)}
         >
           {saving ? "Saving..." : "Save resolution"}
         </button>
@@ -3570,72 +3779,187 @@ function ResolveReturnSheet({
         className="space-y-4"
         onSubmit={(event) => void submit(event)}
       >
-        <Field label="Resolution" htmlFor="return-resolution">
-          <select
-            id="return-resolution"
-            className="input"
-            value={resolution}
-            disabled={mode === "finance"}
-            onChange={(event) =>
-              setResolution(event.target.value as typeof resolution)
-            }
+        {error && (
+          <p
+            role="alert"
+            className="text-sm text-amber-800 dark:text-amber-300"
           >
-            <option value="replacement">Replacement</option>
-            {mode === "finance" && <option value="refund">Refund</option>}
-            <option value="vendor_return">Vendor return</option>
-            <option value="re_kit">Re-kit</option>
-            <option value="write_off">Write off</option>
-          </select>
-        </Field>
-        {needsBin && (
-          <Field label="Quarantine bin" htmlFor="return-bin">
+            {error}
+          </p>
+        )}
+        <fieldset
+          disabled={saving || !!pendingCommand.current}
+          className="min-w-0 space-y-4"
+        >
+          <Field label="Resolution" htmlFor="return-resolution">
             <select
-              id="return-bin"
+              id="return-resolution"
               className="input"
-              value={binId}
-              onChange={(event) => setBinId(event.target.value)}
-              required
+              value={resolution}
+              disabled={mode === "finance"}
+              onChange={(event) =>
+                setResolution(event.target.value as typeof resolution)
+              }
             >
-              <option value="">Select a controlled bin</option>
-              {bins.map((bin) => (
-                <option key={bin.id} value={bin.id}>
-                  {bin.code} / {bin.label ?? "Controlled storage"}
-                </option>
-              ))}
+              <option value="replacement">Replacement</option>
+              {mode === "finance" && <option value="refund">Refund</option>}
+              <option value="vendor_return">Vendor return</option>
+              <option value="re_kit">Re-kit</option>
+              <option value="write_off">Write off</option>
             </select>
           </Field>
-        )}
-        {["refund", "vendor_return"].includes(resolution) && (
-          <Field
-            label={
-              resolution === "refund"
-                ? "Finance refund reference"
-                : "Supplier RMA reference"
-            }
-            htmlFor="return-reference"
-            hint="Use the attributable Finance or supplier case reference."
-          >
-            <input
-              id="return-reference"
-              className="input"
-              value={reference}
-              onChange={(event) => setReference(event.target.value)}
-              required
-            />
-          </Field>
-        )}
-        {["refund", "write_off"].includes(resolution) && (
-          <Field label="Finance evidence URL" htmlFor="return-finance-evidence">
-            <input
-              id="return-finance-evidence"
-              className="input"
-              type="url"
-              value={financeEvidenceUrl}
-              onChange={(event) => setFinanceEvidenceUrl(event.target.value)}
-              required
-            />
-          </Field>
-        )}
+          {resolution === "replacement" && (
+            <section
+              aria-label="Replacement delivery"
+              className="space-y-3 border-y border-line py-3"
+            >
+              <h3 className="text-sm font-semibold text-ink">
+                Replacement delivery
+              </h3>
+              <fieldset className="min-w-0 space-y-2">
+                <legend className="sr-only">Delivery details source</legend>
+                <label className="flex min-h-11 items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="replacement-delivery-mode"
+                    value="original"
+                    checked={deliveryMode === "original"}
+                    disabled={!originalAvailable}
+                    onChange={() => setDeliveryMode("original")}
+                  />
+                  Original delivery details
+                </label>
+                <label className="flex min-h-11 items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="replacement-delivery-mode"
+                    value="new"
+                    checked={deliveryMode === "new"}
+                    onChange={() => setDeliveryMode("new")}
+                  />
+                  New delivery details
+                </label>
+              </fieldset>
+              {!originalAvailable && (
+                <p className="text-sm text-muted">
+                  Original delivery details are unavailable or incomplete.
+                  Confirm new recipient and address details with Customer
+                  Service.
+                </p>
+              )}
+              {deliveryMode === "original" &&
+                originalOrder &&
+                originalAddress && (
+                  <div className="space-y-1 break-words text-sm">
+                    <p>
+                      {originalOrder.customerName} /{" "}
+                      {maskContact(originalOrder.customerContact)}
+                    </p>
+                    <p>
+                      {originalAddress.addressLine}, {originalAddress.city},{" "}
+                      {originalAddress.province} {originalAddress.postalCode}
+                    </p>
+                  </div>
+                )}
+              {deliveryMode === "new" && (
+                <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                  {(
+                    [
+                      ["customerName", "Replacement recipient name", "text"],
+                      [
+                        "customerContactNumber",
+                        "Replacement contact number",
+                        "tel",
+                      ],
+                      [
+                        "customerEmail",
+                        "Replacement email (optional)",
+                        "email",
+                      ],
+                      ["addressLine", "Replacement address line", "text"],
+                      ["city", "Replacement city", "text"],
+                      ["province", "Replacement province", "text"],
+                      ["postalCode", "Replacement postal code", "text"],
+                      ["reason", "Reason for new delivery details", "text"],
+                    ] as const
+                  ).map(([key, label, type]) => (
+                    <Field
+                      key={key}
+                      label={label}
+                      htmlFor={`replacement-${key}`}
+                    >
+                      <input
+                        id={`replacement-${key}`}
+                        className="input"
+                        type={type}
+                        value={deliveryFields[key]}
+                        required={key !== "customerEmail"}
+                        onChange={(event) =>
+                          setDeliveryFields((current) => ({
+                            ...current,
+                            [key]: event.target.value,
+                          }))
+                        }
+                      />
+                    </Field>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+          {needsBin && (
+            <Field label="Quarantine bin" htmlFor="return-bin">
+              <select
+                id="return-bin"
+                className="input"
+                value={binId}
+                onChange={(event) => setBinId(event.target.value)}
+                required
+              >
+                <option value="">Select a controlled bin</option>
+                {bins.map((bin) => (
+                  <option key={bin.id} value={bin.id}>
+                    {bin.code} / {bin.label ?? "Controlled storage"}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
+          {["refund", "vendor_return"].includes(resolution) && (
+            <Field
+              label={
+                resolution === "refund"
+                  ? "Finance refund reference"
+                  : "Supplier RMA reference"
+              }
+              htmlFor="return-reference"
+              hint="Use the attributable Finance or supplier case reference."
+            >
+              <input
+                id="return-reference"
+                className="input"
+                value={reference}
+                onChange={(event) => setReference(event.target.value)}
+                required
+              />
+            </Field>
+          )}
+          {["refund", "write_off"].includes(resolution) && (
+            <Field
+              label="Finance evidence URL"
+              htmlFor="return-finance-evidence"
+            >
+              <input
+                id="return-finance-evidence"
+                className="input"
+                type="url"
+                value={financeEvidenceUrl}
+                onChange={(event) => setFinanceEvidenceUrl(event.target.value)}
+                required
+              />
+            </Field>
+          )}
+        </fieldset>
       </form>
     </Sheet>
   );

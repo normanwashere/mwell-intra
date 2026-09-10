@@ -1833,6 +1833,7 @@ export class SupabaseRepository implements WarehouseControlRepository {
       resolution: input.resolution,
       quarantine_bin_id: input.quarantineBinId ?? null,
       replacement_order_id: input.replacementOrderId ?? null,
+      ...(input.replacementDelivery ? { replacement_delivery: input.replacementDelivery } : {}),
       refund_reference: input.refundReference?.trim() || null,
       supplier_reference: input.supplierReference?.trim() || null,
       finance_evidence_url: input.financeEvidenceUrl?.trim() || null,

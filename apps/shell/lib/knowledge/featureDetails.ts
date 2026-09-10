@@ -829,9 +829,9 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         control(
           "Relocate stock",
-          "Opens bin relocation for the selected product identity.",
-          "A valid operation route and destination bin are required.",
-          "A relocation draft opens with current source context.",
+          "Choose the source and destination, scan the exact units, and remove an individual wrong scan before moving. Closing retains a browser-local, account-specific draft; use Resume draft after a reload or Discard draft to start over.",
+          "Source and destination must differ. Current source custody and all active hold pages are checked before submission; Quality must resolve blocked stock through its normal process. A failed preflight does not move stock.",
+          "Only the retained eligible selection moves. If confirmation is uncertain, check movement history before retrying; never clear a hold just to complete a move.",
         ),
         control(
           "Adjust count",
@@ -1153,7 +1153,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         control(
           "Acknowledge receipt",
-          "Records proof that an internal, event, or third-party recipient accepted released stock.",
+          "Records proof that an internal, event, or third-party recipient accepted released stock. Use the receiving party's reference and upload its acceptance photo; this is not the dispatch confirmation.",
           "An acknowledgment reference and evidence are required, and the acknowledger cannot be the releasing operator.",
           "The order and its linked department request become Completed and Closed.",
         ),
@@ -1161,7 +1161,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Update delivery with proof",
           "Records courier progression, failed delivery, return to sender, or delivery completion and uploads the delivery image directly from camera or file picker.",
           "Delivered requires both a proof reference and at least one successfully uploaded image.",
-          "The shipment stores the proof reference and evidence path and becomes Delivered.",
+          "The shipment stores the proof reference and evidence path and becomes Delivered. Open Order details to review the saved proof image, including on completed orders; an unavailable attachment must be recovered, not assumed present.",
         ),
         control(
           "Split backorder or cancel",
@@ -1172,7 +1172,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         control(
           "Create return or re-kit work",
           "Lets Customer Service scan or enter the returned serial, identifies its original released order when available, and records warehouse resolution and Product-approved open-box re-kit lineage.",
-          "Returns require a recognized product and serial when applicable. An unmatched serial is visibly flagged for investigation instead of being silently linked to the wrong order. Active kits require a Product approval reference.",
+          "Returns use the existing unit serial, not a newly invented serial. An unmatched serial is visibly flagged for investigation instead of being silently linked to the wrong order. Replacement resolution requires confirmed original or new customer/delivery details; a new destination needs a reason. Active kits require a Product approval reference.",
           "The return preserves its original-order lineage when found and receives a controlled resolution or a traceable re-kit work order.",
         ),
         control(

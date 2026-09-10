@@ -447,6 +447,14 @@ export interface ResolveCustomerReturnCaseInput {
   resolution: Exclude<ReturnResolution, "pending">;
   quarantineBinId?: string;
   replacementOrderId?: string;
+  replacementDelivery?: {
+    mode: 'original' | 'new';
+    customerName?: string;
+    customerContactNumber?: string;
+    customerEmail?: string;
+    deliveryAddress?: { addressLine: string; city: string; province: string; postalCode: string };
+    reason?: string;
+  };
   refundReference?: string;
   supplierReference?: string;
   financeEvidenceUrl?: string;

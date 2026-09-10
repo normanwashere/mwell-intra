@@ -140,6 +140,46 @@ function uid(): string {
   return `oq-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+export function hasReplayIdentity(entry: OutboxEntry): boolean {
+  return typeof entry.input.actor === 'string' && !!entry.input.actor.trim() &&
+    typeof entry.input.idempotencyKey === 'string' && !!entry.input.idempotencyKey.trim();
+}
+
+export interface OutboxCounts {
+  pendingCount: number;
+  conflictCount: number;
+  unresolvedLegacyCount: number;
+}
+
+/** Device-local metadata only; never returns another actor's payload or error. */
+export async function readOutboxCounts(actor: string): Promise<OutboxCounts> {
+  const counts: OutboxCounts = { pendingCount: 0, conflictCount: 0, unresolvedLegacyCount: 0 };
+  const count = (entry: OutboxEntry) => {
+    if (entry.status === 'committed') return;
+    if (!hasReplayIdentity(entry)) counts.unresolvedLegacyCount += 1;
+    else if (entry.input.actor === actor) {
+      if (entry.status === 'pending') counts.pendingCount += 1;
+      if (entry.status === 'conflict') counts.conflictCount += 1;
+    }
+  };
+  const db = await openDb();
+  if (!db) memoryQueue.forEach(count);
+  else await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(STORE, 'readonly');
+    const request = transaction.objectStore(STORE).openCursor();
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) return;
+      count(cursor.value as OutboxEntry);
+      cursor.continue();
+    };
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+    transaction.onabort = () => reject(transaction.error);
+  });
+  return counts;
+}
+
 export function intentIdentity(method: QueueableMethod, input: Record<string, unknown>): string {
   const canonical = (value: unknown): unknown => {
     if (Array.isArray(value)) return value.map(canonical);
@@ -186,11 +226,11 @@ export async function enqueue(
   return entry;
 }
 
-export async function allPending(): Promise<OutboxEntry[]> {
+export async function allPending(actor?: string): Promise<OutboxEntry[]> {
   const db = await openDb();
   if (!db) {
     return memoryQueue
-      .filter((e) => e.status === 'pending')
+      .filter((e) => e.status === 'pending' && (actor === undefined || (e.input.actor === actor && hasReplayIdentity(e))))
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   }
   return new Promise((resolve, reject) => {
@@ -199,7 +239,7 @@ export async function allPending(): Promise<OutboxEntry[]> {
     req.onsuccess = () =>
       resolve(
         (req.result as OutboxEntry[])
-          .filter((e) => e.status === 'pending')
+          .filter((e) => e.status === 'pending' && (actor === undefined || (e.input.actor === actor && hasReplayIdentity(e))))
           .sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
       );
     req.onerror = () => reject(req.error);
@@ -213,8 +253,11 @@ export async function markConflict(id: string, error: string): Promise<void> {
   });
 }
 
-export async function removeEntry(id: string): Promise<void> {
-  await tx('readwrite', (store) => store.delete(id));
+export async function removeEntry(id: string, isActive?: () => boolean): Promise<void> {
+  await tx('readwrite', (store) => {
+    if (isActive?.() === false) return;
+    store.delete(id);
+  });
 }
 
 export async function updateEntry(
@@ -243,7 +286,7 @@ export async function updateEntry(
   });
 }
 
-export async function allConflicts(): Promise<OutboxEntry[]> {
+export async function allConflicts(actor?: string): Promise<OutboxEntry[]> {
   const db = await openDb();
   const all = db
     ? await new Promise<OutboxEntry[]>((resolve, reject) => {
@@ -253,11 +296,11 @@ export async function allConflicts(): Promise<OutboxEntry[]> {
         req.onerror = () => reject(req.error);
       })
     : [...memoryQueue];
-  return all.filter((e) => e.status === 'conflict');
+  return all.filter((e) => e.status === 'conflict' && (actor === undefined || (e.input.actor === actor && hasReplayIdentity(e))));
 }
 
-export async function pendingCount(): Promise<number> {
-  return (await allPending()).length;
+export async function pendingCount(actor?: string): Promise<number> {
+  return (await allPending(actor)).length;
 }
 
 /** For tests: wipe the in-memory fallback queue. */

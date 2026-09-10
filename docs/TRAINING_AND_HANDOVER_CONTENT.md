@@ -4,6 +4,12 @@
 
 Verify contextual help preserves unsaved values and focus, including unavailable-help recovery and the full-guide fallback. Review outcome/prerequisite, actual decision flow/owner, controls/screenshots, result/handoff/recovery and controlled reference in that order. Human pilot recruitment, routine/negative/handoff goals and target thresholds are defined in `docs/training/task-first-pilot-protocol.md`; no participant results exist yet. `docs/audits/task-first-coverage.md` is an exact content inventory with unverified evidence flags, not a release or usability certificate. Capture only after the relevant UI freezes; do not fabricate missing screenshots or promote old captures to new deployment proof.
 
+## September 9 WMS Practice
+
+After the matching UAT rollout, demonstrate Save progress versus Confirm receiving, a genuine exception reason, and a wrong-variant barcode rejection. During relocation, remove one mistaken scan, resume after refreshing in the same account/browser, and explain why a Quality hold still prevents a move. Select a bin to filter its serials and load beyond the first 30. Switch test accounts to verify pending work remains separated; never retry unowned legacy work before checking movement history.
+
+Open and close a completed order's saved delivery photo. Confirm a replacement using the original destination, then a separate case using a customer-confirmed new destination and reason; reload the order to verify persistence. For handovers, use different releasing and accepting identities and attach actual acceptance evidence. Explain that an authorized non-releasing recorder is currently allowed, while courier shipments use delivery proof. Start an event return from its issued allocation and do not record the same physical return a second time. These exercises are acceptance steps, not claims that the live scenarios have already passed.
+
 ## PO Count and Closure Clarity Practice
 
 Using the matching deployed candidate, distinguish physical **Received** from **Not yet QC accepted (outstanding)**. A Closed PO with 100 physically received and pending QC must not be taught as accepted or paid. Explain **Awaiting QC acceptance**, retain the actual acceptance/payment blockers, and distinguish **PO closed; lifecycle review required** from confirmed **Package closed**. Current control gaps are not evidence that historical issue controls were satisfied.

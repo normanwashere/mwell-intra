@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useSession } from '@intra/auth';
+import { Modal } from '@intra/ui';
 import { resolveEvidenceUrl } from '@/data/supabase/evidence';
 import { Icon } from './Icon';
 
@@ -144,29 +144,23 @@ function UnavailableEvidence({ className }: { className?: string }) {
 
 function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
   const closeButton = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    const previous = document.activeElement;
-    closeButton.current?.focus();
-    return () => { if (previous instanceof HTMLElement && previous.isConnected) previous.focus(); };
-  }, []);
-  return createPortal(
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Evidence photo"
-      className="fixed inset-0 z-[60] grid place-items-center bg-black/80 p-4"
-      onClick={onClose}
-      onKeyDown={(event) => {
-        if (event.key === 'Escape') {
-          event.preventDefault();
-          event.stopPropagation();
-          onClose();
-        } else if (event.key === 'Tab') {
-          event.preventDefault();
-          closeButton.current?.focus();
-        }
-      }}
+  // Join Sheet's modal stack so the preview owns pointer events and focus.
+  return (
+    <Modal
+      open
+      onOpenChange={(open) => { if (!open) onClose(); }}
+      title="Evidence photo"
+      initialFocusRef={closeButton}
+      showClose={false}
+      overlayClassName="!z-[60] !bg-black/80 !backdrop-blur-none"
+      className="!inset-0 !z-[60] !h-full !max-h-none !w-full !translate-x-0 !translate-y-0 !overflow-hidden !rounded-none !border-0 !bg-transparent !shadow-none grid place-items-center p-4"
     >
+      <div
+        aria-hidden="true"
+        data-testid="evidence-lightbox-backdrop"
+        className="absolute inset-0"
+        onClick={onClose}
+      />
       <button
         ref={closeButton}
         type="button"
@@ -179,10 +173,8 @@ function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
       <img
         src={src}
         alt="Evidence"
-        className="h-auto w-auto max-h-[calc(100vh-2rem)] max-w-[calc(100vw-2rem)] rounded-2xl object-contain supports-[height:100dvh]:max-h-[calc(100dvh-2rem)]"
-        onClick={(e) => e.stopPropagation()}
+        className="relative h-auto w-auto max-h-[calc(100vh-2rem)] max-w-[calc(100vw-2rem)] rounded-2xl object-contain supports-[height:100dvh]:max-h-[calc(100dvh-2rem)]"
       />
-    </div>,
-    document.body,
+    </Modal>
   );
 }

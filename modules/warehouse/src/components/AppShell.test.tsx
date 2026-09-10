@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { screen, within } from "@testing-library/react";
+import { describe, it, expect, vi } from "vitest";
+import { act, screen, within } from "@testing-library/react";
+import { _resetMemoryQueue, enqueue, markConflict } from '@intra/data-kit';
 import userEvent from "@testing-library/user-event";
 import { useLocation } from "react-router-dom";
 import { AppShell } from "./AppShell";
@@ -11,6 +12,30 @@ function LocationProbe() {
 }
 
 describe("AppShell navigation", () => {
+  it('keeps metadata-only legacy recovery visible beyond toast expiry without exposing queue payloads', async () => {
+    _resetMemoryQueue();
+    await enqueue('transfer', { secret: 'unowned payload' });
+    const legacy = await enqueue('transfer', { actor: 'other', secret: 'foreign legacy payload' });
+    await markConflict(legacy.id, 'private legacy error');
+    const foreign = await enqueue('transfer', { actor: 'other', idempotencyKey: 'foreign', secret: 'foreign payload' });
+    await markConflict(foreign.id, 'private foreign error');
+    const rendered = renderWithProviders(<AppShell>content</AppShell>);
+    try {
+      const notice = await screen.findByRole('status', { name: 'Unresolved legacy queue' });
+      expect(notice).toHaveTextContent('2 unresolved legacy queued actions on this device.');
+      expect(notice).toHaveTextContent(/account administrator.*reconcil/i);
+      expect(notice).toHaveTextContent(/not.*automatically assigned, replayed, or deleted/);
+      expect(within(notice).queryByRole('button')).not.toBeInTheDocument();
+      expect(document.body).not.toHaveTextContent(/unowned payload|foreign legacy payload|private legacy error|foreign payload|private foreign error/);
+      vi.useFakeTimers();
+      await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+      expect(notice).toBeVisible();
+    } finally {
+      vi.useRealTimers();
+      rendered.unmount();
+      _resetMemoryQueue();
+    }
+  });
   it.each([
     ["warehouse_operator", "Receive and inspect"],
     ["warehouse_supervisor", "Receiving"],

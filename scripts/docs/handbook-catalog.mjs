@@ -14,6 +14,20 @@ export const HANDBOOK_TABS = Object.freeze([
 
 const CATALOG = [
   {
+    source: "docs/releases/2026-09-10-SEPT9-WMS-FEEDBACK.md",
+    id: "sept9-wms-feedback",
+    title: "September 9 WMS Feedback",
+    primaryTab: "release",
+    relatedTabs: ["workflows", "roles"],
+    contentType: "release-note",
+    audience: ["operator", "trainer", "release-reviewer"],
+    summary: "Receiving, relocation, returns and recipient handover fixes, tester instructions and UAT release limits.",
+    keywords: ["september 9", "barcode", "relocation", "replacement", "acknowledgment", "proof of delivery"],
+    sortOrder: 4,
+    collapse: "reference",
+    relatedSources: ["docs/USER_TRAINING_AND_OPERATIONS_MANUAL.md"],
+  },
+  {
     source: "docs/manual/REVIEWED_TASK_TRAINING.md",
     id: "reviewed-task-training",
     title: "Reviewed Task Training",

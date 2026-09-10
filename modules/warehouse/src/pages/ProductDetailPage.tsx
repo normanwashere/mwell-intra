@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useWarehouse } from '@/app/store';
 import { WAREHOUSE_MUTATION_CAPABILITIES } from '@/app/authorization';
@@ -33,7 +33,8 @@ import { ExpiryBadge } from '@/components/ExpiryStatus';
 import { EvidenceGallery } from '@/components/EvidenceGallery';
 import { PriceEditorSheet } from '@/components/PriceEditorSheet';
 import { ProductEditorSheet } from '@/components/ProductEditorSheet';
-import { WarehouseScanFlow, resolveWarehouseScan } from '@/components/camera/WarehouseScanFlow';
+import { RelocationSheet } from '@/components/relocation/RelocationSheet';
+import { WarehouseScanFlow } from '@/components/camera/WarehouseScanFlow';
 
 const UNIT_TONE: Record<UnitStatus, Tone> = {
   in_stock: 'emerald',
@@ -48,18 +49,10 @@ const UNIT_TONE: Record<UnitStatus, Tone> = {
 export function ProductDetailPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
-  const { data, can, transfer, requestStockChange, relocate } = useWarehouse();
+  const { data, can, transfer, requestStockChange } = useWarehouse();
   const toast = useToast();
 
   const [relocateOpen, setRelocateOpen] = useState(false);
-  const [relLoc, setRelLoc] = useState('');
-  const [relFrom, setRelFrom] = useState('');
-  const [relTo, setRelTo] = useState('');
-  const [relQty, setRelQty] = useState(1);
-  const [relErr, setRelErr] = useState<string | null>(null);
-  const [relSerials, setRelSerials] = useState<string[]>([]);
-  const [relSaving, setRelSaving] = useState(false);
-  const relInFlight = useRef(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [fromLoc, setFromLoc] = useState('');
   const [toLoc, setToLoc] = useState('');
@@ -70,6 +63,8 @@ export function ProductDetailPage() {
   const [transferSerials, setTransferSerials] = useState<string[]>([]);
   const [timelineSerial, setTimelineSerial] = useState<string | null>(null);
   const [unitQuery, setUnitQuery] = useState('');
+  const [unitBin, setUnitBin] = useState('all');
+  const [unitLimit, setUnitLimit] = useState(30);
   const [priceOpen, setPriceOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [adjustOpen, setAdjustOpen] = useState(false);
@@ -108,16 +103,21 @@ export function ProductDetailPage() {
   const allUnits = data.units.filter((u) => u.productId === product.id);
   const locationName = (lid: string) =>
     data.locations.find((l) => l.id === lid)?.name ?? lid;
+  const binLabel = (binId?: string) =>
+    binId
+      ? data.storageAreas.find((b) => b.id === binId)?.code ?? binId
+      : 'General area';
   const uq = unitQuery.trim().toLowerCase();
-  const units = uq
-    ? allUnits.filter(
-        (u) =>
-          u.serialNumber.toLowerCase().includes(uq) ||
-          u.status.toLowerCase().includes(uq) ||
-          locationName(u.locationId).toLowerCase().includes(uq) ||
-          (u.assignedTo ?? '').toLowerCase().includes(uq),
-      )
-    : allUnits;
+  const units = allUnits.filter(
+    (u) =>
+      (unitBin === 'all' || (unitBin === 'general' ? !u.binId : u.binId === unitBin)) &&
+      (!uq ||
+        u.serialNumber.toLowerCase().includes(uq) ||
+        u.status.toLowerCase().includes(uq) ||
+        locationName(u.locationId).toLowerCase().includes(uq) ||
+        binLabel(u.binId).toLowerCase().includes(uq) ||
+        (u.assignedTo ?? '').toLowerCase().includes(uq)),
+  );
   const history = productMovementHistory(data.movements, product.id);
   const canTransfer = can('transfer_stock');
   const canSetPrice = can('set_pricing');
@@ -129,12 +129,6 @@ export function ProductDetailPage() {
   const warehouseIds = new Set(
     data.locations.filter((l) => l.type === 'warehouse').map((l) => l.id),
   );
-  const binLabel = (binId?: string) =>
-    binId
-      ? data.storageAreas.find((b) => b.id === binId)?.code ?? binId
-      : 'General area';
-  // Bins available for relocation at the chosen warehouse.
-  const relBins = data.storageAreas.filter((b) => b.locationId === relLoc);
   // Storage areas at a location (for transfer/adjust bin scoping).
   const binsAt = (locationId: string) =>
     data.storageAreas.filter((b) => b.locationId === locationId);
@@ -197,65 +191,6 @@ export function ProductDetailPage() {
     setTransferSerials([]);
     setTErr(null);
     setTransferOpen(true);
-  };
-
-  const openRelocate = () => {
-    const firstWh =
-      locations.find((l) => warehouseIds.has(l.locationId))?.locationId ??
-      [...warehouseIds][0] ??
-      '';
-    setRelLoc(firstWh);
-    setRelFrom('');
-    setRelTo('');
-    setRelQty(1);
-    setRelSerials([]);
-    setRelErr(null);
-    setRelocateOpen(true);
-  };
-
-  const submitRelocate = async () => {
-    if (relInFlight.current) return;
-    setRelErr(null);
-    if (!relLoc) {
-      setRelErr('Choose a warehouse.');
-      return;
-    }
-    if ((relFrom || '') === (relTo || '')) {
-      setRelErr('Source and destination bins must differ.');
-      return;
-    }
-    const quantity = product.serialized ? relSerials.length : relQty;
-    if (!Number.isInteger(quantity) || quantity < 1) {
-      setRelErr(product.serialized ? 'Scan the exact units to move.' : 'Quantity must be a positive whole number.');
-      return;
-    }
-    for (const code of product.serialized ? relSerials : []) {
-      const result = resolveWarehouseScan({ data, context: 'transfer', code,
-        expectedProductId: product.id, expectedLocationId: relLoc, expectedBinId: relFrom || null });
-      if (!result.ok) { setRelErr(result.message); return; }
-    }
-    relInFlight.current = true;
-    setRelSaving(true);
-    try {
-      const ok = await relocate({
-        productId: product.id,
-        locationId: relLoc,
-        fromBinId: relFrom || undefined,
-        toBinId: relTo || undefined,
-        quantity,
-        serialNumbers: product.serialized ? relSerials : undefined,
-      });
-      if (!ok) { setRelErr('Move not confirmed. Keep these exact units selected and review the reported error before continuing.'); return; }
-      toast.success(
-        `Moved ${quantity}× ${product.name} to ${binLabel(relTo || undefined)}`,
-      );
-      setRelocateOpen(false);
-    } catch {
-      setRelErr('Move not confirmed. Read back these exact units before retrying.');
-    } finally {
-      relInFlight.current = false;
-      setRelSaving(false);
-    }
   };
 
   const submitTransfer = async () => {
@@ -389,7 +324,7 @@ export function ProductDetailPage() {
             {canRelocate && (
               <button
                 type="button"
-                onClick={openRelocate}
+                onClick={() => setRelocateOpen(true)}
                 className="btn-accent btn-sm min-h-11 w-full justify-center sm:min-h-0 sm:w-auto"
               >
                 <Icon name="pin" className="h-4 w-4" /> Relocate
@@ -470,29 +405,44 @@ export function ProductDetailPage() {
             subtitle="Tap a unit to trace its history"
             action={
               <Badge tone="slate">
-                {uq ? `${units.length}/${allUnits.length}` : allUnits.length}
+                {uq || unitBin !== 'all' ? `${units.length}/${allUnits.length}` : allUnits.length}
               </Badge>
             }
           />
-          {allUnits.length > 6 && (
+          {allUnits.length > 0 && (
             <div className="relative mb-3">
               <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint">
                 <Icon name="search" className="h-4 w-4" />
               </span>
               <input
                 className="input pl-10"
-                placeholder="Filter by serial, status, site or assignee"
+                placeholder="Filter by serial, status, site, bin or assignee"
                 aria-label="Filter serialized units"
                 value={unitQuery}
-                onChange={(e) => setUnitQuery(e.target.value)}
+                onChange={(e) => { setUnitQuery(e.target.value); setUnitLimit(30); }}
               />
             </div>
           )}
+          {allUnits.length > 0 && (
+            <div className="mb-3">
+              <Field label="Bin" htmlFor="unit-bin-filter">
+                <select id="unit-bin-filter" className="input" aria-label="Filter units by bin" value={unitBin}
+                  onChange={(e) => { setUnitBin(e.target.value); setUnitLimit(30); }}>
+                  <option value="all">All bins</option>
+                  <option value="general">General area (unassigned)</option>
+                  {[...new Set(allUnits.flatMap(unit => unit.binId ? [unit.binId] : []))].map(binId => {
+                    const bin = data.storageAreas.find(area => area.id === binId);
+                    return <option key={binId} value={binId}>{binLabel(binId)}{bin ? ` - ${locationName(bin.locationId)}` : ''}</option>;
+                  })}
+                </select>
+              </Field>
+            </div>
+          )}
           {units.length === 0 ? (
-            <EmptyState icon="tag" title={uq ? 'No matching units' : 'No units yet'} />
+            <EmptyState icon="tag" title={uq || unitBin !== 'all' ? 'No matching units' : 'No units yet'} />
           ) : (
             <ul className="space-y-2" aria-label="Serialized units">
-              {units.slice(0, 30).map((u: InventoryUnit) => (
+              {units.slice(0, unitLimit).map((u: InventoryUnit) => (
                 <li key={u.id}>
                   <button
                     type="button"
@@ -504,7 +454,7 @@ export function ProductDetailPage() {
                         {u.serialNumber}
                       </p>
                       <p className="text-xs text-faint">
-                        {locationName(u.locationId)}
+                        {locationName(u.locationId)} · {binLabel(u.binId)}
                         {u.assignedTo ? ` • ${u.assignedTo}` : ''}
                       </p>
                     </div>
@@ -514,8 +464,11 @@ export function ProductDetailPage() {
               ))}
             </ul>
           )}
-          {units.length > 30 && (
-            <p className="mt-2 text-xs text-faint">Showing 30 of {units.length} units.</p>
+          {units.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+              <p role="status" className="text-xs text-faint">Showing {Math.min(unitLimit, units.length)} of {units.length} units.</p>
+              {unitLimit < units.length && <button type="button" className="btn-ghost" onClick={() => setUnitLimit(limit => limit + 30)}>Load more units</button>}
+            </div>
           )}
         </Card>
       )}
@@ -790,116 +743,8 @@ export function ProductDetailPage() {
         </div>
       </Sheet>
 
-      {/* Relocate (bin-to-bin within a warehouse) sheet */}
-      <Sheet
-        open={relocateOpen}
-        onOpenChange={(open) => { if (!relInFlight.current) setRelocateOpen(open); }}
-        title="Relocate stock"
-        description={`Move ${product.name} between storage areas.`}
-        footer={
-          <button type="button" className="btn-primary w-full" disabled={relSaving || (product.serialized && relSerials.length === 0)} onClick={() => void submitRelocate()}>
-            Move stock
-          </button>
-        }
-      >
-        <fieldset className="space-y-3" disabled={relSaving}>
-          {warehouseIds.size > 1 && (
-            <Field label="Warehouse" htmlFor="rel-wh">
-              <select
-                id="rel-wh"
-                className="input"
-                value={relLoc}
-                onChange={(e) => {
-                  setRelLoc(e.target.value);
-                  setRelFrom('');
-                  setRelTo('');
-                  setRelSerials([]);
-                }}
-              >
-                {data.locations
-                  .filter((l) => warehouseIds.has(l.id))
-                  .map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.name}
-                    </option>
-                  ))}
-              </select>
-            </Field>
-          )}
-          <Field label="From bin" htmlFor="rel-from">
-            <select
-              id="rel-from"
-              className="input"
-              value={relFrom}
-              onChange={(e) => { setRelFrom(e.target.value); setRelSerials([]); }}
-            >
-              <option value="">General area (unassigned)</option>
-              {relBins.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.code}
-                  {b.label ? ` · ${b.label}` : ''}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="To bin" htmlFor="rel-to">
-            <select
-              id="rel-to"
-              className="input"
-              value={relTo}
-              onChange={(e) => setRelTo(e.target.value)}
-            >
-              <option value="">General area (unassigned)</option>
-              {relBins.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.code}
-                  {b.label ? ` · ${b.label}` : ''}
-                </option>
-              ))}
-            </select>
-          </Field>
-          {product.serialized ? (
-            <Field label="Serialized units" hint={`${relSerials.length} selected`}>
-              <WarehouseScanFlow
-                key={`${relocateOpen}:${relLoc}:${relFrom || 'general'}`}
-                data={data}
-                context="transfer"
-                expectedProductId={product.id}
-                expectedLocationId={relLoc}
-                expectedBinId={relFrom || null}
-                scannedCodes={relSerials}
-                label="Scan relocation serial"
-                batch
-                complete={relSaving}
-                onResolved={(resolution) => {
-                  if (relInFlight.current || !resolution.serialNumber) return;
-                  const serial = resolution.serialNumber;
-                  setRelSerials((current) => current.includes(serial) ? current : [...current, serial]);
-                }}
-              />
-            </Field>
-          ) : <Field label="Quantity" htmlFor="rel-qty">
-            <QuantityStepper
-              id="rel-qty"
-              aria-label="Relocate quantity"
-              value={relQty}
-              onChange={setRelQty}
-              min={1}
-            />
-          </Field>}
-          {relBins.length === 0 && (
-            <p className="text-sm text-muted">
-              No storage areas set up for this warehouse yet. Add bins on the
-              Storage areas page first.
-            </p>
-          )}
-          {relErr && (
-            <p role="alert" className="text-sm text-rose-600 dark:text-rose-300">
-              {relErr}
-            </p>
-          )}
-        </fieldset>
-      </Sheet>
+      <RelocationSheet product={product} data={data} open={relocateOpen} onOpenChange={setRelocateOpen}
+        initialLocationId={locations.find(location => warehouseIds.has(location.locationId))?.locationId ?? [...warehouseIds][0] ?? ''} />
 
       {/* Unit timeline sheet */}
       <Sheet

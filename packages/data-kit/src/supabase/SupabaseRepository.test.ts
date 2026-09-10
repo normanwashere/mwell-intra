@@ -622,6 +622,17 @@ describe("SupabaseRepository read model query shape", () => {
 });
 
 describe("SupabaseRepository WMS persistence boundary", () => {
+  it.each(['original', 'new'] as const)('forwards %s replacement delivery without trusting the actor', async (mode) => {
+    const { client, calls } = makeMockClient(buildSeed());
+    const delivery = mode === 'original' ? { mode } : { mode, customerName: 'Test recipient',
+      customerContactNumber: '09170000000', reason: 'Confirmed address change',
+      deliveryAddress: { addressLine: 'Test street', city: 'Pasig', province: 'Metro Manila', postalCode: '1600' } };
+    await new SupabaseRepository(client).resolveCustomerReturnCase({ returnCaseId: 'case-test', resolution: 'replacement',
+      quarantineBinId: 'bin-test', replacementDelivery: delivery, actor: 'forged' });
+    expect(calls.at(-1)).toMatchObject({ fn: 'resolve_customer_return_case', payload: {
+      return_case_id: 'case-test', quarantine_bin_id: 'bin-test', replacement_delivery: delivery } });
+    expect(calls.at(-1)!.payload).not.toHaveProperty('actor');
+  });
   it("hydrates every WMS aggregate with explicit projections", async () => {
     const { client, queries } = makeMockClient(buildSeed());
     const data = await new SupabaseRepository(client).getData();

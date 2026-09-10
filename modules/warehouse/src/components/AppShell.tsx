@@ -176,6 +176,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     canOpenRoute,
     resetDemo,
     pendingSync,
+    unresolvedLegacyCount,
     conflicts,
     syncNow,
     discardConflict,
@@ -526,6 +527,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           data-testid="warehouse-scroll-region"
           className="mx-auto min-h-0 w-full max-w-5xl flex-1 scroll-pb-[calc(5rem+env(safe-area-inset-bottom))] overflow-y-auto overscroll-contain px-4 py-5 pb-[calc(7.5rem+env(safe-area-inset-bottom))] sm:px-6 md:overflow-visible md:pb-10 xl:max-w-6xl"
         >
+          {unresolvedLegacyCount > 0 && (
+            <div role="status" aria-label="Unresolved legacy queue" className="mb-4 space-y-1 border-y border-amber-300 bg-amber-50 px-3 py-3 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100">
+              <p className="font-semibold">{unresolvedLegacyCount} unresolved legacy queued action{unresolvedLegacyCount === 1 ? '' : 's'} on this device.</p>
+              <p>Ask your account administrator to reconcile them against server receipts and movements before re-entering these actions or clearing this device's saved data.</p>
+              <p>They will not be automatically assigned, replayed, or deleted.</p>
+            </div>
+          )}
           <PageTransition
             id={location.pathname}
             className="warehouse-workspace min-w-0 max-w-full"

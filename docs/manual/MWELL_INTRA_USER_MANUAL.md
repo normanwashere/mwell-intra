@@ -1,5 +1,7 @@
 # Mwell Intra Standalone Operating Handbook
 
+**September 9 feedback candidate:** The receiving, relocation, replacement-delivery and recipient-acknowledgment refinements described below are local development changes awaiting a matching UAT migration/deployment and live retest. They do not change the release status of the September 8 update.
+
 **September 8 UAT update:** Revision `4459b4d` includes scoped requester names in request review, wrapping product attributes, required actual delivery dates for new governed receipts, private photo storage, newest-first receipt/return history, and saved-photo review under Quality Control > Completed. The actual delivery date is separate from the posting timestamp. Previously saved records are not assigned invented dates or replacement evidence. The focused release evidence is in the September 8 open-items remediation report; earlier dated audit snapshots below retain their original scope and do not describe the latest fix status. These changes target UAT, not the main production app.
 
 **September 6 task-first candidate, not a live-release claim:** Home, Knowledge Base and onboarding share **What are you working on?**. Choose **Prepare for task** to prioritize learning for the selected task, or **View guide** to read its current instructions. **All task guides** retains the broader library. Suggestions are presentation, not a grant of role or record access; a selected task does not establish that an operation is authorized or complete.
@@ -396,13 +398,19 @@ flowchart TD
 
 Warehouse Admin creates the site, storage areas, scannable bins, and allowed operation routes. Verify destinations before receiving production stock.
 
+For bin relocation, choose the exact source and destination and scan the units to move. Remove a single incorrect scan using its removal control; the remaining list stays intact. Closing retains a local account/product-specific draft. After refresh, use **Resume draft** or **Discard draft**. Drafts do not transfer between devices. Active holds are checked before submission. If a hold blocks the move, keep the unit in its source custody and ask Quality to review it. An unknown network outcome requires checking movement history before retrying. On the product screen, select a bin's stock count to filter its serialized units and use **Load more** to see the remaining units.
+
 ### Receiving and Inspection
 
 Select the PO and destination, record each line, scan serial/lot details, and attach evidence. Inspection supports accepted, hold, damaged, unavailable, and vendor-return outcomes. Non-accepted outcomes require a reason and evidence. Evidence must be an approved HTTPS resource, a governed private-storage object resolved through a signed URL, or a bundled UAT evidence asset. Intra does not request insecure or malformed links; it shows an explicit unavailable state so the operator can replace the evidence without generating a hidden browser failure.
 
+In the governed PO receipt form, **Exception reason** explains damaged, short, excess or unidentified quantities; it is not an exemption request. Example: "Expected 100; received 95 clean and 5 damaged; photos attached." Expand the compact validation summary and select a missing requirement to reach its field. **Save progress** preserves unfinished input without receiving stock; **Confirm governed receipt** performs the receipt. For non-serialized merchandise, scan the barcode mapped to the exact product and size and enter the quantity, not invented device serials. A rejected barcode needs a label/mapping check by the Warehouse lead. General area means unassigned location, not QC acceptance.
+
 ### Allocation, Events, and Returns
 
 Reserve only available non-held stock. Scan custody on issue. Record consumed, returned, lost, and damaged quantities. Close the event only after all issued quantity reconciles.
+
+Use **Allocation Return** from the original issued allocation for its linked event-stock return. Do not record that same physical return again under Returns receiving. Returns receiving is the physical intake and inspection-staging workflow; a replacement/refund decision belongs to its customer return case.
 
 ### Ecommerce Fulfillment and Pick & Pack
 
@@ -412,9 +420,13 @@ Selling price is assigned by Product and is read-only in Warehouse. Do not type 
 
 Before picking, scan the displayed rack or bin and then scan each serialized unit. Confirm packaging supplies, waybill, courier, dispatch details, and the generated handover reference. Upload proof directly in Intra; an external evidence URL is not required. Use **Export current view** when a controlled CSV handoff is needed.
 
+For a completed shipment, include completed orders in the status filter and open **Order details** to review the saved proof of delivery. Open its image to inspect it, then close the preview to return to the order. A missing or inaccessible attachment must be recovered; an "attached" label alone is not delivery proof. For an internal/event/third-party handover, the eligible recipient/requester or authorized non-releasing recorder uses **Acknowledge receipt**, enters the acceptance reference and uploads recipient evidence. The releasing operator cannot acknowledge their own handoff. This action does not grant requesters warehouse execution permissions.
+
 ### Customer Returns and Original Release Matching
 
 Customer Service or Operations scans the returned serial with the camera or enters it manually. Intra matches the serial to its original picked release and order when evidence exists. Verify the displayed source before accepting custody. An unmatched serial must remain visibly unresolved and be escalated for controlled investigation; do not attach it to an unrelated order.
+
+Use the serial already on the physical device or in the original release, not a new serial. An already-scanned message means it is already in this draft. For a replacement, review the linked original order, confirm its complete customer/delivery details or enter a new destination with a reason. Missing historical details need customer confirmation, not a guessed backfill. The original order stays unchanged. Closed returns must not be reopened or create another stock movement merely because a previous command is retried.
 
 ### Counts and Adjustments
 

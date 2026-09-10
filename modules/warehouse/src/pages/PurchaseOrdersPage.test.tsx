@@ -15,6 +15,7 @@ import { buildSeed, type ReceiveProcurementPOInput } from "@intra/data-kit";
 import type { ReceivingProgress } from "@/data/receivingProgress";
 import * as evidenceStorage from "@/data/supabase/evidence";
 import * as repositorySource from "@/data/createRepository";
+import merchManifest from "../../../../scripts/qa/uat-sep08-merch.manifest.json";
 
 const liveDrafts = vi.hoisted(() => ({ enabled: false, rpc: vi.fn() }));
 const camera = vi.hoisted(() => ({
@@ -204,6 +205,89 @@ class LiveProcurementRepository extends InMemoryRepository {
 }
 
 describe("PurchaseOrdersPage", () => {
+  it.each(['damaged', 'unidentified', 'short', 'excess'] as const)(
+    'explains and requires an exception reason for %s, while allowing draft saves', async (outcome) => {
+      const repo = new LiveProcurementRepository();
+      const user = userEvent.setup();
+      renderReceiving(repo);
+      const dialog = await openReceiving(user);
+      completeReceipt(dialog);
+      expect(within(dialog).queryByLabelText('Exception reason')).not.toBeInTheDocument();
+      expect(within(dialog).getByText('Damaged, unidentified, short, and excess quantities require an exception reason. Clean-only receipts do not.')).toBeVisible();
+      fireEvent.change(within(dialog).getByLabelText(`${outcome} quantity for Smart watches`), { target: { value: '1' } });
+      if (outcome !== 'excess') {
+        fireEvent.change(within(dialog).getByLabelText('clean quantity for Smart watches'), { target: { value: '1' } });
+        fireEvent.change(within(dialog).getByLabelText('clean serials for Smart watches'), { target: { value: 'RECEIVE-1' } });
+      }
+      if (outcome !== 'short') {
+        fireEvent.change(within(dialog).getByLabelText(`${outcome} serials for Smart watches`), { target: { value: 'EXCEPTION-1' } });
+      }
+      const reason = within(dialog).getByLabelText('Exception reason');
+      expect(reason).toBeRequired();
+      expect(reason).toHaveAttribute('aria-invalid', 'true');
+      expect(reason).toHaveAccessibleDescription(new RegExp(`Required for this receipt: ${outcome}\\. Example:`, 'i'));
+      expect(within(dialog).getByText('Required: explain the exception.')).toBeVisible();
+      fireEvent.change(reason, { target: { value: '   ' } });
+      expect(within(dialog).getByRole('button', { name: 'Confirm governed receipt' })).toBeDisabled();
+      await user.click(within(dialog).getByRole('button', { name: 'Save progress' }));
+      await waitFor(() => expect(JSON.parse(localStorage.getItem(draftKey)!).body.reason).toBe('   '));
+      expect(repo.receivedInputs).toHaveLength(0);
+      fireEvent.change(reason, { target: { value: 'Delivery discrepancy documented on the delivery note.' } });
+      expect(reason).toHaveAttribute('aria-invalid', 'false');
+      expect(within(dialog).getByRole('button', { name: 'Confirm governed receipt' })).toBeEnabled();
+    },
+  );
+
+  it('keeps validation compact, expands focusable corrections, and groups responsive receipt actions', async () => {
+    const user = userEvent.setup();
+    renderReceiving();
+    const dialog = await openReceiving(user, 0, false);
+    const requirements = within(dialog).getByRole('region', { name: 'Receipt requirements' });
+    const disclosure = requirements.querySelector('details')!;
+    expect(disclosure).not.toHaveAttribute('open');
+    expect(within(requirements).getByText('3 requirements before confirmation')).toBeVisible();
+    await user.click(within(requirements).getByText('3 requirements before confirmation'));
+    const date = within(dialog).getByLabelText('Actual delivery date');
+    date.scrollIntoView = vi.fn();
+    await user.click(within(requirements).getByRole('button', { name: 'Enter the actual delivery date.' }));
+    expect(date).toHaveFocus();
+    expect(date).toHaveAccessibleDescription(/Enter the actual delivery date/);
+    const save = within(dialog).getByRole('button', { name: 'Save progress' });
+    const confirm = within(dialog).getByRole('button', { name: 'Confirm governed receipt' });
+    expect(save.parentElement).toBe(confirm.parentElement);
+    expect(save.parentElement).toHaveClass('sm:flex-row');
+    expect(confirm).toHaveClass('sm:w-auto');
+    expect(confirm).toBeDisabled();
+  });
+
+  it('rejects MW-JCKT-333354 against source-seeded Jacket S and shows its expected identity without changing quantities', async () => {
+    const seeded = merchManifest.fixtures.find(group => group.table === 'products')!.rows
+      .find(row => row.id === 'uat-sep08-tester1-jacket-s')!;
+    if (!('barcode' in seeded) || !('sku' in seeded) || !('name' in seeded)) throw new Error('Missing source product identity');
+    const repo = new LiveProcurementRepository(100);
+    const data = await repo.getData();
+    const product = { ...data.products.find(row => row.id === 'doctor-token')!, id: seeded.id, name: seeded.name, sku: seeded.sku, barcode: seeded.barcode, serialized: false };
+    data.products.push(product);
+    vi.spyOn(repo, 'getData').mockResolvedValue(data);
+    const [po] = await repo.getReceivableProcurementPOs();
+    vi.spyOn(repo, 'getReceivableProcurementPOs').mockResolvedValue([{ ...po!, lines: [{ ...po!.lines[0]!, productId: product.id, description: product.name }] }]);
+    const user = userEvent.setup();
+    renderReceiving(repo);
+    const dialog = await openReceiving(user);
+    const code = within(dialog).getByLabelText(`Product barcode for ${product.name}`);
+    const line = code.closest('li')!;
+    await user.type(code, 'MW-JCKT-333354{Enter}');
+    expect(within(line).getByRole('alert')).toHaveTextContent(`Expected ${product.name}. Barcode: ${product.barcode}.`);
+    expect(within(line).getByRole('alert')).toHaveTextContent('Check the product label and scan again.');
+    expect(within(dialog).getByLabelText(`Map ${product.name}`)).toHaveValue(product.id);
+    expect(within(dialog).getByLabelText(`clean quantity for ${product.name}`)).toHaveValue(100);
+    expect(repo.receivedInputs).toHaveLength(0);
+    await user.type(code, `${product.barcode}{Enter}`);
+    expect(within(line).queryByRole('alert')).not.toBeInTheDocument();
+    expect(within(line).getByRole('status')).toHaveTextContent(`Product verified: ${product.name}`);
+    expect(within(dialog).getByLabelText(`clean quantity for ${product.name}`)).toHaveValue(100);
+  });
+
   it("requires an explicit actual delivery date, saves it in progress and sends it on receipt", async () => {
     const repo = new LiveProcurementRepository();
     const receive = vi.spyOn(repo, "receiveProcurementPO");
@@ -262,7 +346,7 @@ describe("PurchaseOrdersPage", () => {
     await user.type(code, "WRONG-CODE{Enter}");
     const line = code.closest("li")!;
     expect(within(line).getByRole("alert")).toHaveTextContent("Wrong or ambiguous product barcode for Merchandise.");
-    expect(screen.getAllByText("Wrong or ambiguous product barcode for Merchandise.")).toHaveLength(1);
+    expect(screen.getAllByText(/Wrong or ambiguous product barcode for Merchandise\./)).toHaveLength(1);
     expect(mapping).toHaveValue(product.id);
     const otherProduct = (await repo.getData()).products.find(row => row.id === "shirt-l")!;
     await user.type(code, `${otherProduct.barcode || otherProduct.sku}{Enter}`);
@@ -317,6 +401,7 @@ describe("PurchaseOrdersPage", () => {
     expect(confirm).toBeDisabled();
     const evidence = within(dialog).getByLabelText('Delivery evidence URL');
     evidence.scrollIntoView = vi.fn();
+    await user.click(within(dialog).getByText(/requirements? before confirmation/));
     await user.click(within(dialog).getByRole('button', { name: 'Attach delivery evidence' }));
     expect(evidence).toHaveFocus();
     fireEvent.change(evidence, { target: { value: 'https://example.com/delivery-evidence.jpg' } });
@@ -377,6 +462,7 @@ describe("PurchaseOrdersPage", () => {
     const closed = within(dialog).getByRole('checkbox', { name: 'Receive Already received' });
     if ((closed as HTMLInputElement).checked) await user.click(closed);
     checkbox.scrollIntoView = vi.fn();
+    await user.click(within(dialog).getByText(/requirements? before confirmation/));
     await user.click(within(dialog).getByRole('button', { name: 'Select at least one item to receive.' }));
     expect(checkbox).toHaveFocus();
     expect(closed).not.toHaveFocus();
@@ -410,6 +496,7 @@ describe("PurchaseOrdersPage", () => {
     const scroll = vi.fn();
     const input = within(dialog).getByLabelText('Delivery evidence URL');
     input.scrollIntoView = scroll;
+    await user.click(within(dialog).getByText(/requirements? before confirmation/));
     await user.click(within(dialog).getByRole('button', { name: 'Attach delivery evidence' }));
     expect(input).toHaveFocus();
     expect(scroll).toHaveBeenCalled();

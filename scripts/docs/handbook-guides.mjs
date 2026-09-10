@@ -1066,6 +1066,7 @@ function roleGuide(definition) {
 }
 
 const SOURCE_ROOT_HEADINGS = {
+  "sept9-wms-feedback": "September 9 WMS Feedback: Fixes And Tester Instructions",
   "reviewed-task-training": "Reviewed Task Training",
   "sep05-procurement-legal-candidate": "Procurement And Legal - September 05 Candidate",
   "sep05-platform-finance-candidate": "September 5 Platform and Finance Candidate",
@@ -1403,6 +1404,7 @@ function markdownHeadings(source) {
 }
 
 const LEGACY_TARGET_BY_SOURCE_ID = {
+  "sept9-wms-feedback": ["system", "source-references", "source-sept9-wms-feedback"],
   "user-manual": ["home", "home", "document-controls"],
   "process-reference-library": ["tasks", "procurement-request-approval", "document-controls"],
   "migration-cutover-hypercare": ["system", "infrastructure-continuity", "source-references"],

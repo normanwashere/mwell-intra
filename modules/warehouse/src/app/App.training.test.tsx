@@ -59,12 +59,19 @@ describe("Warehouse training denial recovery", () => {
     expect(
       await screen.findByText("Complete onboarding before this action"),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: "Resume onboarding" }),
-    ).toHaveAttribute(
-      "href",
-      "/onboarding?requirement=marketing-reservation-assessment",
-    );
+    await waitFor(() => {
+      const href = screen.getByRole("link", { name: "Resume onboarding" }).getAttribute("href");
+      expect(href).toBeTruthy();
+      const destination = new URL(href!, window.location.href);
+      expect(destination.origin).toBe(window.location.origin);
+      expect(destination.pathname).toBe("/onboarding");
+      expect(destination.searchParams.getAll("requirement")).toEqual(["marketing-reservation-assessment"]);
+      // MemoryRouter does not change the browser location used for the return destination.
+      expect(destination.searchParams.getAll("next")).toEqual(["/"]);
+      const returnDestination = new URL(destination.searchParams.get("next")!, destination);
+      expect(returnDestination.origin).toBe(window.location.origin);
+      expect(returnDestination.pathname).toBe("/");
+    });
     expect(
       screen.queryByText(/not assigned to your current roles/),
     ).not.toBeInTheDocument();

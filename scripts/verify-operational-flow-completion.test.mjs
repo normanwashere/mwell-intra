@@ -103,10 +103,14 @@ test("surfaces every new control in its owning module", () => {
     read("modules/warehouse/src/pages/FulfillmentPage.tsx"),
     /Close with customer/i,
   );
-  assert.match(
+  const fulfillmentProjection = /fulfillment_orders:\s*"([^"]+)"/.exec(
     read("packages/data-kit/src/supabase/SupabaseRepository.ts"),
-    /shipment_status,dispatched_at,last_tracking_at/,
-  );
+  )?.[1];
+  assert.ok(fulfillmentProjection, "Fulfillment must declare an explicit read projection");
+  const fulfillmentFields = new Set(fulfillmentProjection.split(","));
+  for (const field of ["shipment_status", "shipment_events", "dispatched_at", "last_tracking_at"]) {
+    assert.ok(fulfillmentFields.has(field), `Fulfillment projection is missing ${field}`);
+  }
   assert.match(
     read("packages/data-kit/src/supabase/SupabaseRepository.ts"),
     /finance_evidence_url,customer_resolution_reference/,
