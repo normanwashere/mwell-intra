@@ -317,6 +317,7 @@ export const TROUBLESHOOTING_GUIDES: TroubleshootingGuide[] = [
       "Route to the authorized Quality disposition owner",
       "Wait for Quality Control to finish loading before deciding. If it cannot load the queue, choose Retry quality queue. Do not create another receipt or release a hold to get past loading; inspection and evidence checks still apply",
       "Completed inspection photos load as their rows come into view. Wait for the thumbnail to be ready, then open it to review the original photos. If a photo cannot load, choose Retry photos; do not upload a duplicate or treat a loading error as missing inspection evidence",
+      "On Warehouse Tasks, a failed task read stays visible until you choose Retry task queue or reload the work. Do not treat a connection error as proof that no tasks are due. Tasks load inspection labels without downloading photos; follow the task link to review evidence in Quality Control",
       "Release, continue hold, or return only through the recorded decision",
       "If relocation says stock is held, keep the exact serial/bin/lot reference and resolve its hold. Do not create a second receipt or move it to another bin to escape the hold",
     ],

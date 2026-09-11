@@ -2,6 +2,8 @@
 
 ## September 12 Workspace Layout
 
+**Task queue recovery:** A failed Warehouse Tasks read is not an empty queue. Choose **Retry task queue** after checking your connection. Task labels load without downloading inspection photos; use the task's source link to review the evidence in Quality Control. No task completion, inspection or stock step changes.
+
 Quality Control keeps the complete inspection queue available without downloading every photo at startup. On **Completed**, photos load as their rows come into view. Select a thumbnail to review the original evidence. **Retry photos** retries an image read, not an inspection or stock decision. A photo loading error does not mean the inspection has no evidence. All inspection, hold and independent-review steps remain unchanged.
 
 **Loading follow-up:** Quality Control now waits for warehouse startup before fetching its inspection and hold queues. Wait for the queue to finish before making a decision; if it fails, use **Retry quality queue**. Do not repeat a receipt or release a hold to get past loading. Permission checks have also been made faster without changing your roles, required training, approval steps or evidence. UAT records marked **PERF-SEP12** are synthetic volume-test drafts and unallocated orders, not real stock or deliveries; existing operational test scenarios remain available.

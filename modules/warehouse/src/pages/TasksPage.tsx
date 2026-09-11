@@ -1,8 +1,9 @@
 import { userFacingError } from '@intra/ui';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useWarehouse } from '@/app/store';
-import type { WarehouseTask, QualityInspection } from '@intra/data-kit';
+import type { WarehouseTask, QualityInspectionSummary } from '@intra/data-kit';
+import { useSession } from '@intra/auth';
 import { Badge, EmptyState, PageHeader, SegmentedControl } from '@/components/ui';
 import { Icon } from '@/components/Icon';
 import { loadCompleteControlQueue } from '@/domain/controlQueues';
@@ -10,7 +11,11 @@ import { loadCompleteControlQueue } from '@/domain/controlQueues';
 import { parseTaskStatus, sourcePathForTask, type TaskStatus } from '@/domain/taskNavigation';
 
 export function TasksPage() {
-  const { data, loadWarehouseTasks, loadQualityInspections } = useWarehouse();
+  const { data, identityId, capabilities, loadWarehouseTasks, loadQualityInspectionSummaries } = useWarehouse();
+  const { mode, supabaseClient } = useSession();
+  const loaders = useRef({ tasks: loadWarehouseTasks, inspections: loadQualityInspectionSummaries });
+  const accessScope = [...capabilities].sort().join('|');
+  useEffect(() => { loaders.current = { tasks: loadWarehouseTasks, inspections: loadQualityInspectionSummaries }; });
   const [params, setParams] = useSearchParams();
   const status = parseTaskStatus(params.get('status'));
   const setStatus = (next: TaskStatus) => {
@@ -20,15 +25,19 @@ export function TasksPage() {
   };
   const [tasks, setTasks] = useState<WarehouseTask[]>([]);
   const [loading, setLoading] = useState(true);
-  const [inspections, setInspections] = useState<QualityInspection[]>([]);
+  const [inspections, setInspections] = useState<QualityInspectionSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [reloadVersion, setReloadVersion] = useState(0);
 
   useEffect(() => {
+    // Wait for bootstrap and ignore provider callback churn between real data changes.
+    if (!data) return;
     let active = true;
     setLoading(true);
     setError(null);
-    void Promise.all([loadCompleteControlQueue(loadWarehouseTasks), loadCompleteControlQueue(loadQualityInspections)])
+    setTasks([]);
+    setInspections([]);
+    void Promise.all([loadCompleteControlQueue(loaders.current.tasks), loadCompleteControlQueue(loaders.current.inspections)])
       .then(([rows, quality]) => {
         if (active) { setTasks(rows); setInspections(quality); }
       })
@@ -39,7 +48,7 @@ export function TasksPage() {
     return () => {
       active = false;
     };
-  }, [loadWarehouseTasks, loadQualityInspections, reloadVersion]);
+  }, [data, identityId, mode, supabaseClient, accessScope, reloadVersion]);
 
   const shown = useMemo(() => tasks.filter((task) => task.status === status), [status, tasks]);
   return (

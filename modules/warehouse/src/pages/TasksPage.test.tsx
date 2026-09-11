@@ -7,12 +7,18 @@ import { makeRepo, renderWithProviders } from '@/test/renderWithProviders';
 describe('TasksPage', () => {
   it('offers retry after a failed queue read without claiming the queue is empty', async () => {
     const repo = makeRepo();
-    vi.spyOn(repo, 'listWarehouseTasks').mockRejectedValueOnce(new Error('Connection interrupted')).mockResolvedValue({ rows: [] });
+    const read = vi.spyOn(repo, 'listWarehouseTasks').mockRejectedValueOnce(new Error('Connection interrupted')).mockResolvedValue({ rows: [] });
+    const summaries = vi.spyOn(repo, 'listQualityInspectionSummaries').mockResolvedValue({ rows: [] });
+    const fullEvidence = vi.spyOn(repo, 'listQualityInspections');
     renderWithProviders(<TasksPage />, { repo, role: 'logistics_supervisor' });
     expect(await screen.findByRole('alert')).toHaveTextContent('Connection interrupted');
     expect(screen.queryByText('No due tasks')).not.toBeInTheDocument();
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(summaries).toHaveBeenCalledTimes(1);
+    expect(fullEvidence).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole('button', { name: 'Retry task queue' }));
     expect(await screen.findByText('No due tasks')).toBeInTheDocument();
+    expect(read).toHaveBeenCalledTimes(2);
   });
   it('links a quality task to its source queue', async () => {
     const repo = makeRepo();

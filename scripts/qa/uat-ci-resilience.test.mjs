@@ -161,7 +161,7 @@ test("UAT certification workflow gates deployment and always certifies cleanup",
   for (const gate of [
     "pnpm lint",
     "pnpm typecheck",
-    "pnpm test",
+    "pnpm exec turbo run test",
     "pnpm build",
     "pnpm verify:launch-artifacts",
   ]) {
@@ -192,6 +192,14 @@ test("UAT certification workflow gates deployment and always certifies cleanup",
     /uat-ci-run-id\.mjs[\s\S]*--ordinal "\$\{\{ matrix\.ordinal \}\}"/,
   );
   assert.doesNotMatch(workflow, /SUPABASE_SERVICE_ROLE_KEY:\s*eyJ/);
+});
+
+test("CI bounds nested test pools without relaxing assertions or deadlines", async () => {
+  const workflow = await readFile(new URL("../../.github/workflows/uat-live-certification.yml", import.meta.url), "utf8");
+  const step = workflow.split("      - name: Run unit and contract tests\n")[1]?.split("      - name:")[0];
+  assert.ok(step);
+  assert.match(step, /run: pnpm exec turbo run test --concurrency=1 -- --maxWorkers=2/);
+  assert.doesNotMatch(step, /testTimeout|retry|continue-on-error|\|\||--exclude|--passWithNoTests/);
 });
 
 test("prepare runs only reviewed Sep05 SQL suites before persona provisioning", async () => {

@@ -71,7 +71,8 @@ jobs:
       - name: Typecheck all workspaces
         run: pnpm typecheck
       - name: Run unit and contract tests
-        run: pnpm test
+        # Avoid nested Turbo/Vitest pools competing on the shared runner.
+        run: pnpm exec turbo run test --concurrency=1 -- --maxWorkers=2
       - name: Verify Sep05 isolated SQL regression suites
         run: |
           node --test --test-concurrency=1 \

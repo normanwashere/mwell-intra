@@ -2,6 +2,8 @@
 
 ## September 12 Interface Training
 
+**Task queue recovery:** Demonstrate a failed Tasks read and **Retry task queue**. A background provider update must not replace an error with **No due tasks**. Task labels no longer download photo payloads; open the linked Quality source when evidence review is required.
+
 **Inspection photos:** The complete Quality queue loads first. Completed-inspection photos load when visible; click the thumbnail to see the original evidence. Use **Retry photos** for a failed image read. Do not submit another inspection or upload a duplicate to get past a loading error. Queue retry and photo retry are separate, read-only recovery actions.
 
 **Loading follow-up:** Quality Control fetches its complete queues after warehouse startup, avoiding a discarded early download. Existing inspection, hold, evidence and independent-review steps stay the same. A loading failure must show **Retry quality queue**, not an empty-work confirmation. Permission checks are faster but still use current roles and required training. **PERF-SEP12** records are clearly tagged UAT volume fixtures, not real orders to dispatch or a substitute for operational training scenarios.
