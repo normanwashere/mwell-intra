@@ -2,7 +2,7 @@
 
 ## Resolution
 
-UAT database: `kkoitlvydytdhlpxhuah`. Migration `20260911035750_loading_query_performance` applied successfully. Main production was not changed. App-side changes are local and require a separate UAT application deployment.
+UAT database: `kkoitlvydytdhlpxhuah`. Migration `20260911035750_loading_query_performance` applied successfully. Main production was not changed. App-side changes were subsequently deployed to live UAT on September 11 in release `e411a7e`. Public health confirmed the release SHA, correct UAT database and reachable static assets. Six read-only desktop/mobile smoke checks passed for Marketing, Operations Associate and Administrator. See `docs/releases/2026-09-11-UAT-USABILITY-PERFORMANCE.md` for deployment evidence. The local tests and database measurements below retain their original scope.
 
 | Area | Before | After |
 | --- | --- | --- |

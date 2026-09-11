@@ -14,6 +14,20 @@ export const HANDBOOK_TABS = Object.freeze([
 
 const CATALOG = [
   {
+    source: "docs/releases/2026-09-11-UAT-USABILITY-PERFORMANCE.md",
+    id: "sept11-uat-usability-performance",
+    title: "September 11 UAT Update",
+    primaryTab: "release",
+    relatedTabs: ["workflows", "infrastructure"],
+    contentType: "release-note",
+    audience: ["operator", "trainer", "release-reviewer"],
+    summary: "Live UAT acknowledgment, order context, notifications and loading improvements, with deployment smoke evidence and test limits.",
+    keywords: ["september 11", "acknowledgment", "notifications", "performance", "deployment"],
+    sortOrder: 3,
+    collapse: "reference",
+    relatedSources: ["docs/USER_TRAINING_AND_OPERATIONS_MANUAL.md"],
+  },
+  {
     source: "docs/releases/2026-09-10-SEPT9-WMS-FEEDBACK.md",
     id: "sept9-wms-feedback",
     title: "September 9 WMS Feedback",
