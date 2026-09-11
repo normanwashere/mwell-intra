@@ -161,6 +161,6 @@ describe("role onboarding integration", () => {
   it("compiles every learning workspace utility used by the shell", () => {
     const tailwind = source("tailwind.config.ts");
 
-    expect(tailwind).toContain("../../modules/learning/src/**/*.{ts,tsx}");
+    expect(tailwind).toContain("../../modules/*/src/**/*.{ts,tsx}");
   });
 });

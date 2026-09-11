@@ -24,7 +24,7 @@ describe("task coverage evidence boundary", () => {
     expect(result.unmappedLiveControls).toEqual([]);
     expect(result.unresolvedTargets).toEqual([]);
     expect(result.invalidDecisionBranches).toEqual([]);
-    expect(result.missingActionEvidence).toHaveLength(287);
+    expect(result.missingActionEvidence).toHaveLength(289);
     expect(result.missingActionEvidence.filter(key => key.startsWith("vendor-application-submission:"))).toEqual([
       "vendor-application-submission:vendor-self-case",
       "vendor-application-submission:vendor-self-prepare",
