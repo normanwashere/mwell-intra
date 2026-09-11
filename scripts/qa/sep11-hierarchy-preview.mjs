@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { checkConvenience } from './sep11-qol-checks.mjs';
+import { checkConvenience, setPreviewTheme } from './sep11-qol-checks.mjs';
 const require = createRequire(new URL('../../apps/shell/package.json', import.meta.url));
 const { chromium } = require('@playwright/test');
 const origin = process.env.PREVIEW_ORIGIN || 'https://mwell-intra-uat.vercel.app';
@@ -69,7 +69,8 @@ try {
       if(item.id==='my-work')await page.locator('a[aria-label^="Open tracked request:"]').first().waitFor();
       if(item.id==='purchase-order')await page.getByRole('navigation',{name:'Purchase order sections'}).waitFor();
       await page.waitForTimeout(900);
-      await page.evaluate(()=>{document.documentElement.classList.remove('dark');window.scrollTo(0,0);});
+      await setPreviewTheme(page,'light');
+      await page.evaluate(()=>window.scrollTo(0,0));
       const metrics=await page.evaluate(()=>({overflow:document.documentElement.scrollWidth-innerWidth,firstOrder:document.querySelector('ul[aria-label="Fulfillment demand"] > li')?.getBoundingClientRect().top,heading:document.querySelector('main h1')?.textContent}));
       assert(metrics.overflow<=1,'Page overflow');
       await page.screenshot({path:path.join(output,`${item.id}-${width}.png`),animations:'disabled'});
@@ -150,7 +151,8 @@ try {
         if(item.id==='my-work')await page.locator('a[aria-label^="Open tracked request:"]').first().waitFor();
         if(item.id==='purchase-order')await page.getByRole('navigation',{name:'Purchase order sections'}).waitFor();
       }
-      await page.evaluate(()=>{document.documentElement.classList.add('dark');window.scrollTo(0,0);});
+      await setPreviewTheme(page,'dark');
+      await page.evaluate(()=>window.scrollTo(0,0));
       await page.screenshot({path:path.join(output,`${item.id}-${width}-dark.png`),animations:'disabled'});
       assert.deepEqual(errors,[]);assert.deepEqual(apiErrors,[]);assert.deepEqual(blocked,[]);
       results.push({id:item.id,width,...metrics,authResponses,passed:true});

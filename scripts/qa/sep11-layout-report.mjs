@@ -14,6 +14,9 @@ const screens={
   'order-footer':['New order / actions','The existing submit action stays outside the scrolling form, without covering the last fields.'],
   'work-return':['My Work','Compact desktop rows with column headings. The sidebar remains visible after returning to a record.'],
   'po-list-return':['Purchase orders','The sidebar stays in the viewport while the PO list and amendment form scroll.'],
+  'my-work':['My Work / overview','The main work views, filters and request list at the top of the page.'],
+  'pick-pack':['Pick & Pack / overview','The fulfillment queue retains its existing status filters and actions.'],
+  'purchase-order':['Purchase order / overview','The record header, section navigation and existing PO actions.'],
 };
 for(const key of Object.keys(screens)) for(const width of [1440,390]) await access(path.join(root,`layout-refined/${key}-${width}.png`));
 const options=Object.entries(screens).map(([key,[title]])=>`<option value="${key}">${title}</option>`).join('');
@@ -34,5 +37,5 @@ try {
     const expected=`layout-refined/${key}-${width}.png`;
     if(await page.locator('#original').getAttribute('href')!==expected || await page.locator('#full').getAttribute('href')!==expected) throw new Error('Full-size link does not match the selected image');
   }
-  console.log('Verified all 14 screenshot selections and full-size links.');
+  console.log(`Verified all ${Object.keys(screens).length*2} screenshot selections and full-size links.`);
 } finally {await browser.close();}

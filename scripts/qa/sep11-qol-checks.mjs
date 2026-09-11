@@ -1,6 +1,26 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 
+export async function setPreviewTheme(page, theme) {
+  if(await page.getByRole('dialog').count()) {
+    // Warehouse sheets remain open when a theme preference arrives from another tab.
+    await page.evaluate(value => {
+      localStorage.setItem('intra-theme', value);
+      window.dispatchEvent(new StorageEvent('storage', {key:'intra-theme',newValue:value}));
+    }, theme);
+  } else {
+    // The suite shell uses its visible switch, not the Warehouse storage listener.
+    const viewport=page.viewportSize();
+    if(viewport.width<768) await page.setViewportSize({width:1440,height:1000});
+    const toggle=page.locator('[role="switch"][aria-label^="Switch to"]:visible').first();
+    await toggle.waitFor();
+    if((await toggle.getAttribute('aria-checked')==='true')!==(theme==='dark')) await toggle.click();
+    if(viewport.width<768) await page.setViewportSize(viewport);
+  }
+  await page.waitForFunction(value=>document.documentElement.classList.contains('dark')===(value==='dark'),theme);
+  await page.waitForTimeout(300);
+}
+
 async function checkPinnedNavigation(page, width) {
   if (width < 768) return;
   const aside = page.locator('aside:visible').first();
@@ -43,10 +63,13 @@ export async function checkConvenience({page, context, item, width, origin, outp
     assert(await details.getByRole('definition').count() > 0);
     const detailsBody=details.getByRole('region',{name:/^Order details.* content$/});
     assert(await detailsBody.evaluate(el=>el.scrollWidth <= el.clientWidth + 1), 'Order details must not scroll horizontally');
-    await page.evaluate(()=>document.documentElement.classList.add('dark'));
+    await setPreviewTheme(page,'dark');
     await page.screenshot({path:path.join(output,`order-dark-${width}.png`)});
-    await page.evaluate(()=>document.documentElement.classList.remove('dark'));
+    await setPreviewTheme(page,'light');
     await detailsBody.evaluate(el=>{el.scrollTop=el.scrollHeight;});
+    const timelineBox=await details.locator('section[aria-labelledby="shipment-timeline-title"]').boundingBox();
+    const linesBox=await details.locator('section[aria-labelledby="order-lines-title"]').boundingBox();
+    assert(Math.abs(timelineBox.width-linesBox.width)<=1, 'Timeline uses the record width instead of leaving an empty grid column');
     await page.screenshot({path:path.join(output,`order-bottom-${width}.png`)});
     await page.keyboard.press('Escape');
     await details.waitFor({state:'hidden'});
@@ -96,6 +119,11 @@ export async function checkConvenience({page, context, item, width, origin, outp
     catch(error) { console.log('PO scroll mismatch', {saved,actual:await page.evaluate(()=>({top:window.scrollY,height:document.documentElement.scrollHeight,viewport:innerHeight,checkpoints:Object.keys(sessionStorage).filter(k=>k.startsWith('intra.list-return:')).map(k=>sessionStorage.getItem(k))}))});throw error; }
     await page.screenshot({path:path.join(output,`po-list-return-${width}.png`)});
     await checkPinnedNavigation(page,width);
+    if(width>=1024) {
+      const lineBox=await page.getByRole('combobox',{name:/^PO line/}).boundingBox();
+      const quantityBox=await page.getByLabel('New whole-number quantity',{exact:true}).boundingBox();
+      assert(Math.abs(lineBox.y-quantityBox.y)<=1, 'Amendment controls align even when labels wrap');
+    }
     await page.goto(origin+item.route);await page.getByRole('navigation',{name:'Purchase order sections'}).waitFor();
   }
 }
