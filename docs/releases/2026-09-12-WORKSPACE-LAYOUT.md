@@ -25,7 +25,7 @@ The first CI attempt stopped at the production dependency audit. The follow-up r
 Deploy to the existing mwell-intra-uat project using its configured production-target environment. Verify the deployed commit, appEnv uat and Supabase reference kkoitlvydytdhlpxhuah. Capture the final live receipt and role-screen results as release evidence. This release note describes scope; it does not itself certify that deployment or every transaction passed.
 
 Updated references: standalone operating handbook, training/operations manual, technical/functional specification, training handover and in-app navigation guidance. Historical screenshots retain their historical labels; fresh release screenshots belong in the live validation gallery.
-## Quality Evidence and KB Performance Follow-up
+**Quality Evidence and KB Performance Follow-up**
 
 - Quality now reads complete inspection metadata without eagerly downloading all photos. Completed photos load on visibility and retain exact-record preview and retry. The full inspection API remains available to other consumers.
 - The additive, SELECT-only summary view uses caller RLS. The original 493 inspection records and 6,385,637 bytes of evidence were unchanged by the migration, verified by an identical content hash.
