@@ -31,7 +31,7 @@ const routes = {
 const browser = await chromium.launch();
 const results = [], logins = [];
 const persist = () => writeFile(path.join(output, 'results.json'), JSON.stringify({ origin, health, run,
-  methodology: 'Sequential real Chromium navigations; 3 desktop samples and 1 mobile sample per route. Browser cache enabled, no CPU/network throttling. Ready means visible content plus 400 ms without in-flight Supabase reads. Long-task time is a lab diagnostic, not field INP. Small-sample maxima are not p95 capacity certification.', results, logins }, null, 2));
+  methodology: 'Sequential real Chromium navigations; default 3 desktop samples and 1 mobile sample per route. Browser cache enabled, no CPU/network throttling. Capture starts with the destination document request, excluding outgoing-page requests. Ready means visible content plus 400 ms without foreground same-origin or Supabase requests. Explicit Next.js prefetches are recorded separately; cancelled prefetches are not foreground failures. Long-task time is a lab diagnostic, not field INP. Small-sample maxima are not p95 capacity certification.', results, logins }, null, 2));
 try {
   for (const persona of CURRENT_LIVE_ROLES) {
     if (process.env.PERF_ROLES && !process.env.PERF_ROLES.split(',').includes(persona.role)) continue;
@@ -54,10 +54,13 @@ try {
     let active = null;
     const requests = new Map();
     page.on('request', req => {
-      if (active && new URL(req.url()).hostname === 'kkoitlvydytdhlpxhuah.supabase.co') {
-        requests.set(req, { row: active, started: performance.now() });
-        active.pending++;
-        active.lastNetwork = performance.now();
+      if (active && req.isNavigationRequest() && req.frame() === page.mainFrame() && req.resourceType() === 'document') active.capturing = true;
+      if (!active?.capturing) return;
+      if (active && (new URL(req.url()).hostname === 'kkoitlvydytdhlpxhuah.supabase.co' || new URL(req.url()).origin === origin)) {
+        const headers = req.headers();
+        const background = Boolean(headers['next-router-prefetch'] || headers['next-router-segment-prefetch'] || headers.purpose === 'prefetch');
+        requests.set(req, { row: active, started: performance.now(), background });
+        if (!background) { active.pending++; active.lastNetwork = performance.now(); }
       }
     });
     const finish = async req => {
@@ -66,11 +69,10 @@ try {
       requests.delete(req);
       const response = await req.response().catch(() => null);
       const sizes = await req.sizes().catch(() => null);
-      record.row.requests.push({ path: new URL(req.url()).pathname, method: req.method(),
+      record.row.requests.push({ path: new URL(req.url()).pathname, host: new URL(req.url()).hostname, background: record.background, type: req.resourceType(), method: req.method(), timing: req.timing(),
         status: response?.status() ?? null, ms: Math.round(performance.now() - record.started),
         bytes: sizes?.responseBodySize ?? null, failure: req.failure()?.errorText ?? null });
-      record.row.pending--;
-      record.row.lastNetwork = performance.now();
+      if (!record.background) { record.row.pending--; record.row.lastNetwork = performance.now(); }
     };
     page.on('requestfinished', finish);
     page.on('requestfailed', finish);
@@ -84,10 +86,14 @@ try {
       await page.waitForURL(url => url.pathname !== '/login', { timeout: 90000, waitUntil: 'domcontentloaded' });
       await page.locator('main h1:visible,main h2:visible').first().waitFor();
       logins.push({ role: persona.role, ms: Math.round(performance.now() - loginStart), passed: true });
-      for (const [index, route] of routes[persona.role].entries()) {
+      const roleRoutes = process.env.PERF_INCLUDE_KB ? [...new Set([...routes[persona.role], '/knowledge'])] : routes[persona.role];
+      for (const [index, route] of roleRoutes.entries()) {
+        if (process.env.PERF_ROUTE && !process.env.PERF_ROUTE.split(',').some(prefix => route.startsWith(prefix))) continue;
         for (const [width, samples] of [[1440, Number(process.env.PERF_DESKTOP_SAMPLES ?? 3)], [390, 1]]) {
           await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
           for (let sample = 0; sample < samples; sample++) {
+            // Finish the outgoing page before measuring the destination; retain context cookies/cache.
+            await page.goto('about:blank');
             const row = { role: persona.role, route, width, sample, requests: [], errors: [], pending: 0, lastNetwork: 0 };
             results.push(row); active = row;
             const started = performance.now();
@@ -102,19 +108,20 @@ try {
                 const navigation = performance.getEntriesByType('navigation')[0];
                 return { ...window.__perf, ttfb: navigation.responseStart, domContentLoaded: navigation.domContentLoadedEventEnd,
                   transferredBytes: performance.getEntriesByType('resource').reduce((sum, entry) => sum + entry.transferSize, 0),
+                  resources: performance.getEntriesByType('resource').map(entry => ({ name: new URL(entry.name).pathname, duration: entry.duration, bytes: entry.encodedBodySize })),
                   domNodes: document.querySelectorAll('*').length, overflow: document.documentElement.scrollWidth - innerWidth };
               });
               row.heading = await page.locator('main h1:visible,main h2:visible').first().innerText();
               row.notices = await page.locator('[role=alert]:visible').allTextContents();
               assert(!new URL(page.url()).pathname.startsWith('/login'), 'Session lost');
               assert(!/^Access denied|No .* access$/i.test(row.heading), 'Unexpected access denial');
-              row.passed = row.errors.length === 0 && !row.requests.some(req => req.status >= 400 || req.failure);
+              row.passed = row.errors.length === 0 && !row.requests.some(req => req.status >= 400 || (req.failure && !(req.background && req.failure === 'net::ERR_ABORTED')));
               if (sample === 0) {
                 row.screenshot = `${persona.role}-${index}-${width}.png`;
                 await page.screenshot({ path: path.join(output, row.screenshot), animations: 'disabled' });
               }
             } catch (error) { row.passed = false; row.error = error.message; }
-            finally { active = null; delete row.pending; delete row.lastNetwork; await persist(); }
+            finally { active = null; delete row.pending; delete row.lastNetwork; delete row.capturing; await persist(); }
           }
         }
       }

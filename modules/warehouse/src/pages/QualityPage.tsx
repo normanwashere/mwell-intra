@@ -2,14 +2,14 @@ import { userFacingError } from '@intra/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { tasksReturnPath } from '@/domain/taskNavigation';
-import type { InventoryHold, QualityInspection, VendorReturn } from '@intra/data-kit';
+import type { InventoryHold, QualityInspectionSummary, VendorReturn } from '@intra/data-kit';
 import { useSession } from '@intra/auth';
 import { useWarehouse } from '@/app/store';
 import { WAREHOUSE_MUTATION_CAPABILITIES } from '@/app/authorization';
 import { Badge, EmptyState, PageHeader, SegmentedControl } from '@/components/ui';
 import { InspectionSheet } from '@/components/quality/InspectionSheet';
 import { HoldReleaseSheet } from '@/components/quality/HoldReleaseSheet';
-import { EvidenceGallery } from '@/components/EvidenceGallery';
+import { InspectionEvidence } from '@/components/quality/InspectionEvidence';
 import { pendingQualityWork, type PendingInspection } from '@/domain/controlQueues';
 import { loadQualityControlPopulation } from '@/domain/qualityControlLoad';
 
@@ -21,7 +21,7 @@ export function QualityPage() {
     can,
     capabilities,
     identityId,
-    loadQualityInspections,
+    loadQualityInspectionSummaries: loadQualityInspections,
     loadHolds,
     loadVendorReturns,
     inspectQuality,
@@ -30,7 +30,7 @@ export function QualityPage() {
   } = useWarehouse();
   const { mode, supabaseClient } = useSession();
   const [tab, setTab] = useState<QualityTab>('pending');
-  const [inspections, setInspections] = useState<QualityInspection[]>([]);
+  const [inspections, setInspections] = useState<QualityInspectionSummary[]>([]);
   const [holds, setHolds] = useState<InventoryHold[]>([]);
   const [vendorReturns, setVendorReturns] = useState<VendorReturn[]>([]);
   const [loading, setLoading] = useState(true);
@@ -277,7 +277,7 @@ export function QualityPage() {
               </div>
               <div className="flex min-w-0 flex-wrap items-center gap-3">
                 <Badge tone={inspection.disposition === 'accepted' ? 'emerald' : 'amber'}>{inspection.disposition.replace('_', ' ')}</Badge>
-                <EvidenceGallery urls={inspection.evidenceUrls} size="thumb" className="shrink-0" />
+                <InspectionEvidence key={`${identityId}:${mode}:${accessScope}:${inspection.id}:${inspection.inspectedAt}`} inspectionId={inspection.id} evidenceCount={inspection.evidenceCount} />
               </div>
             </li>
           ))}

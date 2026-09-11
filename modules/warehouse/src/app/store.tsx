@@ -99,6 +99,7 @@ import type {
   WarehouseTask,
   VendorReturn,
   QualityInspection,
+  QualityInspectionSummary,
   StockChangeRequest,
   SubmitCycleCountInput,
   AdvanceFulfillmentOrderInput,
@@ -222,6 +223,8 @@ interface WarehouseContextValue {
   loadQualityInspections: (
     query: PageQuery,
   ) => Promise<PageResult<QualityInspection>>;
+  loadQualityInspectionSummaries: (query: PageQuery) => Promise<PageResult<QualityInspectionSummary>>;
+  loadQualityInspectionEvidence: (inspectionId: string) => Promise<string[]>;
   loadHolds: (query: PageQuery) => Promise<PageResult<InventoryHold>>;
   loadVendorReturns: (query: PageQuery) => Promise<PageResult<VendorReturn>>;
   loadExceptions: (query: PageQuery) => Promise<PageResult<WarehouseException>>;
@@ -819,6 +822,8 @@ export function WarehouseProvider({
         }),
       ),
     loadQualityInspections: (query) => repo.listQualityInspections(query),
+    loadQualityInspectionSummaries: (query) => repo.listQualityInspectionSummaries(query),
+    loadQualityInspectionEvidence: (id) => repo.getQualityInspectionEvidence(id),
     loadHolds: (query) => repo.listHolds(query),
     loadVendorReturns: (query) => repo.listVendorReturns(query),
     loadExceptions: (query) => repo.listExceptions(query),

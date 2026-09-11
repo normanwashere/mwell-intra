@@ -90,6 +90,7 @@ import {
   type ProcurementPOHandoff,
   type QualityDisposition,
   type QualityInspection,
+  type QualityInspectionSummary,
   type ReceiveProcurementPOInput,
   type RequestStockChangeInput,
   type ReleaseHoldInput,
@@ -1447,6 +1448,17 @@ export class InMemoryRepository implements WarehouseControlRepository {
 
   async listHolds(query: PageQuery): Promise<PageResult<InventoryHold>> {
     return this.page(this.holds, query, (row) => row.status);
+  }
+
+  async listQualityInspectionSummaries(query: PageQuery): Promise<PageResult<QualityInspectionSummary>> {
+    const page = await this.listQualityInspections(query);
+    return { ...page, rows: page.rows.map(({ evidenceUrls, ...row }) => ({ ...row, evidenceCount: evidenceUrls.length })) };
+  }
+
+  async getQualityInspectionEvidence(inspectionId: string): Promise<string[]> {
+    const row = this.qualityInspections.find(inspection => inspection.id === inspectionId);
+    if (!row) throw new Error('This inspection is no longer available. Reload the quality queue.');
+    return clone(row.evidenceUrls);
   }
 
   async listVendorReturns(query: PageQuery): Promise<PageResult<VendorReturn>> {

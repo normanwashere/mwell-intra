@@ -29,6 +29,7 @@ import {
   type PageResult,
   type ProcurementPOHandoff,
   type QualityInspection,
+  type QualityInspectionSummary,
   type ReceiveProcurementPOInput,
   type RequestStockChangeInput,
   type ReleaseHoldInput,
@@ -163,6 +164,8 @@ const TABLE_PROJECTIONS: Record<string, string> = {
     "id,operation_type_id,source_location_types,destination_location_types,requires_evidence,requires_approval,requires_online,active",
   quality_inspections:
     "id,source_type,source_id,product_id,procurement_po_line_id,bin_id,lot_id,serial_number,quantity,disposition,reason,evidence_urls,inspected_by,inspected_at",
+  quality_inspection_queue:
+    "id,source_type,source_id,product_id,procurement_po_line_id,bin_id,lot_id,serial_number,quantity,disposition,reason,evidence_count,inspected_by,inspected_at",
   inventory_holds:
     "id,inspection_id,product_id,location_id,bin_id,lot_id,serial_number,quantity,status,reason,created_by,created_at,released_by,released_at",
   vendor_returns:
@@ -207,6 +210,7 @@ const BOUNDED_HISTORY = new Set([
 const OPERATIONAL_HISTORY_LIMIT = 5000;
 const CONTROL_TIMESTAMP_COLUMNS: Record<string, string> = {
   quality_inspections: "inspected_at",
+  quality_inspection_queue: "inspected_at",
 };
 
 /**
@@ -437,6 +441,24 @@ export class SupabaseRepository implements WarehouseControlRepository {
 
   listHolds(query: PageQuery): Promise<PageResult<InventoryHold>> {
     return this.listControl("inventory_holds", query, rowToHold);
+  }
+
+  listQualityInspectionSummaries(query: PageQuery): Promise<PageResult<QualityInspectionSummary>> {
+    return this.listControl('quality_inspection_queue', query, (raw: never) => {
+      const { evidenceUrls: _evidence, ...inspection } = rowToQualityInspection(raw);
+      return { ...inspection, evidenceCount: Number((raw as Row).evidence_count ?? 0) };
+    }, 'disposition');
+  }
+
+  async getQualityInspectionEvidence(inspectionId: string): Promise<string[]> {
+    const { data, error } = await this.db.from('quality_inspections')
+      .select('evidence_urls').eq('id', inspectionId).maybeSingle();
+    if (error) throw new Error('The inspection photos could not be loaded. Please retry.');
+    if (!data) throw new Error('This inspection is no longer available. Reload the quality queue.');
+    if (!Array.isArray(data.evidence_urls) || !data.evidence_urls.every((url: unknown) => typeof url === 'string')) {
+      throw new Error('The inspection photos could not be read. Ask Quality to review this record.');
+    }
+    return data.evidence_urls;
   }
 
   listVendorReturns(query: PageQuery): Promise<PageResult<VendorReturn>> {

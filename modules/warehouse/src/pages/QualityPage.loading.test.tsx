@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
-import { InMemoryRepository, type PageResult, type QualityInspection, type WarehouseData } from '@intra/data-kit';
+import { InMemoryRepository, type PageResult, type QualityInspectionSummary as QualityInspection, type WarehouseData } from '@intra/data-kit';
 import { QUALITY_CONTROL_LOAD_TIMEOUT_MS } from '@/domain/qualityControlLoad';
 
 const state = vi.hoisted(() => ({
@@ -14,7 +14,7 @@ vi.mock('@intra/auth', () => ({ useSession: () => ({ mode: 'memory', supabaseCli
 vi.mock('@/app/store', () => ({ useWarehouse: () => ({
   data: state.data, identityId: state.identity, capabilities: state.capabilities, can: () => false,
   // Deliberately fresh wrappers model ordinary provider rerenders.
-  loadQualityInspections: (query: unknown) => state.inspections(query),
+  loadQualityInspectionSummaries: (query: unknown) => state.inspections(query),
   loadHolds: (query: unknown) => state.holds(query),
   loadVendorReturns: (query: unknown) => state.returns(query),
 }) }));
@@ -28,7 +28,7 @@ function deferred<T>() {
 const inspection = (id: string): QualityInspection => ({
   id, sourceType: 'receipt', sourceId: `receipt-${id}`, productId: 'shirt-l', quantity: 1,
   serialNumber: id, disposition: 'pending', inspectedAt: '2026-09-05T00:00:00Z',
-  inspectedBy: 'receiver', evidenceUrls: [],
+  inspectedBy: 'receiver', evidenceCount: 0,
 });
 const mount = () => render(<QualityPage />, { wrapper: MemoryRouter });
 

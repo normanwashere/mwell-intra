@@ -48,6 +48,10 @@ export interface QualityInspection {
   inspectedAt: string;
 }
 
+export type QualityInspectionSummary = Omit<QualityInspection, 'evidenceUrls'> & {
+  evidenceCount: number;
+};
+
 export interface InventoryHold {
   id: string;
   inspectionId: string;

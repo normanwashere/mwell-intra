@@ -1,19 +1,19 @@
-import type { InventoryHold, PageQuery, PageResult, QualityInspection, VendorReturn } from '@intra/data-kit';
+import type { InventoryHold, PageQuery, PageResult, QualityInspectionSummary, VendorReturn } from '@intra/data-kit';
 import { loadCompleteControlQueue } from './controlQueues';
 
 // Match the warehouse bootstrap deadline, independently of test wait limits.
 export const QUALITY_CONTROL_LOAD_TIMEOUT_MS = 12_000;
 
 export interface QualityControlLoaders {
-  inspections: (query: PageQuery) => Promise<PageResult<QualityInspection>>;
+  inspections: (query: PageQuery) => Promise<PageResult<QualityInspectionSummary>>;
   holds: (query: PageQuery) => Promise<PageResult<InventoryHold>>;
   vendorReturns: (query: PageQuery) => Promise<PageResult<VendorReturn>>;
 }
 
 export function loadQualityControlPopulation(loaders: QualityControlLoaders, signal: AbortSignal) {
-  return new Promise<[QualityInspection[], InventoryHold[], VendorReturn[]]>((resolve, reject) => {
+  return new Promise<[QualityInspectionSummary[], InventoryHold[], VendorReturn[]]>((resolve, reject) => {
     let settled = false;
-    const finish = (error?: Error, result?: [QualityInspection[], InventoryHold[], VendorReturn[]]) => {
+    const finish = (error?: Error, result?: [QualityInspectionSummary[], InventoryHold[], VendorReturn[]]) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);

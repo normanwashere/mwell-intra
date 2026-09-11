@@ -18,6 +18,9 @@ describe('Completed inspection evidence', () => {
       { ...base, id: 'qc-other', sourceId: 'receipt-other', disposition: 'hold', evidenceUrls: ['quality/other.png'] },
       { ...base, id: 'qc-pending', sourceId: 'receipt-pending', disposition: 'pending', evidenceUrls: ['quality/pending.png'] },
     ] });
+    vi.spyOn(repo, 'getQualityInspectionEvidence').mockImplementation(async id => {
+      return id === 'qc-accepted' ? ['quality/accepted.png'] : ['quality/other.png'];
+    });
     const user = userEvent.setup();
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const view = renderWithProviders(<QualityPage />, { repo, route: '/quality?inspection=qc-accepted' });

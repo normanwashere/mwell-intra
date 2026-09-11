@@ -1,4 +1,6 @@
-import type { PageQuery, PageResult, QualityInspection, WarehouseData } from '@intra/data-kit';
+import type { PageQuery, PageResult, QualityInspection as FullInspection, WarehouseData } from '@intra/data-kit';
+
+type QualityInspection = Omit<FullInspection, 'evidenceUrls'>;
 
 export async function loadCompleteControlQueue<T>(load: (query: PageQuery) => Promise<PageResult<T>>): Promise<T[]> {
   const rows: T[] = [];

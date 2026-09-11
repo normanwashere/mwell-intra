@@ -36,6 +36,7 @@ import type {
   PageResult,
   ProcurementPOHandoff,
   QualityInspection,
+  QualityInspectionSummary,
   ReleaseHoldInput,
   ReceiveProcurementPOInput,
   RequestStockChangeInput,
@@ -564,6 +565,8 @@ export interface WarehouseControlRepository extends WarehouseRepository {
   listQualityInspections(
     query: PageQuery,
   ): Promise<PageResult<QualityInspection>>;
+  listQualityInspectionSummaries(query: PageQuery): Promise<PageResult<QualityInspectionSummary>>;
+  getQualityInspectionEvidence(inspectionId: string): Promise<string[]>;
   listHolds(query: PageQuery): Promise<PageResult<InventoryHold>>;
   listVendorReturns(query: PageQuery): Promise<PageResult<VendorReturn>>;
   listExceptions(query: PageQuery): Promise<PageResult<WarehouseException>>;
