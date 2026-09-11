@@ -2,6 +2,8 @@
 
 ## September 12 Workspace Layout
 
+On mobile Pick & Pack, use Status to choose the queue and Search orders to find a record. Desktop retains the counter strip. Dependency security patches in this release do not require a new account or change your workflow.
+
 The updated interface uses distinct page headers, shaded section headings and clearer dialog headers and footers across internal and vendor workspaces. Status colors still indicate the same business states. Your roles, approvals and transaction steps have not changed.
 
 - Use Hide navigation or Show navigation in the desktop header to give the record more room. This browser remembers the choice. The visible sidebar stays available while the page scrolls; mobile navigation is unchanged.

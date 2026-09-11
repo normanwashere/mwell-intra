@@ -40,7 +40,15 @@ try {
         await page.goto(`${origin}${route}`, { waitUntil: 'domcontentloaded' });
         const content = role === 'administrator' ? page.getByRole('heading', { name: /audit/i }).first() : page.getByRole('heading', { name: 'Department requests', exact: true });
         if (role !== 'operations') await expect(content).toBeVisible({ timeout: 45000 });
-        else await expect(page.getByRole('group', { name: 'Order counters' })).toBeVisible({ timeout: 45000 });
+        else if (width >= 768) await expect(page.getByRole('group', { name: 'Order counters' })).toBeVisible({ timeout: 45000 });
+        else {
+          await expect(page.getByRole('heading', { name: 'Pick & Pack', exact: true })).toBeVisible({ timeout: 45000 });
+          const status = page.getByRole('combobox', { name: 'Status', exact: true });
+          await expect(status).toBeVisible();
+          await expect(status).toHaveValue('active');
+          await expect(status.locator('option[value="active"]')).toHaveText(/Active work \(\d+\)/);
+          await expect(page.getByRole('searchbox', { name: 'Search orders', exact: true })).toBeVisible();
+        }
         await expect(page.locator('[aria-busy="true"]:visible')).toHaveCount(0, { timeout: 45000 });
         await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - innerWidth), { timeout: 15000 }).toBeLessThanOrEqual(2);
         await page.screenshot({ path: path.join(output, `${role}-${width}.png`), animations: 'disabled' });

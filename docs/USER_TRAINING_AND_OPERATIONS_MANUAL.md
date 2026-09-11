@@ -2,6 +2,8 @@
 
 ## September 12 Interface Training
 
+For mobile Pick & Pack, demonstrate the Status selector and Search orders; do not ask learners to find the desktop counter strip. Security dependency updates leave these operating steps unchanged.
+
 Rehearse the same business workflow with the updated workspace hierarchy: identify the page, its section heading, current status, responsible role and next action. The visual changes do not create new permissions or change approval order.
 
 Desktop users can hide/show navigation from the header; the browser remembers the choice. The sidebar remains reachable while scrolling. My Work uses compact desktop rows and mobile stacked records. Open a supported order dialog and locate its grouped information, scrollable body, close control and separate footer. Copy a record reference and link, then return to its list and confirm context is retained. A copied link never bypasses recipient access checks.

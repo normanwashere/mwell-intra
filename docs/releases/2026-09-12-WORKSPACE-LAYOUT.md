@@ -12,6 +12,8 @@ No database, role, authorization, approval, inventory or payment command changes
 
 ## Verification And Deployment
 
+The first CI attempt stopped at the production dependency audit. The follow-up raises Next.js to at least 16.3.3, sharp to at least 0.35.4 and csv-parse to at least 7.0.2, retaining the existing security gate. The mobile smoke assertion now checks the approved Status selector and order search, rather than desktop-only counters. No transaction assertion was relaxed. Validate the final dependency-patched build independently from earlier layout captures.
+
 Deploy to the existing mwell-intra-uat project using its configured production-target environment. Verify the deployed commit, appEnv uat and Supabase reference kkoitlvydytdhlpxhuah. Capture the final live receipt and role-screen results as release evidence. This release note describes scope; it does not itself certify that deployment or every transaction passed.
 
 Updated references: standalone operating handbook, training/operations manual, technical/functional specification, training handover and in-app navigation guidance. Historical screenshots retain their historical labels; fresh release screenshots belong in the live validation gallery.

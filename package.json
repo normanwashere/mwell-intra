@@ -68,7 +68,7 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.4",
-    "csv-parse": "7.0.1",
+    "csv-parse": "7.0.2",
     "marked": "15.0.12",
     "mermaid": "11.17.0",
     "pg": "8.23.0",

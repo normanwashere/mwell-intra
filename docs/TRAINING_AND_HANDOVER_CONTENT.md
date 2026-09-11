@@ -2,6 +2,8 @@
 
 ## September 12 Layout Handover
 
+Mobile Pick & Pack training uses Status and Search orders instead of the desktop counter strip. Infrastructure must retain the dependency security gate and validate the patched Next.js/sharp/csv-parse build, rather than treating the earlier layout screenshots as runtime-patch certification.
+
 Trainer demonstration: hide and restore desktop navigation, identify the page and shaded section bands, read a compact My Work row, open its authorized record, and use a wider order dialog on desktop and its stacked mobile equivalent. Show the separate action footer and confirm that closing a read-only dialog does not change the transaction.
 
 Development handover: shared workspace selectors cover suite, Warehouse and vendor shells; specialized queue/record rules remain local. Preserve semantic alert colors, keyboard focus, responsive scrolling and role checks. Do not turn visual grouping into a new workflow gate. Procurement unsaved warnings and order-intake draft recovery have deliberately limited scope, not universal navigation protection.

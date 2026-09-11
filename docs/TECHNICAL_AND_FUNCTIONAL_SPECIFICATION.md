@@ -2,6 +2,8 @@
 
 ## September 12 Shared Workspace Layout
 
+The accompanying dependency correction requires Next.js >=16.3.3, sharp >=0.35.4 and csv-parse >=7.0.2. Preserve locked dependency installation and the high-severity production audit gate. Mobile smoke tests assert the rendered status/search controls; the counter strip remains a desktop assertion.
+
 The suite, Warehouse and vendor content containers opt into `workspace-hierarchy`. Shared CSS supplies page/section contrast, input surfaces, card edges and keyboard focus styling in light and dark themes. Existing workflow-specific queue styles remain scoped. Login and recovery screens retain their standalone layouts. The existing `hierarchy-preview.css` filename is retained for compatibility; its shared rules are no longer limited to the pilot.
 
 Shared Sheet supports default, record and wide sizes, a scrollable body and separate header/footer surfaces. Order detail/intake use the record size and responsive grouping without changing their fields or commands. Desktop navigation state is browser-local, synchronized across shell mounts; the sidebar is viewport-sticky with independent navigation scrolling. Supported list-return checkpoints expire after 30 minutes and are user/tab scoped. Record links remain canonical and access-controlled.
