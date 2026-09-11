@@ -1407,6 +1407,7 @@ function markdownHeadings(source) {
 }
 
 const LEGACY_TARGET_BY_SOURCE_ID = {
+  "sept12-workspace-layout": ["system", "source-references", "source-sept12-workspace-layout"],
   "sept11-ux-remediation-candidate": ["system", "source-references", "source-sept11-ux-remediation-candidate"],
   "sept9-wms-feedback": ["system", "source-references", "source-sept9-wms-feedback"],
   "sept11-uat-usability-performance": ["system", "source-references", "source-sept11-uat-usability-performance"],
