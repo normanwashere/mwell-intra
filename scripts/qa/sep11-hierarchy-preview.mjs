@@ -91,6 +91,15 @@ try {
             await page.screenshot({path:path.join(output,`${item.id}-${width}-nav-hidden.png`)});
             await page.reload();await show.waitFor();
             assert.equal(await aside.isVisible(),false);
+            if(item.id === 'pick-pack') {
+              await page.goto(origin+'/');
+              await show.waitFor();
+              assert.equal(await show.getAttribute('aria-controls'),'suite-side-navigation');
+              await page.goto(origin+item.route);
+              await show.waitFor();
+              assert.equal(await show.getAttribute('aria-controls'),'warehouse-side-navigation');
+              await page.locator('ul[aria-label="Fulfillment demand"] > li').first().waitFor();
+            }
             await page.setViewportSize({width:390,height:844});
             assert.equal(await show.isVisible(),false);
             assert(await page.getByRole('navigation',{name:'Primary mobile',exact:true}).isVisible());

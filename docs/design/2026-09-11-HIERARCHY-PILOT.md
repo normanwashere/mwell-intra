@@ -35,3 +35,14 @@ One mobile capture recorded a pre-login 401 from assignment resolution. Authenti
 ## Limits and next decision
 
 This is a visual pilot, not full transaction certification or an all-role audit. Screenshot review does not establish real-user usability. Review the comparison before extending the treatment to other modules. Update published training/manual screenshots when an approved version is promoted, not while the live app still has the previous design.
+
+## Desktop navigation follow-up
+
+The desktop top bar now contains a keyboard-accessible Hide/Show side navigation button in both the suite and Warehouse shells. The choice is stored on this browser, shared across modules and tabs. Hiding navigation does not unmount page content, change access, or navigate away. Mobile bottom navigation is unchanged. Browser storage failure does not stop the toggle working on the current page.
+
+- App candidate: `0c2f6c5`, protected preview https://mwell-intra-mlmhbvrvt-normans-projects-d718ecb1.vercel.app.
+- Screenshot comparison: `outputs/sep11-hierarchy-preview/sidebar.html`.
+- Verification: 21 focused component/navigation tests, UI TypeScript, and remote production build passed.
+- Six browser cases passed on the three pilot screens at desktop/mobile widths, including keyboard toggle, retained URL, increased header width, reload persistence, mobile navigation, and Warehouse-to-suite preference continuity.
+- All six expanded/hidden desktop screenshots loaded successfully in the comparison viewer. Hidden desktop captures were visually inspected.
+- Live UAT remains on `343b372`; this follow-up has not been promoted.
