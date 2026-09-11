@@ -2,6 +2,7 @@
 .hierarchy-preview {
   --c-app: 239 242 244;
   --c-surface: 255 255 255;
+  --surface: #ffffff;
   --c-inset: 230 235 239;
   --c-line: 194 204 212;
   --c-ink: 24 35 44;
@@ -14,6 +15,7 @@
 .dark .hierarchy-preview {
   --c-app: 23 27 31;
   --c-surface: 35 41 47;
+  --surface: #23292f;
   --c-inset: 46 55 63;
   --c-line: 83 99 110;
   --c-ink: 241 245 248;
@@ -47,12 +49,9 @@ main:has(> .hierarchy-preview) { background: #eff2f4; }
 }
 .hierarchy-preview :is(input,select,textarea).input {
   background: rgb(var(--c-surface));
-  border-color: rgb(var(--c-line));
   border-radius: 6px;
 }
 .hierarchy-preview .card {
-  background: rgb(var(--c-surface));
-  border-color: rgb(var(--c-line));
   border-radius: 6px;
   box-shadow: none;
 }
@@ -113,7 +112,7 @@ main:has(> .hierarchy-preview) { background: #eff2f4; }
   color: rgb(var(--c-muted));
   cursor: pointer;
 }
-.hierarchy-preview .hp-guidance > ol { margin-bottom: 12px; border-radius: 6px; }
+.hierarchy-preview .hp-guidance > ol { grid-template-columns: 1fr; margin-bottom: 12px; border-radius: 6px; }
 .hierarchy-preview .hp-guidance li span { white-space: normal; }
 .hierarchy-preview .section-heading-band {
   margin-bottom: 0;
@@ -127,7 +126,7 @@ main:has(> .hierarchy-preview) { background: #eff2f4; }
   padding: 16px 20px;
   background: rgb(var(--c-surface));
   border: 0;
-  border-left: 4px solid #16857d;
+  border-left: 4px solid #6c7b86;
 }
 .hp-record > [aria-label="Workflow status"] dt { font-size: 11px; text-transform: uppercase; }
 .hp-record > [aria-label="Workflow status"] dd { font-size: 15px; }

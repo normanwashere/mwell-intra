@@ -648,8 +648,10 @@ describe("FulfillmentPage", () => {
         }),
       ]);
     });
-    // Desktop summary, mobile tools summary, and the order's reported value.
-    expect(await screen.findAllByText("PHP 8,640.00")).toHaveLength(3);
+    // The shared tools summary replaces duplicate desktop/mobile summaries.
+    await user.click(screen.getByText("Queue tools", { selector: "summary" }));
+    expect(screen.getByText("PHP 8,640.00", { selector: "span" })).toBeVisible();
+    expect(await screen.findAllByText("PHP 8,640.00")).toHaveLength(2);
     expect(
       screen.queryByRole("button", { name: "Allocate stock" }),
     ).not.toBeInTheDocument();

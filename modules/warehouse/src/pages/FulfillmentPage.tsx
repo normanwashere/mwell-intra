@@ -687,12 +687,20 @@ function OrdersWorkspace({
           </h2>
           <Link to={FLOOR_WORK_PATH} className="inline-flex min-h-11 min-w-11 items-center text-sm text-brand-600 underline">Floor work</Link>
         </div>
-        {(canCreate || filteredOrders.length > 0 || thirdPartyOrders.length > 0) && (
+        {(
           <div className="flex flex-wrap items-center gap-2">
             <details className="relative">
               <summary className="min-h-11 cursor-pointer rounded-lg px-3 py-3 text-sm font-semibold text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500">Queue tools</summary>
-              <div className="z-20 grid w-60 max-w-[calc(100vw-2rem)] gap-2 rounded-lg border border-line bg-surface p-2 shadow-e2 sm:absolute sm:right-0">
+              <div className="z-20 grid w-80 max-w-[calc(100vw-2rem)] gap-2 rounded-lg border border-line bg-surface p-2 shadow-e2 sm:absolute sm:right-0">
                 {thirdPartyOrders.length > 0 && <p className="p-2 text-sm text-muted">Third-party event sales: <span className="font-semibold text-ink">{thirdPartySales}</span>. Finance owns settlement.</p>}
+                <details className="hp-guidance">
+                  <summary>Department handoff</summary>
+                  <HandoffRail steps={[
+                    { owner: "Sales, Operations, or Marketing", task: "Submit confirmed customer, event, or campaign demand." },
+                    { owner: "Warehouse operator", task: "Allocate, scan, pick, pack, and release." },
+                    { owner: "Courier and Finance", task: "Carry the waybill, sales value, refund, and settlement evidence." },
+                  ]} />
+                </details>
             {filteredOrders.length > 0 && (
               <button
                 type="button"
@@ -734,26 +742,6 @@ function OrdersWorkspace({
           </div>
         )}
       </div>
-      <details className="hp-guidance">
-      <summary>Department handoff</summary>
-      <HandoffRail
-        steps={[
-          {
-            owner: "Sales, Operations, or Marketing",
-            task: "Submit confirmed customer, event, or campaign demand.",
-          },
-          {
-            owner: "Warehouse operator",
-            task: "Allocate, scan, pick, pack, and release.",
-          },
-          {
-            owner: "Courier and Finance",
-            task: "Carry the waybill, sales value, refund, and settlement evidence.",
-          },
-        ]}
-      />
-      </details>
-
       <div className="hp-toolbar grid grid-cols-2 gap-2 border-y border-line py-3 md:grid-cols-[minmax(14rem,1fr)_12rem_12rem] [&>div:first-child]:col-span-2 md:[&>div:first-child]:col-span-1">
         <Field label="Search orders" htmlFor="fulfillment-search">
           <input

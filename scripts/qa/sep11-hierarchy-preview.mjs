@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 const require = createRequire(new URL('../../apps/shell/package.json', import.meta.url));
 const { chromium } = require('@playwright/test');
@@ -9,7 +9,14 @@ assert(['https://mwell-intra-uat.vercel.app', 'http://localhost:3023'].includes(
 const stage = process.env.PREVIEW_STAGE || 'before';
 assert(['before','after'].includes(stage));
 assert(process.env.AUDIT_PASSWORD);
-const health = await (await fetch(origin + '/api/health')).json();
+// Use only cookies exported by the authenticated Vercel CLI for this preview.
+const previewCookies = process.env.PREVIEW_COOKIE_FILE ? (await readFile(process.env.PREVIEW_COOKIE_FILE,'utf8')).split(/\r?\n/).filter(line=>line.includes('\t')).map(line=>{
+  const [rawDomain,,cookiePath,secure,expires,name,value]=line.split('\t');
+  const domain=rawDomain.replace(/^#HttpOnly_/,'');
+  assert.equal(domain,new URL(origin).hostname);
+  return {name,value,domain,path:cookiePath,secure:secure==='TRUE',httpOnly:rawDomain.startsWith('#HttpOnly_'),expires:Number(expires)||-1};
+}) : [];
+const health = await (await fetch(origin + '/api/health',{headers:previewCookies.length?{cookie:previewCookies.map(c=>`${c.name}=${c.value}`).join('; ')}:{}})).json();
 assert.equal(health.deployment.supabaseProjectRef, 'kkoitlvydytdhlpxhuah');
 if(stage==='after' && origin.startsWith('https:')) {
   assert(process.env.PREVIEW_SHA, 'Verify the exact isolated preview build');
@@ -28,6 +35,7 @@ const browser=await chromium.launch();
 try {
   for (const item of cases) {
     const context=await browser.newContext({serviceWorkers:'block',reducedMotion:'reduce'});
+    await context.addCookies(previewCookies);
     const blocked=[];
     await context.route('**/*', route => {
       const req=route.request(), url=new URL(req.url());
@@ -63,13 +71,18 @@ try {
       if(stage==='after') {
         assert.equal(await page.locator('.hierarchy-preview').count(),1);
         if(item.id==='pick-pack') {
+          const toolsMenu=page.getByText('Queue tools',{exact:true});
+          await toolsMenu.click();
           const guidance=page.locator('details.hp-guidance');
           assert.equal(await guidance.getAttribute('open'),null);
           await guidance.locator('summary').click();await guidance.getByRole('list',{name:'Department handoff'}).waitFor();
           await guidance.locator('summary').click();
+          await toolsMenu.click();
           await page.getByLabel('Search orders',{exact:true}).fill('NO-MATCH-VISUAL-PREVIEW');
+          await page.locator('ul[aria-label="Fulfillment demand"]').waitFor({state:'hidden'});
           assert.equal(await page.locator('ul[aria-label="Fulfillment demand"] > li').count(),0);
           await page.getByLabel('Search orders',{exact:true}).fill('');
+          await page.locator('ul[aria-label="Fulfillment demand"] > li').first().waitFor();
         }
         if(item.id==='my-work') {
           await page.getByRole('button',{name:'Needs your action',exact:true}).click();
