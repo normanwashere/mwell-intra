@@ -58,7 +58,8 @@ export function FollowupQueue({ view = 'all', source = 'all', search = '' }: { v
     const matchesView = view === 'all' || (view === 'completed' ? item.status === 'resolved' : item.status !== 'resolved' && (view === 'action' ? item.can_act : !item.can_act));
     return directLink || (matchesView && `${item.metric_id} ${item.area} ${item.reason_code} ${item.status}`.toLowerCase().includes(search.trim().toLowerCase()));
   });
-  return <section aria-label="Leadership follow-ups" className="space-y-3 border-t border-line pt-4">
+  const empty = !loading && !error && !visible.length && !outcome;
+  return <section aria-label="Leadership follow-ups" className={empty ? 'flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t border-line py-3 text-sm' : 'space-y-3 border-t border-line pt-4'}>
     <h2 className="text-lg font-semibold">Leadership follow-ups</h2>
     {outcome && <p role="status" className="text-sm text-ink">{outcome.resolved ? 'Follow-up resolved. The result is saved in completed work.' : 'Follow-up acknowledged. Add the resolution reference when the work is finished.'} <a className="font-semibold underline" href={`/work?view=${outcome.resolved ? 'completed' : 'action'}#followup-${encodeURIComponent(outcome.id)}`}>View follow-up</a></p>}
     {loading && <p role="status">Loading follow-ups...</p>}

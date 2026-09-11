@@ -440,7 +440,7 @@ export function PurchaseOrdersPage() {
       </div>
 
       {mode === 'supabase' && (canAuthorPo || amendmentItems.length > 0) && (
-        <section className="space-y-3" aria-label="PO quantity amendment queue">
+        <section className="po-amendment-layout space-y-3" aria-label="PO quantity amendment queue">
           <SectionTitle
             title="PO quantity amendments"
             subtitle="Requests follow the current department, category, amount, and effective-date DOA ladder."

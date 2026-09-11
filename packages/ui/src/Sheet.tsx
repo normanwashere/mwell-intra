@@ -14,7 +14,7 @@ import { Icon } from './Icon';
 import { SPRING_GENTLE } from './motion/tokens';
 
 type SheetSide = 'adaptive' | 'bottom' | 'right' | 'center';
-type SheetSize = 'default' | 'wide';
+type SheetSize = 'default' | 'record' | 'wide';
 
 const CONTENT_CLASS: Record<SheetSide, string> = {
   adaptive:
@@ -88,13 +88,13 @@ export function Sheet({
           <div className="mx-auto h-1.5 w-10 rounded-full bg-line" />
         </div>
       )}
-      <div className="flex items-start justify-between gap-3 px-5 pb-3 pt-1.5 md:px-6 md:pb-4 md:pt-5">
+      <div className="intra-sheet-header flex shrink-0 items-start justify-between gap-3 border-b border-line bg-inset px-5 pb-4 pt-3 md:px-6 md:py-5">
         <div className="min-w-0">
-          <Dialog.Title className="font-display text-lg font-bold text-ink [overflow-wrap:anywhere]">
+          <Dialog.Title className="font-display text-lg font-bold leading-snug text-ink [overflow-wrap:anywhere] md:text-xl">
             {title}
           </Dialog.Title>
           {description && (
-            <Dialog.Description className="mt-0.5 text-sm text-muted">
+            <Dialog.Description className="mt-1 max-w-prose text-sm leading-relaxed text-muted">
               {description}
             </Dialog.Description>
           )}
@@ -111,12 +111,12 @@ export function Sheet({
         role="region"
         aria-label={`${title} content`}
         tabIndex={0}
-        className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500 md:px-6 md:pb-6"
+        className="intra-sheet-body min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500 md:px-6 md:py-6"
       >
         {children}
       </div>
       {footer && (
-        <div role="group" aria-label={`${title} actions`} className="relative z-10 shrink-0 border-t border-line bg-surface px-5 py-3 md:px-6 md:py-4">
+        <div role="group" aria-label={`${title} actions`} className="intra-sheet-footer relative z-10 shrink-0 border-t border-line bg-inset px-5 py-3 md:px-6 md:py-4">
           <div className="md:flex md:justify-end [&>button]:md:min-w-36 [&>button]:md:w-auto">
             {footer}
           </div>
@@ -132,8 +132,8 @@ export function Sheet({
         <Dialog.Overlay className="fixed inset-0 z-40 bg-brand-900/50 backdrop-blur-sm" />
         <Dialog.Content
           className={clsx(
-            CONTENT_CLASS[side],
-            side === 'adaptive' && (size === 'wide' ? 'md:w-[min(94vw,72rem)]' : 'md:w-[min(92vw,36rem)]'),
+            'intra-sheet', CONTENT_CLASS[side],
+            side === 'adaptive' && (size === 'wide' ? 'md:w-[min(94vw,72rem)]' : size === 'record' ? 'md:w-[min(94vw,60rem)]' : 'md:w-[min(92vw,36rem)]'),
             side === 'right' && (size === 'wide' ? 'md:max-w-3xl' : 'max-w-sm'),
           )}
           {...(description ? {} : { 'aria-describedby': undefined })}

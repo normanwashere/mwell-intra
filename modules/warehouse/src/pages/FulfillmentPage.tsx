@@ -1118,7 +1118,7 @@ function OrderDetailsSheet({
       }}
       title={`Order details / ${order.externalReference}`}
       description="Fulfillment record, controlled customer details, and shipment history."
-      size="wide"
+      size="record"
     >
       <RecordCopyActions reference={order.externalReference} href={`/warehouse/fulfillment?tab=orders&order=${encodeURIComponent(order.id)}`} />
       <WorkflowSummary {...orderWorkflowSummary(order, { actorIds: [actor, identityId], units: data?.units })}>
@@ -1126,41 +1126,15 @@ function OrderDetailsSheet({
           {order.status === 'released' && order.deliveryMethod === 'shipment' ? 'Review shipment timeline' : 'Review order lines'}
         </a>
       </WorkflowSummary>
-      <div className="grid min-w-0 gap-6 md:grid-cols-2 [&>section]:min-w-0 [&>section]:border-b [&>section]:border-line [&>section]:pb-5">
-        <section aria-label="Operational summary" className="space-y-2 border-b border-line pb-3 text-sm md:col-span-2 [overflow-wrap:anywhere]">
+      <div className="order-record-layout grid min-w-0 items-start gap-5 md:grid-cols-2 [&>section]:min-w-0 [&>section]:border-b [&>section]:border-line [&>section]:pb-4">
+        <section aria-label="Operational summary" className="space-y-2 text-sm [overflow-wrap:anywhere]">
+          <h3 className="font-semibold text-ink">Order summary</h3>
           <p className="font-semibold text-ink">{titleCase(order.status)} / {order.externalReference}</p>
           <ul>{order.lines.map((line) => <li key={line.productId}>{line.quantity} x {products.find((product) => product.id === line.productId)?.name ?? line.productId}</li>)}</ul>
           <p className="break-words">Destination: {address ? `${address.addressLine}, ${address.city}, ${address.province} ${address.postalCode}` : order.requestingDepartment ?? "Not provided"}</p>
           {order.deliveryMethod === "shipment" && <p className="break-words">{order.courier ?? "Courier not provided"} / {order.waybillNumber ?? "Waybill not provided"}</p>}
         </section>
-        {replacementCases.length > 0 && (
-          <section aria-label="Replacement linkage" className="space-y-3 border-b border-line pb-3 text-sm">
-            <h3 className="font-semibold text-ink">Replacement linkage</h3>
-            {replacementCases.map((record) => {
-              const original = orders.find((candidate) => candidate.id === record.sourceOrderId);
-              return (
-                <div key={record.id} className="min-w-0 space-y-2">
-                  <p className="break-all">Return case: <span>{record.id}</span></p>
-                  <p>{titleCase(record.status)} / {titleCase(record.resolution)}</p>
-                  <p className="break-words">{record.defectDescription}</p>
-                  {original ? (
-                    <button type="button" className="btn-outline max-w-full whitespace-normal text-left" onClick={() => onOpenOrder(original)}>
-                      View original order {original.externalReference}
-                    </button>
-                  ) : (
-                    <p className="break-all text-muted">Original order: {record.sourceOrderId ? `${record.sourceOrderId} (not available in this view)` : "Not linked"}</p>
-                  )}
-                </div>
-              );
-            })}
-            {!address && (
-              <p role="alert" className="text-amber-800 dark:text-amber-300">
-                Replacement delivery address is not recorded. Ask Customer Service and a warehouse supervisor to confirm the destination before dispatch. The original order's address is not a confirmed replacement destination.
-              </p>
-            )}
-          </section>
-        )}
-        <dl className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-4 border-y border-line py-4 text-sm [overflow-wrap:anywhere]">
+        <dl aria-label="Order information" className="order-information grid min-w-0 grid-cols-2 gap-x-4 gap-y-4 p-4 text-sm [overflow-wrap:anywhere]">
           <div>
             <dt className="text-xs text-faint">Channel</dt>
             <dd className="mt-1 font-semibold text-ink">
@@ -1197,6 +1171,34 @@ function OrderDetailsSheet({
             </div>
           )}
         </dl>
+
+        {replacementCases.length > 0 && (
+          <section aria-label="Replacement linkage" className="space-y-3 text-sm">
+            <h3 className="font-semibold text-ink">Replacement linkage</h3>
+            {replacementCases.map((record) => {
+              const original = orders.find((candidate) => candidate.id === record.sourceOrderId);
+              return (
+                <div key={record.id} className="min-w-0 space-y-2">
+                  <p className="break-all">Return case: <span>{record.id}</span></p>
+                  <p>{titleCase(record.status)} / {titleCase(record.resolution)}</p>
+                  <p className="break-words">{record.defectDescription}</p>
+                  {original ? (
+                    <button type="button" className="btn-outline max-w-full whitespace-normal text-left" onClick={() => onOpenOrder(original)}>
+                      View original order {original.externalReference}
+                    </button>
+                  ) : (
+                    <p className="break-all text-muted">Original order: {record.sourceOrderId ? `${record.sourceOrderId} (not available in this view)` : "Not linked"}</p>
+                  )}
+                </div>
+              );
+            })}
+            {!address && (
+              <p role="alert" className="text-amber-800 dark:text-amber-300">
+                Replacement delivery address is not recorded. Ask Customer Service and a warehouse supervisor to confirm the destination before dispatch. The original order's address is not a confirmed replacement destination.
+              </p>
+            )}
+          </section>
+        )}
 
         {internal && <section aria-label="Department request details" className="space-y-3 text-sm">
           <h3 className="font-display text-base font-bold text-ink">Department request</h3>

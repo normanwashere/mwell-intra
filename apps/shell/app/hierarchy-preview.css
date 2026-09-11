@@ -1,5 +1,5 @@
 /* Three-screen visual pilot. Shared tokens elsewhere remain unchanged. */
-.hierarchy-preview {
+.hierarchy-preview, .intra-sheet {
   --c-app: 239 242 244;
   --c-surface: 255 255 255;
   --surface: #ffffff;
@@ -12,7 +12,7 @@
   --hp-active-ink: #ffffff;
   color: rgb(var(--c-ink));
 }
-.dark .hierarchy-preview {
+.dark .hierarchy-preview, .dark .intra-sheet {
   --c-app: 23 27 31;
   --c-surface: 35 41 47;
   --surface: #23292f;
@@ -149,4 +149,53 @@ main:has(> .hierarchy-preview) { background: #eff2f4; }
   .hp-record > [aria-label="Workflow status"] { padding: 14px; }
   .hierarchy-preview .hp-section-nav { display: grid; grid-template-columns: 1fr 1fr; }
   .hierarchy-preview .hp-section-nav a { text-align: center; }
+}
+
+/* Dialog surfaces also apply to Radix portals outside the page wrapper. */
+.intra-sheet-header { border-top: 3px solid var(--hp-active); background: var(--hp-band); }
+.intra-sheet-footer { background: var(--hp-band); }
+.intra-sheet-body { background: rgb(var(--c-surface)); }
+.intra-sheet-body > [aria-label="Workflow status"] {
+  margin: 12px 0 20px;
+  padding: 14px 16px;
+  border: 0;
+  border-left: 4px solid var(--hp-active);
+  background: rgb(var(--c-inset));
+}
+.intra-sheet-body > [aria-label="Workflow status"] > div { margin-top: 4px; }
+.intra-sheet :is(input, select, textarea).input { border-radius: 6px; background: rgb(var(--c-surface)); }
+.order-record-layout > section > h3,
+.order-record-layout > details > summary,
+.intake-section > div:first-child:has(> h3),
+.intake-section > h3 {
+  padding: 10px 12px;
+  background: var(--hp-band);
+  border-left: 3px solid #788b98;
+  font-size: 15px;
+  line-height: 1.4;
+}
+.order-record-layout > details > summary { cursor: pointer; min-height: 44px; }
+.order-record-layout .order-information { background: rgb(var(--c-inset)); border-radius: 4px; }
+.order-record-layout dt { color: rgb(var(--c-muted)); }
+.order-record-layout > section > .rounded-xl,
+.order-record-layout > details > .rounded-xl { border-radius: 4px; }
+.hp-request-columns {
+  padding: 10px 16px;
+  gap: 12px;
+  background: var(--hp-band);
+  border-bottom: 1px solid rgb(var(--c-line));
+  font-size: 12px;
+  font-weight: 600;
+  color: rgb(var(--c-muted));
+}
+.hp-work .hp-request-row.card { padding: 14px 16px; border-radius: 4px; }
+.hp-work .hp-request-row.card h2 { margin-top: 6px; font-size: 15px; line-height: 1.4; }
+.hp-work .hp-request-row.card p { line-height: 1.5; }
+.hp-work [aria-label="Leadership follow-ups"].flex h2 { font-size: 14px; }
+.hp-work [aria-label="Leadership follow-ups"].flex p { color: rgb(var(--c-muted)); }
+.po-amendment-layout > .section-heading-band { background: rgb(var(--c-inset)); padding: 14px 16px; border-left: 3px solid rgb(var(--c-muted)); }
+.po-amendment-layout > .grid { padding: 16px; background: rgb(var(--c-surface)); align-items: start; }
+.po-amendment-layout > p { padding: 0 16px; }
+@media (min-width: 1024px) {
+  .hp-work .hp-request-row.card { margin-top: 0; border-top: 0; border-radius: 0; }
 }

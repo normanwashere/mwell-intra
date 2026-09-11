@@ -313,8 +313,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="h-dvh overflow-hidden bg-app md:flex md:h-auto md:min-h-screen md:overflow-visible">
       {/* Desktop sidebar */}
-      <aside id="warehouse-side-navigation" style={desktopNavigation.hidden ? { display: "none" } : undefined} className="hidden w-60 shrink-0 flex-col border-r border-line bg-surface md:flex lg:w-64">
-        <div className="safe-top flex items-center gap-2 px-5 py-5">
+      <aside id="warehouse-side-navigation" style={desktopNavigation.hidden ? { display: "none" } : undefined} className="hidden w-60 shrink-0 flex-col border-r border-line bg-surface md:sticky md:top-0 md:flex md:h-dvh md:self-start lg:w-64">
+        <div className="safe-top flex shrink-0 items-center gap-2 px-5 py-5">
           <a
             href="/"
             aria-label="Mwell Intra home"
@@ -329,7 +329,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </a>
         </div>
         <nav
-          className="flex-1 space-y-5 overflow-y-auto px-3 pb-4"
+          className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-3 pb-4"
           aria-label="Primary"
         >
           {groupedModules.map((section) => (
@@ -378,7 +378,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </section>
           ))}
         </nav>
-        <div className="safe-bottom border-t border-line px-5 py-4">
+        <div className="safe-bottom shrink-0 border-t border-line px-5 py-4">
           <p className="text-sm font-semibold text-ink">
             {rolePresentation.label}
           </p>

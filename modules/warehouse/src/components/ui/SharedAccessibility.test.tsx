@@ -47,6 +47,18 @@ function ModalHarness() {
 }
 
 describe("shared dialog accessibility", () => {
+  it("sizes record dialogs separately and keeps footer actions outside the scrolling content", async () => {
+    render(<Sheet open onOpenChange={() => undefined} size="record" title="Review record" description="Review before saving" footer={<button type="button">Save record</button>}><p>Record fields</p></Sheet>);
+    const dialog = screen.getByRole('dialog', {name:'Review record'});
+    const body = screen.getByRole('region', {name:'Review record content'});
+    const footer = screen.getByRole('group', {name:'Review record actions'});
+    expect(dialog).toHaveClass('intra-sheet', 'md:w-[min(94vw,60rem)]');
+    expect(body).not.toContainElement(footer);
+    expect(footer).toContainElement(screen.getByRole('button', {name:'Save record'}));
+    expect(dialog).toHaveAccessibleDescription('Review before saving');
+    expect((await axe(dialog)).violations).toHaveLength(0);
+  });
+
   it("makes read-only Sheet content a named keyboard region without losing focus containment", async () => {
     const user = userEvent.setup();
     function ReadOnlySheet() {

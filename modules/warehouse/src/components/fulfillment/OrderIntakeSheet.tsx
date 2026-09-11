@@ -306,7 +306,7 @@ function ScopedOrderIntake({
   };
 
   const sectionClass =
-    "space-y-4 border-t border-line pt-5 first:border-0 first:pt-0";
+    "intake-section space-y-4 border-t border-line pt-5 first:border-0 first:pt-0";
   return (
     <Sheet
       open={open}

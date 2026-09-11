@@ -181,12 +181,12 @@ export function AppShell({ children }: { children: ReactNode }) {
       <aside
         id="suite-side-navigation"
         style={desktopNavigation.hidden ? { display: "none" } : undefined}
-        className="safe-top hidden w-[4.75rem] shrink-0 flex-col items-center border-r border-line bg-surface py-4 md:flex lg:w-[15rem] lg:items-stretch"
+        className="safe-top hidden w-[4.75rem] shrink-0 flex-col items-center border-r border-line bg-surface py-4 md:sticky md:top-0 md:flex md:h-dvh md:self-start lg:w-[15rem] lg:items-stretch"
         aria-label="Primary"
       >
         <Link
           href="/"
-          className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl text-ink transition hover:bg-inset lg:mx-3 lg:w-auto lg:justify-start lg:px-2"
+          className="mb-5 flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-ink transition hover:bg-inset lg:mx-3 lg:w-auto lg:justify-start lg:px-2"
           aria-label="Mwell Intra home"
         >
           <MwellIntraLogo
@@ -202,7 +202,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </Link>
 
         <nav
-          className="flex flex-1 flex-col items-center gap-1 lg:items-stretch lg:px-3"
+          className="flex min-h-0 w-full flex-1 flex-col items-center gap-1 overflow-y-auto overscroll-contain lg:items-stretch lg:px-3"
           aria-label="Primary"
         >
           {entries.map((e) => (
@@ -210,9 +210,10 @@ export function AppShell({ children }: { children: ReactNode }) {
               key={e.href}
               href={e.href}
               aria-label={e.label}
+              title={e.label}
               aria-current={isActive(e.href) ? "page" : undefined}
               className={cx(
-                "group relative grid h-11 w-11 place-items-center rounded-lg text-faint transition hover:bg-inset hover:text-ink lg:flex lg:min-h-11 lg:h-auto lg:w-full lg:justify-start lg:gap-3 lg:px-3 lg:py-2.5",
+                "group relative grid h-11 w-11 shrink-0 place-items-center rounded-lg text-faint transition hover:bg-inset hover:text-ink lg:flex lg:min-h-11 lg:h-auto lg:w-full lg:justify-start lg:gap-3 lg:px-3 lg:py-2.5",
                 isActive(e.href) &&
                   "font-semibold text-brand-700 dark:text-brand-300",
               )}
@@ -231,17 +232,11 @@ export function AppShell({ children }: { children: ReactNode }) {
               <span className="relative hidden min-w-0 text-sm font-medium leading-tight lg:block">
                 {e.label}
               </span>
-              <span
-                className="pointer-events-none absolute left-full z-50 ml-2 hidden whitespace-nowrap rounded-lg border border-line bg-surface px-2.5 py-1 text-xs font-medium text-ink opacity-0 shadow-e2 transition group-hover:opacity-100 md:block lg:hidden"
-                role="tooltip"
-              >
-                {e.label}
-              </span>
             </Link>
           ))}
         </nav>
 
-        <div className="mt-auto px-2 lg:px-3">
+        <div className="mt-auto w-full shrink-0 border-t border-line px-2 pt-3 lg:px-3">
           <button
             type="button"
             onClick={() => {
