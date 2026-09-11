@@ -2,6 +2,8 @@
 
 ## What Changed
 
+**Authorization follow-up:** The UAT requester-name lookup and return-resolution entry point now use current role/training eligibility. The migration changes only five permission predicates in the deployed functions. Own-request names, requested-ID limits, private profile access, quarantine, delivery confirmation, Finance evidence and duplicate-submission handling remain intact. Cross-request name review requires current issuing or approval eligibility.
+
 The final visual pass also corrects outlined dialog-action text in dark mode, including View original order. Contrast is checked against the rendered button background; destinations and actions are unchanged.
 
 The approved layout now applies through the shared internal and vendor workspace containers, not just the three pilot screens. Page headers, section bands and dialog surfaces have clearer contrast in both themes. Status colors keep their existing meanings.
@@ -10,9 +12,11 @@ Desktop navigation can be hidden/restored and remains reachable while scrolling.
 
 ## Workflow Boundaries
 
-No database, role, authorization, approval, inventory or payment command changes. Existing seeded tester records remain intact. Unsaved warnings are limited to procurement browser exit/Cancel and order-intake failed local draft persistence; they do not cover every in-app navigation.
+The visual layout itself has no database, role, authorization, approval, inventory or payment command changes. The separately tested authorization follow-up above changes current eligibility checks, not business steps or role assignments. Existing seeded tester records remain intact. Unsaved warnings are limited to procurement browser exit/Cancel and order-intake failed local draft persistence; they do not cover every in-app navigation.
 
 ## Verification And Deployment
+
+Authorization follow-up evidence: the new assertions first reproduced six missing-certification failures in the previous functions. After remediation, 24 isolated SQL tests passed, including authenticated execution, all five return outcomes, denial before writes, completed-case replay, atomic rollback and name privacy. On UAT, 66 read-only boundary probes passed across the 11 canonical test personas. These check permission outcomes and nonexistent-record rejection, not 66 completed transactions. The unchanged live launch verifier reports zero raw boundaries, missing objects and missing grants. Full CI certification remains a separate result; do not infer it from these focused checks.
 
 The first CI attempt stopped at the production dependency audit. The follow-up raises Next.js to at least 16.3.3, sharp to at least 0.35.4 and csv-parse to at least 7.0.2, retaining the existing security gate. The mobile smoke assertion now checks the approved Status selector and order search, rather than desktop-only counters. No transaction assertion was relaxed. Validate the final dependency-patched build independently from earlier layout captures.
 

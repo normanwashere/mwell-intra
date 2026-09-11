@@ -2,6 +2,8 @@
 
 ## September 12 Workspace Layout
 
+**Authorization follow-up:** Return resolution now checks current permission and any required training before saving or replaying a completed case. Quarantine, Finance evidence, replacement delivery and customer closure steps remain unchanged. If access is denied, check your assigned responsibility and training; do not recreate the return. Names on your own department stock requests remain available. Viewing names on another person's request requires current issuing or request-approval authority. Missing names do not mean the records were deleted.
+
 The final visual pass also corrects outlined dialog-action text in dark mode, including View original order. Contrast is checked against the rendered button background; destinations and actions are unchanged.
 
 On mobile Pick & Pack, use Status to choose the queue and Search orders to find a record. Desktop retains the counter strip. Dependency security patches in this release do not require a new account or change your workflow.

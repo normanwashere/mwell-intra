@@ -2,6 +2,8 @@
 
 ## September 12 Shared Workspace Layout
 
+**Separate authorization follow-up:** Migration `20260911170103_requester_names_return_live_authority.sql` replaces the raw capability calls in `private.department_request_actor_names(uuid[])` and `warehouse.resolve_customer_return_case(jsonb)` with `core.has_live_cap`. It preserves deployed function bodies, grants, record filters and return side effects, failing if the expected authority contract is absent. Own-request name access is unchanged; cross-request name access now follows current issuing/approval eligibility. Return resolution checks authority before record lookup, writes and completed-case replay. The existing procurement Finance alternative remains available according to its configured certification rule; the migration does not add a new training requirement to that capability. Private delegates remain inaccessible to authenticated callers. No business rows or role/certification assignments are changed.
+
 The final visual pass also corrects outlined dialog-action text in dark mode, including View original order. Contrast is checked against the rendered button background; destinations and actions are unchanged.
 
 The accompanying dependency correction requires Next.js >=16.3.3, sharp >=0.35.4 and csv-parse >=7.0.2. Preserve locked dependency installation and the high-severity production audit gate. Mobile smoke tests assert the rendered status/search controls; the counter strip remains a desktop assertion.
@@ -10,7 +12,7 @@ The suite, Warehouse and vendor content containers opt into `workspace-hierarchy
 
 Shared Sheet supports default, record and wide sizes, a scrollable body and separate header/footer surfaces. Order detail/intake use the record size and responsive grouping without changing their fields or commands. Desktop navigation state is browser-local, synchronized across shell mounts; the sidebar is viewport-sticky with independent navigation scrolling. Supported list-return checkpoints expire after 30 minutes and are user/tab scoped. Record links remain canonical and access-controlled.
 
-No database migration, RLS, capability, approval, inventory or payment command changes are part of this release. The deployment target is the existing mwell-intra-uat Vercel project and its UAT Supabase environment, not the main production database. Verification distinguishes read-only role/screen checks from transaction execution.
+No database migration, RLS, capability, approval, inventory or payment command changes are part of the visual layout itself. The separate authorization follow-up above is independently tested and applied. The deployment target is the existing mwell-intra-uat Vercel project and its UAT Supabase environment, not the main production database. Verification distinguishes read-only role/screen checks from transaction execution.
 
 ## September 11 Loading Optimization
 

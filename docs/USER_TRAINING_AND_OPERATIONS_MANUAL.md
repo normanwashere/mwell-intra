@@ -2,6 +2,8 @@
 
 ## September 12 Interface Training
 
+**Authorization follow-up:** Demonstrate that return resolution requires current role authority and any required training, including repeat submissions on completed returns. A denied attempt is not a reason to recreate the case. Quarantine, evidence and delivery checks still apply. Requesters can see names on their own stock requests; reviewing names on other requests requires current issuing or request-approval authority. Check training and assignment before escalating a missing name.
+
 The final visual pass also corrects outlined dialog-action text in dark mode, including View original order. Contrast is checked against the rendered button background; destinations and actions are unchanged.
 
 For mobile Pick & Pack, demonstrate the Status selector and Search orders; do not ask learners to find the desktop counter strip. Security dependency updates leave these operating steps unchanged.

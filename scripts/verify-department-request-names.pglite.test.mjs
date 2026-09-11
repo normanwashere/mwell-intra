@@ -4,6 +4,8 @@ import test from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
 
 const migration = readFileSync(new URL('../supabase/migrations/20260908042032_department_request_actor_names.sql', import.meta.url), 'utf8');
+const authorityMigration = readFileSync(new URL('../supabase/migrations/20260911170103_requester_names_return_live_authority.sql', import.meta.url), 'utf8');
+assert.match(authorityMigration, /do \$requester_names\$[\s\S]*?\$requester_names\$;/);
 const requester = '11111111-1111-4111-8111-111111111111';
 const other = '22222222-2222-4222-8222-222222222222';
 const approver = '33333333-3333-4333-8333-333333333333';
@@ -14,12 +16,14 @@ async function setup() {
   await db.exec(`create role authenticated; create role anon; create schema auth; create schema core; create schema warehouse; create schema private;
     create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('test.actor',true),'')::uuid$$;
     create function core.has_cap(text,text) returns boolean language sql stable as $$select coalesce(current_setting('test.cap',true),'') = $1 || '.' || $2$$;
+    create function core.has_live_cap(text,text) returns boolean language sql stable as $$select core.has_cap($1,$2) and coalesce(current_setting('test.certified',true),'true') = 'true'$$;
     create table core.profiles(id uuid primary key, full_name text);
     create table warehouse.department_stock_requests(id uuid primary key, requested_by uuid, approved_by uuid);
     insert into core.profiles values('${requester}','Marketing Lead'),('${approver}','Approver'),('${other}','Other Person');
     insert into warehouse.department_stock_requests values('${request}','${requester}','${approver}'),('${foreign}','${other}',null);
     grant usage on schema warehouse,private to authenticated; grant usage on schema warehouse,private to anon;
     ${migration}
+    ${authorityMigration.match(/do \$requester_names\$[\s\S]*?\$requester_names\$;/)?.[0] ?? ''}
     set role authenticated; set test.actor='${requester}'; set test.cap='';`);
   return db;
 }
@@ -30,6 +34,16 @@ test('own request discloses only linked names; guessed unrelated request and act
     assert.deepEqual((await lookup(db,[request,foreign,other])).rows,[{request_id:request,requested_by_name:'Marketing Lead',approved_by_name:'Approver'}]);
     assert.deepEqual((await lookup(db,[])).rows,[]);
     await assert.rejects(db.query('select * from core.profiles'),/permission denied/);
+  } finally { await db.close(); }
+});
+test('missing certification cannot disclose another requester, but own request names stay available', async () => {
+  const db = await setup(); try {
+    for (const cap of ['warehouse.issue_items', 'procurement.approve_request']) {
+      await db.exec(`set test.cap='${cap}'; set test.certified='false'`);
+      assert.deepEqual((await lookup(db,[request,foreign])).rows.map(row => row.request_id),[request]);
+      await db.exec("set test.certified='true'");
+      assert.equal((await lookup(db,[foreign])).rows.length,1);
+    }
   } finally { await db.close(); }
 });
 for (const cap of ['warehouse.issue_items','procurement.approve_request']) test(`${cap} reads names for specifically requested rows`, async () => {

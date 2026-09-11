@@ -64,6 +64,8 @@ export const TROUBLESHOOTING_GUIDES: TroubleshootingGuide[] = [
     safeRecovery: [
       "Open the account menu and confirm the job title, department, responsibility, and scoped authority shown for the active identity",
       "Confirm the denied route and the specific responsibility required for that action",
+      "For return resolution, check that the required training is current before retrying. The same check applies when reopening a completed return; it does not repeat the stock movement",
+      "Requester names on your own stock requests remain available. Reviewing names on someone else's request requires current issuing or request-approval authority; a missing name does not mean the person or request was deleted",
       "Sign out and back in after an approved role change",
       "Use Sign in with a different account when the current identity is not the intended operator",
       "Submit an access request with business owner approval",

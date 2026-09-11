@@ -2,6 +2,8 @@
 
 ## September 12 Layout Handover
 
+**Authorization follow-up:** The requester-name projection and return-resolution entry point now use `core.has_live_cap`. Infrastructure must apply `20260911170103_requester_names_return_live_authority.sql` to the verified UAT project and rerun the unchanged database launch gate. QA must test own-request names, unrelated request IDs, current versus missing training, all five return resolutions, completed-case replay and rollback. The focused SQL suites now run explicitly in CI. No tester stock, role assignments or training completions are rewritten by this migration.
+
 The final visual pass also corrects outlined dialog-action text in dark mode, including View original order. Contrast is checked against the rendered button background; destinations and actions are unchanged.
 
 Mobile Pick & Pack training uses Status and Search orders instead of the desktop counter strip. Infrastructure must retain the dependency security gate and validate the patched Next.js/sharp/csv-parse build, rather than treating the earlier layout screenshots as runtime-patch certification.

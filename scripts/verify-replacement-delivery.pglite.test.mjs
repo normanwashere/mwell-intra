@@ -7,6 +7,8 @@ const actor = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const otherActor = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const id = '11111111-1111-4111-8111-111111111111';
 const source = '22222222-2222-4222-8222-222222222222';
+const authorityMigration = await readFile(new URL('../supabase/migrations/20260911170103_requester_names_return_live_authority.sql', import.meta.url), 'utf8');
+assert.match(authorityMigration, /do \$return_resolution\$[\s\S]*?\$return_resolution\$;/);
 const [controls, helpers, original, predecessor, migration] = await Promise.all([
   '20260710150000_warehouse_w1_control_schema.sql',
   '20260710160000_warehouse_w1_quality_and_approval_rpcs.sql',
@@ -38,6 +40,9 @@ async function setup(t) {
     $$;
     create function core.has_cap(text, text) returns boolean language sql as $$
       select coalesce(current_setting('test.capabilities', true)::jsonb ? ($1 || '.' || $2), false)
+    $$;
+    create function core.has_live_cap(text, text) returns boolean language sql as $$
+      select core.has_cap($1,$2) and coalesce(current_setting('test.certified',true),'true') = 'true'
     $$;
     set test.actor = '${actor}';
     set test.capabilities = '["warehouse.manage_returns"]';
@@ -75,6 +80,8 @@ async function setup(t) {
   await db.exec(functionSql(original, 'private.warehouse_resolve_customer_return_case'));
   await db.exec(functionSql(predecessor, 'warehouse.resolve_customer_return_case'));
   await db.exec(migration);
+  await db.exec(authorityMigration.match(/do \$return_resolution\$[\s\S]*?\$return_resolution\$;/)?.[0] ?? 'select 1;');
+  await db.exec('grant usage on schema warehouse to authenticated, anon;');
   await db.exec(`
     insert into warehouse.fulfillment_orders(id, source, external_reference, source_location_id, lines,
       created_by, customer_name, customer_contact, delivery_address)
@@ -99,9 +106,12 @@ const payload = delivery => ({
   supplier_reference: null, finance_evidence_url: null,
   ...(delivery === undefined ? {} : { replacement_delivery: delivery }),
 });
-const call = async (db, value) => (await db.query(
-  'select warehouse.resolve_customer_return_case($1::jsonb) as result', [JSON.stringify(value)],
-)).rows[0].result;
+const call = async (db, value) => {
+  await db.exec('set role authenticated');
+  try {
+    return (await db.query('select warehouse.resolve_customer_return_case($1::jsonb) as result', [JSON.stringify(value)])).rows[0].result;
+  } finally { await db.exec('reset role'); }
+};
 const rows = async (db, sql) => (await db.query(sql)).rows;
 const snapshot = async db => ({
   cases: await rows(db, 'select * from warehouse.customer_return_cases order by id'),
@@ -115,6 +125,27 @@ async function closeCase(db) {
   await db.exec(`update warehouse.customer_return_cases set status='closed', customer_closed_by='${actor}',
     customer_closed_at=now(), customer_resolution_reference='CLOSE-1',
     customer_closure_evidence_url='https://example.test/proof' where id='${id}'`);
+}
+
+for (const resolution of ['replacement', 'refund', 'vendor_return', 're_kit', 'write_off']) {
+  test(`${resolution}: uncertified authority fails before writes; certified authority keeps the resolution chain`, async t => {
+    const db = await setup(t);
+    const cap = resolution === 'refund' ? 'warehouse.approve_stock_adjustment_finance' : 'warehouse.manage_returns';
+    await db.exec(`set test.capabilities='["${cap}"]'; set test.certified='false'`);
+    const command = { ...payload(resolution === 'replacement' ? originalDelivery : undefined), resolution,
+      refund_reference: resolution === 'refund' ? 'REFUND-CERT' : null,
+      supplier_reference: resolution === 'vendor_return' ? 'RMA-CERT' : null,
+      finance_evidence_url: ['refund', 'write_off'].includes(resolution) ? 'https://example.test/finance' : null };
+    const before = await snapshot(db);
+    await assert.rejects(call(db, command), /Not authorized|Finance authorization/i);
+    assert.deepEqual(await snapshot(db), before);
+    await db.exec("set test.certified='true'");
+    assert.equal((await call(db,command)).resolution,resolution);
+    const resolved = await snapshot(db);
+    await db.exec("set test.certified='false'");
+    await assert.rejects(call(db,command), /Not authorized|Finance authorization/i);
+    assert.deepEqual(await snapshot(db), resolved);
+  });
 }
 
 for (const delivery of [originalDelivery, newDelivery]) {
