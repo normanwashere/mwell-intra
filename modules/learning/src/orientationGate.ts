@@ -62,9 +62,11 @@ export function sanitizeOnboardingReturnPath(
   value: string | null,
 ): string | null {
   if (!value || !value.startsWith("/") || value.startsWith("//")) return null;
+  // eslint-disable-next-line no-control-regex -- Reject control characters in return destinations.
   if (value.includes("\\") || /[\u0000-\u001f\u007f]/.test(value)) return null;
   try {
     const decoded = decodeURIComponent(value);
+    // eslint-disable-next-line no-control-regex -- Reject percent-encoded controls as well.
     if (decoded.startsWith("//") || decoded.includes("\\") || /[\u0000-\u001f\u007f]/.test(decoded)) return null;
     const base = "https://intra.invalid";
     const destination = new URL(value, base);

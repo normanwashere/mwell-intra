@@ -12,7 +12,7 @@ function Probe({ read, identity = 'queue' }: { read: () => Promise<string[]>; id
   latest = useReadQuery(scope, identity, read);
   return createElement('p', { role: latest[3] ? 'alert' : 'status' }, latest[1] ? 'Loading' : latest[3] ?? (latest[0].join(',') || 'Empty'));
 }
-beforeEach(() => { (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; host = document.createElement('div'); document.body.append(host); root = createRoot(host); });
+beforeEach(() => { (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true; host = document.createElement('div'); document.body.append(host); root = createRoot(host); });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
 it('keeps failure distinct from empty and recovers with an explicit retry', async () => {
   const read = vi.fn().mockRejectedValueOnce(new Error('private database detail')).mockResolvedValueOnce([]);

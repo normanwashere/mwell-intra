@@ -1,12 +1,12 @@
 # Task-first Coverage Inventory
 
-Date: 2026-09-06; inventory updated September 11 for the local UX remediation instructions, including the previously documented order-detail and inspection-evidence controls. Scope: current knowledge inventory, including candidate instructions on existing feature routes. A feature's existing live classification does not certify its new candidate controls as deployed. NOT a release sign-off or completed Task11 pilot. Local screenshots do not establish live exact-control certification.
+Date: 2026-09-06; inventory updated September 12 for the shared workspace release, including desktop Hide navigation / Show navigation. Scope: current knowledge inventory, including candidate instructions on existing feature routes. A feature's existing live classification does not certify its new candidate controls as deployed. NOT a release sign-off or completed Task11 pilot. Local screenshots do not establish live exact-control certification.
 
 ## Exact Baseline
 
-68 features: 59 live, 0 limited, 9 coming soon. 291 documented controls: 282 on live-classified features and 9 non-executable roadmap controls. 26 flows, 58 decision nodes, 14 distinct policy-reference strings, 53 existing evidence records. Zero unresolved mapped flow/role targets and zero graph-validator errors in the current inventory.
+68 features: 59 live, 0 limited, 9 coming soon. 294 documented controls: 285 on live-classified features and 9 non-executable roadmap controls. 26 flows, 58 decision nodes, 14 distinct policy-reference strings, 53 existing evidence records. Zero unresolved mapped flow/role targets and zero graph-validator errors in the current inventory.
 
-All 282 controls on live-classified features have written behavior/validation/result and an owned feature reference. **Zero exact control-name/hotspot evidence matches.** This does not mean 53 images are absent: their recorded scope does not establish every control. All 291 inventory rows remain unverified for release evidence. The validator reports 287 missing action-evidence bindings, including 5 existing flow-node bindings. No new screenshots, capture dates or acceptance states were fabricated.
+All 285 controls on live-classified features have written behavior/validation/result and an owned feature reference. **Zero exact control-name/hotspot evidence matches.** This does not mean 53 images are absent: their recorded scope does not establish every control. All 294 inventory rows remain unverified for release evidence. The validator reports 290 missing action-evidence bindings, including 5 existing flow-node bindings. No new screenshots, capture dates or acceptance states were fabricated.
 
 The snapshot below is intentionally exact. Changes require reviewing this inventory and its test, not reducing expected counts or treating a new control as implicitly verified. The inventory is current content, not a second task catalog.
 
@@ -31,7 +31,7 @@ StepWorkspace retains exact branch callback identity and permission behavior. Ti
 
 | Feature reference | Availability | Controls | Routes | Content owner | Existing flows |
 | --- | --- | ---: | --- | --- | --- |
-| feature-shell-home | live | 4 | / | Platform | identity-and-access |
+| feature-shell-home | live | 5 | / | Platform | identity-and-access |
 | feature-sign-in | live | 3 | /login | Platform | identity-and-access |
 | feature-reset-password | live | 2 | /reset-password | Platform | identity-and-access |
 | feature-knowledge-library | live | 5 | /knowledge | Platform | Reference only |
@@ -125,7 +125,7 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
 {
   "counts": {
     "features": 68,
-    "controls": 293,
+    "controls": 294,
     "liveFeatures": 59,
     "limitedFeatures": 0,
     "comingSoonFeatures": 9,
@@ -158,6 +158,16 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
     },
     {
       "key": "shell-home:Use primary navigation",
+      "referenceId": "feature-shell-home",
+      "availability": "live",
+      "flowIds": [
+        "identity-and-access"
+      ],
+      "evidenceIds": [],
+      "unverified": true
+    },
+    {
+      "key": "shell-home:Hide navigation / Show navigation",
       "referenceId": "feature-shell-home",
       "availability": "live",
       "flowIds": [
