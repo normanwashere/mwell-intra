@@ -72,6 +72,9 @@ export function QualityPage() {
   }, [identityId, mode, supabaseClient]);
 
   useEffect(() => {
+    // Bootstrap replaces data once ready. Starting early downloads and then
+    // discards the same evidence-heavy population before that replacement.
+    if (!data) return;
     void reloadControls();
     return () => {
       loadSequence.current += 1;

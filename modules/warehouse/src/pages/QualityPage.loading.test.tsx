@@ -46,6 +46,21 @@ describe('QualityPage bounded read recovery', () => {
   });
   afterEach(() => { cleanup(); vi.useRealTimers(); });
 
+  it('waits for warehouse bootstrap before loading the control population once', async () => {
+    const data = state.data;
+    state.data = null;
+    const view = mount();
+    expect(state.inspections).not.toHaveBeenCalled();
+    expect(state.holds).not.toHaveBeenCalled();
+    expect(state.returns).not.toHaveBeenCalled();
+    state.data = data;
+    view.rerender(<QualityPage />);
+    await screen.findByText('Serial EXACT-A');
+    expect(state.inspections).toHaveBeenCalledTimes(1);
+    expect(state.holds).toHaveBeenCalledTimes(1);
+    expect(state.returns).toHaveBeenCalledTimes(1);
+  });
+
   it('bounds a never-resolving queue, offers Retry, and loads the complete exact population', async () => {
     const slow = deferred<PageResult<QualityInspection>>();
     state.inspections.mockReturnValueOnce(slow.promise);

@@ -2,6 +2,8 @@
 
 ## September 12 Interface Training
 
+**Loading follow-up:** Quality Control fetches its complete queues after warehouse startup, avoiding a discarded early download. Existing inspection, hold, evidence and independent-review steps stay the same. A loading failure must show **Retry quality queue**, not an empty-work confirmation. Permission checks are faster but still use current roles and required training. **PERF-SEP12** records are clearly tagged UAT volume fixtures, not real orders to dispatch or a substitute for operational training scenarios.
+
 **Authorization follow-up:** Demonstrate that return resolution requires current role authority and any required training, including repeat submissions on completed returns. A denied attempt is not a reason to recreate the case. Quarantine, evidence and delivery checks still apply. Requesters can see names on their own stock requests; reviewing names on other requests requires current issuing or request-approval authority. Check training and assignment before escalating a missing name.
 
 The final visual pass also corrects outlined dialog-action text in dark mode, including View original order. Contrast is checked against the rendered button background; destinations and actions are unchanged.

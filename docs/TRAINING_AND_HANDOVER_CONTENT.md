@@ -2,6 +2,8 @@
 
 ## September 12 Layout Handover
 
+**Performance follow-up:** Apply the guarded learning query-plan migration to verified UAT only, then compare all 11 capability snapshots and rerun the unchanged authority/read gates. No result cache or authority relaxation is introduced. QA must retain the Quality loading, complete-queue, hold, evidence, timeout and retry checks. The performance seed adds 300 zero-stock products, 200 unallocated ecommerce orders, 100 draft purchase requests and 50 draft department requests, all tagged PERF-SEP12. These fixtures must not be presented as approved purchases, received stock or real deliveries. Use the existing operational scenarios for transaction training. Retain the before/after performance JSON and desktop/mobile screenshots with the release evidence.
+
 **Authorization follow-up:** The requester-name projection and return-resolution entry point now use `core.has_live_cap`. Infrastructure must apply `20260911170103_requester_names_return_live_authority.sql` to the verified UAT project and rerun the unchanged database launch gate. QA must test own-request names, unrelated request IDs, current versus missing training, all five return resolutions, completed-case replay and rollback. The focused SQL suites now run explicitly in CI. No tester stock, role assignments or training completions are rewritten by this migration.
 
 The final visual pass also corrects outlined dialog-action text in dark mode, including View original order. Contrast is checked against the rendered button background; destinations and actions are unchanged.

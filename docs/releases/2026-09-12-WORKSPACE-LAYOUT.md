@@ -2,6 +2,8 @@
 
 ## What Changed
 
+**Performance follow-up:** Training eligibility queries now reuse PostgreSQL plans without caching permission results or changing authority predicates. Quality Control avoids starting an evidence-heavy download before warehouse startup replaces its data. All 22 Quality regression tests passed, and the isolated SQL test preserves results across 18 authority variants. On UAT, all 11 capability-output fingerprints match and 66 requester-name/return boundary probes still pass. The live database launch/read gates remain clear. Compare the seeded before/after browser and API runs separately; SQL timing alone does not certify screen performance or completed transactions.
+
 **Authorization follow-up:** The UAT requester-name lookup and return-resolution entry point now use current role/training eligibility. The migration changes only five permission predicates in the deployed functions. Own-request names, requested-ID limits, private profile access, quarantine, delivery confirmation, Finance evidence and duplicate-submission handling remain intact. Cross-request name review requires current issuing or approval eligibility.
 
 The final visual pass also corrects outlined dialog-action text in dark mode, including View original order. Contrast is checked against the rendered button background; destinations and actions are unchanged.

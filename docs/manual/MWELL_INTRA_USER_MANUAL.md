@@ -2,6 +2,8 @@
 
 ## September 12 Workspace Layout
 
+**Loading follow-up:** Quality Control now waits for warehouse startup before fetching its inspection and hold queues. Wait for the queue to finish before making a decision; if it fails, use **Retry quality queue**. Do not repeat a receipt or release a hold to get past loading. Permission checks have also been made faster without changing your roles, required training, approval steps or evidence. UAT records marked **PERF-SEP12** are synthetic volume-test drafts and unallocated orders, not real stock or deliveries; existing operational test scenarios remain available.
+
 **Authorization follow-up:** Return resolution now checks current permission and any required training before saving or replaying a completed case. Quarantine, Finance evidence, replacement delivery and customer closure steps remain unchanged. If access is denied, check your assigned responsibility and training; do not recreate the return. Names on your own department stock requests remain available. Viewing names on another person's request requires current issuing or request-approval authority. Missing names do not mean the records were deleted.
 
 The final visual pass also corrects outlined dialog-action text in dark mode, including View original order. Contrast is checked against the rendered button background; destinations and actions are unchanged.

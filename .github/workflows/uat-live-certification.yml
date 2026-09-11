@@ -90,7 +90,7 @@ jobs:
             scripts/verify-offline-replay-identity.pglite.test.mjs \
             scripts/verify-warehouse-custody-truncate.pglite.test.mjs
       - name: Verify requester-name and return authorization regressions
-        run: node --test --test-concurrency=1 scripts/verify-department-request-names.pglite.test.mjs scripts/verify-replacement-delivery.pglite.test.mjs
+        run: node --test --test-concurrency=1 scripts/verify-department-request-names.pglite.test.mjs scripts/verify-replacement-delivery.pglite.test.mjs scripts/verify-authority-plan-performance.pglite.test.mjs
       - name: Build all workspaces
         run: pnpm build
       - name: Analyze source with CodeQL
