@@ -2,6 +2,8 @@
 
 ## September 12 Workspace Layout
 
+The final visual pass also corrects outlined dialog-action text in dark mode, including View original order. Contrast is checked against the rendered button background; destinations and actions are unchanged.
+
 On mobile Pick & Pack, use Status to choose the queue and Search orders to find a record. Desktop retains the counter strip. Dependency security patches in this release do not require a new account or change your workflow.
 
 The updated interface uses distinct page headers, shaded section headings and clearer dialog headers and footers across internal and vendor workspaces. Status colors still indicate the same business states. Your roles, approvals and transaction steps have not changed.

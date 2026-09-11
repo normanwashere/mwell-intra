@@ -2,6 +2,8 @@
 
 ## September 12 Interface Training
 
+The final visual pass also corrects outlined dialog-action text in dark mode, including View original order. Contrast is checked against the rendered button background; destinations and actions are unchanged.
+
 For mobile Pick & Pack, demonstrate the Status selector and Search orders; do not ask learners to find the desktop counter strip. Security dependency updates leave these operating steps unchanged.
 
 Rehearse the same business workflow with the updated workspace hierarchy: identify the page, its section heading, current status, responsible role and next action. The visual changes do not create new permissions or change approval order.

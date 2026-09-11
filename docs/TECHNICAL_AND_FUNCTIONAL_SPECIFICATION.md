@@ -2,6 +2,8 @@
 
 ## September 12 Shared Workspace Layout
 
+The final visual pass also corrects outlined dialog-action text in dark mode, including View original order. Contrast is checked against the rendered button background; destinations and actions are unchanged.
+
 The accompanying dependency correction requires Next.js >=16.3.3, sharp >=0.35.4 and csv-parse >=7.0.2. Preserve locked dependency installation and the high-severity production audit gate. Mobile smoke tests assert the rendered status/search controls; the counter strip remains a desktop assertion.
 
 The suite, Warehouse and vendor content containers opt into `workspace-hierarchy`. Shared CSS supplies page/section contrast, input surfaces, card edges and keyboard focus styling in light and dark themes. Existing workflow-specific queue styles remain scoped. Login and recovery screens retain their standalone layouts. The existing `hierarchy-preview.css` filename is retained for compatibility; its shared rules are no longer limited to the pilot.

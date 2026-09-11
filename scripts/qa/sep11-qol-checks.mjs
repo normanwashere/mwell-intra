@@ -64,6 +64,16 @@ export async function checkConvenience({page, context, item, width, origin, outp
     const detailsBody=details.getByRole('region',{name:/^Order details.* content$/});
     assert(await detailsBody.evaluate(el=>el.scrollWidth <= el.clientWidth + 1), 'Order details must not scroll horizontally');
     await setPreviewTheme(page,'dark');
+    const outlineContrast = await details.locator('.btn-outline:not(:disabled)').evaluateAll(buttons => buttons.map(button => {
+      const style = getComputedStyle(button);
+      const luminance = color => {
+        const channels = color.match(/[\d.]+/g).slice(0,3).map(Number).map(v => v / 255).map(v => v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+        return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+      };
+      const foreground = luminance(style.color), background = luminance(style.backgroundColor);
+      return { name: button.textContent, ratio: (Math.max(foreground,background) + 0.05) / (Math.min(foreground,background) + 0.05) };
+    }));
+    for (const button of outlineContrast) assert(button.ratio >= 4.5, `Dark dialog action contrast: ${button.name}`);
     await page.screenshot({path:path.join(output,`order-dark-${width}.png`)});
     await setPreviewTheme(page,'light');
     await detailsBody.evaluate(el=>{el.scrollTop=el.scrollHeight;});

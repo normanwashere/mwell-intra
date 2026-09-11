@@ -162,6 +162,7 @@ main:has(> .hierarchy-preview) { background: #eff2f4; }
 .intra-sheet-header { border-top: 3px solid var(--hp-active); background: var(--hp-band); }
 .intra-sheet-footer { background: var(--hp-band); }
 .intra-sheet-body { background: rgb(var(--c-surface)); }
+.intra-sheet .btn-outline { color: rgb(var(--c-ink)); }
 .intra-sheet-body > [aria-label="Workflow status"] {
   margin: 0 0 20px;
   padding: 14px 16px;

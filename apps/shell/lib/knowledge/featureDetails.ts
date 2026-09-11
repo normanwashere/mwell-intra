@@ -45,7 +45,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Hide navigation / Show navigation",
           "Use the desktop header control to hide or restore the sidebar. The browser remembers the choice; the visible sidebar stays reachable while the page scrolls.",
           "Desktop only. Mobile navigation and role-authorized destinations are unchanged; mobile Pick & Pack uses Status and Search orders rather than the desktop counter strip.",
-          "The workspace gains room without changing the current record, approval step or permissions. Page and section bands distinguish the same work across internal and vendor screens.",
+          "The workspace gains room without changing the current record, approval step or permissions. Page and section bands distinguish the same work across internal and vendor screens. Dialog actions remain readable in light and dark mode; View original order still opens the linked original record.",
         ),
         control(
           "View account details",

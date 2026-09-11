@@ -2,6 +2,8 @@
 
 ## September 12 Layout Handover
 
+The final visual pass also corrects outlined dialog-action text in dark mode, including View original order. Contrast is checked against the rendered button background; destinations and actions are unchanged.
+
 Mobile Pick & Pack training uses Status and Search orders instead of the desktop counter strip. Infrastructure must retain the dependency security gate and validate the patched Next.js/sharp/csv-parse build, rather than treating the earlier layout screenshots as runtime-patch certification.
 
 Trainer demonstration: hide and restore desktop navigation, identify the page and shaded section bands, read a compact My Work row, open its authorized record, and use a wider order dialog on desktop and its stacked mobile equivalent. Show the separate action footer and confirm that closing a read-only dialog does not change the transaction.

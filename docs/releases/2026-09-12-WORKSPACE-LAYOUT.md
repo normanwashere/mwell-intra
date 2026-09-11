@@ -2,6 +2,8 @@
 
 ## What Changed
 
+The final visual pass also corrects outlined dialog-action text in dark mode, including View original order. Contrast is checked against the rendered button background; destinations and actions are unchanged.
+
 The approved layout now applies through the shared internal and vendor workspace containers, not just the three pilot screens. Page headers, section bands and dialog surfaces have clearer contrast in both themes. Status colors keep their existing meanings.
 
 Desktop navigation can be hidden/restored and remains reachable while scrolling. My Work rows are more compact. Order details and intake have wider, grouped desktop layouts and mobile stacking; dialog action footers remain separate. PO amendment inputs align without changing their validation. Supported record copying and list-return convenience are included.
