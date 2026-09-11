@@ -142,7 +142,8 @@ describe("role onboarding integration", () => {
     const internalPage = source("app/onboarding/page.tsx");
     const vendorPage = source("app/vendor/onboarding/page.tsx");
 
-    expect(internalPage).toContain("<OnboardingCenter");
+    expect(internalPage).toContain("<TaskLearningWorkspace");
+    expect(source("components/knowledge/TaskLearningWorkspace.tsx")).toContain('<OnboardingCenter audience={audience} selectedTask={selectedTask}');
     expect(vendorPage).toContain('audience="vendor"');
     expect(vendorPage).toContain("Vendor onboarding");
   });

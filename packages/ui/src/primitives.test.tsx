@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { Card, Field, ModuleHero } from "./primitives";
+import { Card, Field, ModuleHero, PageHeader, HeroStat, SectionTitle } from "./primitives";
 import { readFileSync } from "node:fs";
 
 describe("Card DOM contract", () => {
@@ -23,7 +23,7 @@ describe("Card DOM contract", () => {
 });
 
 describe("ModuleHero responsive hierarchy", () => {
-  it("uses a compact contextual icon and a two-zone operational hierarchy", () => {
+  it("uses the shared in-flow title and action hierarchy without a floating hero card", () => {
     const markup = renderToStaticMarkup(
       <ModuleHero
         eyebrow="Warehouse dashboard"
@@ -33,18 +33,35 @@ describe("ModuleHero responsive hierarchy", () => {
       />,
     );
 
-    expect(markup).toContain('data-module-hero-watermark="true"');
-    expect(markup).toContain('data-module-hero-content="true"');
-    expect(markup).toContain("workspace-hero");
-    expect(markup).toContain("h-6 w-6");
-    expect(markup).toContain("relative z-10");
-    expect(markup).not.toContain("h-36 w-36");
+    expect(markup).toContain('data-workspace-header="true"');
+    expect(markup).toContain('data-workspace-icon="true"');
+    expect(markup).not.toContain('watermark');
+    expect(markup).not.toContain('hero-surface');
+    expect(markup).not.toContain('absolute');
   });
-  it("moves the icon into flow when the hero container cannot accommodate the reserved column", () => {
+  it("uses container size, not viewport size, for action reflow", () => {
     const css = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
-    expect(css).toContain("container-name: module-hero");
-    expect(css).toContain("@container module-hero (max-width: 12rem)");
-    expect(css).toMatch(/\[data-module-hero-watermark\]\s*\{\s*position: static;/);
-    expect(css).toMatch(/\[data-module-hero-content\]\s*\{\s*padding-inline-end: 0;/);
+    expect(css).toContain('container-name: workspace-header');
+    expect(css).toContain('@container workspace-header (min-width: 48rem)');
+    expect(css).toContain('overflow-wrap: anywhere');
+  });
+  it('keeps names, status, action destinations and metrics for both header APIs', () => {
+    for (const component of [
+      <PageHeader title="Purchase orders" status={<span>Issued</span>} action={<a href="/create">Create order</a>} />,
+      <ModuleHero title="Purchase orders" action={<a href="/create">Create order</a>} accessory={<HeroStat label="Status">Issued</HeroStat>} />,
+    ]) {
+      const html = renderToStaticMarkup(component);
+      expect(html).toContain('Purchase orders');
+      expect(html).toContain('Issued');
+      expect(html).toContain('href="/create"');
+      expect(html).toContain('data-workspace-header="true"');
+      expect((html.match(/<h1/g) ?? []).length).toBe(1);
+    }
+  });
+  it('keeps section anchors and actions beside a distinct section heading', () => {
+    const html = renderToStaticMarkup(<SectionTitle id="receiving" title="Receiving" action={<button>Review</button>} />);
+    expect(html).toContain('id="receiving"');
+    expect(html).toContain('section-heading-band');
+    expect(html).toContain('Review');
   });
 });

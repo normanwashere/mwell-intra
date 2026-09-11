@@ -13,6 +13,7 @@ const readiness: ReadinessPackage = {
   productId: "product-1",
   title: "Remote care launch",
   version: 3,
+  kitRequired: false,
   status: "approved",
   evidence: [
     {

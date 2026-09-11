@@ -63,6 +63,18 @@ type ReconciliationWorkflowModule = {
 const reconciliationWorkflow = eventData as ReconciliationWorkflowModule;
 
 describe('event lifecycle rules', () => {
+  it('UX04 distinguishes failed reads and UX10 reloads only authorized event handoffs', async () => {
+    let failed = false;
+    const client = { schema: () => ({ from: (table: string) => {
+      const query = { select: () => query, order: () => query, in: () => query, eq: () => query,
+        limit: async () => ({ error: failed && table === 'events' ? { message: 'Network failure' } : null,
+          data: table === 'events' ? [{ id: 'e1', start_date: '2026-09-11' }] : table === 'department_stock_requests' ? [{ id: 'r1', event_id: 'e1', status: 'pending_approval' }, { id: 'r2', event_id: 'outside' }] : [] }) };
+      return query;
+    } }) };
+    expect((await loadLiveEvents(client as never)).fulfillmentHandoffs).toEqual([expect.objectContaining({ id: 'r1', eventId: 'e1', status: 'pending_approval' })]);
+    failed = true;
+    await expect(loadLiveEvents(client as never)).rejects.toThrow('Events unavailable: Network failure');
+  });
   it('WE01 rejects 9/11 outcomes for ten lifetime issued, and rejects negative balanced outcomes', () => {
     const input = { action: 'submit' as const, soldUnits: 0, giveawayUnits: 0, returnedUnits: 10, lostUnits: 0, damagedUnits: 0, rekitUnits: 0, grossSalesAmount: 0, evidenceUrl: 'https://example.com/event-evidence' };
     expect(eventData.validateEventReconciliationTransition(input, 10).outcomes).toBeUndefined();

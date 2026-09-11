@@ -8,6 +8,7 @@
 //
 // Namespaced under `intra.legal.v1.*` so a future migration is clean.
 
+import { useReadQuery } from './useReadQuery';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSession } from '@intra/auth';
 import type {
@@ -150,71 +151,15 @@ function useLiveRows<T>(
   table: string,
   map: (row: LiveRow) => T,
   order?: { column: string; ascending?: boolean },
-): [T[], boolean, () => Promise<void>] {
-  const [rows, setRows] = useState<T[]>([]);
-  const [loading, setLoading] = useState(Boolean(client));
-  const mapRef = useRef(map);
-
-  useEffect(() => {
-    mapRef.current = map;
-  }, [map]);
-
-  const refresh = useCallback(async () => {
-    if (!client) {
-      setRows([]);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    try {
-      let query = client.schema('legal').from(table).select('*');
-      if (order) {
-        query = query.order(order.column, {
-          ascending: order.ascending ?? false,
-        });
-      }
-      const { data, error } = await query;
-      if (error) throw new Error(error.message);
-      setRows((data ?? []).map(mapRef.current));
-    } catch {
-      setRows([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [client, table, order?.column, order?.ascending]);
-
-  useEffect(() => {
-    let active = true;
-    if (!client) {
-      setRows([]);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    let query = client.schema('legal').from(table).select('*');
-    if (order) {
-      query = query.order(order.column, {
-        ascending: order.ascending ?? false,
-      });
-    }
-    Promise.resolve(query)
-      .then(({ data, error }: { data: LiveRow[] | null; error: LiveQueryError | null }) => {
-        if (!active) return;
-        if (error) throw error;
-        setRows((data ?? []).map(mapRef.current));
-        setLoading(false);
-      })
-      .catch(() => {
-        if (!active) return;
-        setRows([]);
-        setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [client, table, order?.column, order?.ascending]);
-
-  return [rows, loading, refresh];
+): [T[], boolean, () => Promise<void>, string | undefined] {
+  const { profile, userCapabilities } = useSession();
+  return useReadQuery(client, `${profile?.id}:${profile?.vendorId}:${JSON.stringify(userCapabilities)}:${table}:${order?.column}:${order?.ascending}`, async () => {
+    let query = client!.schema('legal').from(table).select('*');
+    if (order) query = query.order(order.column, { ascending: order.ascending ?? false });
+    const { data, error } = await query;
+    if (error) throw new Error(error.message);
+    return (data ?? []).map(map);
+  });
 }
 
 function mapCase(row: LiveRow): AccreditationCase {
@@ -621,6 +566,8 @@ export interface AddCaseOptions {
 }
 
 export interface CasesAPI {
+  error?: string;
+  refresh: () => Promise<void>;
   rows: AccreditationCase[];
   loading: boolean;
   getById: (id: string) => AccreditationCase | undefined;
@@ -654,7 +601,7 @@ export interface CasesAPI {
 export function useAccreditationCases(): CasesAPI {
   const live = useLiveClient();
   const [localRows, set, localLoading] = useTrackedRows<AccreditationCase>(CASES_KEY, !isLive(live));
-  const [liveRows, liveLoading, refreshLive] = useLiveRows<AccreditationCase>(live, 'accreditation_cases', mapCase, {
+  const [liveRows, liveLoading, refreshLive, readError] = useLiveRows<AccreditationCase>(live, 'accreditation_cases', mapCase, {
     column: 'opened_at',
     ascending: false,
   });
@@ -908,6 +855,8 @@ export function useAccreditationCases(): CasesAPI {
   return {
     rows,
     loading,
+    error: readError,
+    refresh: refreshLive,
     getById,
     addCase,
     submitCase,
@@ -921,6 +870,8 @@ export function useAccreditationCases(): CasesAPI {
 // Checklist
 // ---------------------------------------------------------------------------
 export interface ChecklistAPI {
+  error?: string;
+  refresh: () => Promise<void>;
   rows: RequirementChecklistItem[];
   loading: boolean;
   forCase: (caseId: string) => RequirementChecklistItem[];
@@ -935,7 +886,7 @@ export interface ChecklistAPI {
 export function useChecklist(): ChecklistAPI {
   const live = useLiveClient();
   const [localRows, set, localLoading] = useTrackedRows<RequirementChecklistItem>(CHECKLIST_KEY, !isLive(live));
-  const [liveRows, liveLoading, refreshLive] = useLiveRows<RequirementChecklistItem>(
+  const [liveRows, liveLoading, refreshLive, readError] = useLiveRows<RequirementChecklistItem>(
     live,
     'requirement_checklist_items',
     mapChecklist,
@@ -1011,13 +962,15 @@ export function useChecklist(): ChecklistAPI {
     [set, live],
   );
 
-  return { rows, loading, forCase, review, attach };
+  return { rows, loading, error: readError, refresh: refreshLive, forCase, review, attach };
 }
 
 // ---------------------------------------------------------------------------
 // Documents
 // ---------------------------------------------------------------------------
 export interface DocsAPI {
+  error?: string;
+  refresh: () => Promise<void>;
   rows: AccreditationDoc[];
   loading: boolean;
   forCase: (caseId: string) => AccreditationDoc[];
@@ -1038,7 +991,7 @@ export interface DocsAPI {
 export function useAccreditationDocs(): DocsAPI {
   const live = useLiveClient();
   const [localRows, set, localLoading] = useTrackedRows<AccreditationDoc>(DOCS_KEY, !isLive(live));
-  const [liveRows, liveLoading, refreshLive] = useLiveRows<AccreditationDoc>(live, 'accreditation_docs', mapDoc, {
+  const [liveRows, liveLoading, refreshLive, readError] = useLiveRows<AccreditationDoc>(live, 'accreditation_docs', mapDoc, {
     column: 'uploaded_at',
     ascending: false,
   });
@@ -1156,7 +1109,7 @@ export function useAccreditationDocs(): DocsAPI {
     [live],
   );
 
-  return { rows, loading, forCase, forRequirement, upload, setStatus, prepareAccess };
+  return { rows, loading, error: readError, refresh: refreshLive, forCase, forRequirement, upload, setStatus, prepareAccess };
 }
 
 // ---------------------------------------------------------------------------
@@ -1184,6 +1137,8 @@ export interface SignInstrumentInput {
 }
 
 export interface SignedInstrumentsAPI {
+  error?: string;
+  refresh: () => Promise<void>;
   rows: SignedInstrument[];
   loading: boolean;
   forCase: (caseId: string) => SignedInstrument[];
@@ -1286,7 +1241,7 @@ export function signInstrument(input: SignInstrumentInput): SignedInstrument {
 export function useSignedInstruments(): SignedInstrumentsAPI {
   const live = useLiveClient();
   const [localRows, , localLoading] = useTrackedRows<SignedInstrument>(SIGNED_KEY, !isLive(live));
-  const [liveRows, liveLoading, refreshLive] = useLiveRows<SignedInstrument>(live, 'signed_instruments', mapSigned, {
+  const [liveRows, liveLoading, refreshLive, readError] = useLiveRows<SignedInstrument>(live, 'signed_instruments', mapSigned, {
     column: 'signed_at',
     ascending: false,
   });
@@ -1325,7 +1280,7 @@ export function useSignedInstruments(): SignedInstrumentsAPI {
     [live, refreshLive],
   );
 
-  return { rows, loading, forCase, findSigned, sign };
+  return { rows, loading, error: readError, refresh: refreshLive, forCase, findSigned, sign };
 }
 
 // ---------------------------------------------------------------------------

@@ -5,7 +5,6 @@ import { useEffect, useRef, useState } from "react";
 import { useSession } from "@intra/auth";
 import {
   Badge,
-  Card,
   EmptyState,
   HeroChipButton,
   Icon,
@@ -20,7 +19,6 @@ import {
   getSnapshotTruth,
   metricStatusPresentation,
   prioritizeMetrics,
-  resolveRequestedInsightArea,
   resolveGovernedSource,
   safeInsightFollowupPayload,
   useInsightsData,
@@ -28,6 +26,7 @@ import {
 } from "./data";
 import type { FollowupReasonCode, FollowupRequestType } from "./data";
 import type { InsightArea, InsightMetric } from "./types";
+import { insightAreaFromPath, insightAreaHref } from './navigation';
 
 const LABELS: Record<InsightArea, string> = {
   warehouse: "Warehouse",
@@ -70,7 +69,7 @@ export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
   } = useSession();
   const { data, loading, error, refresh, areas } = useInsightsData();
   const online = useOnlineStatus();
-  const [area, setArea] = useState<InsightArea | "all">("all");
+  const [area, setArea] = useState<InsightArea | "all" | "invalid">(initialArea ?? 'all');
   const [exporting, setExporting] = useState(false);
   const [commandMessage, setCommandMessage] = useState<string | null>(null);
   const [selectedMetric, setSelectedMetric] = useState<InsightMetric | null>(
@@ -81,14 +80,23 @@ export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
   const [followupReason, setFollowupReason] =
     useState<FollowupReasonCode>("stale_source");
   const [submittingFollowup, setSubmittingFollowup] = useState(false);
+  const [followupError, setFollowupError] = useState<string | null>(null);
   const followupLock = useRef(false);
   const followupKeys = useRef<Record<string,string>>({});
 
   useEffect(() => {
-    setArea((current) =>
-      resolveRequestedInsightArea(initialArea, areas, current),
-    );
-  }, [areas.join("|"), initialArea]);
+    const sync = () => setArea(insightAreaFromPath(window.location.pathname));
+    sync();
+    window.addEventListener('popstate', sync);
+    return () => window.removeEventListener('popstate', sync);
+  }, [initialArea]);
+
+  const selectArea = (value: InsightArea | 'all') => {
+    if (value !== 'all' && !areas.includes(value)) return;
+    if (value === area) return;
+    window.history.pushState(null, '', insightAreaHref(value));
+    setArea(value);
+  };
 
   const mayExport = canShowGovernedExport(mode, userRoles, userCapabilities);
 
@@ -124,11 +132,12 @@ export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
   async function submitFollowup() {
     if (followupLock.current) return;
     if (!selectedMetric || !supabaseClient) {
-      setCommandMessage("A connected governed session is required.");
+      setFollowupError("A connected governed session is required.");
       return;
     }
     followupLock.current = true;
     setSubmittingFollowup(true);
+    setFollowupError(null);
     setCommandMessage(null);
     const command = `${profile?.id}:${selectedMetric.id}:${followupType}:${followupReason}`;
     const storageKey = `intra.insight-followup.${command}`;
@@ -148,7 +157,7 @@ export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
       .schema("core")
       .rpc("request_insight_followup", { payload });
     if (followupError) {
-      setCommandMessage(followupError.message);
+      setFollowupError(followupError.message);
     } else {
       const handoff = result as unknown as {
         id?: string;
@@ -161,7 +170,7 @@ export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
       delete followupKeys.current[command];
       try { sessionStorage.removeItem(storageKey); } catch { /* No sensitive payload is stored. */ }
     }
-    } catch (cause) { setCommandMessage((cause as Error).message || 'Follow-up response unavailable. Retry uses the same request.'); }
+    } catch (cause) { setFollowupError(cause instanceof Error ? cause.message : 'Follow-up response unavailable. Retry uses the same request.'); }
     finally { followupLock.current = false; setSubmittingFollowup(false); }
   }
   if (sessionLoading || (profile && loading))
@@ -189,6 +198,13 @@ export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
         </div>
       </div>
     );
+  if (area === 'invalid' || (area !== 'all' && !areas.includes(area))) {
+    return <div role="alert" className="space-y-3">
+      <h1 className="text-lg font-bold">Insight view unavailable</h1>
+      <p>This view does not exist or is outside your permitted scope.</p>
+      <button className="btn-secondary" onClick={() => selectArea('all')}>All available insights</button>
+    </div>;
+  }
   const visible = prioritizeMetrics(
     area === "all"
       ? data.metrics
@@ -210,7 +226,7 @@ export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
     ...areas.map((value) => ({ value, label: LABELS[value] })),
   ];
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-4">
       <ModuleHero
         eyebrow="Decision support"
         title="Operational and executive insights"
@@ -265,7 +281,7 @@ export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
       {error && (
         <div
           role="status"
-          className="flex items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950"
         >
           <span>
             <strong>Insights unavailable.</strong> {userFacingError(error)}
@@ -288,7 +304,7 @@ export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
           className="input min-h-11"
           value={area}
           onChange={(event) =>
-            setArea(event.target.value as InsightArea | "all")
+            selectArea(event.target.value as InsightArea | "all")
           }
         >
           {options.map((option) => (
@@ -303,14 +319,14 @@ export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
           ariaLabel="Choose insight view"
           options={options}
           value={area}
-          onChange={(value) => setArea(value as InsightArea | "all")}
+          onChange={(value) => selectArea(value as InsightArea | "all")}
         />
       </div>
       <section
         aria-labelledby="insights-summary-title"
         className="border-y border-line py-4"
       >
-        <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase text-brand-700">
               Decision summary
@@ -326,14 +342,14 @@ export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
             {visible.length} visible indicators
           </p>
         </div>
-        <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line lg:grid-cols-4">
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
           {[
             ["Critical", summary.critical, "text-rose-700"],
             ["Stale source", summary.stale, "text-amber-700"],
             ["Review", summary.review, "text-amber-700"],
             ["Current", summary.current, "text-emerald-700"],
           ].map(([label, value, tone]) => (
-            <div key={String(label)} className="min-w-0 bg-surface px-4 py-3">
+            <div key={String(label)} className="min-w-0 border-l-2 border-line pl-3">
               <dt className="text-xs font-semibold text-faint">{label}</dt>
               <dd
                 className={`mt-1 font-display text-2xl font-extrabold ${tone}`}
@@ -353,26 +369,39 @@ export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
       ) : (
         <section
           aria-label="Operational indicators"
-          className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3"
+          className="min-w-0"
         >
+          <div aria-hidden="true" className="hidden grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1.2fr)] gap-4 border-b border-line bg-inset px-3 py-2 text-xs font-semibold text-muted xl:grid">
+            <span>Indicator</span><span>Value / target</span><span>Source coverage</span><span>Actions</span>
+          </div>
           {visible.map((metric) => {
             const presentation = metricStatusPresentation(metric.status);
             const source = resolveGovernedSource(metric, userRoles, mode === 'supabase' ? userCapabilities ?? {} : undefined);
             return (
-              <Card
+              <article
                 key={metric.id}
                 data-insight-metric={metric.id}
-                className="flex min-h-56 flex-col gap-4"
+                aria-label={metric.label}
+                className="grid min-w-0 gap-4 border-b border-line px-3 py-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1.2fr)]"
               >
-                <div className="flex items-center justify-between gap-2">
-                  <Badge tone="slate">{LABELS[metric.area]}</Badge>
-                  <Badge tone={presentation.tone}>{presentation.label}</Badge>
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-muted">
+                <div className="min-w-0 space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge tone="slate">{LABELS[metric.area]}</Badge>
+                    <Badge tone={presentation.tone}>{presentation.label}</Badge>
+                  </div>
+                  <h2 className="break-words text-sm font-semibold text-ink">
                     {metric.label}
-                  </p>
-                  <p className="mt-1 font-display text-3xl font-extrabold text-ink">
+                  </h2>
+                  <p className="break-words text-sm text-muted">{metric.detail}</p>
+                  {metric.drillDownContext && (
+                    <p className="break-words text-xs text-faint">
+                      <strong>Definition:</strong> {metric.drillDownContext}
+                    </p>
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-faint xl:hidden">Value / target</p>
+                  <p className="tnum mt-1 break-words font-display text-2xl font-extrabold text-ink">
                     {metric.value == null
                       ? "—"
                       : `${metric.value}${metric.unit ?? ""}`}
@@ -381,13 +410,7 @@ export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
                     {targetLabel(metric)}
                   </p>
                 </div>
-                <p className="text-sm text-muted">{metric.detail}</p>
-                {metric.drillDownContext && (
-                  <p className="text-xs text-faint">
-                    <strong>Definition:</strong> {metric.drillDownContext}
-                  </p>
-                )}
-                <dl className="grid grid-cols-2 gap-x-3 gap-y-2 border-t border-line pt-3 text-xs">
+                <dl className="grid min-w-0 content-start grid-cols-2 gap-x-3 gap-y-2 border-t border-line pt-3 text-xs sm:col-span-2 xl:col-span-1 xl:grid-cols-1 xl:border-t-0 xl:pt-0">
                   <div>
                     <dt className="text-faint">Sample</dt>
                     <dd className="font-semibold text-muted">
@@ -400,7 +423,7 @@ export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
                       {dateTime(metric.sourceUpdatedAt)}
                     </dd>
                   </div>
-                  <div className="col-span-2">
+                  <div className="col-span-2 xl:col-span-1">
                     <dt className="text-faint">Reporting period</dt>
                     <dd className="font-semibold text-muted">
                       {dateOnly(metric.reportingPeriodStart)} to{" "}
@@ -408,24 +431,24 @@ export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
                     </dd>
                   </div>
                 </dl>
-                <div className="mt-auto grid gap-2 sm:grid-cols-2">
+                <div className="grid min-w-0 content-start gap-2 sm:col-span-2 sm:grid-cols-2 xl:col-span-1 xl:grid-cols-1">
                   {source.accessible ? (
                     <a
                       href={source.href ?? undefined}
-                      className="btn-ghost min-h-11 justify-between"
+                      className="btn-ghost min-h-11 min-w-0 justify-between whitespace-normal text-left"
                     >
                       {source.label}{" "}
-                      <Icon name="arrowRight" className="h-4 w-4" />
+                      <Icon name="arrowRight" className="h-4 w-4 shrink-0" />
                     </a>
                   ) : (
-                    <div className="flex min-h-11 items-center gap-2 rounded-lg bg-inset px-3 text-sm font-semibold text-faint">
-                      <Icon name="lock" className="h-4 w-4" />
+                    <div className="flex min-h-11 min-w-0 items-center gap-2 px-3 text-sm font-semibold text-faint">
+                      <Icon name="lock" className="h-4 w-4 shrink-0" />
                       {source.label}
                     </div>
                   )}
                   <button
                     type="button"
-                    className="btn-secondary min-h-11 justify-center"
+                    className="btn-secondary min-h-11 min-w-0 justify-center whitespace-normal"
                     onClick={() => {
                       setFollowupType(
                         userRoles.insights?.includes("executive")
@@ -438,6 +461,7 @@ export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
                           : "target_breach",
                       );
                       setSelectedMetric(metric);
+                      setFollowupError(null);
                     }}
                   >
                     {userRoles.insights?.includes("executive")
@@ -445,7 +469,7 @@ export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
                       : "Request validation"}
                   </button>
                 </div>
-              </Card>
+              </article>
             );
           })}
         </section>
@@ -479,6 +503,7 @@ export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
         }
       >
         <div className="space-y-5">
+          {followupError && <p role="alert" className="text-sm text-rose-700">{userFacingError(followupError)} Retry uses the same request.</p>}
           <div className="rounded-lg border border-line bg-inset px-4 py-3">
             <p className="text-xs font-semibold uppercase text-faint">
               Indicator reference

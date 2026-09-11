@@ -77,6 +77,7 @@ const po: PurchaseOrder = {
 let warehouseAccess = true;
 let procurementAccess = true;
 let requesterId: string | undefined;
+let policyErrors: Record<string, string> = {};
 
 vi.mock('@intra/auth', async () => {
   const actual = await vi.importActual<typeof import('@intra/auth')>('@intra/auth');
@@ -114,6 +115,8 @@ vi.mock('../localStore', () => ({
   }],
   usePurchaseOrders: () => ({
     rows: [po],
+    policyErrors,
+    refresh: vi.fn(),
     loading: false,
     approve: vi.fn(),
     issue: vi.fn(),
@@ -124,11 +127,11 @@ vi.mock('../localStore', () => ({
   }),
 }));
 
-function renderPage() {
+function renderPage(suffix = '') {
   return renderToStaticMarkup(
     createElement(
       MemoryRouter,
-      { initialEntries: ['/purchase-orders/po-issued-1'] },
+      { initialEntries: [`/purchase-orders/po-issued-1${suffix}`] },
       createElement(
         Routes,
         null,
@@ -142,6 +145,83 @@ function renderPage() {
 }
 
 describe('PODetailPage Warehouse handoff', () => {
+  it.each(['?from=finance&section=payment', '?from=finance&section=lines#payment'])('marks the requested section without losing handoff context: %s', suffix => {
+    const html = renderPage(suffix);
+    const nav = html.match(/<nav aria-label="Purchase order sections"[^]*?<\/nav>/)?.[0] ?? '';
+    expect(nav.match(/aria-current="location"/g)).toHaveLength(1);
+    expect(nav).toMatch(/<a[^>]*aria-current="location"[^>]*>Payment handoff<\/a>/);
+    expect(nav).toContain('from=finance');
+    if (process.env.QA_PO_NAV_HTML) writeFileSync(process.env.QA_PO_NAV_HTML, html);
+    for (const section of ['lines', 'policy', 'receiving', 'payment']) {
+      expect(html).toMatch(new RegExp(`id="${section}"[^>]*tabindex="-1"[^>]*scroll-mt-28`));
+    }
+  });
+  it('does not mark a default or unavailable section as current', () => {
+    expect(renderPage()).not.toContain('aria-current="location"');
+    const prior = po.commitmentReadiness;
+    try {
+      po.commitmentReadiness = undefined;
+      const html = renderPage('#policy');
+      expect(html).not.toContain('aria-current="location"');
+      expect(html).not.toContain('>Policy evidence</a>');
+    } finally { po.commitmentReadiness = prior; }
+  });
+  it.each(['draft', 'approved'] as const)('renders one %s primary command and keeps it disabled when readiness is unavailable', status => {
+    const priorStatus = po.status;
+    const priorReadiness = po.commitmentReadiness;
+    try {
+      po.status = status;
+      po.commitmentReadiness = { ...priorReadiness!, ready: true, blockers: [] };
+      const label = status === 'draft' ? 'Sign &amp; approve award' : 'Issue to vendor';
+      expect(renderPage().match(new RegExp(label, 'g'))).toHaveLength(1);
+      policyErrors = { [po.id]: 'Readiness unavailable' };
+      const html = renderPage();
+      expect(html.match(new RegExp(label, 'g'))).toHaveLength(1);
+      expect(html).toMatch(new RegExp(`<button[^>]*disabled=""[^>]*>[^]*?${label}`));
+    } finally { po.status = priorStatus; po.commitmentReadiness = priorReadiness; policyErrors = {}; }
+  });
+  it.each(['cancelled', 'closed', 'unexpected'])('shows the %s workflow without proposing a new issue action', (status) => {
+    const priorStatus = po.status;
+    try {
+      po.status = status as PurchaseOrder['status'];
+      const html = renderPage();
+      expect(html).toContain('Next responsibility');
+      expect(html).toContain(status === 'unexpected' ? 'Status unrecognized' : status === 'closed' ? 'PO closure does not confirm settlement' : 'No further PO action');
+      expect(html).not.toContain('Issue to vendor');
+      expect(html).toContain('href="/requests/req-approved-1"');
+    } finally { po.status = priorStatus; }
+  });
+  it('adds receiving responsibility without adding another Warehouse primary action', () => {
+    const html = renderPage();
+    expect(html).toContain('Receiving incomplete');
+    expect(html).toContain('Warehouse / Procurement');
+    expect(html).toContain('PO-2026-0042');
+    expect(html).toContain('Approved Medical Supply Corp');
+    expect(html).not.toContain('hero-surface');
+    expect(html.match(/\/warehouse\/purchase-orders\?po=po-issued-1/g)).toHaveLength(2);
+  });
+  it('retains the known PO and its receipt evidence when policy readiness fails', () => {
+    policyErrors = { [po.id]: 'Policy readiness could not be loaded. Please retry.' };
+    const prior = po.commitmentReadiness;
+    try {
+      po.commitmentReadiness = undefined;
+      const html = renderPage();
+      expect(html).toContain('PO-2026-0042');
+      expect(html).toContain('Barcode scanners');
+      expect(html).toContain('Warehouse receiving');
+      expect(html).toContain('Policy prerequisite unavailable');
+      expect(html).toContain('Retry policy readiness');
+      expect(html).not.toContain('Ready to commit');
+    } finally { policyErrors = {}; po.commitmentReadiness = prior; }
+  });
+  it('disables issue while its policy prerequisite is unavailable', () => {
+    policyErrors = { [po.id]: 'Policy readiness could not be loaded. Please retry.' };
+    const prior = po.status;
+    try {
+      po.status = 'approved';
+      expect(renderPage()).toMatch(/<button[^>]*disabled=""[^>]*>[^]*?Issue to vendor/);
+    } finally { policyErrors = {}; po.status = prior; }
+  });
   it('shows Unknown for unavailable receipt authority and missing normalized counts', () => {
     const priorReceipt = po.receiptStatus;
     const priorLines = po.lines;

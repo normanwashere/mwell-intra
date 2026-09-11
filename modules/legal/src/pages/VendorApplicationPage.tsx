@@ -123,7 +123,7 @@ export function VendorApplicationPage() {
   const { id = '' } = useParams();
   const { profile, mode, supabaseClient } = useSession();
   const canManageDraft = useCan('core', 'manage_own_accreditation_draft');
-  const { getById, submitCase, loading } = useAccreditationCases();
+  const { getById, submitCase, loading, error: caseReadError, refresh } = useAccreditationCases();
   const { rows: aliases } = useVendorAliases();
   const { success, error } = useToast();
   const kase = getById(id);
@@ -136,6 +136,7 @@ export function VendorApplicationPage() {
   const readOnly = submitted || !isVendor || !canManageDraft || !editState.editable;
   const [draftVersion, setDraftVersion] = useState(0);
   const [draftState, setDraftState] = useState<'loading' | 'saved' | 'unsaved' | 'saving' | 'error'>('loading');
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
   const editRevision = useRef(0);
   const repository = useMemo(() => {
@@ -174,7 +175,7 @@ export function VendorApplicationPage() {
     return () => {
       active = false;
     };
-  }, [isVendor, kase?.id, kase?.status, kase?.correctionRequest?.sourceVersion, repository]);
+  }, [isVendor, kase?.id, kase?.status, kase?.correctionRequest?.sourceVersion, repository, loadAttempt]);
 
   useEffect(() => {
     if (!kase || !application || !repository || !isVendor || readOnly || busy || draftState !== 'unsaved') return;
@@ -210,6 +211,7 @@ export function VendorApplicationPage() {
         <div className="h-64 animate-pulse rounded-lg bg-inset" />
       </div>
     );
+  if (caseReadError) return <div role="alert"><p>Application case could not be loaded.</p><button type="button" className="btn-outline" onClick={() => void refresh()}>Retry case</button></div>;
   if (!kase) {
     return (
       <div className="mx-auto max-w-xl py-8">
@@ -234,6 +236,7 @@ export function VendorApplicationPage() {
       <div role="alert">
         <Card className="mx-auto max-w-xl">
           <h1 className="font-display text-xl font-bold text-ink">Application could not be loaded</h1>
+          <button type="button" className="btn-outline" onClick={() => setLoadAttempt(value => value + 1)}>Retry application</button>
           <p className="mt-2 text-sm text-muted">{userFacingError(loadError)}</p>
           <Link to={caseRouteWithinModule(kase.id)} className="btn-primary mt-4">
             Return to case

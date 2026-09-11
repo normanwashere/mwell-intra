@@ -16,6 +16,8 @@
 // procurement.submit_request / procurement.decide_request RPCs when they land.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useReadQuery } from './useReadQuery';
+import { readReadinessIndependently } from './readinessReads';
 import { useCan, useSession } from '@intra/auth';
 import { governedReceivedQuantity } from './evidencePresentation';
 import type {
@@ -138,107 +140,27 @@ function useLiveRows<T>(
   table: string,
   map: (row: LiveRow) => T,
   order?: { column: string; ascending?: boolean },
-): [T[], boolean, () => Promise<void>] {
-  const [rows, setRows] = useState<T[]>([]);
-  const [loading, setLoading] = useState(Boolean(client));
-  const mapRef = useRef(map);
-
-  useEffect(() => {
-    mapRef.current = map;
-  }, [map]);
-
-  const refresh = useCallback(async () => {
-    if (!client) {
-      setRows([]);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    try {
-      let query = client.schema(schema).from(table).select('*');
-      if (order) {
-        query = query.order(order.column, {
-          ascending: order.ascending ?? false,
-        });
-      }
-      const { data, error } = await query;
-      if (error) throw new Error(error.message);
-      setRows((data ?? []).map(mapRef.current));
-    } catch {
-      setRows([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [client, schema, table, order?.column, order?.ascending]);
-
-  useEffect(() => {
-    let active = true;
-    if (!client) {
-      setRows([]);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    let query = client.schema(schema).from(table).select('*');
-    if (order)
-      query = query.order(order.column, {
-        ascending: order.ascending ?? false,
-      });
-    Promise.resolve(query)
-      .then(({ data, error }: { data: LiveRow[] | null; error: LiveQueryError | null }) => {
-        if (!active) return;
-        if (error) throw error;
-        setRows((data ?? []).map(mapRef.current));
-        setLoading(false);
-      })
-      .catch(() => {
-        if (!active) return;
-        setRows([]);
-        setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [client, schema, table, order?.column, order?.ascending]);
-
-  return [rows, loading, refresh];
+): [T[], boolean, () => Promise<void>, string | undefined] {
+  const { profile, userCapabilities } = useSession();
+  return useReadQuery(client, `${profile?.id}:${profile?.vendorId}:${JSON.stringify(userCapabilities)}:${schema}:${table}:${order?.column}:${order?.ascending}`, async () => {
+    let query = client!.schema(schema).from(table).select('*');
+    if (order) query = query.order(order.column, { ascending: order.ascending ?? false });
+    const { data, error } = await query;
+    if (error) throw new Error(error.message);
+    return (data ?? []).map(map);
+  });
 }
 
 function useLiveRpcRows<T>(
   client: LiveClient | null,
   fn: string,
   map: (row: LiveRow) => T,
-): [T[], boolean, () => Promise<void>] {
-  const [rows, setRows] = useState<T[]>([]);
-  const [loading, setLoading] = useState(Boolean(client));
-  const mapRef = useRef(map);
-
-  useEffect(() => {
-    mapRef.current = map;
-  }, [map]);
-
-  const refresh = useCallback(async () => {
-    if (!client) {
-      setRows([]);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    try {
-      const data = await liveRpc<LiveRow[]>(client, 'procurement', fn, {});
-      setRows((data ?? []).map(mapRef.current));
-    } catch {
-      setRows([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [client, fn]);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
-
-  return [rows, loading, refresh];
+): [T[], boolean, () => Promise<void>, string | undefined] {
+  const { profile, userCapabilities } = useSession();
+  return useReadQuery(client, `${profile?.id}:${JSON.stringify(userCapabilities)}:${fn}`, async () => {
+    const data = await liveRpc<LiveRow[]>(client!, 'procurement', fn, {});
+    return (data ?? []).map(map);
+  });
 }
 
 function mapVendor(row: LiveRow): ProcurementVendor {
@@ -763,6 +685,7 @@ export interface DecideActor {
 }
 
 export interface ProcurementRequestsAPI {
+  error?: string;
   rows: ProcurementRequest[];
   loading: boolean;
   add: (input: NewRequestInput) => MaybePromise<ProcurementRequest>;
@@ -787,14 +710,14 @@ export interface ProcurementRequestsAPI {
 export function useProcurementRequests(): ProcurementRequestsAPI {
   const live = useLiveClient();
   const [localRows, set, localLoading] = useTrackedRows<ProcurementRequest>(REQ_KEY, !isLive(live));
-  const [liveBaseRows, liveRowsLoading, refreshRequests] = useLiveRows<LiveRow>(
+  const [liveBaseRows, liveRowsLoading, refreshRequests, requestsError] = useLiveRows<LiveRow>(
     live,
     'procurement',
     'requests',
     (row) => row,
     { column: 'created_at', ascending: false },
   );
-  const [liveSteps, liveStepsLoading, refreshSteps] = useLiveRows<
+  const [liveSteps, liveStepsLoading, refreshSteps, stepsError] = useLiveRows<
     ApprovalStep & { requestId: string }
   >(
     live,
@@ -1085,6 +1008,7 @@ export function useProcurementRequests(): ProcurementRequestsAPI {
     decide,
     getById,
     refresh: refreshLive,
+    error: requestsError ?? stepsError,
   };
 }
 
@@ -1114,6 +1038,10 @@ function nextPoNumber(existing: PurchaseOrder[]): string {
 }
 
 export interface PurchaseOrdersAPI {
+  error?: string;
+  warning?: string;
+  policyErrors?: Record<string, string>;
+  refresh: () => Promise<void>;
   rows: PurchaseOrder[];
   loading: boolean;
   add: (input: NewPOInput) => MaybePromise<PurchaseOrder>;
@@ -1211,24 +1139,24 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
   const canAdmin = useCan('procurement', 'admin');
   const canViewFinance = useCan('procurement', 'view_finance');
   const [localRows, set, localLoading] = useTrackedRows<PurchaseOrder>(PO_KEY, !isLive(live));
-  const [liveBaseRows, liveRowsLoading, refreshPos] = useLiveRows<LiveRow>(
+  const [liveBaseRows, liveRowsLoading, refreshPos, poReadError] = useLiveRows<LiveRow>(
     live,
     'procurement',
     'purchase_orders',
     (row) => row,
     { column: 'created_at', ascending: false },
   );
-  const [liveReceiptStatuses, liveReceiptStatusesLoading, refreshReceiptStatuses] =
+  const [liveReceiptStatuses, liveReceiptStatusesLoading, refreshReceiptStatuses, receiptReadError] =
     useLiveRpcRows<PurchaseOrderReceiptStatus & { purchaseOrderId: string }>(
       live,
       'purchase_order_receipt_status',
       mapReceiptStatus,
     );
-  const [livePoLines, livePoLinesLoading, refreshPoLines] = useLiveRows<LiveRow>(
+  const [livePoLines, livePoLinesLoading, refreshPoLines, linesReadError] = useLiveRows<LiveRow>(
     live, 'procurement', 'purchase_order_lines', (row) => row,
     { column: 'id', ascending: true },
   );
-  const [liveAcceptances, liveAcceptancesLoading, refreshAcceptances] = useLiveRows<AcceptancePack>(
+  const [liveAcceptances, liveAcceptancesLoading, refreshAcceptances, acceptanceReadError] = useLiveRows<AcceptancePack>(
     live,
     'procurement',
     'acceptance_packs',
@@ -1244,6 +1172,8 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
   >([]);
   const [liveLifecycle, setLiveLifecycle] = useState<Array<PurchaseOrderLifecycle & { purchaseOrderId: string }>>([]);
   const [liveMonitoring, setLiveMonitoring] = useState<OpenPurchaseOrderMonitoringItem[]>([]);
+  const [policyErrors, setPolicyErrors] = useState<Record<string, string>>({});
+  const [projectionError, setProjectionError] = useState<string>();
   const [liveCommitmentLoading, setLiveCommitmentLoading] = useState(Boolean(live));
   const refreshCommitmentReadiness = useCallback(async () => {
     if (!live) {
@@ -1253,10 +1183,9 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
     }
     setLiveCommitmentLoading(true);
     try {
-      const readiness = await Promise.all(
-        liveBaseRows
-          .filter((row) => Boolean(row.request_id))
-          .map(async (row) => ({
+      const readiness = await readReadinessIndependently(
+        liveBaseRows.filter((row) => Boolean(row.request_id)) as Array<LiveRow & { id: string }>,
+        async (row) => ({
             ...(await liveRpc<NonNullable<PurchaseOrder['commitmentReadiness']>>(
               live,
               'procurement',
@@ -1270,10 +1199,12 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
             )),
             phase: (row.status === 'closed' ? 'closed' : row.status === 'draft' || row.status === 'pending_approval' ? 'award' : 'issue') as NonNullable<PurchaseOrder['commitmentReadiness']>['phase'],
             purchaseOrderId: String(row.id),
-          })),
+          }),
       );
-      setLiveCommitmentReadiness(readiness);
+      setLiveCommitmentReadiness(readiness.rows);
+      setPolicyErrors(readiness.errors);
     } catch {
+      setPolicyErrors(Object.fromEntries(liveBaseRows.map(row => [row.id, 'Policy readiness could not be loaded. Please retry.'])));
       setLiveCommitmentReadiness([]);
     } finally {
       setLiveCommitmentLoading(false);
@@ -1292,9 +1223,9 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
     const monitoring = await liveRpc<OpenPurchaseOrderMonitoringItem[]>(live, 'procurement', 'review_open_purchase_orders', {});
     setLiveMonitoring(monitoring ?? []);
   }, [canAdmin, canAuthorPo, live]);
-  useEffect(() => { void refreshLifecycle().catch(() => setLiveLifecycle([])); }, [refreshLifecycle]);
-  useEffect(() => { void refreshMonitoring().catch(() => setLiveMonitoring([])); }, [refreshMonitoring]);
-  const [livePaymentPacks, livePaymentPacksLoading, refreshPaymentPacks] =
+  useEffect(() => { void refreshLifecycle().catch(() => { setLiveLifecycle([]); setProjectionError('PO lifecycle could not be loaded. Please retry.'); }); }, [refreshLifecycle]);
+  useEffect(() => { void refreshMonitoring().catch(() => { setLiveMonitoring([]); setProjectionError('PO monitoring could not be loaded. Please retry.'); }); }, [refreshMonitoring]);
+  const [livePaymentPacks, livePaymentPacksLoading, refreshPaymentPacks, paymentReadError] =
     useLiveRows<PaymentReadinessPack>(
       live,
       'procurement',
@@ -1338,6 +1269,7 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
         })),
       );
     } catch {
+      setProjectionError('Payment evidence updates could not be loaded. Please retry.');
       setLiveStalenessEvents([]);
     } finally {
       setLiveStalenessLoading(false);
@@ -1374,6 +1306,7 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
       liveStalenessLoading
     : localLoading;
   const refreshLive = useCallback(async () => {
+    setProjectionError(undefined);
     await Promise.all([
       refreshPos(),
       refreshPoLines(),
@@ -1382,8 +1315,8 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
       refreshPaymentPacks(),
       refreshCommitmentReadiness(),
       refreshStalenessEvents(),
-      refreshLifecycle(),
-      refreshMonitoring(),
+      refreshLifecycle().catch(() => setProjectionError('PO lifecycle could not be loaded. Please retry.')),
+      refreshMonitoring().catch(() => setProjectionError('PO monitoring could not be loaded. Please retry.')),
     ]);
   }, [
     refreshPos,
@@ -1918,6 +1851,10 @@ export function usePurchaseOrders(): PurchaseOrdersAPI {
     issue,
     cancel,
     recordAcceptance,
+    error: poReadError ?? receiptReadError ?? linesReadError ?? acceptanceReadError ?? paymentReadError,
+    warning: projectionError,
+    policyErrors,
+    refresh: refreshLive,
     createPolicyEvidence,
     reviewPolicyEvidence,
     supersedePolicyEvidence,
@@ -1978,32 +1915,21 @@ function mapAcceptanceWorkItem(row: Record<string, unknown>): AcceptanceWorkItem
 
 export function useAcceptanceWorkItem(purchaseOrderId: string) {
   const live = useLiveClient();
-  const [item, setItem] = useState<AcceptanceWorkItem | null>(null);
-  const [loading, setLoading] = useState(Boolean(live));
-
-  const load = useCallback(async () => {
-    if (!live || !purchaseOrderId) {
-      setItem(null);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    try {
+  const { profile, userCapabilities } = useSession();
+  const [items, loading, load, error] = useReadQuery<AcceptanceWorkItem>(
+    purchaseOrderId ? live : null,
+    `${profile?.id}:${JSON.stringify(userCapabilities)}:acceptance:${purchaseOrderId}`,
+    async () => {
       const rows = await liveRpc<Array<Record<string, unknown>>>(
-        live,
+        live!,
         'procurement',
         'acceptance_work_items',
         { purchase_order_id: purchaseOrderId },
       );
-      setItem(rows[0] ? mapAcceptanceWorkItem(rows[0]) : null);
-    } finally {
-      setLoading(false);
-    }
-  }, [live, purchaseOrderId]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+      return rows.map(mapAcceptanceWorkItem);
+    },
+  );
+  const item = items[0] ?? null;
 
   const recordAcceptance = useCallback(
     async (input: {
@@ -2033,7 +1959,7 @@ export function useAcceptanceWorkItem(purchaseOrderId: string) {
     [item, live, load],
   );
 
-  return { item, loading, recordAcceptance };
+  return { item, loading, error, refresh: load, recordAcceptance };
 }
 
 // ---------------------------------------------------------------------------

@@ -129,3 +129,4 @@ export {
   TaskLearningSummary,
   type TaskLearningSummaryProps,
 } from "./TaskLearningSummary";
+export { taskRequirementIds, taskSelectionQuery } from './taskSelection';

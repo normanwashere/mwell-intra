@@ -8,6 +8,13 @@ export interface TaskRecommendationInput {
   assignedTaskIds: readonly string[];
 }
 
+export function eligibleTasks(tasks: readonly TaskDefinition[], query = ''): TaskDefinition[] {
+  const needle = query.trim().toLocaleLowerCase();
+  const unique = new Map(tasks.filter(task => task.availability === 'live').map(task => [task.id, task]));
+  return [...unique.values()].filter(task => !needle || [task.title, task.outcome, task.moduleLabel, ...task.roleIds, ...task.aliases].join(' ').replaceAll('_', ' ').toLocaleLowerCase().includes(needle))
+    .sort((a, b) => a.moduleLabel.localeCompare(b.moduleLabel) || a.priority - b.priority || a.id.localeCompare(b.id));
+}
+
 export function recommendTasks(input: TaskRecommendationInput): TaskDefinition[] {
   const eligible = new Map<string, TaskDefinition>();
   for (const task of input.tasks) {

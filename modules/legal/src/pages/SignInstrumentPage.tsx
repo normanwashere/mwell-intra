@@ -43,7 +43,7 @@ export function SignInstrumentPage() {
   const navigate = useNavigate();
   const { profile } = useSession();
   const { success, error } = useToast();
-  const { getById, loading: casesLoading } = useAccreditationCases();
+  const { getById, loading: casesLoading, error: readError, refresh } = useAccreditationCases();
   const { forCase: checklistForCase } = useChecklist();
   const { findSigned, forCase: signedForCase, sign } = useSignedInstruments();
   const { rows: aliases } = useVendorAliases();
@@ -93,7 +93,8 @@ export function SignInstrumentPage() {
       </div>
     );
   }
-  if (!kase || !template) return <Navigate to="/" replace />;
+  if (readError) return <div role="alert" className="space-y-3"><p>Instrument data could not be loaded.</p><button type="button" className="btn-outline" onClick={() => void refresh()}>Retry instrument</button><Link to="/">Back to cases</Link></div>;
+  if (!kase || !template) return <div role="status" className="space-y-3"><h1>Instrument unavailable</h1><p>This record is not available in your scope.</p><Link to="/" className="btn-outline">Back to cases</Link></div>;
   // Vendor-ownership guard (F1.1): vendors can only open their own case's
   // instruments — deep links to another vendor's sign page bounce home.
   if (shouldBlockVendorAccess(profile, kase, aliases)) {

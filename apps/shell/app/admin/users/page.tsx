@@ -30,16 +30,11 @@ import {
   EmptyState,
   Field,
   HeroChipButton,
-  HeroStat,
   Icon,
   Input,
-  ModuleHero,
   SectionTitle,
   Sheet,
   Skeleton,
-  StatCard,
-  StaggerGrid,
-  StaggerItem,
   useToast,
   userFacingError,
   type Column,
@@ -48,6 +43,8 @@ import { Guard, useSession } from '@intra/auth';
 import { MODULE_LIST, MODULES, type Module, type UserRoles } from '@intra/rbac';
 import { DEMO_PROFILES } from '@shell/lib/demoProfiles';
 import { cx } from '@shell/lib/cx';
+import { AdminHeader } from '../AdminHeader';
+import { useDirectoryState } from './directoryState';
 import {
   validateRoleChangeEvidence,
   type RoleChangeEvidence,
@@ -241,70 +238,17 @@ function MemoryAdminUsers() {
     ? (profiles.find((profile) => profile.id === 'demo-operations') ?? null)
     : null;
 
-  const totalGrants = Array.from(held.values()).reduce((n, s) => n + s.size, 0);
+  const totalGrants = profiles.reduce((n, user) => n + (held.get(user.id)?.size ?? 0), 0);
   const vendors = profiles.filter((p) => p.kind === 'vendor').length;
 
   return (
-    <div className="space-y-6">
-      <ModuleHero
-        eyebrow="Platform admin,"
-        title="Users & Roles"
-        description="Assign each person only the access they need across Mwell Intra."
-        icon="list"
-        accessory={
-          <div className="flex flex-wrap items-end gap-3">
-            <HeroStat label="Profiles">
-              <p className="tnum font-display text-2xl font-extrabold text-ink">
-                {profiles.length}
-              </p>
-            </HeroStat>
-            <HeroStat label="Scoped grants" align="right">
-              <p className="tnum font-display text-2xl font-extrabold text-ink">
-                {totalGrants}
-              </p>
-            </HeroStat>
-          </div>
-        }
-      />
-
-      <StaggerGrid className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StaggerItem>
-          <StatCard
-            label="Profiles"
-            value={profiles.length}
-            icon="list"
-            tone="brand"
-            hint="Employees + vendors"
-          />
-        </StaggerItem>
-        <StaggerItem>
-          <StatCard
-            label="Scoped grants"
-            value={totalGrants}
-            icon="check"
-            tone="emerald"
-            hint="Across all modules"
-          />
-        </StaggerItem>
-        <StaggerItem>
-          <StatCard
-            label="External vendors"
-            value={vendors}
-            icon="building"
-            tone="cyan"
-            hint="kind = vendor"
-          />
-        </StaggerItem>
-        <StaggerItem>
-          <StatCard
-            label="Backend"
-            value="Demo"
-            icon="alert"
-            tone="amber"
-            hint="Read-only preview"
-          />
-        </StaggerItem>
-      </StaggerGrid>
+    <div className="space-y-4">
+      <AdminHeader title="Users & Roles" />
+      <dl aria-label="Directory summary" className="flex flex-wrap gap-x-6 gap-y-2 border-b border-line pb-3 text-sm">
+        <div><dt className="inline text-muted">Profiles</dt><dd className="ml-2 inline font-semibold text-ink">{profiles.length}</dd></div>
+        <div><dt className="inline text-muted">Grants on this page</dt><dd className="ml-2 inline font-semibold text-ink">{totalGrants}</dd></div>
+        <div><dt className="inline text-muted">Vendors on this page</dt><dd className="ml-2 inline font-semibold text-ink">{vendors}</dd></div>
+      </dl>
 
       <Card className="border-amber-500/30 bg-amber-500/5">
         <div className="flex items-start gap-3">
@@ -392,13 +336,7 @@ function LiveAdminUsers() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<Set<string>>(new Set());
-  const [detailUserId, setDetailUserId] = useState<string | null>(null);
-  const [query, setQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('active');
-  const [kindFilter, setKindFilter] = useState<'all' | 'employee' | 'vendor'>(
-    'all',
-  );
-  const [page, setPage] = useState(1);
+  const [selectedProfile, setSelectedProfile] = useState<AdminProfile | null>(null);
   const [directoryTotal, setDirectoryTotal] = useState(0);
   const directoryRequest = useRef(0);
   const [roleChange, setRoleChange] = useState<{
@@ -416,11 +354,36 @@ function LiveAdminUsers() {
   const [roleEvidenceErrors, setRoleEvidenceErrors] = useState<
     Partial<Record<keyof RoleChangeEvidence, string>>
   >({});
+  const confirmDiscard = useCallback(() => {
+    if (pending.size) return false;
+    if (roleChange && !window.confirm('Discard the unsaved role change evidence? No access change will be saved.')) return false;
+    setRoleChange(null);
+    return true;
+  }, [roleChange, pending.size]);
+  const state = useDirectoryState(confirmDiscard);
+  const { query, status: statusFilter, kind: kindFilter, page, user: detailUserId, ready, update } = state;
+  const lastSelected = useRef<string | null>(null);
+  const setDetailUserId = (user: string | null) => update({ user });
+  useEffect(() => {
+    if (detailUserId) { lastSelected.current = detailUserId; return; }
+    if (loading || !lastSelected.current) return;
+    const previous = lastSelected.current;
+    lastSelected.current = null;
+    const frame = requestAnimationFrame(() => {
+      (document.getElementById(`manage-user-${previous}`) ?? document.getElementById('admin-user-search'))?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [detailUserId, loading]);
+  useEffect(() => {
+    if (!roleChange) return;
+    const beforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
+    window.addEventListener('beforeunload', beforeUnload);
+    return () => window.removeEventListener('beforeunload', beforeUnload);
+  }, [roleChange]);
 
   const refresh = useCallback(async () => {
-    if (!supabase) return;
+    if (!supabase || !ready) return;
     const request = ++directoryRequest.current;
-    setDetailUserId(null);
     setLoading(true);
     setError(null);
     try {
@@ -436,22 +399,37 @@ function LiveAdminUsers() {
       if (request !== directoryRequest.current) return;
       const result = directoryData as { rows: AdminProfile[]; roles: RoleAssignment[]; total: number };
       if (!Array.isArray(result?.rows) || !Array.isArray(result?.roles) || !Number.isFinite(result.total)) throw new Error('Directory authority is incomplete. Retry before changing roles.');
+      let selected: AdminProfile | null = null;
+      let selectedRoles: RoleAssignment[] = [];
+      if (detailUserId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(detailUserId)) {
+        const { data, error: detailError } = await supabase.from('profiles')
+          .select('id,email,full_name,title,kind,vendor_id,status').eq('id', detailUserId).maybeSingle();
+        if (detailError) throw detailError;
+        selected = data as AdminProfile | null;
+        if (selected) {
+          const roles = await supabase.from('user_roles').select('user_id,module,role').eq('user_id', detailUserId);
+          if (roles.error) throw roles.error;
+          selectedRoles = (roles.data ?? []) as RoleAssignment[];
+        }
+      }
+      if (request !== directoryRequest.current) return;
+      setSelectedProfile(selected);
       setProfiles(result.rows);
-      setHeld(indexAssignments(result.roles));
+      setHeld(indexAssignments([...result.roles.filter(row => row.user_id !== selected?.id), ...selectedRoles]));
       setDirectoryTotal(result.total);
       setColumns(
         roleColumnsFromCatalog((catalogRows ?? []) as RoleCatalogRow[]),
       );
     } catch (err) {
       if (request !== directoryRequest.current) return;
-      setProfiles([]); setHeld(new Map()); setDetailUserId(null);
+      setProfiles([]); setHeld(new Map()); setSelectedProfile(null);
       const msg = err instanceof Error ? err.message : 'Failed to load users.';
       setError(msg);
       toast.error(msg);
     } finally {
       if (request === directoryRequest.current) setLoading(false);
     }
-  }, [supabase, toast, query, statusFilter, kindFilter, page]);
+  }, [supabase, toast, query, statusFilter, kindFilter, page, detailUserId, ready]);
 
   useEffect(() => {
     void refresh();
@@ -526,17 +504,12 @@ function LiveAdminUsers() {
     [supabase, toast, loading, error],
   );
 
-  const detailUser = detailUserId
-    ? profiles.find((p) => p.id === detailUserId)
-    : null;
+  const detailUser = selectedProfile?.id === detailUserId ? selectedProfile : null;
   const directory = { rows: profiles, total: directoryTotal, pages: Math.max(1, Math.ceil(directoryTotal / 20)) };
-
-  useEffect(() => {
-    setPage(1);
-  }, [query, statusFilter, kindFilter]);
 
   const requestRoleChange = useCallback(
     (userId: string, moduleName: Module, role: string, next: boolean) => {
+      if (loading || error || pending.size) return;
       if (userId === profile?.id) {
         toast.error(
           'You cannot change your own roles. Ask another platform administrator.',
@@ -552,11 +525,11 @@ function LiveAdminUsers() {
       setRoleEvidenceErrors({});
       setRoleChange({ userId, moduleName, role, next });
     },
-    [profile?.id, toast],
+    [profile?.id, toast, loading, error, pending.size],
   );
 
   const confirmRoleChange = useCallback(async () => {
-    if (!roleChange) return;
+    if (!roleChange || pending.size || loading || error) return;
     const errors = validateRoleChangeEvidence(roleEvidence);
     setRoleEvidenceErrors(errors);
     if (Object.keys(errors).length > 0) return;
@@ -568,77 +541,19 @@ function LiveAdminUsers() {
       roleEvidence,
     );
     setRoleChange(null);
-  }, [roleChange, roleEvidence, toggle]);
+  }, [roleChange, roleEvidence, toggle, pending.size, loading, error]);
 
-  const totalGrants = Array.from(held.values()).reduce((n, s) => n + s.size, 0);
+  const totalGrants = profiles.reduce((n, user) => n + (held.get(user.id)?.size ?? 0), 0);
   const vendors = profiles.filter((p) => p.kind === 'vendor').length;
 
   return (
-    <div className="space-y-6">
-      <ModuleHero
-        eyebrow="Platform admin,"
-        title="Users & Roles"
-        description="Assign each person only the access they need across Mwell Intra."
-        icon="list"
-        action={
-          <HeroChipButton icon="rotate" onClick={() => void refresh()}>
-            Refresh
-          </HeroChipButton>
-        }
-        accessory={
-          <div className="flex flex-wrap items-end gap-3">
-            <HeroStat label="Matching profiles">
-              <p className="tnum font-display text-2xl font-extrabold text-ink">
-                {directoryTotal}
-              </p>
-            </HeroStat>
-            <HeroStat label="Grants on this page" align="right">
-              <p className="tnum font-display text-2xl font-extrabold text-ink">
-                {totalGrants}
-              </p>
-            </HeroStat>
-          </div>
-        }
-      />
-
-      <StaggerGrid className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StaggerItem>
-          <StatCard
-            label="Matching profiles"
-            value={directoryTotal}
-            icon="list"
-            tone="brand"
-            hint="Employees + vendors"
-          />
-        </StaggerItem>
-        <StaggerItem>
-          <StatCard
-            label="Grants on this page"
-            value={totalGrants}
-            icon="check"
-            tone="emerald"
-            hint="Current directory page"
-          />
-        </StaggerItem>
-        <StaggerItem>
-          <StatCard
-            label="Vendors on this page"
-            value={vendors}
-            icon="building"
-            tone="cyan"
-            hint="kind = vendor"
-          />
-        </StaggerItem>
-        <StaggerItem>
-          <StatCard
-            label="Backend"
-            value="Live"
-            icon="bell"
-            tone="emerald"
-            hint="Supabase connected"
-          />
-        </StaggerItem>
-      </StaggerGrid>
+    <div className="space-y-4">
+      <AdminHeader title="Users & Roles" action={<HeroChipButton icon="rotate" onClick={() => void refresh()}>Refresh</HeroChipButton>} />
+      <dl aria-label="Directory summary" className="flex flex-wrap gap-x-6 gap-y-2 border-b border-line pb-3 text-sm">
+        <div><dt className="inline text-muted">Matching profiles</dt><dd className="ml-2 inline font-semibold text-ink">{directoryTotal}</dd></div>
+        <div><dt className="inline text-muted">Grants on this page</dt><dd className="ml-2 inline font-semibold text-ink">{totalGrants}</dd></div>
+        <div><dt className="inline text-muted">Vendors on this page</dt><dd className="ml-2 inline font-semibold text-ink">{vendors}</dd></div>
+      </dl>
 
       {error && (
         <Card className="mb-4 border-rose-500/30 bg-rose-500/5">
@@ -647,7 +562,7 @@ function LiveAdminUsers() {
               <Icon name="alert" className="h-5 w-5" />
             </span>
             <div className="min-w-0">
-              <p className="font-semibold text-ink">Couldn&apos;t load users</p>
+              <p className="font-semibold text-ink">Couldn&apos;t load users</p><Button variant="outline" onClick={() => void refresh()}>Retry directory</Button>
               <p className="mt-0.5 text-sm text-muted">{userFacingError(error)}</p>
             </div>
           </div>
@@ -656,23 +571,26 @@ function LiveAdminUsers() {
 
       {(
         <>
-          <Card className="p-4 sm:p-5">
-            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_12rem_12rem]">
+          <section aria-label="Directory filters" className="border-b border-line pb-3">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-[minmax(0,1fr)_12rem_12rem]">
+              <div className="col-span-2 md:col-span-1">
               <Field label="Search users" htmlFor="admin-user-search">
                 <Input
                   id="admin-user-search"
                   type="search"
                   value={query}
-                  onChange={(event) => setQuery(event.target.value)}
+                  maxLength={200}
+                  onChange={(event) => update({ q: event.target.value, page: 1 }, true)}
                   placeholder="Name or email"
                 />
               </Field>
+              </div>
               <Field label="Status" htmlFor="admin-user-status">
                 <select
                   id="admin-user-status"
                   className="input-base min-h-11 w-full"
                   value={statusFilter}
-                  onChange={(event) => setStatusFilter(event.target.value)}
+                  onChange={(event) => update({ status: event.target.value, page: 1 })}
                 >
                   <option value="active">Active</option>
                   <option value="all">All statuses</option>
@@ -685,9 +603,7 @@ function LiveAdminUsers() {
                   className="input-base min-h-11 w-full"
                   value={kindFilter}
                   onChange={(event) =>
-                    setKindFilter(
-                      event.target.value as 'all' | 'employee' | 'vendor',
-                    )
+                    update({ kind: event.target.value, page: 1 })
                   }
                 >
                   <option value="all">All user types</option>
@@ -696,12 +612,13 @@ function LiveAdminUsers() {
                 </select>
               </Field>
             </div>
-          </Card>
-          {loading ? <Skeleton className="h-32 w-full" /> : error ? <p role="status">Directory unavailable. Retry before managing access.</p> : directory.total === 0 ? (
+          </section>
+          {loading ? <Skeleton className="h-32 w-full" /> : error ? <p role="status">Directory unavailable. Retry before managing access.</p> : directory.rows.length === 0 ? (
             <EmptyState
               icon="search"
-              title="No matching users"
-              message="Adjust the search or filters to find another profile."
+              title={directory.total === 0 ? 'No matching users' : 'No users on this page'}
+              message={directory.total === 0 ? 'Adjust the search or filters to find another profile.' : 'The directory has changed. Return to the first page with the same filters.'}
+              action={page > 1 ? <Button variant="outline" onClick={() => update({ page: 1 })}>First page</Button> : undefined}
             />
           ) : (
             <UserRoleTable
@@ -722,7 +639,7 @@ function LiveAdminUsers() {
                 <Button
                   variant="outline"
                   disabled={loading || page <= 1}
-                  onClick={() => setPage((value) => Math.max(1, value - 1))}
+                  onClick={() => update({ page: Math.max(1, page - 1) })}
                 >
                   Previous
                 </Button>
@@ -730,7 +647,7 @@ function LiveAdminUsers() {
                   variant="outline"
                   disabled={loading || page >= directory.pages}
                   onClick={() =>
-                    setPage((value) => Math.min(directory.pages, value + 1))
+                    update({ page: Math.min(directory.pages, page + 1) })
                   }
                 >
                   Next
@@ -742,7 +659,7 @@ function LiveAdminUsers() {
       )}
 
       <Sheet
-        open={Boolean(detailUser)}
+        open={Boolean(detailUserId)}
         onOpenChange={(open) => {
           if (!open) setDetailUserId(null);
         }}
@@ -751,7 +668,7 @@ function LiveAdminUsers() {
         side="right"
         size="wide"
       >
-        {detailUser && (
+        {loading ? <Skeleton className="h-32 w-full" /> : error ? <div role="alert"><p>User details are unavailable.</p><Button onClick={() => void refresh()}>Retry user details</Button></div> : !detailUser ? <div role="status"><p>User not found or outside your authorized scope.</p><Button variant="outline" onClick={() => setDetailUserId(null)}>Return to directory</Button></div> : (
           <UserDetail
             key={detailUser.id}
             profile={detailUser}
@@ -768,7 +685,7 @@ function LiveAdminUsers() {
       <Sheet
         open={Boolean(roleChange)}
         onOpenChange={(open) => {
-          if (!open) setRoleChange(null);
+          if (!open) confirmDiscard();
         }}
         title={
           roleChange?.next ? 'Grant governed access' : 'Revoke governed access'
@@ -780,7 +697,7 @@ function LiveAdminUsers() {
         }
         side="right"
         footer={
-          <Button className="w-full" onClick={() => void confirmRoleChange()}>
+          <Button className="w-full" disabled={pending.size > 0 || loading || Boolean(error)} onClick={() => void confirmRoleChange()}>
             {roleChange?.next ? 'Grant access' : 'Revoke access'}
           </Button>
         }
@@ -922,11 +839,11 @@ function UserRoleTable({
         header: 'User',
         primary: true,
         render: (row) => (
-          <div className="min-w-[10rem]">
-            <div className="truncate font-semibold text-ink">
+          <div className="min-w-0 max-w-full">
+            <div className="break-words font-semibold text-ink [overflow-wrap:anywhere]">
               {row.full_name ?? row.email}
             </div>
-            <div className="truncate text-xs text-muted">{row.email}</div>
+            <div className="break-words text-xs text-muted [overflow-wrap:anywhere]">{row.email}</div>
           </div>
         ),
       },
@@ -952,7 +869,7 @@ function UserRoleTable({
           return <span className="text-xs text-faint">No roles</span>;
         }
         return (
-          <div className="flex flex-wrap gap-1">
+          <div className="flex min-w-0 max-w-full flex-wrap gap-1">
             {assigned.slice(0, 3).map((column) => (
               <span
                 key={column.key}
@@ -981,6 +898,7 @@ function UserRoleTable({
         hideOnMobile: false,
         render: (row) => (
           <Button
+            id={`manage-user-${row.id}`}
             variant="ghost"
             size="sm"
             iconRight="chevron"
@@ -999,22 +917,23 @@ function UserRoleTable({
   }, [roleColumns, held, pending, onToggle, onOpenDetail, disabled]);
 
   return (
-    <div className="card min-w-0 overflow-hidden">
-      <div className="border-b border-line px-4 pb-2 pt-4 sm:px-5">
+    <section className="min-w-0 overflow-hidden" aria-label="User directory">
+      <div className="border-b border-line pb-2">
         <SectionTitle
-          title="Access matrix"
+          title="User directory"
           subtitle={`${profiles.length} user${profiles.length === 1 ? '' : 's'} · ${roleColumns.length} scoped role${roleColumns.length === 1 ? '' : 's'}`}
         />
       </div>
-      <div className="max-w-full overflow-x-auto px-4 pb-4 pt-2 sm:px-5 sm:pb-5">
+      <div data-testid="admin-users-table" className="max-w-full pt-2 [&_table]:min-w-0 [&_table]:table-fixed [&_th:first-child]:w-[32%] [&_th:nth-child(2)]:w-24 [&_th:last-child]:w-28 [&_td]:align-top [&_td]:px-2 [&_th]:px-2">
         <DataTable
+          density="compact"
           ariaLabel="Users and scoped role assignments"
           columns={columns}
           rows={profiles as AdminProfile[]}
           keyOf={(row) => row.id}
         />
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -1047,12 +966,12 @@ function RoleCheckbox({
         checked={checked}
         disabled={disabled}
         onChange={(e) => onChange(e.currentTarget.checked)}
-        className="sr-only"
+        className="peer sr-only"
       />
       <span
         aria-hidden
         className={cx(
-          'inline-flex h-6 w-6 items-center justify-center rounded-md border transition',
+          'inline-flex h-6 w-6 items-center justify-center rounded-md border transition peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-brand-700 forced-colors:peer-focus-visible:outline-[Highlight]',
           checked
             ? 'border-brand-500 bg-brand-500 text-white'
             : 'border-line bg-surface text-transparent hover:border-brand-300',
@@ -1129,13 +1048,13 @@ function UserDetail({
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border border-line bg-inset p-4 sm:p-5">
+      <div className="border-b border-line pb-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="truncate font-semibold text-ink">
+            <p className="break-words font-semibold text-ink [overflow-wrap:anywhere]">
               {profile.full_name ?? profile.email}
             </p>
-            <p className="truncate text-sm text-muted">{profile.email}</p>
+            <p className="break-words text-sm text-muted [overflow-wrap:anywhere]">{profile.email}</p>
           </div>
           <Badge tone={profile.kind === 'vendor' ? 'emerald' : 'brand'}>
             {profile.kind === 'vendor' ? 'Vendor' : 'Employee'}
@@ -1144,8 +1063,8 @@ function UserDetail({
         {profile.title && (
           <p className="mt-2 text-sm text-muted">{profile.title}</p>
         )}
-        <div className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line">
-          <div className="bg-surface px-3 py-2.5">
+        <div className="mt-4 grid grid-cols-2 gap-4">
+          <div className="border-l-2 border-line pl-3">
             <p className="text-xs font-semibold uppercase text-faint">
               Assigned roles
             </p>
@@ -1153,7 +1072,7 @@ function UserDetail({
               {assigned.length}
             </p>
           </div>
-          <div className="bg-surface px-3 py-2.5">
+          <div className="border-l-2 border-line pl-3">
             <p className="text-xs font-semibold uppercase text-faint">
               Active modules
             </p>
@@ -1185,7 +1104,7 @@ function UserDetail({
           </div>
           <p className="text-xs text-muted">Assigned modules appear first</p>
         </div>
-        <div className="grid items-start gap-3 lg:grid-cols-2">
+        <div className="divide-y divide-line border-y border-line">
           {orderedGroups.map(([moduleName, cols]) => {
             const modulePresentation = getAdminModulePresentation(moduleName);
             const assignedInModule = cols.filter((column) =>
@@ -1200,7 +1119,7 @@ function UserDetail({
             return (
               <details
                 key={moduleName}
-                className="group overflow-hidden rounded-lg border border-line bg-surface shadow-e1"
+                className="group min-w-0"
                 open={openModules.has(moduleName)}
                 onToggle={(event) => {
                   const nextOpen = event.currentTarget.open;
@@ -1212,11 +1131,11 @@ function UserDetail({
                   });
                 }}
               >
-                <summary className="flex min-h-20 cursor-pointer list-none items-center gap-3 px-4 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500 [&::-webkit-details-marker]:hidden">
+                <summary className="flex min-h-11 cursor-pointer list-none flex-wrap items-center gap-3 px-2 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500 [&::-webkit-details-marker]:hidden">
                   <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300">
                     <Icon name={modulePresentation.icon} className="h-5 w-5" />
                   </span>
-                  <span className="min-w-0 flex-1">
+                  <span className="min-w-0 flex-1 basis-48 break-words">
                     <span className="block text-[0.68rem] font-bold uppercase text-faint">
                       Module
                     </span>

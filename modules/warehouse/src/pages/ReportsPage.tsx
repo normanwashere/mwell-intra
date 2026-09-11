@@ -5,7 +5,7 @@ import { useWarehouse } from '@/app/store';
 import { prepareWarehouseExport } from '@/app/governedExports';
 import { downloadText, downloadUrl } from '@/app/download';
 import { toCsv } from '@/domain/export';
-import { Card, DataTable, EmptyState, Field, PageHeader, SectionTitle, type Column } from '@/components/ui';
+import { DataTable, EmptyState, Field, PageHeader, SectionTitle, type Column } from '@/components/ui';
 
 export function ReportsPage() {
   const { data, source, loadInventoryPositions } = useWarehouse();
@@ -68,19 +68,19 @@ export function ReportsPage() {
     <div className="space-y-4">
       <PageHeader title="Inventory position report" icon="history" subtitle="On-hand, commitments, holds, unavailable, and available stock" />
       {error && <p role="alert" className="rounded-lg bg-rose-500/10 p-3 text-sm text-rose-700 dark:text-rose-300">{userFacingError(error)}</p>}
-      <Card className="grid gap-3 sm:grid-cols-3">
+      <div className="grid min-w-0 gap-3 border-y border-line py-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] [&>div]:min-w-0">
         <Field label="Location filter" htmlFor="report-location"><select id="report-location" className="input" value={locationId} onChange={(event) => setLocationId(event.target.value)}><option value="all">All locations</option>{data.locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select></Field>
         <Field label="Product filter" htmlFor="report-product"><select id="report-product" className="input" value={productId} onChange={(event) => setProductId(event.target.value)}><option value="all">All products</option>{data.products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select></Field>
         <button type="button" className="btn-primary self-end justify-center" disabled={exporting || loading} onClick={() => void exportReport()}>{exporting ? 'Preparing...' : 'Export report'}</button>
-      </Card>
+      </div>
       {exportReady && <p role="status" className="rounded-lg bg-emerald-500/10 p-3 text-sm font-medium text-emerald-700 dark:text-emerald-300">Export ready. The private download link expires shortly; request a new export for corrections.</p>}
       <dl className="grid grid-cols-2 gap-2 sm:grid-cols-5" aria-label="Inventory position totals">
         {Object.entries(totals).map(([key, value]) => <div key={key} className="rounded-lg bg-inset p-3"><dt className="text-xs capitalize text-faint">{key === 'onHand' ? 'On hand' : key}</dt><dd className="mt-1 text-xl font-bold tabular-nums text-ink">{value}</dd></div>)}
       </dl>
-      <Card>
-        <SectionTitle title="Committed report" subtitle={`${rows.length} position row(s) · maximum 100 per request`} />
+      <section aria-labelledby="committed-report-title" className="min-w-0">
+        <SectionTitle id="committed-report-title" title="Committed report" subtitle={`${rows.length} position row(s) · maximum 100 per request`} />
         {loading ? <p className="text-sm text-muted">Loading inventory positions...</p> : rows.length === 0 ? <EmptyState icon="box" title="No positions match these filters" /> : <DataTable columns={columns} rows={rows} keyOf={(row) => `${row.productId}|${row.locationId}|${row.binId ?? ''}`} ariaLabel="Inventory position report" density="compact" />}
-      </Card>
+      </section>
     </div>
   );
 }

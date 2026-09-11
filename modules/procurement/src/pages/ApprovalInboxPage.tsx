@@ -26,7 +26,7 @@ import { formatDate, formatDateTime, statusLabel } from '../labels';
 import { makeTypedSignature } from '../signature';
 
 export function ApprovalInboxPage() {
-  const { rows, decide, loading, refresh } = useProcurementRequests();
+  const { rows, decide, loading, refresh, error: readError } = useProcurementRequests();
   const { profile, userRoles, mode, supabaseClient } = useSession();
   const [eligibility, setEligibility] = useState<Record<string, boolean>>({});
   const rowKey = rows.map(r => `${r.id}:${r.status}:${r.approvalSteps?.map(s => `${s.id}:${s.status}:${s.assignedUserId}`).join(',')}`).join('|');
@@ -58,6 +58,7 @@ export function ApprovalInboxPage() {
   // them. Admit anyone with the cap OR ≥1 resolved tier.
   const canApproveCap = useCan('procurement', 'approve_request');
   const allowed = canApproveCap || myTiers.length > 0;
+  const canBrowseRequests = useCan('procurement', 'view_dashboard');
 
   // PR-15/J2-4: a prefilled signer name arms the confirm button without
   // retyping. The frozen SignaturePad only commits typed signatures on an
@@ -189,7 +190,7 @@ export function ApprovalInboxPage() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-4">
       {/* One KPI surface (PR-13): the hero carries the only counts. */}
       <ModuleHero
         eyebrow={
@@ -201,10 +202,9 @@ export function ApprovalInboxPage() {
         description="Decide the requests waiting on your tier."
         icon="clipboard"
         action={
-          <Link to="/" className="btn-outline btn-sm">
-            <Icon name="arrowRight" className="h-4 w-4 rotate-180" />
-            Back to requests
-          </Link>
+          canBrowseRequests ? <Link to="/requests" className="btn-outline btn-sm">
+            <Icon name="arrowRight" className="h-4 w-4 rotate-180" /> Back to requests
+          </Link> : <a href="/work" className="btn-outline btn-sm"><Icon name="arrowRight" className="h-4 w-4 rotate-180" />Back to My Work</a>
         }
         accessory={
           <HeroStat label="Waiting on you" align="right">
@@ -227,7 +227,7 @@ export function ApprovalInboxPage() {
             />
           }
         />
-        {loading ? (
+        {readError ? <div role="alert"><p>{readError}</p><button type="button" className="btn-outline" disabled={loading} onClick={() => void refresh()}>Retry requests</button></div> : loading ? (
           <div className="h-32 animate-pulse rounded-2xl bg-inset" aria-hidden />
         ) : pending.length === 0 ? (
           <EmptyState
@@ -525,9 +525,9 @@ function PendingCard({
   const step = nextPendingStep(req.approvalSteps);
   const total = req.approvalSteps?.length ?? 0;
   return (
-    <Card>
+    <Card className="min-w-0 [overflow-wrap:anywhere]">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1 basis-72">
           <Link
             to={`/requests/${req.id}`}
             className="inline-flex min-h-11 items-center font-display text-base font-bold text-ink hover:underline"
@@ -561,7 +561,7 @@ function PendingCard({
             </span>
           </div>
         </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
+        <div className="flex w-full flex-wrap gap-2 border-t border-line pt-3 sm:w-auto sm:shrink-0 sm:border-0 sm:pt-0">
           <button
             type="button"
             onClick={() => onDecide(req, 'rejected')}

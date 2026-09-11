@@ -8,6 +8,8 @@ const state = vi.hoisted(() => ({
   session: null as unknown as SessionValue,
   reconciliationStatus: "draft" as "draft" | "submitted" | "approved",
   issuedUnits: 3,
+  readError: null as string | null,
+  refresh: vi.fn(async () => undefined),
   saveReconciliation: vi.fn(async () => undefined),
   openReconciliationEvidence: vi.fn(async () =>
     "https://example.com/uat/events/UAT-AUG24-EVENT-A"),
@@ -58,8 +60,8 @@ vi.mock("./data", async (importOriginal) => {
     useEventsData: () => ({
       data: data(),
       loading: false,
-      error: null,
-      refresh: vi.fn(async () => undefined),
+      error: state.readError,
+      refresh: state.refresh,
       createEvent: vi.fn(async () => undefined),
       manageEvent: vi.fn(async () => undefined),
       requestFulfillment: vi.fn(async () => undefined),
@@ -107,9 +109,67 @@ function renderEvent() {
 describe("event reconciliation handoff", () => {
   beforeEach(() => {
     state.reconciliationStatus = "draft";
+    state.readError = null;
+    state.refresh.mockClear();
     state.issuedUnits = 3;
     state.saveReconciliation.mockClear();
     state.openReconciliationEvidence.mockClear();
+  });
+
+  it('UX04 keeps an announced retry beside stale detail and recovers without navigating away', () => {
+    state.session = session({ events: ['coordinator'] });
+    state.readError = 'Event read failed';
+    const view = renderEvent();
+    expect(screen.getByRole('alert')).toHaveTextContent('Event data unavailable');
+    expect(screen.getByRole('alert')).toHaveTextContent('may be stale');
+    expect(screen.getByRole('region', { name: 'Workflow status' })).toHaveTextContent('Event workflow unavailable');
+    expect(screen.queryByRole('button', { name: 'Request warehouse stock' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(state.refresh).toHaveBeenCalledOnce();
+    state.readError = null;
+    view.rerender(<ToastProvider><EventsApp eventId="uat-event-a" /></ToastProvider>);
+    expect(screen.queryByText('Event data unavailable.')).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Workflow status' })).toHaveTextContent('planned; Draft reconciliation');
+    expect(screen.getByRole('button', { name: 'Request warehouse stock' })).toBeInTheDocument();
+  });
+
+  it('UX16 uses one compact totals row and a secondary creation action before the event queue', () => {
+    state.session = session({ events: ['coordinator'] });
+    render(<ToastProvider><EventsApp /></ToastProvider>);
+    expect(screen.getByRole('heading', { level: 1, name: 'Events' })).toBeInTheDocument();
+    expect(screen.queryByText(/Plan activations, monitor readiness/)).not.toBeInTheDocument();
+    const totals = screen.getByRole('region', { name: 'Event totals' });
+    expect(totals.querySelector('dl')).toHaveClass('grid-cols-4');
+    for (const [label, value] of [['All events', '1'], ['Planned', '1'], ['Active', '0'], ['Units issued', '3']]) {
+      expect(within(totals).getByText(label!).nextElementSibling).toHaveTextContent(value!);
+    }
+    expect(screen.getByRole('button', { name: 'New event' })).toHaveClass('btn-outline', 'inline-flex');
+    expect(screen.getByRole('button', { name: 'New event' })).not.toHaveClass('btn-primary');
+    expect(screen.getByRole('link', { name: 'View event' })).toHaveAttribute('href', '/events/uat-event-a');
+    fireEvent.click(screen.getByRole('button', { name: 'New event' }));
+    expect(screen.getByRole('dialog', { name: 'Create event' })).toBeInTheDocument();
+  });
+
+  it('UX04 does not call a failed detail read missing', () => {
+    state.session = session({ events: ['viewer'] });
+    state.readError = 'Network failure';
+    render(<ToastProvider><EventsApp eventId="not-loaded" /></ToastProvider>);
+    expect(screen.getByRole('alert')).toHaveTextContent('could not be checked');
+    expect(screen.queryByText('Event not found')).not.toBeInTheDocument();
+  });
+
+  it('UX17 hides live locked commands, exposes recovery and responds to revocation', () => {
+    state.session = { ...session({ events: ['coordinator'] }), mode: 'supabase', userCapabilities: { events: ['view_events'] }, roleCapabilities: { events: ['view_events', 'manage_events', 'request_fulfillment'] } };
+    const view = renderEvent();
+    expect(screen.queryByRole('button', { name: 'Edit details' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Review Events prerequisites' })).toHaveAttribute('href', '/onboarding?next=%2Fevents%2Fuat-event-a');
+    state.session.userCapabilities = { events: ['view_events', 'manage_events', 'request_fulfillment'] };
+    view.rerender(<ToastProvider><EventsApp eventId="uat-event-a" /></ToastProvider>);
+    fireEvent.click(screen.getByRole('button', { name: 'Edit details' }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    state.session.userCapabilities = { events: ['view_events'] };
+    view.rerender(<ToastProvider><EventsApp eventId="uat-event-a" /></ToastProvider>);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it("LV07 preserves custody labels and large counts in a text-relative wrapping grid", () => {
@@ -138,7 +198,7 @@ describe("event reconciliation handoff", () => {
     state.session = session({ events: ["coordinator"] });
     renderEvent();
 
-    expect(screen.getByText("Draft reconciliation")).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Workflow status' })).toHaveTextContent('planned; Draft reconciliation');
     expect(screen.getByText("Event operations")).toBeInTheDocument();
     expect(screen.getByText("Evidence attached")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Submit to Finance" }));
@@ -177,7 +237,7 @@ describe("event reconciliation handoff", () => {
     state.session = session({ events: ["finance_reviewer"] });
     renderEvent();
 
-    expect(screen.getByText("Finance review")).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Workflow status' })).toHaveTextContent('planned; Finance review');
     expect(screen.getByText("Finance settlement reviewer")).toBeInTheDocument();
     expect(screen.getByText("Finance settlement reference is missing.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Review settlement" }));
@@ -198,12 +258,15 @@ describe("event reconciliation handoff", () => {
     );
   });
 
-  it("shows the current owner and stage without mutation controls to Event viewers", () => {
+  it("shows the next responsibility and stage without mutation controls to Event viewers", () => {
     state.reconciliationStatus = "submitted";
     state.session = session({ events: ["viewer"] });
     renderEvent();
 
-    expect(screen.getByText("Finance review")).toBeInTheDocument();
+    const summary = screen.getByRole('region', { name: 'Workflow status' });
+    expect(summary).toHaveTextContent('planned; Finance review');
+    expect(within(summary).getByText('Next responsibility')).toBeInTheDocument();
+    expect(within(summary).queryByRole('button')).not.toBeInTheDocument();
     expect(screen.getByText("Finance settlement reviewer")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Submit to Finance" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Review settlement" })).not.toBeInTheDocument();

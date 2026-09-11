@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Badge, Button, Card, Field, Input, Sheet, useToast, userFacingError } from '@intra/ui';
+import { Badge, Button, Field, Input, Sheet, useToast, userFacingError } from '@intra/ui';
 import {
   MPIC_SOURCE_PROFILE,
   MWELL_OPERATING_PROFILE,
@@ -213,7 +213,7 @@ export function PolicyProfileSection({
   };
 
   return (
-    <section aria-labelledby="procurement-policy-heading" aria-busy={historyLoading} className="space-y-4">
+    <section id="doa-policies" tabIndex={-1} aria-labelledby="procurement-policy-heading" aria-busy={historyLoading} className="scroll-mt-24 space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 id="procurement-policy-heading" className="text-lg font-semibold text-ink">Procurement policy profiles</h2>
@@ -222,20 +222,20 @@ export function PolicyProfileSection({
         <Badge tone="emerald">Governed policy mapping</Badge>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-2">
-        <Card className="p-4">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="min-w-0 border-l-2 border-line pl-3">
           <h3 className="font-semibold text-ink">Incorporated reference source</h3>
-          <p className="mt-2 text-sm text-muted">{MPIC_SOURCE_PROFILE.sourceFilename} · {MPIC_SOURCE_PROFILE.sourceOrganization}</p>
+          <p className="mt-2 break-words text-sm text-muted [overflow-wrap:anywhere]">{MPIC_SOURCE_PROFILE.sourceFilename} · {MPIC_SOURCE_PROFILE.sourceOrganization}</p>
           <p className="mt-1 text-xs text-faint">Only non-conflicting controls may be inherited. The canonical Mwell source remains the operating authority.</p>
-        </Card>
-        <Card className="p-4">
+        </div>
+        <div className="min-w-0 border-l-2 border-brand-500 pl-3">
           <h3 className="font-semibold text-ink">Canonical Mwell mapping</h3>
           <p className="mt-2 text-sm text-muted">{activeMapping.code} {activeMapping.version} · effective {activeMapping.effectiveFrom}</p>
           <p className="mt-1 text-xs text-faint">Maker: policy author. Checker: a different authorized Admin or Legal user.</p>
-        </Card>
+        </div>
       </div>
 
-      <Card className="p-4 sm:p-5">
+      <section aria-label="Draft controlled revision" className="border-y border-line py-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div><h3 className="font-semibold text-ink">Draft controlled revision</h3><p className="mt-1 text-xs text-muted">Each numeric control keeps its source mapping. Saving a draft does not activate it.</p></div>
           <Badge tone="amber">Maker-checker</Badge>
@@ -288,18 +288,18 @@ export function PolicyProfileSection({
           <Button variant="outline" disabled={!canManage} onClick={() => setConflictOpen(true)}>Resolve a conflict</Button>
           <Button variant="outline" disabled={!canManage || !draftId || busy} onClick={() => void activateDraft()}>Activate as checker</Button>
         </div>
-      </Card>
+      </section>
 
-      <Card className="p-4 sm:p-5">
-        <h3 className="font-semibold text-ink">History and unresolved conflicts</h3>
+      {historyError ? <p role="alert" className="text-sm text-danger">Could not load policy history: {userFacingError(historyError)}</p> : null}
+      <details className="border-b border-line pb-3" open={openConflicts.length > 0 || Boolean(historyError) || undefined}>
+        <summary className="min-h-11 cursor-pointer py-3 font-semibold text-ink">History and unresolved conflicts ({openConflicts.length} open)</summary>
         <p className="mt-1 text-sm text-muted">Activation history, draft author, checker, and unresolved policy conflicts are read from the governed profile records. A conflict needs a documented mapping and rationale before activation.</p>
-        {historyError ? <p role="alert" className="mt-3 text-sm text-danger">Could not load policy history: {userFacingError(historyError)}</p> : null}
         <div className="mt-4 grid gap-3 lg:grid-cols-3">
           <div><h4 className="text-sm font-semibold text-ink">Profiles</h4><ul className="mt-2 space-y-2 text-sm text-muted">{profileHistory.length ? profileHistory.slice(0, 4).map((profile) => <li key={profile.id}><strong className="text-ink">{profile.code} {profile.version}</strong><br />{profile.status} · source {profile.source_document_status?.replaceAll('_', ' ') ?? 'status unavailable'} · effective {policyEffectiveDate(profile.effective_from)}<br />Maker {profile.created_by} · checker {profile.activated_by ?? 'Pending'}{profile.status === 'draft' && profile.source_document_status === 'approved' && canManage ? <button type="button" className="mt-1 text-link underline disabled:opacity-50" disabled={busy} onClick={() => void activateDraft(profile.id)}>Activate this approved draft as checker</button> : null}</li>) : <li>No governed profile history is available yet.</li>}</ul></div>
           <div><h4 className="text-sm font-semibold text-ink">Open conflicts</h4><ul className="mt-2 space-y-2 text-sm text-muted">{openConflicts.length ? openConflicts.slice(0, 4).map((conflict) => <li key={conflict.id}><strong className="text-ink">{conflict.parent_rule}</strong><br />{conflict.impact}<br /><button type="button" className="mt-1 text-link underline" onClick={() => { setConflictId(conflict.id); setConflictOpen(true); }}>Resolve this conflict</button></li>) : <li>No unresolved policy conflicts.</li>}</ul></div>
           <div><h4 className="text-sm font-semibold text-ink">Activation events</h4><ul className="mt-2 space-y-2 text-sm text-muted">{events.length ? events.slice(0, 4).map((event) => <li key={event.id}><strong className="text-ink">{event.event_type.replaceAll('_', ' ')}</strong><br />{event.event_at.slice(0, 10)} · actor {event.actor_id}</li>) : <li>No activation events are available yet.</li>}</ul></div>
         </div>
-      </Card>
+      </details>
 
       <Sheet open={conflictOpen} onOpenChange={setConflictOpen} title="Resolve policy conflict">
         <div className="space-y-4 p-4">

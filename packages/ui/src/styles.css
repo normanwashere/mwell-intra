@@ -372,39 +372,45 @@ select.input {
   border-block: 1px solid rgb(var(--c-line) / 0.9);
 }
 
-/* App-wide workspace hierarchy. These classes are consumed by the shared
-   primitives so every module receives the same visual rhythm. */
-.workspace-hero {
+/* Header actions reflow to their actual container, including narrow detail panes. */
+.workspace-header {
   container-type: inline-size;
-  container-name: module-hero;
-  position: relative;
-  isolation: isolate;
-  border-radius: 0.5rem;
+  container-name: workspace-header;
+  min-width: 0;
 }
-@container module-hero (max-width: 12rem) {
-  .workspace-hero [data-module-hero-watermark] {
-    position: static;
-    margin-inline-start: auto;
-    margin-block-end: 1rem;
-  }
-  .workspace-hero [data-module-hero-content] {
-    padding-inline-end: 0;
-  }
+.workspace-header-main {
+  display: grid;
+  min-width: 0;
+  gap: 1rem;
 }
-.workspace-hero::before {
-  content: "";
-  position: absolute;
-  inset-block: 0.75rem;
-  inset-inline-start: 0;
-  width: 0.25rem;
-  border-radius: 0 0.25rem 0.25rem 0;
-  background: var(--brand-600);
+.workspace-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  max-width: 100%;
+}
+.workspace-header-actions > * {
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.workspace-header-metrics > * { max-width: 100%; }
+@container workspace-header (min-width: 48rem) {
+  .workspace-header-main {
+    grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+    align-items: center;
+  }
+  .workspace-header-actions { justify-content: flex-end; }
 }
 .page-header-band {
-  border-block: 1px solid rgb(var(--c-line) / 0.85);
-  background: rgb(var(--c-surface) / 0.72);
+  border-top: 2px solid rgb(var(--c-line));
+  border-bottom: 1px solid rgb(var(--c-line));
+  background: rgb(var(--c-surface));
 }
 .section-heading-band {
+  border-top: 1px solid rgb(var(--c-line) / 0.9);
   border-bottom: 1px solid rgb(var(--c-line) / 0.9);
 }
 .workflow-launcher {

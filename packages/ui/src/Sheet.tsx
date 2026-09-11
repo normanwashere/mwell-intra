@@ -106,7 +106,13 @@ export function Sheet({
           <Icon name="x" />
         </Dialog.Close>
       </div>
-      <div ref={bodyRef} className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 md:px-6 md:pb-6">
+      <div
+        ref={bodyRef}
+        role="region"
+        aria-label={`${title} content`}
+        tabIndex={0}
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500 md:px-6 md:pb-6"
+      >
         {children}
       </div>
       {footer && (

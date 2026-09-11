@@ -117,17 +117,24 @@ function columns(
 type CaseFilter = "all" | InboxBucket;
 
 export function AccreditationCasesPage() {
-  const [workspace, setWorkspace] = useState<'cases' | 'lifecycle'>('cases');
   const { profile } = useSession();
-  const { rows, loading } = useAccreditationCases();
-  const { rows: allChecklist } = useChecklist();
-  const { rows: allDocs } = useAccreditationDocs();
-  const { rows: allSigned } = useSignedInstruments();
+  const { rows, loading, error: readError, refresh } = useAccreditationCases();
+  const { rows: allChecklist, error: checklistError, refresh: refreshChecklist } = useChecklist();
+  const { rows: allDocs, error: docsError, refresh: refreshDocs } = useAccreditationDocs();
+  const { rows: allSigned, error: signedError, refresh: refreshSigned } = useSignedInstruments();
   const { rows: aliases } = useVendorAliases();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
+  const workspace = params.get('view') === 'lifecycle' ? 'lifecycle' : 'cases';
+  const setWorkspace = (view: 'cases' | 'lifecycle') => {
+    const next = new URLSearchParams(params);
+    if (view === 'cases') next.delete('view');
+    else next.set('view', view);
+    setParams(next);
+  };
   const isVendor = profile?.kind === "vendor";
-  const filter = (params.get("filter") as CaseFilter) ?? "all";
+  const requestedFilter = params.get("filter");
+  const filter: CaseFilter = requestedFilter && requestedFilter in INBOX_BUCKET_LABEL ? requestedFilter as InboxBucket : 'all';
 
   // Vendors see only their own case(s) — same matcher as the detail guard.
   const visible = useMemo(
@@ -175,6 +182,7 @@ export function AccreditationCasesPage() {
   // -------------------------------------------------------------------------
   // Vendor branch — status-first application card (§2.1)
   // -------------------------------------------------------------------------
+  if (readError || checklistError || docsError || signedError) return <div role="alert" className="space-y-3"><h1 className="text-xl font-semibold">Accreditation cases unavailable</h1><p>{readError ?? checklistError ?? docsError ?? signedError}</p><button type="button" className="btn-outline" onClick={() => { void refresh(); void refreshChecklist?.(); void refreshDocs?.(); void refreshSigned?.(); }}>Retry cases</button></div>;
   if (isVendor) {
     return (
       <VendorHome

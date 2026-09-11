@@ -46,7 +46,6 @@ import { Icon, type IconName } from "@/components/Icon";
 import {
   BarRow,
   Badge,
-  Card,
   DataTable,
   DonutChart,
   EmptyState,
@@ -107,7 +106,7 @@ function IssuedComparison({
 
   return (
     <div
-      className="mt-2 space-y-1.5 rounded-xl bg-surface/70 p-2 ring-1 ring-line/70"
+      className="mt-2 min-w-0 space-y-1.5"
       aria-label={`Issued comparison: last 5 days ${recent}, prior 5 days ${prior}`}
     >
       {rows.map(({ label, value, tone }) => {
@@ -154,39 +153,18 @@ function DashboardHero({
 }) {
   return (
     <section
-      className="hero-surface relative overflow-hidden rounded-3xl p-5 sm:p-6"
+      className="min-w-0"
       data-testid="warehouse-dashboard-hero"
     >
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-y-0 left-0 z-10 w-1 rounded-l-3xl bg-gradient-to-b from-brand-500 to-brand-700"
+      <PageHeader
+        eyebrow={eyebrow}
+        title={title}
+        subtitle={description}
+        icon={icon}
+        status={<Badge tone="slate">{roleLabel}</Badge>}
+        action={action}
       />
-      <div
-        aria-hidden
-        data-testid="warehouse-dashboard-hero-watermark"
-        className="pointer-events-none absolute bottom-4 right-4 z-0 text-brand-700 dark:text-brand-300"
-        style={{ opacity: 0.05 }}
-      >
-        <Icon name={icon} className="h-32 w-32 sm:h-44 sm:w-44" />
-      </div>
-
-      <div className="relative z-10 grid min-w-0 gap-5 md:grid-cols-[minmax(0,1fr)_minmax(17rem,20rem)] md:items-end">
-        <div className="min-w-0">
-          <p className="text-caption font-semibold uppercase tracking-wide text-faint">
-            {eyebrow}
-          </p>
-          <h1 className="mt-1 font-display text-title text-ink sm:text-display">
-            {title}
-          </h1>
-          <p className="mt-1.5 max-w-xl text-body text-muted">{description}</p>
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            {action}
-            <span className="chip bg-inset text-muted">{roleLabel}</span>
-          </div>
-        </div>
-
-        <div className="min-w-0">{children}</div>
-      </div>
+      {children}
     </section>
   );
 }
@@ -204,7 +182,7 @@ function IssuedMetricDock({
 }) {
   return (
     <div
-      className="rounded-2xl border border-line/70 bg-inset/85 p-3 shadow-e1 backdrop-blur-sm sm:p-4"
+      className="grid min-w-0 gap-x-6 gap-y-2 border-y border-line py-3 sm:grid-cols-[minmax(12rem,1fr)_minmax(0,1fr)] sm:items-center"
       data-testid="warehouse-dashboard-hero-metric"
     >
       <div className="flex items-start justify-between gap-3">
@@ -232,7 +210,7 @@ function IssuedMetricDock({
       </div>
 
       <IssuedComparison recent={recent} prior={prior} />
-      <p className="mt-2 text-xs font-medium text-faint">
+      <p className="text-xs font-medium text-faint sm:col-span-2">
         Last 5 days compared with the previous 5.
       </p>
     </div>
@@ -406,7 +384,7 @@ function OperatorDashboard({
           ) : undefined
         }
       />
-      <section aria-labelledby="operator-overview">
+      <section aria-labelledby="operator-overview" className="min-w-0">
         <SectionTitle
           id="operator-overview"
           title="Shift queues"
@@ -421,7 +399,7 @@ function OperatorDashboard({
                 to={action.to}
                 aria-label={action.label}
                 data-tone={action.tone}
-                className="workflow-launcher group grid min-h-[7.25rem] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-lg border border-line bg-surface px-4 py-3 shadow-e1 transition hover:border-brand-300 hover:shadow-e2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                className="workflow-launcher group grid min-h-11 min-w-0 grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2 rounded-lg border border-line bg-surface px-3 py-3 transition hover:border-brand-300 hover:bg-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:grid-cols-[2.5rem_minmax(0,1fr)_6rem]"
               >
                 <span
                   className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ${toneClass[action.tone]}`}
@@ -429,23 +407,23 @@ function OperatorDashboard({
                   <Icon name={action.icon} className="h-5 w-5" />
                 </span>
                 <span className="min-w-0">
-                  <span className="block font-semibold text-ink">
+                  <span className="block break-words text-sm font-semibold text-ink">
                     {action.label}
                   </span>
-                  <span className="mt-1 block text-sm leading-5 text-muted">
+                  <span className="mt-1 block text-xs leading-5 text-muted">
                     {action.description}
                   </span>
                 </span>
-                <span className="min-w-[4.5rem] text-right">
-                  <span className="tnum block font-display text-2xl font-extrabold text-ink">
+                <span className="col-start-2 flex min-w-0 items-baseline gap-2 sm:col-start-auto sm:flex-col sm:items-end sm:gap-0 sm:text-right">
+                  <span className="tnum block font-display text-xl font-bold text-ink">
                     {action.value}
                   </span>
-                  <span className="block text-[0.68rem] font-semibold text-faint">
+                  <span className="block text-xs font-semibold text-faint">
                     {action.unit}
                   </span>
                   <Icon
                     name="chevron"
-                    className="ml-auto mt-2 h-4 w-4 text-faint transition group-hover:translate-x-0.5 group-hover:text-brand-700"
+                    className="ml-auto h-4 w-4 shrink-0 self-center text-faint transition group-hover:translate-x-0.5 group-hover:text-brand-700 sm:hidden"
                   />
                 </span>
               </Link>
@@ -460,23 +438,23 @@ function OperatorDashboard({
           />
         )}
         {quietActions.length > 0 && (
-          <div className="mt-5">
+          <div className="mt-5 border-t border-line pt-4">
             <p className="mb-2 text-xs font-semibold uppercase text-faint">
               Available floor tools
             </p>
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
               {quietActions.map((action) => (
                 <Link
                   key={action.label}
                   to={action.to}
                   aria-label={action.label}
-                  className="group flex min-h-16 items-center gap-3 rounded-lg border border-line bg-surface px-3 py-2.5 transition hover:border-brand-300 hover:bg-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                  className="group flex min-h-11 min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 transition hover:bg-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
                 >
                   <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-emerald-500/15 text-emerald-800 dark:text-emerald-300">
                     <Icon name={action.icon} className="h-4 w-4" />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-semibold text-ink">
+                    <span className="block break-words text-sm font-semibold text-ink">
                       {action.label}
                     </span>
                     <span className="block text-xs text-faint">{action.label === "Receive and inspect" && (inbound.loading || inbound.error) ? (inbound.loading ? "Loading inbound work" : "Inbound unavailable - open to retry") : "Queue clear"}</span>
@@ -1155,7 +1133,7 @@ export function DashboardPage() {
 
   const PANELS: Record<PanelId, ReactNode> = {
     lowStock: (
-      <Card key="lowStock">
+      <section key="lowStock" className="min-w-0">
         <SectionTitle
           title="Low-stock alerts"
           subtitle="At or below reorder point"
@@ -1196,10 +1174,10 @@ export function DashboardPage() {
             ))}
           </ul>
         )}
-      </Card>
+      </section>
     ),
     reconciliation: (
-      <Card key="reconciliation">
+      <section key="reconciliation" className="min-w-0">
         <SectionTitle
           title="Reconciliation"
           subtitle="Variances from latest counts"
@@ -1236,10 +1214,10 @@ export function DashboardPage() {
             ))}
           </ul>
         )}
-      </Card>
+      </section>
     ),
     recentActivity: (
-      <Card key="recentActivity">
+      <section key="recentActivity" className="min-w-0">
         <SectionTitle
           title="Recent activity"
           subtitle="Latest stock movements"
@@ -1271,10 +1249,10 @@ export function DashboardPage() {
             ))}
           </ul>
         )}
-      </Card>
+      </section>
     ),
     reservations: (
-      <Card key="reservations">
+      <section key="reservations" className="min-w-0">
         <SectionTitle
           title="Pending reservations"
           subtitle="Awaiting issue"
@@ -1304,10 +1282,10 @@ export function DashboardPage() {
             ))}
           </ul>
         )}
-      </Card>
+      </section>
     ),
     events: (
-      <Card key="events">
+      <section key="events" className="min-w-0">
         <SectionTitle title="Events" subtitle="Consumption & costing" />
         {upcomingEvents.length === 0 ? (
           <EmptyState icon="calendar" title="No events" />
@@ -1339,10 +1317,10 @@ export function DashboardPage() {
             })}
           </ul>
         )}
-      </Card>
+      </section>
     ),
     consumption: (
-      <Card key="consumption">
+      <section key="consumption" className="min-w-0">
         <SectionTitle
           title="Consumption by event type"
           subtitle="Issued units per engagement"
@@ -1372,10 +1350,10 @@ export function DashboardPage() {
             </div>
           </div>
         )}
-      </Card>
+      </section>
     ),
     fastMoving: (
-      <Card key="fastMoving">
+      <section key="fastMoving" className="min-w-0">
         <SectionTitle title="Fast-moving SKUs" subtitle="By quantity issued" />
         {fast.length === 0 ? (
           <EmptyState title="No issuance yet" />
@@ -1392,10 +1370,10 @@ export function DashboardPage() {
             ))}
           </div>
         )}
-      </Card>
+      </section>
     ),
     utilization: (
-      <Card key="utilization">
+      <section key="utilization" className="min-w-0">
         <SectionTitle
           title="Device utilization"
           subtitle="Issued vs returned"
@@ -1411,10 +1389,10 @@ export function DashboardPage() {
             onRowClick={(r) => navigate(`/inventory/${r.productId}`)}
           />
         )}
-      </Card>
+      </section>
     ),
     valuation: (
-      <Card key="valuation">
+      <section key="valuation" className="min-w-0">
         <SectionTitle
           title="Valuation by category"
           subtitle="Devices vs merchandise"
@@ -1446,10 +1424,10 @@ export function DashboardPage() {
         <p className="mt-3 text-xs text-faint">
           Devices {money(devicesValue)} • Merchandise {money(merchValue)}
         </p>
-      </Card>
+      </section>
     ),
     assets: (
-      <Card key="assets">
+      <section key="assets" className="min-w-0">
         <SectionTitle
           title="Asset register"
           subtitle="Serialized devices in the field"
@@ -1482,10 +1460,10 @@ export function DashboardPage() {
             ))}
           </ul>
         )}
-      </Card>
+      </section>
     ),
     reorder: (
-      <Card key="reorder">
+      <section key="reorder" className="min-w-0">
         <SectionTitle
           title="Reorder worklist"
           subtitle="At-risk first"
@@ -1526,10 +1504,10 @@ export function DashboardPage() {
             ))}
           </ul>
         )}
-      </Card>
+      </section>
     ),
     openPOs: (
-      <Card key="openPOs">
+      <section key="openPOs" className="min-w-0">
         <SectionTitle
           title="Open purchase orders"
           subtitle="In progress"
@@ -1575,10 +1553,10 @@ export function DashboardPage() {
             ))}
           </ul>
         )}
-      </Card>
+      </section>
     ),
     topValue: (
-      <Card key="topValue">
+      <section key="topValue" className="min-w-0">
         <SectionTitle
           title="Top SKUs by value"
           subtitle="Landed cost × on hand"
@@ -1601,7 +1579,7 @@ export function DashboardPage() {
             </li>
           ))}
         </ul>
-      </Card>
+      </section>
     ),
   };
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Badge, Card, EmptyState, EvidenceAttachment, useEvidenceAttachment, Field, Icon, Sheet, money, useToast } from '@intra/ui';
+import { Badge, Card, EmptyState, EvidenceAttachment, useEvidenceAttachment, Field, Icon, Sheet, WorkflowSummary, money, useToast } from '@intra/ui';
 import type {
   FinanceCloseEntry,
   FinanceCloseEvidenceRecordType,
@@ -11,6 +11,7 @@ import type {
 } from '../types';
 import { isSupportedFinanceEvidenceReference, validateFinanceCloseEntry } from '../data';
 import { closeActionReason } from '../closeEligibility';
+import { closeWorkflowSummary } from '../closeWorkflowSummary';
 import type { SearchCloseSources, LoadCloseEvidence, CloseSource, CloseEvidenceOption } from '../sourceSelection';
 import { closeSourceBlocker } from '../sourceSelection';
 
@@ -117,7 +118,11 @@ function FinanceClosePanelSession({
   const [draft, setDraft] = useState(emptyCloseDraft);
   const [sourceQuery, setSourceQuery] = useState('');
   const [sources, setSources] = useState<CloseSource[]>([]);
-  const [sourceError, setSourceError] = useState('');
+  const [deepLinkError, setDeepLinkError] = useState('');
+  const [queryError, setQueryError] = useState('');
+  const [bindingError, setBindingError] = useState('');
+  const sourceError = deepLinkError || bindingError || queryError;
+  const [sourceAttempt, setSourceAttempt] = useState(0);
   const [authorizedSource, setAuthorizedSource] = useState<CloseSource>();
   const [evidenceOptions, setEvidenceOptions] = useState<CloseEvidenceOption[]>([]);
   useEffect(() => {
@@ -126,38 +131,39 @@ function FinanceClosePanelSession({
     const type = query.get('close_source_type');
     const id = query.get('close_source_id');
     if (!type || !id) return;
+    setDeepLinkError('');
     const blocker = closeSourceBlocker(type);
     if (blocker) { toast.error(blocker); return; }
     let active = true;
     void searchSources('', type, id).then(rows => {
       const source = rows.find(row => row.type === type && row.id === id);
       if (!source) throw new Error('The requested source is not available in your scope.');
-      if (active) { setDraft(current => ({...current,sourceRecordType:source.type,sourceRecordId:source.id,sourceModule:source.module,sourceReference:source.reference,amount:source.amount ?? 0,evidenceRecordType:'core_document',evidenceRecordId:''})); setOpen(true); }
-    }).catch(cause => { if (active) toast.error(cause.message || 'Source access unavailable'); });
+      if (active) { setDeepLinkError(''); setDraft(current => ({...current,sourceRecordType:source.type,sourceRecordId:source.id,sourceModule:source.module,sourceReference:source.reference,amount:source.amount ?? 0,evidenceRecordType:'core_document',evidenceRecordId:''})); setOpen(true); }
+    }).catch(cause => { if (active) setDeepLinkError(cause.message || 'Source access unavailable'); });
     return () => { active = false; };
-  }, [searchSources, canManage]);
+  }, [searchSources, canManage, sourceAttempt]);
   useEffect(() => {
     if (!open || !searchSources) return;
     let active = true;
     const timer = setTimeout(() => {
-      void searchSources(sourceQuery).then(rows => { if (active) { setSources(rows); setSourceError(''); } }).catch(cause => { if (active) setSourceError(cause.message || 'Source lookup unavailable'); });
+      void searchSources(sourceQuery).then(rows => { if (active) { setSources(rows); setQueryError(''); } }).catch(cause => { if (active) setQueryError(cause.message || 'Source lookup unavailable'); });
     }, 200);
     return () => { active = false; clearTimeout(timer); };
-  }, [open, sourceQuery, searchSources]);
+  }, [open, sourceQuery, searchSources, sourceAttempt]);
   useEffect(() => {
-    setAuthorizedSource(undefined); setEvidenceOptions([]);
+    setAuthorizedSource(undefined); setEvidenceOptions([]); setBindingError('');
     if (!open || !searchSources || !draft.sourceRecordId) return;
     const blocker = closeSourceBlocker(draft.sourceRecordType);
-    if (blocker) { setSourceError(blocker); return; }
+    if (blocker) { setBindingError(blocker); return; }
     let active = true;
     void searchSources('', draft.sourceRecordType, draft.sourceRecordId).then(async rows => {
       const source = rows.find(row => row.id === draft.sourceRecordId && row.type === draft.sourceRecordType);
       if (!source) throw new Error('Source access unavailable. Select an authorized source.');
       const options = await loadEvidenceOptions?.(source.type, source.id) ?? [];
-      if (active) { setAuthorizedSource(source); setEvidenceOptions(options); setSourceError(''); }
-    }).catch(cause => { if (active) setSourceError(cause.message || 'Source lookup unavailable'); });
+      if (active) { setAuthorizedSource(source); setEvidenceOptions(options); setBindingError(''); }
+    }).catch(cause => { if (active) setBindingError(cause.message || 'Source lookup unavailable'); });
     return () => { active = false; };
-  }, [open, draft.sourceRecordId, draft.sourceRecordType, searchSources, loadEvidenceOptions]);
+  }, [open, draft.sourceRecordId, draft.sourceRecordType, searchSources, loadEvidenceOptions, sourceAttempt]);
   const savingRef = useRef(false);
   const attachment = useEvidenceAttachment(`${open}:${draft.sourceRecordType}:${draft.sourceRecordId}:${draft.evidenceRecordType}:${draft.evidenceRecordId}`);
   const evidenceIdentity = attachment.document?.documentId
@@ -349,9 +355,10 @@ function FinanceClosePanelSession({
   };
 
   return (
-    <section className="space-y-3" aria-labelledby="finance-close-title">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
+    <section id="finance-close" tabIndex={-1} className="space-y-3 scroll-mt-28" aria-labelledby="finance-close-title">
+      {!open && sourceError && <div role="alert"><p>{sourceError}</p><button type="button" className="btn-outline" onClick={() => setSourceAttempt(value => value + 1)}>Retry source lookup</button></div>}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="min-w-0 flex-1 basis-72">
           <p className="text-xs font-semibold uppercase text-faint">Period control</p>
           <h2 id="finance-close-title" className="font-display text-xl font-bold text-ink">
             Finance close
@@ -364,7 +371,7 @@ function FinanceClosePanelSession({
         {canManage && (
           <button
             type="button"
-            className="btn-primary w-full sm:w-auto"
+            className="btn-primary w-full shrink-0 sm:w-auto"
             onClick={() => { if (recovery) resumeDraft(); else { setEditing(undefined); setDraft(emptyCloseDraft()); setOpen(true); } }}
           >
             <Icon name="plus" className="h-4 w-4" /> Prepare close entry
@@ -390,14 +397,14 @@ function FinanceClosePanelSession({
           }
         />
       ) : (
-        <div className="grid gap-3 xl:grid-cols-2">
+        <div className="grid min-w-0 gap-3 xl:grid-cols-2">
           {entries.map((entry) => (
-            <Card key={entry.id} className="space-y-3">
+            <Card key={entry.id} className="min-w-0 space-y-3 [overflow-wrap:anywhere]">
               <span id={`close-${entry.id}`} />
-              <div className="flex items-start justify-between gap-3">
+              <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="font-semibold text-ink">{ENTRY_LABEL[entry.entryType]}</p>
-                  <p className="truncate text-xs text-muted">
+                  <p className="text-xs text-muted [overflow-wrap:anywhere]">
                     {entry.sourceModule} / {entry.sourceReference} / {entry.periodEnd}
                   </p>
                 </div>
@@ -413,13 +420,13 @@ function FinanceClosePanelSession({
                   {entry.status}
                 </Badge>
               </div>
-              <div className="flex items-end justify-between gap-3">
-                <div>
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div className="min-w-0">
                   <p className="text-xs text-faint">Amount</p>
                   <p className="font-display text-lg font-bold text-ink">{money(entry.amount)}</p>
                 </div>
                 {(
-                  <div className="flex flex-wrap justify-end gap-2">
+                  <div className="flex min-w-0 flex-wrap gap-2 sm:ml-auto sm:justify-end">
                     {(entry.evidenceRecordId || entry.sourceRecordType === 'event_reconciliation' || entry.evidenceUrl?.startsWith('evidence://')) && (
                       <button
                         type="button"
@@ -491,6 +498,10 @@ function FinanceClosePanelSession({
               </div>
               {entry.reconciliationNote && <p className="text-sm [overflow-wrap:anywhere]">Correction / reconciliation note: {entry.reconciliationNote}{entry.correctionBy ? `; flagged by ${entry.correctionBy} at ${entry.correctionAt}` : ''}</p>}
               {['ready', 'posted'].includes(entry.status) && <p role="status" className="text-sm text-muted">{closeActionReason(entry, entry.status === 'ready' ? 'post' : 'reconcile', currentActorId, canManage) ?? `Next: independent Finance ${entry.status === 'ready' ? 'poster' : 'reconciler'}`}</p>}
+              <details className="border-t border-line pt-3">
+                <summary className="cursor-pointer text-sm font-semibold text-ink">Workflow details for {entry.sourceReference}</summary>
+                <WorkflowSummary {...closeWorkflowSummary(entry, currentActorId, canManage)} />
+              </details>
               {canManage && !closeActionReason(entry, 'save', currentActorId, canManage) && <button type="button" className="btn-outline btn-sm" onClick={() => {
                 setEditing(entry);
                 setDraft({ ...emptyCloseDraft(), periodStart: entry.periodStart, periodEnd: entry.periodEnd,
@@ -500,7 +511,7 @@ function FinanceClosePanelSession({
                   amount: entry.amount, costCenter: entry.costCenter ?? '', reconciliationNote: entry.reconciliationNote ?? '' });
                 attachment.clear(); setOpen(true);
               }}>Edit and resubmit</button>}
-              {entry.sourceRecordType === 'event_reconciliation' && entry.status === 'exception' && <a className="btn-outline btn-sm" href={`/events/${encodeURIComponent(entry.sourceRecordId ?? '')}`}>Open governed Event correction</a>}
+              {entry.sourceRecordType === 'event_reconciliation' && entry.status === 'exception' && (entry.sourceRecordId ? <a className="btn-outline btn-sm" href={`/events/${encodeURIComponent(entry.sourceRecordId)}`}>Open governed Event correction</a> : <p role="status" className="text-sm text-muted">Event source identity is unavailable. Finance must verify the canonical source before correction.</p>)}
               <dl className="grid gap-2 border-t border-line pt-3 text-xs sm:grid-cols-2">
                 <div>
                   <dt className="text-faint">Canonical source</dt>
@@ -540,6 +551,7 @@ function FinanceClosePanelSession({
       )}
 
       {canManage && <Sheet open={Boolean(flagging)} onOpenChange={(next) => { if (!workingId && !next) setFlagging(undefined); }} title="Flag close entry" footer={<button type="button" className="btn-primary" disabled={Boolean(workingId) || !flagReason.trim()} onClick={() => flagging && void transition(flagging, 'exception')}>Record correction reason</button>}>
+        {flagging && <WorkflowSummary {...closeWorkflowSummary(flagging, currentActorId, canManage)} />}
         <Field label="Correction reason" htmlFor="close-flag-reason"><textarea id="close-flag-reason" className="input" value={flagReason} onChange={event => setFlagReason(event.target.value)} required /></Field>
       </Sheet>}
       {canManage && (
@@ -566,9 +578,10 @@ function FinanceClosePanelSession({
             className="space-y-4"
             onSubmit={(event) => void submit(event)}
           >
+            {editing && <WorkflowSummary {...closeWorkflowSummary(editing, currentActorId, canManage)} />}
             {searchSources && <div className="space-y-2">
               <Field label="Find source by business reference" htmlFor="close-source-search"><input id="close-source-search" className="input" value={sourceQuery} onChange={event => setSourceQuery(event.target.value)} /></Field>
-              {sourceError && <p role="alert">{sourceError}</p>}
+              {sourceError && <div role="alert"><p>{sourceError}</p><button type="button" className="btn-outline" onClick={() => setSourceAttempt(value => value + 1)}>Retry source lookup</button></div>}
               <p className="text-sm text-muted">Available sources: purchase orders, receipts, posted payment releases. Event settlements are upstream-only. Direct request/pack preparation, counts, and returns are unavailable here.</p>
               <label className="block">Source record<select className="input w-full" value={authorizedSource ? `${authorizedSource.type}:${authorizedSource.id}` : ''} onChange={event => {
                 const source = sources.find(row => `${row.type}:${row.id}` === event.target.value);
@@ -576,7 +589,7 @@ function FinanceClosePanelSession({
                 setDraft(current => ({...current, sourceRecordType: source.type, sourceRecordId: source.id, sourceModule: source.module, sourceReference: source.reference, amount: source.amount ?? current.amount, evidenceRecordId: '', evidenceRecordType: 'core_document'}));
                 attachment.clear();
               }}><option value="">Select an authorized source</option>{sources.map(source => <option key={`${source.type}:${source.id}`} value={`${source.type}:${source.id}`}>{source.reference} / {source.party ?? 'Party unavailable'} / {source.occurred_at.slice(0,10)} / {source.amount == null ? 'Amount unavailable' : money(source.amount)}</option>)}</select></label>
-              {authorizedSource && <div className="flex flex-wrap gap-3"><a className="underline" href={authorizedSource.href}>Open source record</a><a className="underline" href={`/finance?${new URLSearchParams({close_source_type:authorizedSource.type,close_source_id:authorizedSource.id})}`}>Open prebound source draft</a></div>}
+              {authorizedSource && <div className="flex flex-wrap gap-3"><a className="underline" href={authorizedSource.type === 'warehouse_receipt' ? `/finance?${new URLSearchParams({ receipt: authorizedSource.id })}` : authorizedSource.href}>Open source record</a><a className="underline" href={`/finance?${new URLSearchParams({close_source_type:authorizedSource.type,close_source_id:authorizedSource.id})}`}>Open prebound source draft</a></div>}
               <label className="block">Eligible registered evidence<select className="input w-full" value={draft.evidenceRecordId} onChange={event => { const evidence = evidenceOptions.find(item => item.id === event.target.value); if (evidence) setDraft(current => ({...current,evidenceRecordId:evidence.id,evidenceRecordType:evidence.type})); }}><option value="">Select evidence or upload below</option>{evidenceOptions.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
             </div>}
             {draftKey && <div className="space-y-1 border-b border-line pb-3">

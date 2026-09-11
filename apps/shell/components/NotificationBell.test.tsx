@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@intra/auth", () => ({ useSession: vi.fn() }));
 vi.mock("@shell/lib/supabase/env", () => ({ ENABLE_NOTIFICATIONS: false }));
 
-import { NotificationItem, NotificationResults, notificationSummary, sortNotifications } from "./NotificationBell";
+import { NotificationItem, NotificationResults, notificationSummary, sortNotifications, notificationRecordHref } from "./NotificationBell";
 
 describe("NotificationItem local rendered fixture", () => {
   beforeEach(() => vi.stubGlobal("React", React));
@@ -57,7 +57,7 @@ describe("NotificationItem local rendered fixture", () => {
   it("shows a successful empty response distinctly from a failure", () => {
     const markup = renderToStaticMarkup(<NotificationResults rows={[]} initialFetch loadFailed={false} refreshing={false}
       busyId={null} onMarkRead={vi.fn()} onRetry={vi.fn()} />);
-    expect(markup).toContain("caught up");
+    expect(markup).toContain("No notifications in this view");
     expect(markup).not.toContain('role="alert"');
     expect(notificationSummary(true, false, 0)).toBe("All read");
   });
@@ -69,5 +69,10 @@ describe("NotificationItem local rendered fixture", () => {
     expect(sortNotifications(rows, false, false).map(item => item.id)).toEqual(['read', 'recent', row.id]);
     expect(sortNotifications(rows, true, false).map(item => item.id)).toEqual(['recent', row.id]);
     expect(rows).toEqual([read, row, recentUnread]);
+  });
+  it('links only supported record identities and encodes their path segment', () => {
+    expect(notificationRecordHref({...row,entity_type:'procurement_request',entity_id:'a/b?x'})).toBe('/procurement/requests/a%2Fb%3Fx');
+    expect(notificationRecordHref({...row,entity_type:'vendor'})).toBeNull();
+    expect(notificationRecordHref({...row,entity_type:'purchase_order',entity_id:null})).toBeNull();
   });
 });

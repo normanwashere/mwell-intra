@@ -3,7 +3,6 @@
 import { userFacingError } from '@intra/ui';
 import {
   Badge,
-  Card,
   HeroChipButton,
   Icon,
   ModuleHero,
@@ -18,10 +17,11 @@ import { summarizeFinanceData, useFinanceData, type FinanceSource } from "./data
 import { FinanceActivityTable } from "./components/FinanceActivityTable";
 import { FinanceOverview } from "./components/FinanceOverview";
 import { FinanceReviewQueue } from "./components/FinanceReviewQueue";
+import { ReceiptSourceView } from './components/ReceiptSourceView';
 import { FinanceClosePanel } from "./components/FinanceClosePanel";
 
 export function FinanceApp() {
-  const { profile, mode, roleCapabilities, loading: sessionLoading } = useSession();
+  const { profile, mode, roleCapabilities, userCapabilities, loading: sessionLoading } = useSession();
   const warehouseFinance = useCan('warehouse', 'view_finance');
   const procurementFinance = useCan('procurement', 'view_finance');
   const mayManageClose = useCan('warehouse', 'manage_finance_close');
@@ -30,7 +30,8 @@ export function FinanceApp() {
 
   if (sessionLoading || (profile && loading)) {
     return (
-      <div className="space-y-6" aria-busy="true" aria-label="Loading Finance">
+      <div role="status" className="space-y-6" aria-busy="true" aria-label="Loading Finance">
+        <span className="sr-only">Loading Finance</span>
         <SkeletonStats />
         <SkeletonList rows={5} />
       </div>
@@ -62,6 +63,8 @@ export function FinanceApp() {
     );
   }
 
+  const receiptId = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('receipt');
+  if (receiptId) return <ReceiptSourceView key={`${profile.id}:${JSON.stringify([roleCapabilities, userCapabilities])}:${receiptId}`} id={receiptId} searchSources={searchSources} loadEvidenceOptions={loadEvidenceOptions} entries={data.closeEntries} openEvidence={openCloseEvidence} />;
   const summary = summarizeFinanceData(data);
   const failedSources = (Object.entries(data.sourceStates ?? {}) as [FinanceSource, string][])
     .filter(([, state]) => state === 'error').map(([source]) => source);
@@ -76,10 +79,11 @@ export function FinanceApp() {
         title="Finance control center"
         description="Follow commitments from approved purchase order through receipt, reconciliation, and payment readiness."
         icon="coins"
+        className="!p-4 sm:!p-5"
         action={
           procurementFinance && nextReview ? (
             <HeroChipButton
-              href={`/procurement/purchase-orders/${encodeURIComponent(nextReview.purchaseOrderId)}`}
+              href={`/procurement/purchase-orders/${encodeURIComponent(nextReview.purchaseOrderId)}?section=payment&from=finance#payment`}
               icon="arrowRight"
             >
               Review next payment pack
@@ -95,7 +99,7 @@ export function FinanceApp() {
           )
         }
         accessory={
-          <div className="flex max-w-[14rem] flex-wrap justify-end gap-1.5">
+          <div className="flex min-w-0 flex-wrap gap-1.5">
             {isDemo && <Badge tone="amber">Demo memory</Badge>}
             {warehouseFinance && (
               <Badge tone="emerald">Warehouse Finance</Badge>
@@ -132,18 +136,23 @@ export function FinanceApp() {
         </div>
       )}
 
+      <nav aria-label="Finance sections" className="flex flex-wrap gap-4 border-y border-line py-2 text-sm font-semibold">
+        {procurementFinance && <a className="inline-flex min-h-11 items-center" href="#finance-payments">Payment reviews</a>}
+        <a className="inline-flex min-h-11 items-center" href="#finance-close">Finance close</a>
+        <a className="inline-flex min-h-11 items-center" href="#finance-activity">Activity</a>
+      </nav>
       {data.totals && <p className="text-sm text-muted">Activity period: {data.totals.periodStart} to {data.totals.periodEnd}</p>}
       <FinanceOverview summary={summary} states={data.sourceStates} procurement={procurementFinance} warehouse={warehouseFinance} />
       {data.sourceStates?.inventory === 'error' && <button className="btn-outline" disabled={retryingSources.inventory} onClick={() => void retrySource('inventory')}>Retry inventory source</button>}
 
-      <div className="grid min-w-0 max-w-full gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)] xl:items-start">
+      <div className="min-w-0 max-w-full space-y-4">
         {procurementFinance && (data.sourceStates?.payments === 'error' ? <p role="status">Payment queue unavailable. <button className="btn-outline" disabled={retryingSources.payments} onClick={() => void retrySource('payments')}>Retry payment source</button></p> : <FinanceReviewQueue items={data.payments} />)}
-        <Card className="space-y-4">
-          <div>
+        <div className="grid min-w-0 gap-4 border-y border-line py-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <div className="min-w-0">
             <p className="text-xs font-semibold uppercase text-faint">
               Control ownership
             </p>
-            <h2 className="mt-1 font-display text-lg font-bold text-ink">
+            <h2 className="mt-1 font-display text-base font-bold text-ink">
               Review and release from the governed PO
             </h2>
             <p className="mt-1 text-sm text-muted">
@@ -152,7 +161,7 @@ export function FinanceApp() {
               owns receiving, inspection, counts, and custody.
             </p>
           </div>
-          <div className="grid gap-2">
+          <div className="grid min-w-0 content-start gap-1 sm:grid-cols-2 lg:grid-cols-1">
             {procurementFinance && (
               <a
                 href="/procurement/purchase-orders"
@@ -181,7 +190,7 @@ export function FinanceApp() {
               </a>
             )}
           </div>
-        </Card>
+        </div>
       </div>
 
       {mode === 'supabase' && !mayManageClose && roleCapabilities?.warehouse?.includes('manage_finance_close') && <p role="status">Close actions require certification. <a className="underline" href="/onboarding">Complete Finance onboarding</a></p>}

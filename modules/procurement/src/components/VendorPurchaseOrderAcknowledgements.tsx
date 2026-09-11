@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useReadQuery } from '../useReadQuery';
 import { useSession } from '@intra/auth';
 import { CertifiedAction } from '@intra/learning';
 import { Badge, money, userFacingError } from '@intra/ui';
@@ -20,29 +21,25 @@ type VendorPo = {
 export function VendorPurchaseOrderAcknowledgements() {
   const { profile, mode, supabaseClient, signOut } = useSession();
   const [reviewed, setReviewed] = useState<Record<string, string>>({});
-  const [rows, setRows] = useState<VendorPo[]>([]);
   const [reference, setReference] = useState<Record<string, string>>({});
   const [error, setError] = useState<string>();
-  const [loading, setLoading] = useState(true);
   const live = mode === 'supabase' ? supabaseClient : null;
 
-  const refresh = useCallback(async () => {
-    if (!live || profile?.kind !== 'vendor') { setRows([]); setLoading(false); return; }
-    setLoading(true);
-    const { data, error: rpcError } = await live.schema('procurement').rpc('vendor_purchase_order_acknowledgements', { payload: {} });
-    if (rpcError) { setError(rpcError.message); setRows([]); } else { setError(undefined); setRows((data ?? []) as VendorPo[]); }
-    setLoading(false);
-  }, [live, profile?.kind]);
-
-  useEffect(() => { void refresh(); }, [refresh]);
+  const [rows, loading, refresh, readError] = useReadQuery<VendorPo>(profile?.kind === 'vendor' ? live : null, `vendor-pos:${profile?.id}:${profile?.vendorId}`, async () => {
+    const { data, error: rpcError } = await live!.schema('procurement').rpc('vendor_purchase_order_acknowledgements', { payload: {} });
+    if (rpcError) throw new Error(rpcError.message);
+    setError(undefined);
+    return (data ?? []) as VendorPo[];
+  });
 
   if (profile?.kind !== 'vendor') return <p role="alert" className="p-6 text-sm text-muted">Vendor access is required.</p>;
   return <main className="mx-auto max-w-4xl space-y-5 p-4 md:p-6" aria-label="Vendor PO acknowledgements">
     <nav aria-label="Vendor portal" className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3"><a href="/vendor/" className="btn-outline">Back to vendor portal</a><span className="text-sm [overflow-wrap:anywhere]">{profile.name}</span><button type="button" className="btn-ghost" onClick={() => void signOut()}>Sign out</button></nav>
     <header><h1 className="text-xl font-semibold text-ink">Purchase order acknowledgements</h1><p className="text-sm text-muted">Only purchase orders awarded to your organization appear here.</p></header>
     {error ? <p role="alert" className="text-sm text-rose-700">{userFacingError(error)}</p> : null}
-    {loading ? <p className="text-sm text-muted">Loading awarded purchase orders...</p> : null}
-    {!loading && rows.length === 0 ? <p className="text-sm text-muted">No issued purchase orders require acknowledgement.</p> : null}
+    {readError && <div role="alert"><p>{readError}</p><button type="button" className="btn-outline" disabled={loading} onClick={() => void refresh()}>Retry purchase orders</button></div>}
+    {loading ? <p role="status" aria-busy="true" className="text-sm text-muted">Loading awarded purchase orders...</p> : null}
+    {!loading && !readError && rows.length === 0 ? <p className="text-sm text-muted">No issued purchase orders require acknowledgement.</p> : null}
     {rows.map((po) => <section key={po.id} className="space-y-3 rounded-lg border border-line p-4">
       <div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="font-semibold text-ink">{po.poNumber}</h2><p className="text-sm text-muted">{po.vendorName}</p></div><Badge tone={po.lifecycle.acknowledgementStatus === 'acknowledged' ? 'emerald' : po.lifecycle.acknowledgementStatus === 'overdue' ? 'rose' : 'amber'}>{po.lifecycle.acknowledgementStatus}</Badge></div>
       {po.lifecycle.acknowledgementDueAt ? <p className="text-xs text-muted">Acknowledgement due {new Date(po.lifecycle.acknowledgementDueAt).toLocaleString()}</p> : null}

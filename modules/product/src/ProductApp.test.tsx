@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionValue } from "@intra/auth";
 import type { ProductWorkspaceData } from "./data";
@@ -38,6 +38,7 @@ const DATA: ProductWorkspaceData = {
       productId: "prod-1",
       title: "Remote care launch",
       version: 2,
+      kitRequired: false,
       status: "submitted",
       evidence: [
         {
@@ -137,6 +138,24 @@ describe("ProductApp", () => {
     expect(screen.queryByRole("button", { name: "Propose price" })).not.toBeInTheDocument();
   });
 
+  it('keeps the summary with its record permalink and restores the Ops handoff after refresh', () => {
+    state.session = session(['operations_partner']);
+    state.workspace.data = { ...DATA, readiness: [{ ...DATA.readiness[0]!, status: 'approved', isCurrent: true, kitPublication: { status: 'draft' } }] };
+    state.workspace.error = 'Read failed';
+    const view = render(<ProductApp />);
+    const article = screen.getByRole('article', { name: 'Remote care launch readiness package' });
+    const summary = within(article).getByRole('region', { name: 'Workflow status' });
+    expect(summary).toHaveTextContent('Readiness status unavailable');
+    expect(within(article).getByRole('link', { name: 'Link to this record' })).toHaveAttribute('href', '#readiness-ready-1');
+    state.workspace.error = null;
+    view.rerender(<ProductApp />);
+    expect(summary).toHaveTextContent('Operations partner');
+    expect(summary).toHaveTextContent('WMS kit publication follows');
+    expect(within(summary).queryByRole('button')).not.toBeInTheDocument();
+    expect(within(article).getAllByRole('button', { name: 'Acknowledge Operations handoff' })).toHaveLength(1);
+    expect(within(article).getByRole('button', { name: 'Acknowledge Operations handoff' })).toBeEnabled();
+  });
+
   it('provides thumb-sized permalinks without promising a separate history view', () => {
     render(<ProductApp />);
     const links = screen.getAllByRole('link', { name: 'Link to this record' });
@@ -184,6 +203,25 @@ describe("ProductApp", () => {
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Approve go-live" })).not.toBeInTheDocument();
     expect(screen.queryByText("Pricing governance")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    [true, false, false, 'Required before handoff'],
+    [true, true, true, 'Verified'],
+    [false, undefined, true, 'Not required before handoff'],
+    [undefined, undefined, false, 'Unknown - confirm kit requirement with Product'],
+  ] as const)('UX24 aligns kit display and handoff for required=%s approved=%s', (kitRequired, kitApproved, enabled, label) => {
+    state.session = session(['operations_partner']);
+    state.workspace.data = { ...DATA, readiness: [{ ...DATA.readiness[0]!, status: 'approved', kitRequired, kitApproved }] };
+    render(<ProductApp />);
+    expect(screen.getByText(label)).toBeInTheDocument();
+    const button = screen.getByRole('button', { name: 'Acknowledge Operations handoff' });
+    expect((button as HTMLButtonElement).disabled).toBe(!enabled);
+    if (!enabled) {
+      fireEvent.click(button);
+      expect(state.workspace.acknowledgeHandoff).not.toHaveBeenCalled();
+      expect(screen.getByText(/Operations handoff is blocked/)).toBeInTheDocument();
+    }
   });
 
   it("keeps contributors in preparation and proposal actions", () => {

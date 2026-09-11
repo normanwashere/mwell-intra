@@ -599,7 +599,7 @@ const definitions: FeatureDefinition[] = [
     route: "/login",
     roleIds: ["core_staff_only", "platform_admin", "vendor_portal"],
     purpose:
-      "Creates a secure employee or vendor session and returns the user to an approved destination.",
+      "Creates a secure employee or vendor session and returns the user to an approved destination. The September 11 local candidate preserves supported guide, task and record query context after checking destination access; this is not a live-release claim.",
     reads:
       "Authentication configuration, requested return path, and the identity returned by the provider.",
     writes:
@@ -713,13 +713,13 @@ const definitions: FeatureDefinition[] = [
     purpose:
       "Combines assignments and approvals from accessible departments into one personal queue without moving decision authority.",
     reads:
-      "The governed core.v_my_work projection or demo queue, filtered by effective capabilities and valid source records before filters, sorting, and priority counts are calculated.",
+      "The governed core.v_my_work projection or demo queue, filtered by effective capabilities and valid source records before filters, sorting, and priority counts are calculated. In the September 11 local candidate, start at the My Work heading and primary assignments queue before reviewing follow-ups below. How work is assigned opens the exact My Work guide; browser Back returns to the queue.",
     writes:
       "No source transaction changes; selecting Open source navigates to the authoritative record.",
     statuses:
       "Loading, priority work, normal work, filtered, empty, source unavailable, or retrying.",
     exception:
-      "If a queue item is stale, open its source and trust the current source status before retrying or escalating.",
+      "If a queue item is stale, open its source and trust the current source status before retrying or escalating. Queue unavailable means the read failed: use Retry and do not infer that you are caught up from a count or retained rows. No work in this view means only that no matching assignments were returned; other departments may still be working on your requests.",
     completionEvidence:
       "The authoritative source record opens under the same identity and displays its current decision or action state.",
   },
@@ -737,7 +737,7 @@ const definitions: FeatureDefinition[] = [
     purpose:
       "Owns activation intent, dates, lifecycle, and the handoff into Warehouse fulfillment while preserving physical custody ownership.",
     reads:
-      "Event records, dates, type, location, and Warehouse allocation totals for reserved, issued, and returned units.",
+      "Event records, dates, type, location, and Warehouse allocation totals for reserved, issued, and returned units. In the September 11 local candidate, event detail shows Current status, Next responsibility, Next step and any Needs attention message. Read lifecycle, custody and reconciliation together: event completion or settlement approval is not Finance close. The next role is not a person assignment or access grant; retry unavailable data before acting.",
     writes:
       "Authorized requesters and coordinators create event intent; stock reservation, issue, and return remain Warehouse commands.",
     statuses:
@@ -761,13 +761,13 @@ const definitions: FeatureDefinition[] = [
     purpose:
       "Presents role-scoped operational and executive indicators from governed source data without granting operational writes.",
     reads:
-      "The governed core.v_insights_snapshot projection filtered by the caller's Insights capabilities.",
+      "The governed core.v_insights_snapshot projection filtered by the caller's Insights capabilities. In the September 11 local candidate, choosing an area updates its address for copying, reload and browser Back/Forward; an invalid or unauthorized area offers All available insights.",
     writes:
       "Source operational data remains unchanged. Authorized users request validation or escalation using an indicator reference and controlled reason, then track the follow-up in My Work; authorized owners acknowledge and resolve it with a resolution record reference.",
     statuses:
       "Indicators: loading, ready, on target, review required, empty, source unavailable, or access denied. Follow-ups: open, acknowledged, or resolved.",
     exception:
-      "Do not reconcile a metric by editing an export; open and correct the authoritative source workflow.",
+      "Do not reconcile a metric by editing an export; open and correct the authoritative source workflow. In the September 11 local candidate, follow-up failures remain inside the open dialog. Retry the same request and use its My Work tracking link instead of creating a duplicate.",
     completionEvidence:
       "The metric's source link opens the permitted operational record or queue. My Work shows follow-up status, acknowledgement and resolution actor/time, and the resolution reference to the requester and authorized owner; source access remains independently restricted.",
   },
@@ -784,7 +784,7 @@ const definitions: FeatureDefinition[] = [
     purpose:
       "Coordinates readiness evidence, the Product-owned go-live decision, Operations acknowledgement, and independently governed price proposals.",
     reads:
-      "Product readiness records, launch criteria, current decision, Operations handoff state, and effective-dated price proposals.",
+      "Product readiness records, launch criteria, current decision, Operations handoff state, and effective-dated price proposals. In the September 11 local candidate, read Current status, Next responsibility, Next step and any Needs attention message on the readiness package. Next responsibility is a role-level handoff, not a person assignment or permission grant. Confirm the current approved version and required evidence; unknown readiness is not ready. Kit approval: Not required before handoff is separate from Kit publication in WMS. Active kit publication follows the approved Operations handoff; a missing visible definition or unavailable publication read does not create an approval prerequisite. Acknowledgement does not publish the kit.",
     writes:
       "Contributors prepare evidence and proposals; Product Owners decide go-live and pricing; Operations Partners acknowledge the approved handoff through governed RPCs.",
     statuses:
@@ -822,7 +822,7 @@ const definitions: FeatureDefinition[] = [
     purpose:
       "Allows the platform administrator to review profiles and assign the minimum approved module roles.",
     reads:
-      "Core profiles, active user_roles assignments, and shared module role definitions.",
+      "Core profiles, active user_roles assignments, and shared module role definitions. In the September 11 local candidate, directory search, status, account kind, page and the selected Manage user are preserved in the address. Links do not save role changes; use Retry directory or Retry user details when a read fails.",
     writes:
       "Adds or removes scoped role assignments through the governed administration service.",
     statuses:
@@ -841,13 +841,13 @@ const definitions: FeatureDefinition[] = [
     purpose:
       "Lets an authorized platform administrator investigate attributable platform and cross-module activity without modifying the evidence.",
     reads:
-      "Readable action and entity labels, actor identity, module, time, retained entity reference, event code, and raw technical payload.",
+      "Readable action and entity labels, actor identity, module, time, retained entity reference, event code, and raw technical payload. The September 11 local candidate searches retained authorized history in steps of at most 2,000 events and shows up to 50 matches per page, with UTC+08 date boundaries. Search unfinished means older history remains unchecked, including when the current segment has no matches.",
     writes:
-      "No audit evidence is changed; search, action, and module filters only change the current view.",
+      "No audit evidence is changed. In the local candidate, enter text, module and optional From/Through dates, then select Search. Continue searching checks the next segment of unfinished history; Older results opens known further matches and Previous revisits a page. Export current page CSV downloads only that page, not the entire matching history; unapplied filter edits block paging and export.",
     statuses:
       "Loading, ready, filtered, technical details expanded, no matching evidence, source unavailable, or access denied.",
     exception:
-      "If expected evidence is missing, stop the access change, preserve the reference, and escalate to Platform Security before retrying.",
+      "In the local candidate, use Retry audit history after a failed read. Unavailable or unfinished history is not proof of missing evidence. Apply filters and use Continue searching or Older results while offered before concluding a record is absent; preserve its reference and escalate to Platform Security if it remains unexplained.",
     completionEvidence:
       "The selected event displays a readable action, entity, actor, module, and time, with identifiers and raw payload available under Technical details.",
   },
@@ -1023,13 +1023,13 @@ const definitions: FeatureDefinition[] = [
     purpose:
       "Coordinates app-native multi-line ecommerce intake, transitional CSV migration, internal and third-party event demand, multi-item department stock requests, customer returns, Product-approved kits, directed rack/bin picking, packing supplies, shipments, accountable handovers, open-box re-kitting, and warehouse release in one governed workspace.",
     reads:
-      "Orders and events and Department requests display actionable counts. Floor work filters the fulfillment queue to actionable floor tasks. For a pending department or event request, select View request to open Review request, inspect quantities and approval context, then select Approve only when authorized. Recheck the source request status before the Operations handoff. Demand references, department and cost center, events, stock, reservations, serial identities, supplies, returns, Product approval, shipment evidence, and decisions remain linked.",
+      "Orders and events and Department requests display actionable counts. Floor work filters the fulfillment queue to actionable floor tasks. For a pending department or event request, select View request to open Review request, inspect quantities and approval context, then select Approve only when authorized. Recheck the source request status before the Operations handoff. In the September 11 local candidate, order details, department-request details and customer-return resolution/closure forms show Current status, Next responsibility, Next step and any Needs attention message. Next responsibility is a role, not a person assignment or permission grant. Request approval is not issue, release is not receipt, and customer closure does not release quarantined stock. An unavailable linked order cannot confirm completion. Demand references, department and cost center, events, stock, reservations, serial identities, supplies, returns, Product approval, shipment evidence, and decisions remain linked.",
     writes:
       "Creates complete app-native ecommerce orders or validated CSV migration records, event demand, multi-line department requests, and returns; calculates commercial totals and VAT; records independent request decisions, reservations, scanned pick bins, optional line evidence, courier tracking, and linked backorders; advances separated pick-pack-release-delivery states with shipment history; and preserves replacement, Finance, supplier, closure, packaging, issue, and re-kit lineage.",
     statuses:
       "Received, allocated, picking, packing, ready, released, dispatched, in transit, delivery failed, returned to sender, delivered, completed, cancelled, pending approval, approved, rejected, submitted, resolved, customer closed, active, or inspection.",
     exception:
-      "Stop for incomplete ecommerce customer, address, payment, or line data; invalid commercial totals; insufficient or held stock; duplicate or missing serials; incomplete bundle sets; missing Product approval; unavailable packaging; missing courier, waybill, tracking link, or proof of delivery; quarantine, Finance, supplier RMA, or closure evidence; same-person pack and release; stale status; invalid cost center; or self-approval.",
+      "Stop for incomplete ecommerce customer, address, payment, or line data; invalid commercial totals; insufficient or held stock; duplicate or missing serials; incomplete bundle sets; missing Product approval; unavailable packaging; missing courier, waybill, tracking link, or proof of delivery; quarantine, Finance, supplier RMA, or closure evidence; same-person pack and release; stale status; invalid cost center; or self-approval. For a rejected stock request, ask the approver for the reason and create a new corrected request if still needed. The original remains rejected and immutable; there is currently no stock-request rejection-reason input, in-place resubmission or system-linked revision. This is not Procurement's revision workflow. Awaiting receipt confirmation names Recipient / another authorized staff member as the next responsibility, without granting permission. The person who released the items cannot confirm receipt; actual receipt, reference and proof remain required.",
     completionEvidence:
       "The source demand, departmental owner, reservation, backorder lineage, picked identities, packaging treatment, dispatch, delivery failure or proof, independent release, recipient acknowledgment, request decision, quarantine, replacement or refund evidence, customer closure, and return or re-kit outcome remain visible and attributable.",
   },
@@ -1229,7 +1229,7 @@ const definitions: FeatureDefinition[] = [
     purpose:
       "Combines authorized procurement commitments, payment readiness, warehouse receipts, returns, inventory valuation, and event settlement in one review workspace. Memory-mode event settlement remains visibly demo-only.",
     reads:
-      "Purchase orders, payment-readiness packs, receipt evidence, returns, stock valuation, and cross-module activity permitted by the user's scoped Finance roles.",
+      "Purchase orders, payment-readiness packs, receipt evidence, returns, stock valuation, and cross-module activity permitted by the user's scoped Finance roles. In the September 11 local candidate, payment queue PO links and Review next payment pack open that PO's Payment handoff section, with Back to Finance. Expand Workflow details for the close entry's source reference to read Current status, Next responsibility, Next step and any Needs attention message; existing-entry edit and flag forms also show the summary. The next role is not a person assignment or action grant; preparation, independent posting and reconciliation remain separate. Unknown readiness is not ready. Viewing receipt or Quality evidence does not grant receiving or inspection authority.",
     writes:
       "For live manual close preparation, select only a purchase order, warehouse receipt, or posted payment release by business reference. Entry categories do not create additional source types: returns and adjustments are not manual close sources, and Event settlement is system-generated through the governed Event workflow. Eligible non-Event draft, ready, or exception entries can be edited and resubmitted under the same ID/version. An independent poster posts a ready entry; a different independent reconciler reconciles the posted entry.",
     statuses:
@@ -1425,7 +1425,7 @@ const definitions: FeatureDefinition[] = [
     purpose:
       "Presents the authoritative request snapshot, sourcing work, approvals, evidence, comments, and resulting award or PO readiness.",
     reads:
-      "Request snapshot, lines, route, approvals, vendors, accreditation, attachments, comments, and activity.",
+      "Request snapshot, lines, route, approvals, vendors, accreditation, attachments, comments, and activity. In the September 11 local candidate, where Workflow status is shown, read Current status, Next responsibility, Next step and any Needs attention message before using the existing controls. Next responsibility describes a role or review tier, not a named-person assignment, owner change or permission grant. Verify the pending approval route and any linked PO; request approval does not establish PO issue or payment readiness. Unverified requirements are not ready.",
     writes:
       "The requester can edit an owned draft or revise a rejected request with current creation authority. Save the corrected need, vendor, lines and governed attachments under the same request ID and expected revision. Prior approval, exception, route and sourcing history stays archived; fresh routing and a new approval ladder are required. Other authorized actions update sourcing artifacts, comments, decisions or award readiness.",
     statuses:
@@ -1482,7 +1482,7 @@ const definitions: FeatureDefinition[] = [
     statuses:
       "Draft, approval ready, approved, issued, partial receipt, received, accepted, payment ready, or cancelled.",
     exception:
-      "Stop when source approval, vendor eligibility, amounts, or receipt evidence do not reconcile.",
+      "Stop when source approval, vendor eligibility, amounts, or receipt evidence do not reconcile. In the September 11 local candidate, a failed list read offers Retry purchase orders instead of claiming no orders exist.",
     completionEvidence:
       "The selected PO opens with source request, supplier, value, status, receipt, acceptance, and finance trail.",
   },
@@ -1499,15 +1499,15 @@ const definitions: FeatureDefinition[] = [
       "procurement_admin",
     ],
     purpose:
-      "Controls one purchase order from approved demand through supplier issue, category-specific acceptance, invoice matching, payment release, and closure.",
+      "Controls one purchase order from approved demand through supplier issue, category-specific acceptance, invoice matching, payment release, and closure. In the September 11 local candidate, use Line items, Policy evidence, Receiving and Payment handoff section links where shown; these links do not perform a business action.",
     reads:
-      "PO, request, award, vendor, accreditation, receipts, inspections, acceptance, invoice, and decision history. A fully received PO may show Closed before payment; check the separate Finance readiness and payment-release evidence. Issued and fully received Closed POs can enter payment preparation when every required acceptance and invoice control is satisfied. Draft and cancelled POs cannot.",
+      "PO, request, award, vendor, accreditation, receipts, inspections, acceptance, invoice, and decision history. In the September 11 local candidate, where Workflow status is shown, read Current status, Next responsibility, Next step and any Needs attention message. The next role is not a person assignment or permission grant; unavailable commitment or downstream readiness is not ready. A fully received PO may show Closed before payment; check the separate Finance readiness and payment-release evidence. Issued and fully received Closed POs can enter payment preparation when every required acceptance and invoice control is satisfied. Draft and cancelled POs cannot.",
     writes:
       "Records approval, issue, receipt linkage, goods/service/milestone acceptance, structured invoice evidence, Finance review, payment release reference, and a required PO cancellation reason. A failed live cancellation leaves the displayed PO unchanged.",
     statuses:
       "Draft, blocked, approved, issued, partially accepted, accepted, payment ready, returned, released, closed, or cancelled. Received counts use the matching normalized PO line; Unknown means the count could not be read and is not zero. Not yet QC accepted (outstanding) is separate from physical receipt. Awaiting QC acceptance can remain after delivery closes the PO. Package closed requires confirmed governed closure; otherwise PO closed; lifecycle review required retains the current control gaps and recovery requirements.",
     exception:
-      "Do not issue or mark ready when accreditation, approval, receipt, inspection, acceptance, invoice, or amount match fails. Correct only the latest same-PO invoice lineage: a returned pack, or an accepted/released pack whose evidence is stale and has no released amount. A current accepted pack is not replaceable; any paid amount requires Finance reconciliation. Never change invoice spelling or number to bypass duplicate controls.",
+      "Do not issue or mark ready when accreditation, approval, receipt, inspection, acceptance, invoice, or amount match fails. Closed does not confirm settlement; accepted evidence alone does not authorize payment release. In the September 11 local candidate, use Retry closure review for an unavailable closure read and Retry goods acceptance on an unavailable goods-acceptance record. An unavailable supporting read is not proof that no responsibility remains. Correct only the latest same-PO invoice lineage: a returned pack, or an accepted/released pack whose evidence is stale and has no released amount. A current accepted pack is not replaceable; any paid amount requires Finance reconciliation. Never change invoice spelling or number to bypass duplicate controls.",
     completionEvidence:
       "Controlled PO, acceptance value, computed invoice match, Finance decision, payment reference, released amount, and closure state are linked.",
   },
@@ -1520,7 +1520,7 @@ const definitions: FeatureDefinition[] = [
     purpose:
       "Queues vendor accreditation cases and post-accreditation renewal, document expiry, performance, reassessment, suspension, and offboarding reviews by risk, owner, due date, evidence, and required Legal action.",
     reads:
-      "Vendors, cases, submissions, risk facts, checklist progress, instruments, decisions, and expiry dates.",
+      "Vendors, cases, submissions, risk facts, checklist progress, instruments, decisions, and expiry dates. In the September 11 local candidate, the Cases/Lifecycle view and case filter remain in the address. A failed case or supporting-evidence read offers Retry cases; it is not an empty queue.",
     writes:
       "Opens and advances governed vendor lifecycle reviews; accreditation decisions remain in the case detail, while suspension and offboarding update supplier eligibility and disable linked vendor access.",
     statuses:
@@ -1538,7 +1538,7 @@ const definitions: FeatureDefinition[] = [
     purpose:
       "Reviews submitted vendor facts, requirement evidence, technology qualification, instruments, decisions, and lifecycle controls.",
     reads:
-      "Case snapshot, vendor, application, documents, checklist, risk, instruments, signatures, decisions, and activity.",
+      "Case snapshot, vendor, application, documents, checklist, risk, instruments, signatures, decisions, and activity. In the September 11 local candidate, read Current status, Next responsibility, Next step and any Needs attention message on case detail. Next responsibility is a role-level handoff, not a person assignment or access grant. Check outstanding evidence, vendor corrections and independent confirmation: a proposed decision is not final and provisional clearance is not full accreditation. Unknown checklist coverage is not readiness; retry unavailable case data before acting.",
     writes:
       "Records evidence reviews, source-version-bound corrections, instruments, signatures, decisions and lifecycle events. Request correction remains available for an eligible case even when uploads are complete. Record manual reminder records follow-up only; it does not send an email or prove delivery.",
     statuses:
@@ -1631,11 +1631,11 @@ const definitions: FeatureDefinition[] = [
     purpose:
       "Shows an enrolled vendor only purchase orders awarded to its organization and records an attributable acknowledgement against the current issued revision.",
     reads:
-      "Vendor-scoped issued purchase orders, lifecycle revision, acknowledgement status, and acknowledgement due time.",
+      "Vendor-scoped issued purchase orders, lifecycle revision, acknowledgement status, and acknowledgement due time. In the September 11 local candidate, choose Purchase orders in the vendor workspace header and Back to vendor portal to return to applications. Navigation does not acknowledge an order.",
     writes:
       "Records the vendor acknowledgement reference through the governed lifecycle RPC without changing commercial terms or another vendor's order.",
     statuses:
-      "No issued orders, pending acknowledgement, overdue acknowledgement, acknowledged, refreshing, or submission failed.",
+      "No issued orders, pending acknowledgement, overdue acknowledgement, acknowledged, refreshing, or submission failed. The September 11 local candidate distinguishes unavailable reads with Retry purchase orders from a successfully loaded empty list.",
     exception:
       "Do not acknowledge an unfamiliar or incorrect purchase order; contact Procurement with the PO number and leave the order pending until corrected.",
     completionEvidence:

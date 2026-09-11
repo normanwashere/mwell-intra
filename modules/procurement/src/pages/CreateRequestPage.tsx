@@ -20,7 +20,6 @@ import {
   Badge,
   Button,
   Field,
-  HeroChipButton,
   Icon,
   InfoTip,
   Input,
@@ -752,17 +751,13 @@ export function CreateRequestPage() {
 
   return (
     <Guard module="procurement" cap="create_request">
-      <div className="mx-auto max-w-4xl space-y-6">
+      <div className="mx-auto min-w-0 max-w-5xl space-y-5">
         <ModuleHero
           eyebrow="New request"
           title="Draft a purchase request"
           description="Three quick steps — the sourcing path and approval ladder preview themselves as you type."
           icon="cart"
-          action={
-            <HeroChipButton icon="x" href="/procurement">
-              Cancel
-            </HeroChipButton>
-          }
+          className="!p-4 sm:!p-5"
         />
 
         {/* Compact stepper (legal invite-wizard house pattern) */}
@@ -837,7 +832,7 @@ export function CreateRequestPage() {
           {/* ==================== STEP 1 — What ==================== */}
           {step === 1 && (
             <>
-              <section className="card space-y-4 p-4 sm:p-5">
+              <section className="min-w-0 space-y-4 border-t border-line py-4">
                 <div>
                   <h2 className="font-display text-base font-bold text-ink">Category</h2>
                   <p className="text-xs text-muted">
@@ -918,7 +913,7 @@ export function CreateRequestPage() {
                 </fieldset>
               </section>
 
-              <section className="card space-y-4 p-4 sm:p-5">
+              <section className="min-w-0 space-y-4 border-t border-line py-4">
                 <div>
                   <h2 className="font-display text-base font-bold text-ink">Title & context</h2>
                 </div>
@@ -943,7 +938,7 @@ export function CreateRequestPage() {
                 </Field>
               </section>
 
-              <section className="card min-w-0 space-y-3 p-4 sm:p-5">
+              <section className="min-w-0 space-y-3 border-t border-line py-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <h2 className="font-display text-base font-bold text-ink">Line items</h2>
@@ -1211,7 +1206,7 @@ export function CreateRequestPage() {
           {/* ============ STEP 2 — Codes & justification ============ */}
           {step === 2 && (
             <>
-              <section className="card space-y-4 p-4 sm:p-5">
+              <section className="min-w-0 space-y-4 border-t border-line py-4">
                 <div>
                   <h2 className="font-display text-base font-bold text-ink">Who is it for?</h2>
                   <p className="text-xs text-muted">
@@ -1322,7 +1317,7 @@ export function CreateRequestPage() {
                 </div>
               </section>
 
-              <section className="card space-y-4 p-4 sm:p-5">
+              <section className="min-w-0 space-y-4 border-t border-line py-4">
                 <div>
                   <h2 className="flex items-center gap-1.5 font-display text-base font-bold text-ink">
                     Why is it needed?
@@ -1372,7 +1367,7 @@ export function CreateRequestPage() {
                 </div>
               </section>
 
-              <section className="card space-y-3 p-4 sm:p-5">
+              <section className="min-w-0 space-y-3 border-t border-line py-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <h2 className="font-display text-base font-bold text-ink">Attachments</h2>
@@ -1443,7 +1438,7 @@ export function CreateRequestPage() {
           {/* ============ STEP 3 — Sourcing & review ============ */}
           {step === 3 && (
             <>
-              <section className="card space-y-3 p-4 sm:p-5">
+              <section className="min-w-0 space-y-3 border-t border-line py-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <h2 className="font-display text-base font-bold text-ink">Procurement route</h2>
@@ -1470,7 +1465,7 @@ export function CreateRequestPage() {
                   </p>
                 )}
                 {route?.solicitationType === 'rfq' && (
-                  <section className="space-y-3 rounded-lg border border-line bg-surface p-4" aria-labelledby="rfq-brief-heading">
+                  <section className="min-w-0 space-y-3 border-t border-line pt-3" aria-labelledby="rfq-brief-heading">
                     <div><h3 id="rfq-brief-heading" className="font-semibold text-ink">RFQ requirements</h3><p className="text-xs text-muted">These structured terms become the quotation brief for suppliers.</p></div>
                     <div className="grid gap-3 sm:grid-cols-2">{([
                       ['acceptanceCriteria', 'Acceptance criteria'], ['deliveryTerms', 'Delivery terms'], ['paymentTerms', 'Payment terms'], ['shippingTerms', 'Shipping terms'], ['validityPeriod', 'Quotation validity'], ['responseDeadline', 'Response deadline'],
@@ -1478,7 +1473,7 @@ export function CreateRequestPage() {
                   </section>
                 )}
                 {route?.solicitationType === 'rfp' && (
-                  <section className="space-y-3 rounded-lg border border-line bg-surface p-4" aria-labelledby="rfp-brief-heading">
+                  <section className="min-w-0 space-y-3 border-t border-line pt-3" aria-labelledby="rfp-brief-heading">
                     <div><h3 id="rfp-brief-heading" className="font-semibold text-ink">RFP requirements</h3><p className="text-xs text-muted">These structured terms become the proposal brief and evaluation record.</p></div>
                     <Field label="Scope of work" htmlFor="rfp-scope"><Textarea id="rfp-scope" value={solicitationRequirements.scopeOfWork ?? ''} onChange={(event) => setSolicitationRequirements((current) => ({ ...current, scopeOfWork: event.target.value }))} /></Field>
                     <Field label="Evaluation approach" htmlFor="rfp-evaluation"><Textarea id="rfp-evaluation" value={solicitationRequirements.evaluationApproach ?? ''} onChange={(event) => setSolicitationRequirements((current) => ({ ...current, evaluationApproach: event.target.value }))} /></Field>
@@ -1550,7 +1545,7 @@ export function CreateRequestPage() {
                 )}
 
                 {riskFacts.importation && (
-                  <section className="space-y-3 rounded-lg border border-line p-4">
+                  <section className="min-w-0 space-y-3 border-t border-line pt-3">
                     <div>
                       <h3 className="font-semibold text-ink">Importation plan</h3>
                       <p className="text-xs text-muted">
@@ -1615,7 +1610,7 @@ export function CreateRequestPage() {
                 )}
               </section>
 
-              <section className="card space-y-3 p-4 sm:p-5">
+              <section className="min-w-0 space-y-3 border-t border-line py-4">
                 <div>
                   <h2 className="font-display text-base font-bold text-ink">
                     Financial protection review
@@ -1632,7 +1627,7 @@ export function CreateRequestPage() {
                 />
               </section>
 
-              <section className="card space-y-3 p-4 sm:p-5">
+              <section className="min-w-0 space-y-3 border-t border-line py-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <h2 className="flex items-center gap-1.5 font-display text-base font-bold text-ink">
@@ -1662,7 +1657,7 @@ export function CreateRequestPage() {
                 </ol>
               </section>
 
-              <section className="card space-y-3 p-4 sm:p-5">
+              <section className="min-w-0 space-y-3 border-t border-line py-4">
                 <div>
                   <h2 className="font-display text-base font-bold text-ink">Preferred vendor</h2>
                   <p className="text-xs text-muted">
@@ -1690,7 +1685,7 @@ export function CreateRequestPage() {
                 </Field>
               </section>
 
-              <section className="card space-y-3 p-4 sm:p-5">
+              <section className="min-w-0 space-y-3 border-t border-line py-4">
                 <div>
                   <h2 className="font-display text-base font-bold text-ink">
                     Required documents for {route ? `${route.solicitationType.toUpperCase()} / ${route.procurementMode.replaceAll('_', ' ')}` : 'this route'}

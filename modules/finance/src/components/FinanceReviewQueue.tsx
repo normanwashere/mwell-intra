@@ -46,7 +46,7 @@ const columns: Column<FinancePaymentItem>[] = [
     render: (row) => (
       <span className="block min-w-0">
         <a
-          href={`/procurement/purchase-orders/${encodeURIComponent(row.purchaseOrderId)}`}
+          href={`/procurement/purchase-orders/${encodeURIComponent(row.purchaseOrderId)}?section=payment&from=finance#payment`}
           className="inline-flex min-h-11 max-w-full items-center break-all font-semibold text-brand-700 hover:underline sm:break-normal dark:text-brand-300"
         >
           {row.poNumber}
@@ -96,7 +96,7 @@ export function FinanceReviewQueue({ items }: { items: FinancePaymentItem[] }) {
   const visible = paymentUrgency(items);
 
   return (
-    <section aria-label="Payment readiness" className="min-w-0 max-w-full overflow-hidden">
+    <section id="finance-payments" tabIndex={-1} aria-label="Payment readiness" className="min-w-0 max-w-full overflow-hidden">
       <SectionTitle
         title="Payment readiness"
         subtitle="Prioritized evidence packs handed off by Procurement"

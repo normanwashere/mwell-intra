@@ -1,10 +1,19 @@
 import { expect, it } from "vitest";
-import { recommendTasks } from "./taskRecommendations";
+import { eligibleTasks, recommendTasks } from "./taskRecommendations";
 import type { TaskDefinition } from "./taskCatalog";
 import { tasksForRoles } from "./taskCatalog";
 import { KNOWLEDGE_CONTENT } from "./content";
 
 const task = (id: string, priority = 1): TaskDefinition => ({ id, title: id, priority, outcome: "Read the assigned record", audience: "internal", roleIds: ["core_staff_only"], featureId: "my-work", actionCapabilities: [], availability: "live", guideHref: "/knowledge?article=feature-my-work", actionHref: "/work", module: "core", moduleLabel: "Core", personaIds: [], aliases: [] });
+
+it('UX11 enumerates every eligible combined-role task with role/module search, retaining recommendations', () => {
+  const tasks = tasksForRoles(KNOWLEDGE_CONTENT, { core: ['platform_admin'], product: ['product_owner'], insights: ['executive'] }, 'internal');
+  expect(tasks.length).toBeGreaterThan(3);
+  expect(new Set(eligibleTasks(tasks).map(t => t.id))).toEqual(new Set(tasks.filter(t => t.availability === 'live').map(t => t.id)));
+  expect(eligibleTasks(tasks, 'product').every(t => [t.title, t.outcome, t.moduleLabel, ...t.roleIds, ...t.aliases].join(' ').toLowerCase().includes('product'))).toBe(true);
+  expect(eligibleTasks([task('a'), task('b')], 'staff only')).toHaveLength(2);
+  expect(eligibleTasks(tasks, 'not-a-real-task')).toEqual([]);
+});
 
 it("ranks selected, resumed, assigned, then curated without granting eligibility", () => {
   expect(recommendTasks({ tasks: [task("curated"), task("assigned"), task("resumed"), task("selected"), task("forbidden")], eligibleTaskIds: new Set(["curated", "assigned", "resumed", "selected"]), selectedTaskId: "selected", resumableTaskId: "resumed", assignedTaskIds: ["forbidden", "assigned", "assigned"] }).map(task => task.id)).toEqual(["selected", "resumed", "assigned"]);

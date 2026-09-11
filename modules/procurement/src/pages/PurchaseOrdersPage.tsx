@@ -13,9 +13,6 @@ import {
   InfoTip,
   ModuleHero,
   SectionTitle,
-  StatCard,
-  StaggerGrid,
-  StaggerItem,
   money,
   useToast,
   type Column,
@@ -29,6 +26,7 @@ import { downloadCsv, purchaseOrdersToCsv } from '../export';
 import { formatDate, poStatusLabel } from '../labels';
 import { poReceiptSummary } from '../evidencePresentation';
 import { ProcurementAccessDenied } from '../components/ProcurementAccessDenied';
+import { QueueFilters } from '../components/QueueFilters';
 import { makeTypedSignature } from '../signature';
 import { createGovernedAttachmentUrl, type GovernedAccessClient } from '../attachments';
 
@@ -136,7 +134,7 @@ const PO_FILTER_LABEL: Record<PoFilter, string> = {
 };
 
 export function PurchaseOrdersPage() {
-  const { rows, loading } = usePurchaseOrders();
+  const { rows, loading, error: readError, refresh } = usePurchaseOrders();
   const { profile, mode, supabaseClient } = useSession();
   const { success, error } = useToast();
   const canAuthorPo = useCan('procurement', 'author_po');
@@ -146,7 +144,6 @@ export function PurchaseOrdersPage() {
   const canAdmin = useCan('procurement', 'admin');
   const canViewPurchaseOrders =
     canAuthorPo || canApproveAward || canFinalApprovePo || canViewFinance || canAdmin;
-  const firstName = profile?.name?.split(/\s+/)[0] ?? 'Procurement';
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const [amendmentItems, setAmendmentItems] = useState<AmendmentWorkItem[]>([]);
@@ -322,8 +319,7 @@ export function PurchaseOrdersPage() {
     );
   }
 
-  // One KPI surface (PR-1 treatment): StatCards are the counts AND the
-  // filters; hero carries no numbers; the count-tabs row is gone.
+  // Counts and filters share one compact queue control.
   const filterCards: Array<{
     key: PoFilter;
     label: string;
@@ -367,10 +363,10 @@ export function PurchaseOrdersPage() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-4">
       <ModuleHero
-        eyebrow="Purchase orders,"
-        title={firstName}
+        eyebrow="Procurement workspace"
+        title="Purchase orders"
         description="Author, approve, and issue POs to accredited vendors."
         icon="cart"
         action={
@@ -382,30 +378,7 @@ export function PurchaseOrdersPage() {
         }
       />
 
-      <StaggerGrid className="grid auto-rows-fr grid-cols-2 gap-3 lg:grid-cols-4">
-        {filterCards.map((c) => {
-          const active = filter === c.key;
-          return (
-            <StaggerItem
-              key={c.key}
-              className={
-                active
-                  ? 'h-full min-w-0 rounded-2xl ring-2 ring-brand-500 ring-offset-2 ring-offset-app'
-                  : 'h-full min-w-0'
-              }
-            >
-              <StatCard
-                label={c.label}
-                value={c.value}
-                icon={c.icon}
-                tone={c.tone}
-                hint={active ? 'Showing below' : c.hint}
-                onClick={() => applyFilter(c.key)}
-              />
-            </StaggerItem>
-          );
-        })}
-      </StaggerGrid>
+      <QueueFilters items={filterCards} value={filter} onChange={applyFilter} />
 
       <div>
         <SectionTitle
@@ -415,10 +388,10 @@ export function PurchaseOrdersPage() {
               ? kpis.openValue > 0
                 ? `${kpis.drafts + kpis.active} open · ${money(kpis.openValue)} on order`
                 : undefined
-              : `Filtered to ${PO_FILTER_LABEL[filter]} — tap a card above to change scope.`
+              : `Filtered to ${PO_FILTER_LABEL[filter]}`
           }
           action={
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {rows.length > 0 && (
                 <button type="button" className="btn-ghost btn-sm" onClick={exportCsv}>
                   <Icon name="download" className="h-4 w-4" /> Export CSV
@@ -432,7 +405,7 @@ export function PurchaseOrdersPage() {
           }
         />
 
-        {loading ? (
+        {readError ? <div role="alert"><p>{readError}</p><button type="button" className="btn-outline" disabled={loading} onClick={() => void refresh()}>Retry purchase orders</button></div> : loading ? (
           <div className="h-24 animate-pulse rounded-2xl bg-inset" aria-hidden />
         ) : visibleRows.length === 0 ? (
           <EmptyState
@@ -441,7 +414,7 @@ export function PurchaseOrdersPage() {
             message={
               filter === 'all'
                 ? 'Approve a request first — the PO authoring path opens from the request detail page.'
-                : 'Nothing in this bucket right now. Tap a card above to see other POs.'
+                : 'No purchase orders match this status.'
             }
             action={
               <Link to="/" className="btn-primary">
@@ -451,6 +424,7 @@ export function PurchaseOrdersPage() {
           />
         ) : (
           <DataTable
+            density="compact"
             rows={visibleRows}
             columns={columns}
             keyOf={(r) => r.id}

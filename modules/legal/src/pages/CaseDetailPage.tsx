@@ -37,11 +37,9 @@ import {
   Button,
   Card,
   DataTable,
-  HeroChipButton,
-  HeroStat,
   Icon,
   InfoTip,
-  ModuleHero,
+  PageHeader,
   SectionTitle,
   Sheet,
   SignaturePad,
@@ -102,6 +100,7 @@ import {
   accreditationSummaryFilename,
 } from '../caseSummary';
 import { applicationEditState, canRequestCorrection } from '../vendorCaseWorkflow';
+import { CaseWorkflowSummary } from '../CaseWorkflowSummary';
 
 const CHECKLIST_TONE: Record<ChecklistDecision, 'slate' | 'emerald' | 'rose' | 'amber'> = {
   pending: 'amber',
@@ -144,10 +143,12 @@ export function CaseDetailPage() {
     sendReminder,
     requestCorrection,
     loading: casesLoading,
+    error: readError,
+    refresh,
   } = useAccreditationCases();
-  const { forCase: checklistForCase, review, attach } = useChecklist();
-  const { forCase: docsForCase, setStatus: setDocStatus } = useAccreditationDocs();
-  const { forCase: signedForCase } = useSignedInstruments();
+  const { forCase: checklistForCase, review, attach, loading: checklistLoading, error: checklistError, refresh: refreshChecklist } = useChecklist();
+  const { forCase: docsForCase, setStatus: setDocStatus, loading: docsLoading, error: docsError, refresh: refreshDocs } = useAccreditationDocs();
+  const { forCase: signedForCase, loading: signedLoading, error: signedError, refresh: refreshSigned } = useSignedInstruments();
   const { rows: aliases } = useVendorAliases();
   const { rows: invites, retry: retryInvite } = useVendorInvites();
   const { rows: timeline } = useCaseTimeline(id);
@@ -237,7 +238,8 @@ export function CaseDetailPage() {
       </div>
     );
   }
-  if (!kase) return <Navigate to="/" replace />;
+  if (readError || checklistError || docsError || signedError) return <div role="alert" className="space-y-3"><p>Case data could not be loaded.</p><CaseWorkflowSummary readFailed /><button type="button" className="btn-outline" onClick={() => { void refresh(); void refreshChecklist?.(); void refreshDocs?.(); void refreshSigned?.(); }}>Retry case</button><Link to="/">Back to cases</Link></div>;
+  if (!kase) return <div role="status" className="space-y-3"><h1>Case unavailable</h1><p>This record is not available in your scope.</p><Link to="/" className="btn-outline">Back to cases</Link></div>;
 
   const isVendor = profile?.kind === 'vendor';
   const failedInvite = invites.find(
@@ -483,30 +485,29 @@ export function CaseDetailPage() {
       )}
 
       <div ref={heroRef}>
-        <ModuleHero
-          eyebrow={`Accreditation case · ${statusLabel}`}
+        <PageHeader
+          eyebrow="Accreditation case"
           title={kase.vendorName}
-          icon="clipboard"
+          subtitle={`${requiredApproved}/${requiredItems.length} required checklist items approved`}
           action={
-            <HeroChipButton href={isVendor ? '/vendor' : '/legal'} icon="arrowRight">
+            <a className="btn-outline" href={isVendor ? '/vendor' : '/legal'}>
+              <Icon name="chevron" className="h-4 w-4 rotate-180" />
               Back to cases
-            </HeroChipButton>
+            </a>
           }
-          accessory={
-            <div className="flex flex-wrap items-end gap-3">
-              <HeroStat label="Status">
-                <Badge tone={CASE_STATUS_TONE[effectiveStatus]}>{statusLabel}</Badge>
-              </HeroStat>
-              <HeroStat label="Checklist" align="right">
-                <p className="tnum font-display text-2xl font-extrabold text-ink">
-                  {requiredApproved}/{requiredItems.length}
-                  <span className="ml-1 text-sm font-medium text-muted">approved</span>
-                </p>
-              </HeroStat>
-            </div>
-          }
+          status={<Badge tone={CASE_STATUS_TONE[effectiveStatus]}>{statusLabel}</Badge>}
         />
       </div>
+
+      <CaseWorkflowSummary
+        kase={kase}
+        status={effectiveStatus}
+        loading={checklistLoading || docsLoading || signedLoading}
+        requiredCount={requiredItems.length}
+        outstandingCount={outstandingCount}
+        awaitingReviewCount={awaitingReviewCount}
+        readyForDecision={readyForDecision}
+      />
 
       {!isVendor && failedInvite && (
         <div role="alert">
@@ -820,7 +821,12 @@ export function CaseDetailPage() {
         </div>
       </Card>
 
-      <div id="vendor-requirements" className="scroll-mt-28">
+      <nav aria-label="Case sections" className="flex flex-wrap gap-4 border-y border-line py-2 text-sm font-semibold">
+        <a className="inline-flex min-h-11 items-center" href="#vendor-requirements">Requirements</a>
+        {!isVendor && <a className="inline-flex min-h-11 items-center" href="#case-documents">Documents</a>}
+        <a className="inline-flex min-h-11 items-center" href="#case-activity">Activity</a>
+      </nav>
+      <div id="vendor-requirements" tabIndex={-1} className="scroll-mt-28">
         <SectionTitle
           title="Requirement checklist"
           subtitle={`${requiredApproved} of ${requiredItems.length} required approved · ${progress.expiringSoon} expiring soon`}
@@ -966,7 +972,7 @@ export function CaseDetailPage() {
 
       {/* Case-level Documents panel — internal reviewers only (F2.2). */}
       {!isVendor && (
-        <div>
+        <div id="case-documents" tabIndex={-1} className="scroll-mt-28">
           <SectionTitle
             title="Documents"
             subtitle={`${docs.length} file${docs.length === 1 ? '' : 's'} on this case, all versions`}
@@ -1038,7 +1044,7 @@ export function CaseDetailPage() {
         </div>
       )}
 
-      <div>
+      <div id="case-activity" tabIndex={-1} className="scroll-mt-28">
         <SectionTitle
           title="Activity"
           action={

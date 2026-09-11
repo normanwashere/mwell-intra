@@ -1,19 +1,18 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Link, Navigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import {
   Badge,
   Card,
   DataTable,
   HeroChipButton,
-  HeroStat,
   Icon,
   InfoTip,
-  ModuleHero,
   SectionTitle,
   Sheet,
   SignaturePad,
+  WorkflowSummary,
   money,
   useToast,
   type Column,
@@ -43,7 +42,10 @@ import { ProcurementAccessDenied } from '../components/ProcurementAccessDenied';
 import { accreditationLabel, formatDate, formatDateTime, poStatusLabel } from '../labels';
 import { makeTypedSignature } from '../signature';
 import { MWELL_OPERATING_PROFILE } from '../policyProfile';
+import { PolicyEvidenceForm } from '../components/PolicyEvidenceForm';
 import { receiptQuantityLabel, quantityLabel } from '../evidencePresentation';
+import { purchaseOrderWorkflowSummary } from '../workflowSummary';
+import { useReadQuery } from '../useReadQuery';
 
 const PO_TONE: Record<PurchaseOrderStatus, 'slate' | 'cyan' | 'amber' | 'emerald' | 'rose'> = {
   draft: 'slate',
@@ -89,6 +91,7 @@ type ClosureWorkItem = {
 
 export function PODetailPage() {
   const { id = '' } = useParams();
+  const location = useLocation();
   const {
     rows,
     approve,
@@ -109,6 +112,10 @@ export function PODetailPage() {
     requestPurchaseOrderClosure,
     approvePurchaseOrderClosure,
     loading,
+    error: readError,
+    warning: readWarning,
+    policyErrors,
+    refresh,
   } = usePurchaseOrders();
   const { rows: requests } = useProcurementRequests();
   const vendors = useProcurementVendors();
@@ -123,8 +130,20 @@ export function PODetailPage() {
   const canAdmin = useCan('procurement', 'admin');
   const canVendorPortal = profile?.kind === 'vendor';
   const canReceiveInWarehouse = useCan('warehouse', 'receive_stock');
-  const [closureWorkItem, setClosureWorkItem] = useState<ClosureWorkItem | null>(null);
   const [closureApproved, setClosureApproved] = useState(false);
+  const [closureItems, closureLoading, refreshClosure, closureReadError] = useReadQuery<ClosureWorkItem>(
+    canFinalApprovePo && mode === 'supabase' && id ? supabaseClient : null,
+    `${profile?.id}:closure:${id}`,
+    async () => {
+      const { data, error: rpcError } = await supabaseClient!
+        .schema('procurement').rpc('purchase_order_closure_work_items', { payload: {} });
+      if (rpcError) throw new Error(rpcError.message);
+      return (Array.isArray(data) ? data : []).filter(
+        candidate => (candidate as ClosureWorkItem).purchase_order_id === id,
+      ) as ClosureWorkItem[];
+    },
+  );
+  const closureWorkItem = closureApproved || closureLoading ? null : closureItems[0] ?? null;
   const po: PurchaseOrder | undefined = useMemo(() => rows.find((r) => r.id === id), [rows, id]);
   const vendor = useMemo(
     () => (po ? vendors.find((v) => v.id === po.vendorId) : undefined),
@@ -136,27 +155,8 @@ export function PODetailPage() {
   );
 
   useEffect(() => {
-    if (!canFinalApprovePo || mode !== 'supabase' || !supabaseClient || !id) {
-      setClosureWorkItem(null);
-      return;
-    }
-    let active = true;
-    void supabaseClient
-      .schema('procurement')
-      .rpc('purchase_order_closure_work_items', { payload: {} })
-      .then(({ data, error: rpcError }) => {
-        if (!active) return;
-        if (rpcError) {
-          error(rpcError.message);
-          return;
-        }
-        const item = (Array.isArray(data) ? data : []).find(
-          (candidate) => (candidate as ClosureWorkItem).purchase_order_id === id,
-        );
-        setClosureWorkItem((item as ClosureWorkItem | undefined) ?? null);
-      });
-    return () => { active = false; };
-  }, [canFinalApprovePo, error, id, mode, supabaseClient]);
+    setClosureApproved(false);
+  }, [id, profile?.id]);
 
   async function approveGovernedClosure() {
     if (!closureWorkItem) return;
@@ -167,7 +167,6 @@ export function PODetailPage() {
       return;
     }
     setClosureApproved(true);
-    setClosureWorkItem(null);
     success('Independent governed closure approved');
   }
   const isSourceRequester = Boolean(
@@ -189,9 +188,6 @@ export function PODetailPage() {
   const [signOpen, setSignOpen] = useState(false);
   const [signature, setSignature] = useState<SignaturePayload | null>(null);
   const [approvalNote, setApprovalNote] = useState('');
-  const [evidenceControlCode, setEvidenceControlCode] = useState('');
-  const [evidenceType, setEvidenceType] = useState('document');
-  const [evidenceFacts, setEvidenceFacts] = useState('{}');
   const [protectionType, setProtectionType] = useState('performance_bond');
   const [protectionBasis, setProtectionBasis] = useState('Contract commitment');
   const [protectionAmount, setProtectionAmount] = useState('');
@@ -211,10 +207,23 @@ export function PODetailPage() {
     [signOpen, profile?.name],
   );
   const effectiveSignature = signature ?? seededSignature;
+  const selectedSection = location.hash.slice(1) || new URLSearchParams(location.search).get('section') || '';
+  const hasPolicySection = Boolean(po?.commitmentReadiness);
+
+  useEffect(() => {
+    if (loading || readError || !po || !canViewPurchaseOrders) return;
+    if (!['payment', 'policy', 'receiving', 'lines'].includes(selectedSection)) return;
+    const frame = requestAnimationFrame(() => {
+      const target = document.getElementById(selectedSection);
+      target?.scrollIntoView({ block: 'start' });
+      target?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [loading, readError, po?.id, po?.status, hasPolicySection, canViewPurchaseOrders, selectedSection, location.key]);
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-4xl space-y-4">
+      <div role="status" aria-busy="true" aria-label="Loading purchase order" className="mx-auto max-w-4xl space-y-4">
         <div className="h-40 animate-pulse rounded-3xl bg-inset" />
         <div className="h-32 animate-pulse rounded-2xl bg-inset" />
       </div>
@@ -228,8 +237,11 @@ export function PODetailPage() {
       />
     );
   }
-  if (!po) return <Navigate to="/purchase-orders" replace />;
+  if (readError) return <div role="alert" className="space-y-3"><WorkflowSummary status="Purchase order unavailable" owner="Purchase order viewer" nextStep="Retry this purchase order. Its current status and next responsibility are not verified." blocker={readError} tone="warning" /><button type="button" className="btn-outline" onClick={() => void refresh()}>Retry purchase order</button><Link to="/purchase-orders">Back to purchase orders</Link></div>;
+  if (!po) return <div role="status" className="space-y-3"><h1>Purchase order unavailable</h1><p>This record is not available in your scope.</p><Link to="/purchase-orders" className="btn-outline">Back to purchase orders</Link></div>;
 
+  const policyReadError = policyErrors?.[id];
+  const readinessUnavailable = Boolean(policyReadError || readWarning);
   const accreditationOk = vendor ? isAccredited(vendor, sourceRequest?.category) : false;
   const sourceAwardOk = sourceRequest?.status === 'approved';
   const databaseCommitmentBlockers = po.commitmentReadiness?.blockers;
@@ -259,6 +271,7 @@ export function PODetailPage() {
   const acceptanceType = acceptanceTypeForCategory(sourceRequest?.category);
 
   function openApprovalSheet() {
+    if (readinessUnavailable) { error('Refresh policy readiness before approval.'); return; }
     if (databaseCommitmentBlockers?.length) {
       error(`Cannot approve yet: ${databaseCommitmentBlockers.join(', ')}.`);
       return;
@@ -281,7 +294,7 @@ export function PODetailPage() {
   }
 
   async function confirmApproval() {
-    if (!po) return;
+    if (!po || readinessUnavailable) return;
     const sig = signature ?? makeTypedSignature(profile?.name);
     if (!sig) return;
     const next = await approve(po.id, {
@@ -299,7 +312,7 @@ export function PODetailPage() {
     }
   }
   async function handleIssue() {
-    if (!po) return;
+    if (!po || readinessUnavailable) return;
     if (issueBlockers.length > 0) {
       error(`Cannot issue yet: ${issueBlockers.join(', ')}.`);
       return;
@@ -370,27 +383,6 @@ export function PODetailPage() {
       error('Could not record acceptance. A goods receipt or authorized requester is required.');
   }
 
-  async function handleAddEvidence() {
-    if (!po?.requestId || !evidenceControlCode.trim()) return;
-    let facts: Record<string, unknown>;
-    try {
-      const parsed = JSON.parse(evidenceFacts) as unknown;
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
-        throw new Error('object required');
-      facts = parsed as Record<string, unknown>;
-    } catch {
-      error('Evidence facts must be valid JSON.');
-      return;
-    }
-    await createPolicyEvidence(po.requestId, {
-      controlCode: evidenceControlCode.trim(),
-      evidenceType: evidenceType.trim(),
-      facts,
-    });
-    setEvidenceControlCode('');
-    success('Policy evidence submitted for review');
-  }
-
   async function handleAddProtection() {
     if (!po?.requestId || !protectionType.trim() || !protectionBasis.trim()) return;
     await createFinancialProtection(po.requestId, {
@@ -455,16 +447,21 @@ export function PODetailPage() {
     else error('Could not post the payment release. Check the balance and payment reference.');
   }
 
-  // PR-27: hero primary action = the PO's current lifecycle action.
+  const showHeaderApproval = po.status === 'draft' && canFinalApprovePo && accreditationOk && sourceAwardOk;
+  const sectionLinkClass = 'inline-flex min-h-11 min-w-0 max-w-full items-center py-1 [overflow-wrap:anywhere] aria-[current=location]:text-ink aria-[current=location]:underline aria-[current=location]:decoration-2 aria-[current=location]:underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2';
+
+  // Keep each lifecycle command in one place, with its existing permission gates.
   const heroAction =
-    po.status === 'draft' && canFinalApprovePo && accreditationOk && sourceAwardOk ? (
-      <HeroChipButton icon="signature" onClick={openApprovalSheet}>
+    showHeaderApproval ? (
+      <button type="button" className="btn-primary" disabled={readinessUnavailable} onClick={openApprovalSheet}>
+        <Icon name="signature" className="h-4 w-4 shrink-0" />
         Sign & approve award
-      </HeroChipButton>
-    ) : po.status === 'approved' && issueBlockers.length === 0 ? (
-      <HeroChipButton icon="rotate" onClick={handleIssue}>
+      </button>
+    ) : po.status === 'approved' ? (
+      <button type="button" className="btn-primary disabled:cursor-not-allowed disabled:opacity-60" disabled={readinessUnavailable || issueBlockers.length > 0} onClick={handleIssue}>
+        <Icon name="rotate" className="h-4 w-4 shrink-0" />
         Issue to vendor
-      </HeroChipButton>
+      </button>
     ) : po.status === 'issued' && !fullyReceived && canReceiveInWarehouse ? (
       <HeroChipButton
         icon="box"
@@ -473,33 +470,49 @@ export function PODetailPage() {
         Open Warehouse handoff
       </HeroChipButton>
     ) : (
-      <HeroChipButton href="/procurement/purchase-orders" icon="arrowRight">
+      <a href="/procurement/purchase-orders" className="btn-ghost btn-sm">
         Back to POs
-      </HeroChipButton>
+      </a>
     );
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <ModuleHero
-        eyebrow={`Purchase order · ${po.poNumber}`}
-        title={po.vendorName}
-        description={po.notes || undefined}
-        icon="cart"
-        action={heroAction}
-        accessory={
-          <div className="flex flex-wrap items-end gap-3">
-            <HeroStat label="Status">
-              <Badge tone={PO_TONE[po.status]}>{poStatusLabel(po.status)}</Badge>
-            </HeroStat>
-            <HeroStat label="Total" align="right">
-              <p className="tnum font-display text-2xl font-extrabold text-ink">
-                {money(po.total)}
-              </p>
-            </HeroStat>
+    <div className="mx-auto min-w-0 max-w-4xl space-y-6 [overflow-wrap:anywhere]">
+      <header className="space-y-2">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1 basis-56">
+            <p className="text-xs font-semibold text-muted [overflow-wrap:anywhere]">Purchase order · {po.poNumber}</p>
+            <h1 className="mt-1 text-xl font-bold text-ink [overflow-wrap:anywhere]">{po.vendorName}</h1>
           </div>
-        }
-      />
+          {heroAction}
+        </div>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <Badge tone={PO_TONE[po.status]}>{poStatusLabel(po.status)}</Badge>
+          <p className="text-sm text-muted">Total <strong className="tnum ml-1 text-ink">{money(po.total)}</strong></p>
+        </div>
+        {po.notes && <p className="text-sm text-muted [overflow-wrap:anywhere]">{po.notes}</p>}
+      </header>
 
+      <WorkflowSummary {...purchaseOrderWorkflowSummary(po, {
+        prerequisiteError: policyReadError ?? readWarning,
+        prerequisiteBlockers: po.status === 'approved' ? issueBlockers : [
+          ...(!sourceRequest ? ['Source award status is unavailable.'] : !sourceAwardOk ? ['Source award is not approved.'] : []),
+          ...(!vendor ? ['Vendor eligibility is unavailable.'] : !accreditationOk ? ['Legal must resolve vendor accreditation or scoped clearance.'] : []),
+          ...(databaseCommitmentBlockers ?? []),
+        ],
+        closurePending: Boolean(closureWorkItem),
+      })} />
+
+      {closureReadError && <div role="alert" className="space-y-2 border-y border-amber-300 py-3 text-sm">
+        <h2 className="font-semibold">Closure review unavailable</h2>
+        <p>Closure approval status could not be loaded. The purchase order remains available; a pending closure decision is not verified.</p>
+        <button type="button" className="btn-outline" onClick={() => void refreshClosure()}>Retry closure review</button>
+      </div>}
+
+      {(policyReadError || readWarning) && <div role="alert" className="space-y-2 border-y border-amber-300 py-3 text-sm">
+        <h2 className="font-semibold">Policy prerequisite unavailable</h2><p>{policyReadError ?? readWarning}</p>
+        <p>The purchase order below remains available for review. Approval and issue are disabled until the prerequisite can be verified.</p>
+        <button type="button" className="btn-outline" onClick={() => void refresh()}>Retry policy readiness</button>
+      </div>}
       {/* PR-20 treatment: one muted meta line instead of a tile grid. */}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
         {vendor && (
@@ -575,7 +588,13 @@ export function PODetailPage() {
           </Card>
         )}
 
-      <div>
+      <nav aria-label="Purchase order sections" className="flex min-w-0 flex-wrap gap-x-4 gap-y-2 border-y border-line py-2 text-sm font-semibold">
+        <Link className={sectionLinkClass} aria-current={selectedSection === 'lines' ? 'location' : undefined} to={{ search: location.search, hash: '#lines' }}>Line items</Link>
+        {po.commitmentReadiness && <Link className={sectionLinkClass} aria-current={selectedSection === 'policy' ? 'location' : undefined} to={{ search: location.search, hash: '#policy' }}>Policy evidence</Link>}
+        {(po.status === 'issued' || po.status === 'closed') && <Link className={sectionLinkClass} aria-current={selectedSection === 'receiving' ? 'location' : undefined} to={{ search: location.search, hash: '#receiving' }}>Receiving</Link>}
+        <Link className={sectionLinkClass} aria-current={selectedSection === 'payment' ? 'location' : undefined} to={{ search: location.search, hash: '#payment' }}>Payment handoff</Link>
+      </nav>
+      <div id="lines" tabIndex={-1} className="scroll-mt-28">
         <SectionTitle
           title="Line items"
           subtitle={`${po.lines.length} line${po.lines.length === 1 ? '' : 's'}`}
@@ -584,29 +603,18 @@ export function PODetailPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        {po.status === 'draft' && (
+        {po.status === 'draft' && !showHeaderApproval && (
           <Guard module="procurement" cap="approve_award" fallback={null}>
             <button
               type="button"
               onClick={openApprovalSheet}
-              disabled={!accreditationOk || !sourceAwardOk}
+              disabled={readinessUnavailable || !accreditationOk || !sourceAwardOk}
               className="btn-primary"
             >
               <Icon name="signature" className="h-4 w-4" />
               Sign & approve award
             </button>
           </Guard>
-        )}
-        {po.status === 'approved' && (
-          <button
-            type="button"
-            onClick={handleIssue}
-            disabled={issueBlockers.length > 0}
-            className="btn-primary disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <Icon name="rotate" className="h-4 w-4" />
-            Issue to vendor
-          </button>
         )}
         {canAuthorPo &&
           (po.status === 'draft' || po.status === 'approved' || po.status === 'issued') && (
@@ -623,7 +631,7 @@ export function PODetailPage() {
       </div>
 
       {po.commitmentReadiness ? (
-        <div>
+        <div id="policy" tabIndex={-1} className="scroll-mt-28">
           <SectionTitle
             title="Commitment controls"
             subtitle="Transactional policy evidence evaluated by the database for this PO."
@@ -787,42 +795,7 @@ export function PODetailPage() {
             ) : null}
             {canAuthorPo && po.requestId ? (
               <div className="mt-4 grid gap-4 border-t border-line pt-4 lg:grid-cols-2">
-                <section className="space-y-2">
-                  <label className="block text-sm font-semibold text-ink">
-                    Control code
-                    <input
-                      className="input mt-1"
-                      value={evidenceControlCode}
-                      onChange={(event) => setEvidenceControlCode(event.target.value)}
-                    />
-                  </label>
-                  <label className="block text-sm font-semibold text-ink">
-                    Evidence type
-                    <input
-                      className="input mt-1"
-                      value={evidenceType}
-                      onChange={(event) => setEvidenceType(event.target.value)}
-                    />
-                  </label>
-                  <label className="block text-sm font-semibold text-ink">
-                    Evidence facts (JSON)
-                    <textarea
-                      className="input mt-1"
-                      rows={3}
-                      value={evidenceFacts}
-                      onChange={(event) => setEvidenceFacts(event.target.value)}
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    className="btn-outline"
-                    disabled={!evidenceControlCode.trim()}
-                    onClick={() => void handleAddEvidence()}
-                  >
-                    <Icon name="plus" className="h-4 w-4" />
-                    Add policy evidence
-                  </button>
-                </section>
+                <PolicyEvidenceForm attachments={sourceRequest?.attachments} submit={input => createPolicyEvidence(po.requestId!, input)} />
                 <section className="space-y-2">
                   <label className="block text-sm font-semibold text-ink">
                     Protection type
@@ -893,7 +866,7 @@ export function PODetailPage() {
       )}
 
       {(po.status === 'issued' || po.status === 'closed') && (
-        <div>
+        <div id="receiving" tabIndex={-1} className="scroll-mt-28">
           <SectionTitle
             title="Warehouse receiving"
             subtitle="Read-only receipt and quality status from the Warehouse authority."
@@ -946,13 +919,16 @@ export function PODetailPage() {
         </div>
       )}
 
+      <section id="payment" tabIndex={-1} aria-label="Payment handoff" className="scroll-mt-28">
+        {new URLSearchParams(location.search).get('from') === 'finance' && <a href="/finance" className="btn-outline mb-3">Back to Finance</a>}
+        {po.status !== 'issued' && po.status !== 'closed' && <p role="status">Payment handoff is not available for this purchase order's current status.</p>}
       {(po.status === 'issued' || po.status === 'closed') && (
         <div>
           <SectionTitle
             title="Payment handoff"
             subtitle="Acceptance and three-way evidence are required before Finance release."
           />
-          <Card>
+          <div className="min-w-0 border-t border-line py-3">
             <PaymentReadinessPanel
               acceptance={po.acceptancePack}
               acceptances={po.acceptancePacks}
@@ -986,10 +962,11 @@ export function PODetailPage() {
               onReview={handleReviewPayment}
               onRelease={handleReleasePayment}
             />
-          </Card>
+          </div>
         </div>
       )}
 
+      </section>
       {po.approvalSignature && (
         <div>
           <SectionTitle

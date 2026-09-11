@@ -63,6 +63,15 @@ function session(roles: SessionValue["userRoles"]): SessionValue {
 }
 
 describe("FinanceApp", () => {
+  it('keeps the payment queue full width with ownership below it', () => {
+    renderFinanceApp();
+    const queue = screen.getByRole('region', { name: 'Payment readiness' });
+    expect(queue.parentElement).toHaveClass('space-y-4');
+    expect(queue.parentElement).not.toHaveClass('xl:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]');
+    const ownership = screen.getByRole('heading', { name: 'Review and release from the governed PO' });
+    expect(ownership.parentElement?.parentElement).not.toHaveClass('card');
+  });
+
   beforeEach(() => {
     state.session = session({
       core: ["staff"],
@@ -107,7 +116,7 @@ describe("FinanceApp", () => {
     ).toHaveAttribute("href", "/warehouse/approvals");
     expect(
       screen.getByRole("link", { name: /review next payment pack/i }),
-    ).toHaveAttribute("href", "/procurement/purchase-orders/po_seed_004");
+    ).toHaveAttribute("href", "/procurement/purchase-orders/po_seed_004?section=payment&from=finance#payment");
   });
 
   it('uses effective live grants, withholding uncertified close actions while retaining reads', () => {

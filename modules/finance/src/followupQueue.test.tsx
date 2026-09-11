@@ -31,3 +31,18 @@ it('requester readback offers no owner mutation and failures do not claim empty 
   await waitFor(()=>expect(screen.getByRole('alert')).toHaveTextContent('Source unavailable'));
   expect(screen.queryByText('No follow-ups in your scope.')).not.toBeInTheDocument();
 });
+it('keeps a saved-result link when resolution removes the row from actionable work',async()=>{
+  let status='acknowledged';
+  state.rpc.mockImplementation(async(name:string)=>{
+    if(name==='platform_transition_followup') status='resolved';
+    return {data:[{id:'followup-a',metric_id:'metric',area:'finance',reason_code:'check',status,can_act:true}],error:null};
+  });
+  const view=render(<FollowupQueue view="action" />);
+  fireEvent.change(await screen.findByLabelText('Resolution record reference'),{target:{value:'FIN-009'}});
+  fireEvent.click(screen.getByRole('button',{name:'Resolve'}));
+  await screen.findByText(/Follow-up resolved. The result is saved/);
+  expect(screen.getByRole('link',{name:'View follow-up'})).toHaveAttribute('href','/work?view=completed#followup-followup-a');
+  await waitFor(()=>expect(screen.queryByRole('button',{name:'Resolve'})).not.toBeInTheDocument());
+  view.rerender(<FollowupQueue view="completed" />);
+  await screen.findByText('metric / finance');
+});

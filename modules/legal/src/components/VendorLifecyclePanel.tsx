@@ -286,8 +286,13 @@ export function VendorLifecyclePanel({ vendors }: { vendors: VendorOption[] }) {
     [vendors],
   );
 
+  const [readError, setReadError] = useState('');
+  const [reading, setReading] = useState(Boolean(live));
   const refresh = useCallback(async () => {
-    if (!live) return;
+    if (!live) { setReading(false); return; }
+    setReading(true);
+    setReadError('');
+    try {
     const { data, error } = await live
       .schema("legal")
       .from("vendor_lifecycle_reviews")
@@ -296,28 +301,27 @@ export function VendorLifecyclePanel({ vendors }: { vendors: VendorOption[] }) {
       )
       .order("opened_at", { ascending: false })
       .limit(200);
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
+    if (error) throw new Error(error.message);
     setReviews(
       (Array.isArray(data) ? data : []).map((row) =>
         mapReview(row as Record<string, unknown>),
       ),
     );
-    const { data: projections } = await live
+    const { data: projections, error: projectionError } = await live
       .schema('legal')
       .rpc('vendor_eligibility_projection', { payload: {} });
+    if (projectionError) throw new Error(projectionError.message);
     if (Array.isArray(projections)) {
       setEligibilityProjections(
         projections.map((row) => mapEligibilityProjection(row as Record<string, unknown>)),
       );
     }
-    const { data: probation } = await live
+    const { data: probation, error: probationError } = await live
       .schema('legal')
       .from('vendor_probation_reviews')
       .select('id,vendor_id,revision')
       .order('due_at', { ascending: true });
+    if (probationError) throw new Error(probationError.message);
     if (Array.isArray(probation)) {
       setProbationReviews(probation.map((row) => ({
         id: text((row as Record<string, unknown>).id),
@@ -325,7 +329,11 @@ export function VendorLifecyclePanel({ vendors }: { vendors: VendorOption[] }) {
         revision: Number((row as Record<string, unknown>).revision ?? 0),
       })));
     }
-  }, [live, toast]);
+    } catch {
+      setReadError('Lifecycle records could not be loaded. Please retry.');
+      setReviews([]); setEligibilityProjections([]); setProbationReviews([]);
+    } finally { setReading(false); }
+  }, [live]);
 
   useEffect(() => {
     void refresh();
@@ -438,7 +446,7 @@ export function VendorLifecyclePanel({ vendors }: { vendors: VendorOption[] }) {
           <Icon name="plus" className="h-4 w-4" /> Open review
         </button>
       </div>
-      {reviews.length === 0 ? (
+      {readError ? <div role="alert"><p>{readError}</p><button type="button" className="btn-outline" disabled={reading} onClick={() => void refresh()}>Retry lifecycle</button></div> : reading ? <p role="status" aria-busy="true">Loading lifecycle records...</p> : reviews.length === 0 ? (
         <EmptyState
           icon="building"
           title="No lifecycle reviews"

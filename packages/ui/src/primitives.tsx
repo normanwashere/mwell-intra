@@ -41,7 +41,7 @@ export function SectionTitle({
   id?: string;
 }) {
   return (
-    <div className="section-heading-band mb-4 flex flex-col items-start gap-3 pb-3 sm:flex-row sm:items-end sm:justify-between">
+    <div className="section-heading-band mb-4 flex flex-wrap items-start justify-between gap-x-5 gap-y-3 py-3">
       <div className="min-w-0 max-w-3xl">
         {eyebrow && (
           <p className="mb-1 text-caption font-semibold uppercase text-brand-700 dark:text-brand-300">
@@ -50,7 +50,7 @@ export function SectionTitle({
         )}
         <h2
           id={id}
-          className="font-display text-base font-bold leading-snug text-ink sm:text-lg"
+          className="break-words font-display text-base font-bold leading-snug text-ink sm:text-lg [overflow-wrap:anywhere]"
         >
           {title}
         </h2>
@@ -58,7 +58,7 @@ export function SectionTitle({
           <p className="mt-1 text-sm leading-5 text-muted">{subtitle}</p>
         )}
       </div>
-      {action && <div className="w-full shrink-0 sm:w-auto">{action}</div>}
+      {action && <div className="flex max-w-full flex-wrap items-center gap-2">{action}</div>}
     </div>
   );
 }
@@ -79,13 +79,28 @@ export function PageHeader({
   eyebrow?: string;
   status?: ReactNode;
 }) {
+  return <WorkspaceHeader title={title} description={subtitle} action={action} icon={icon} eyebrow={eyebrow} status={status} />;
+}
+
+function WorkspaceHeader({ title, description, action, icon, eyebrow, status, accessory, className }: {
+  title: string;
+  description?: string;
+  action?: ReactNode;
+  icon?: IconName;
+  eyebrow?: string;
+  status?: ReactNode;
+  accessory?: ReactNode;
+  className?: string;
+}) {
   return (
-    <header className="page-header-band -mx-4 mb-6 flex flex-col items-start gap-4 px-4 py-4 sm:-mx-6 sm:px-6 md:flex-row md:items-center md:justify-between lg:-mx-8 lg:px-8">
+    <header data-workspace-header="true" className={clsx('workspace-header page-header-band mb-5 px-4 py-4 sm:px-5', className)}>
+      <div className="workspace-header-main">
       <div className="flex min-w-0 items-start gap-3">
         {icon && (
           <span
             aria-hidden
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-brand-200 bg-brand-50 text-brand-700 dark:border-brand-800 dark:bg-brand-900/30 dark:text-brand-300"
+            data-workspace-icon="true"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded border border-brand-200 bg-brand-50 text-brand-700 dark:border-brand-800 dark:bg-brand-900/30 dark:text-brand-300"
           >
             <Icon name={icon} className="h-5 w-5" />
           </span>
@@ -97,19 +112,21 @@ export function PageHeader({
                 {eyebrow}
               </p>
             )}
-            <h1 className="break-words font-display text-title text-ink">
+            <h1 className="break-words font-display text-2xl font-bold leading-tight text-ink [overflow-wrap:anywhere]">
               {title}
             </h1>
             {status}
           </div>
-          {subtitle && (
-            <p className="mt-1 max-w-3xl text-sm leading-5 text-muted">
-              {subtitle}
+          {description && (
+            <p className="mt-1 max-w-3xl text-sm leading-5 text-muted [overflow-wrap:anywhere]">
+              {description}
             </p>
           )}
         </div>
       </div>
-      {action && <div className="w-full shrink-0 md:w-auto">{action}</div>}
+      {action && <div className="workspace-header-actions">{action}</div>}
+      </div>
+      {accessory && <div className="workspace-header-metrics mt-4 min-w-0 border-t border-line pt-3">{accessory}</div>}
     </header>
   );
 }
@@ -118,9 +135,7 @@ export type Tone =
   "brand" | "accent" | "amber" | "rose" | "emerald" | "slate" | "cyan";
 
 /**
- * ModuleHero — suite-wide page header (v2 clinical-modern).
- * Porcelain surface card with a signature teal accent stripe — gradient is
- * reserved for the wordmark and small highlights, not full-bleed backgrounds.
+ * Legacy header API retained so every existing module uses the same workspace hierarchy.
  */
 export function ModuleHero({
   eyebrow = "Welcome back,",
@@ -136,57 +151,11 @@ export function ModuleHero({
   description?: string;
   action?: ReactNode;
   accessory?: ReactNode;
-  /** Watermark icon rendered top-right at low opacity. */
+  /** Contextual icon placed beside the title. */
   icon?: IconName;
   className?: string;
 }) {
-  return (
-    <section
-      className={clsx(
-        "hero-surface workspace-hero overflow-hidden px-4 py-5 sm:px-6 sm:py-6",
-        className,
-      )}
-    >
-      {icon && (
-        <div
-          aria-hidden
-          data-module-hero-watermark="true"
-          className="pointer-events-none absolute right-4 top-4 z-0 grid h-12 w-12 place-items-center rounded-lg border border-brand-200 bg-surface/70 text-brand-700 sm:right-6 sm:top-6 dark:border-brand-800 dark:text-brand-300"
-        >
-          <Icon name={icon} className="h-6 w-6" />
-        </div>
-      )}
-      <div
-        data-module-hero-content="true"
-        className={clsx(
-          "relative z-10 grid min-w-0 gap-5 md:grid-cols-[minmax(0,1fr)_auto] md:items-end",
-          icon && "pr-14 sm:pr-16",
-        )}
-      >
-        <div className="min-w-0">
-          <p className="text-caption font-semibold uppercase text-brand-700 dark:text-brand-300">
-            {eyebrow}
-          </p>
-          <h1 className="mt-1 break-words font-display text-title text-ink sm:text-[1.75rem] sm:leading-tight">
-            {title}
-          </h1>
-          {description && (
-            <p className="mt-2 max-w-2xl text-body text-muted">{description}</p>
-          )}
-          {action && (
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              {action}
-            </div>
-          )}
-        </div>
-        {accessory && (
-          <div className="min-w-0 border-t border-line pt-4 md:max-w-sm md:border-l md:border-t-0 md:pl-5 md:pt-0">
-            {accessory}
-          </div>
-        )}
-      </div>
-    </section>
-  );
+  return <WorkspaceHeader title={title} description={description} action={action} accessory={accessory} icon={icon} eyebrow={eyebrow} className={className} />;
 }
 
 /**
@@ -206,7 +175,7 @@ export function HeroStat({
   return (
     <div
       className={clsx(
-        "rounded-lg border border-line bg-surface px-4 py-2",
+        "min-w-0 border-l-2 border-line pl-3 pr-4 py-1 [overflow-wrap:anywhere]",
         align === "right" && "text-right",
         className,
       )}

@@ -87,7 +87,7 @@ export interface EventsData {
   fulfillmentHandoffs?: Array<{
     id: string;
     eventId: string;
-    status: "demo_recorded" | "submitted";
+    status: string;
     createdAt: string;
   }>;
   warnings: string[];

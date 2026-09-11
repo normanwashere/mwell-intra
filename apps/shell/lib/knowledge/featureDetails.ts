@@ -32,8 +32,8 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         control(
           "Open notification",
           "Opens the latest 10 accessible notifications with record references, All/Unread filters and Unread first/Newest first sorting. Periodic checks pause while the tab is hidden; returning to the tab refreshes notifications without reloading the page.",
-          "Notifications require a signed-in live session. The unread count covers this latest list, not all historical notifications. Warehouse Module alerts are a separate urgency-sorted list of current stock and reservation alerts.",
-          "Reading, filtering and sorting do not change a transaction or mark anything read. Mark read explicitly updates that notification; if confirmation fails, refresh to check before retrying. Only accessible Warehouse alerts offer a destination link.",
+          "Notifications require a signed-in live session. The unread count covers this latest list, not all historical notifications. In the September 11 local candidate, Warehouse alerts explicitly count active stock and reservation issues, highest priority first; they remain until the source issue is resolved.",
+          "Reading, filtering and sorting do not change a transaction or mark anything read. Mark read explicitly updates that notification; if confirmation fails, refresh to check before retrying. The local candidate offers Open record for supported authorized notification destinations. An empty notification view is not proof that My Work is empty; Warehouse alerts are not cleared by marking them read.",
         ),
         control(
           "Use primary navigation",
@@ -75,7 +75,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Sign in",
           "Submits the entered credentials through the configured authentication provider.",
           "Email and password must both be present before submission.",
-          "A valid session is created and the safe return route opens.",
+          "A valid session is created and the safe return route opens. The September 11 local candidate preserves supported article, task and record query context after checking destination access. Section fragments alone are not guaranteed across sign-in; use the destination's section links when needed.",
         ),
         control(
           "Send reset link",
@@ -197,6 +197,12 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
     },
     "role-onboarding": {
       controls: [
+        control(
+          "Change task / All eligible tasks",
+          "In the September 11 local candidate, expand Change task, search All eligible tasks by task, module or role, and choose Select task. Clear search to see the complete eligible list beyond the recommendations.",
+          "Only eligible tasks are listed. A safe return destination is retained only within the selected task's workspace; unrelated selected requirements are cleared. Selection grants neither access nor completion.",
+          "The selected task opens with its learning requirements. Browser Back returns to the preceding task selection; an incompatible return destination is replaced by the task's own destination.",
+        ),
         control(
           "Start or resume requirement",
           "Opens the next assigned orientation, policy, practice, assessment, or attestation.",
@@ -349,9 +355,9 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
       controls: [
         control(
           "Open profile",
-          "Opens the selected user sheet with identity and current role grants.",
+          "Opens the selected user sheet with identity and current role grants. In the September 11 local candidate, Manage preserves the selected user with the directory's search, status, account kind and page in the address.",
           "The selected profile must exist in the loaded core profile list.",
-          "The profile sheet displays its current scoped assignments.",
+          "The profile sheet displays its current scoped assignments. Copying or reopening the address does not save role edits. If details are unavailable, use Retry user details; a missing or out-of-scope user offers Return to directory.",
         ),
         control(
           "Assign role",
@@ -396,22 +402,40 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
     "admin-audit": {
       controls: [
         control(
-          "Search evidence",
-          "Filters role-change evidence by actor, subject, approval reference, reason, module, or role.",
-          "Search is read-only and operates only on evidence visible to the authorized administrator.",
-          "Matching immutable evidence remains visible without changing the audit record.",
+          "Search audit history / Search",
+          "In the September 11 local candidate, enter actor, action, entity or reference text, optionally choose a module and date range, then select Search. Search scans retained authorized events, not only the newest 250.",
+          "Search is read-only and requires current audit authority. Apply edited filters before paging or exporting; a failed read is not an empty history.",
+          "Up to 50 matching events appear per page, newest recorded first. Each search step checks at most 2,000 retained events. Search unfinished means older history remains unchecked, even with no matches on this page; select Continue searching. Search starts a fresh result set without changing evidence.",
         ),
         control(
-          "Filter action",
-          "Limits the trail to assignments or revocations.",
-          "Only released action values may be selected.",
-          "The list shows the chosen action class with its original timestamps.",
+          "From (UTC+08) / Through (UTC+08)",
+          "Limits candidate audit search to the selected dates, including the entire Through date in UTC+08.",
+          "Use valid dates with From no later than Through. Leave a boundary blank to include earlier or later retained history.",
+          "Search applies the range. No separate action-filter control is provided; use search text for an action.",
         ),
         control(
           "Filter module",
           "Limits the trail to one governed module.",
           "The module must come from the canonical role registry.",
           "The list shows role changes for the selected module without altering scope.",
+        ),
+        control(
+          "Continue searching / Older results / Previous",
+          "Moves between candidate audit result pages using the current applied filters.",
+          "Apply edited filters first. Continue searching checks the next bounded segment when the search is unfinished. Older results appears when more matching events are known. Previous is unavailable on the first page.",
+          "The footer identifies the page, displayed matches, retained events checked and whether the search is unfinished or the end of matching history has been reached. An empty unfinished segment does not establish that no matching record exists.",
+        ),
+        control(
+          "Export current page CSV",
+          "Downloads only the currently displayed candidate audit page, not all matching or retained history.",
+          "The page must have loaded successfully with matching events and no unapplied filter edits. Handle exported audit evidence only within authorized channels.",
+          "A page-numbered CSV is downloaded without changing evidence. Export each needed page separately; no full-history export is offered here.",
+        ),
+        control(
+          "Retry audit history",
+          "Reloads the failed candidate audit page with the applied filters.",
+          "Current audit authority is still required; preview mode has no live audit history.",
+          "The error is replaced by loaded results or another visible failure, not a false empty-history confirmation.",
         ),
         control(
           "Open technical details",
@@ -1092,10 +1116,16 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
     "warehouse-fulfillment": {
       controls: [
         control(
+          "Queue filters",
+          "In the September 11 local candidate, order search, status and channel are retained in the address. Department requests retain their selected status and readable request. Copy a detail address or use reload and browser Back/Forward to revisit that context.",
+          "Links are checked against current readable records. Unsaved action forms are not stored in the address. Combined floor/request users see Department requests only with stock-request capability.",
+          "Closing the detail retains queue filters. Selecting an order counter clears search and channel. An unavailable selected record is labelled rather than replaced with another order or request.",
+        ),
+        control(
           "View order details",
           "Opens the order reference, status, lines, picked quantities and serials, saved instructions and activity. Internal requests also show the source request date, requester when available, department, purpose, required date and cost center.",
           "The order and source request must be accessible to the current role. Missing source information is stated explicitly. Commercial information keeps its existing permission checks; payment is not applicable to internal requests.",
-          "A read-only detail panel opens. Customer shipments retain their shipment timeline; internal handovers show their saved recipient and reference. No stock or status changes are made.",
+          "A read-only detail panel opens. In the September 11 local candidate, read Current status, Next responsibility, Next step and any Needs attention message. Next responsibility identifies a role, not a person assignment or permission grant. Release is not delivery or recipient acceptance; unavailable linked fulfillment is not confirmed completion. Customer shipments retain their shipment timeline; internal handovers show their saved recipient and reference. No stock or status changes are made.",
         ),
         control(
           "Create order or demand",
@@ -1131,7 +1161,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Decide request",
           "Approves or rejects an eligible department request as a separate accountable action.",
           "A different authorized user must decide a request that is still pending.",
-          "Approval creates a linked fulfillment order; rejection records the terminal decision.",
+          "Approval creates a linked fulfillment order; rejection records the terminal decision. For a rejected stock request, the requester asks the approver for the reason and creates a new corrected request if still needed. The original remains rejected and immutable. There is currently no stock-request rejection-reason input, in-place resubmission or system-linked revision; Procurement request revision is a separate workflow.",
         ),
         control(
           "Allocate stock",
@@ -1160,7 +1190,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         control(
           "Acknowledge receipt",
           "Records proof that an internal, event, or third-party recipient accepted released stock. In Department requests, eligible requesters can use Acknowledge receipt directly on the issued request or inside View request, without switching to Orders and events. Enter the receiving party's reference and upload its acceptance photo; this is not the dispatch confirmation.",
-          "An acknowledgment reference and evidence are required, and the acknowledger cannot be the releasing operator.",
+          "An acknowledgment reference and evidence are required, and the acknowledger cannot be the releasing operator. In the September 11 local candidate, Awaiting receipt confirmation names Recipient / another authorized staff member as the next responsibility. This role-level description does not assign a person or grant permission; the person who released the items cannot confirm receipt.",
           "The order and its linked department request become Completed and Closed.",
         ),
         control(
@@ -2181,7 +2211,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Review next payment pack",
           "Opens the same priority payment shown first in the queue: actionable ready or accepted-but-unpaid packs, ordered by due date, oldest preparation, and stable identity. Missing due dates are explicitly labeled.",
           "The user needs Procurement Finance scope and the purchase order must remain visible.",
-          "The owning procurement record opens with its current evidence and decision state.",
+          "In the September 11 local candidate, the owning PO opens at Payment handoff with current evidence and decision state. Back to Finance returns to the control center; this navigation does not approve or release payment.",
         ),
         control(
           "Filter cross-module activity",
@@ -2191,9 +2221,9 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         control(
           "Open source record",
-          "Navigates from a payment or activity row to the procurement or warehouse record that owns the transaction.",
+          "Navigates from a payment or activity row to its source. In the September 11 local candidate, Open source record for a warehouse receipt selected in a close draft opens Finance's read-only Receipt evidence summary, with source identity, party, date, amount and registered evidence labels.",
           "The user's scoped role and source-row policy must permit the record.",
-          "The source workflow opens for an attributable review or decision.",
+          "Receipt evidence offers Open protected evidence for linked close entries, then View protected evidence when authorized. Back to close draft opens a draft bound to the receipt source; it is not a guarantee that every unsaved field is restored. Retry receipt recovers a failed read. Receipt-line inspection and Quality details beyond this summary must be requested from Warehouse; no receiving or inspection commands are exposed.",
         ),
         control(
           "Retry unavailable sources",
@@ -2967,7 +2997,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Open purchase order",
           "Navigates to the selected PO detail record.",
           "The order must remain visible under current capabilities.",
-          "Terms, lifecycle, and readiness evidence appear.",
+          "Terms, lifecycle, and readiness evidence appear. In the September 11 local candidate, confirm the PO reference, status and amount in the compact header, then read the workflow summary. Closed does not confirm settlement and accepted evidence alone does not authorize payment release. Retry closure review recovers an unavailable closure read; Retry goods acceptance recovers an unavailable goods-acceptance record. Missing read results do not prove no responsibility remains.",
         ),
       ],
       fields: [
@@ -2987,6 +3017,12 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
     },
     "procurement-po-detail": {
       controls: [
+        control(
+          "Add policy evidence",
+          "In the September 11 local candidate, select a named Policy requirement and Evidence format, complete the displayed business fields, and choose an existing Supporting request attachment when available. Select Add policy evidence to submit for review; raw JSON is not required.",
+          "Only supported requirements are listed and each displayed facts field is required. The optional attachment selector references existing request files; it does not upload a new file or replace server policy checks.",
+          "Submitted evidence remains subject to governed review. A failure retains entries; check saved evidence before repeating an uncertain submission. Changing the requirement clears its facts fields.",
+        ),
         control(
           "Approve award",
           "Approves an eligible draft PO award.",
@@ -3065,6 +3101,12 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
     },
     "legal-cases": {
       controls: [
+        control(
+          "Accreditation cases / Vendor lifecycle",
+          "In the September 11 local candidate, selecting Accreditation cases or Vendor lifecycle updates the address while retaining the case filter.",
+          "A shared view does not grant access to another vendor or save an unfinished decision.",
+          "Reload and browser Back/Forward restore the recorded view. If cases or supporting evidence fail to load, use Retry cases before treating the queue as empty.",
+        ),
         control(
           "Filter case status",
           "Limits case cards by current accreditation lifecycle state.",
@@ -3552,22 +3594,40 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
     "my-work": {
       controls: [
         control(
-          "Source filter",
-          "Shows only work from the selected department.",
-          "The source must be one of the released queue sources.",
-          "The queue changes without changing any source record.",
+          "Needs your action / Waiting on someone else / Recently completed",
+          "Separates actionable assignments from your tracked request handovers. Tracking states cover only the request types and recent-record window shown on screen, not a complete history across every module.",
+          "Records remain scoped to your identity and existing permissions. Issued or released stock is not automatically treated as completed.",
+          "The selected view opens without changing a source transaction. A missing tracking source is shown as unavailable rather than zero work.",
         ),
         control(
-          "Open source",
+          "How work is assigned",
+          "In the September 11 local candidate, opens the specific My Work feature guide. Start at the My Work heading and review the primary assignments queue before the follow-ups below it.",
+          "The guide explains assignment without granting authority or changing work.",
+          "The My Work guide opens; use browser Back to return to the queue.",
+        ),
+        control(
+          "Module",
+          "Shows only work from the selected department.",
+          "The source must be one of the released queue sources.",
+          "The queue changes without changing any source record. In the September 11 local candidate, No work in this view means no matching assignments were returned; other departments may still be working on your requests.",
+        ),
+        control(
+          "Open record",
           "Navigates to the authoritative record or queue.",
           "The route must be internal and role-authorized.",
           "The source page opens under the same session.",
         ),
         control(
+          "Search work",
+          "Finds visible records by record title, status, module and available next-owner text. The selected view, module and search are retained in the link.",
+          "Search does not widen source access or query an unrestricted history.",
+          "The displayed list and its counters update together. Browser Back restores the prior view.",
+        ),
+        control(
           "Retry",
           "Reloads the governed personal projection after a read failure.",
           "The retry performs no source write.",
-          "Current assignments replace the failed state.",
+          "A successful read restores the current assignment view. Queue unavailable is not a caught-up state; a failed retry does not establish that the queue is empty. Check source records before acting on any retained rows or counts.",
         ),
       ],
       fields: [
@@ -3603,7 +3663,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "View event",
           "Opens dates, lifecycle, and fulfillment totals.",
           "The event must remain in the caller's readable scope.",
-          "The event detail view opens.",
+          "The event detail view opens. In the September 11 local candidate, read Current status, Next responsibility, Next step and any Needs attention message for lifecycle, custody and reconciliation. The responsibility is a role-level handoff, not a person assignment or access grant. Event completion or settlement approval does not establish Finance close; unavailable data must be retried before action.",
         ),
         control(
           "Open Warehouse fulfillment",
@@ -3643,9 +3703,9 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
       controls: [
         control(
           "Insight view",
-          "Filters indicators to an authorized department or executive view.",
+          "Filters indicators to an authorized department or executive view. In the September 11 local candidate, the desktop tabs and mobile selector update the area's address.",
           "Only areas granted by the Insights role are offered.",
-          "The visible KPI set changes without a data write.",
+          "The visible KPI set changes without a data write. Copy the link, reload or use browser Back/Forward to revisit the area. Invalid or unauthorized areas show Insight view unavailable and offer All available insights.",
         ),
         control(
           "Open governed source",
@@ -3663,7 +3723,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Request validation or escalation",
           "Routes an indicator reference and controlled reason to the accountable source owner.",
           "The metric must be visible to the caller; protected values, source paths, and free-text detail are never copied into the handoff.",
-          "An open follow-up is created with a stable command identity across uncertain retries. Follow its tracking link to My Work instead of raising a duplicate request.",
+          "An open follow-up is created with a stable command identity across uncertain retries. Follow its tracking link to My Work instead of raising a duplicate request. In the September 11 local candidate, a failure remains visible inside the open dialog; correct the issue and retry the same request.",
         ),
         control(
           "Track follow-ups in My Work",
@@ -3728,8 +3788,8 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         control(
           "Acknowledge Operations handoff",
           "Confirms that Operations accepted the approved launch conditions.",
-          "Only an Operations Partner can acknowledge, and the Product decision must already be approved.",
-          "The handoff changes from pending to completed with accepting actor/time, without changing Product's decision; repeated or stale acknowledgement attempts are rejected.",
+          "Only an Operations Partner can acknowledge, and the current Product decision must already be approved. In the September 11 local candidate, Kit approval: Not required before handoff means active WMS kit publication is not a prerequisite. Required or unknown kit prerequisites, when shown, still need Product resolution.",
+          "The handoff changes from pending to completed with accepting actor/time, without changing Product's decision; repeated or stale acknowledgement attempts are rejected. Kit publication is a separate WMS status/version and approval reference when visible. Active kit publication follows the approved handoff; acknowledgement does not itself publish a kit. No visible kit definition and Unavailable - refresh to check are not kit-approval requirements.",
         ),
         control(
           "Submit pricing proposal",
@@ -3797,6 +3857,12 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
     },
     "vendor-purchase-orders": {
       controls: [
+        control(
+          "Purchase orders / Back to vendor portal",
+          "In the September 11 local candidate, select Purchase orders from the vendor workspace header. Use Back to vendor portal to return to applications.",
+          "Only orders awarded to the authenticated vendor organization appear. Navigation never grants employee access or acknowledges an order.",
+          "The scoped purchase-order list opens. If it fails to load, use Retry purchase orders; a read failure does not mean no acknowledgements are due.",
+        ),
         control(
           "Acknowledge purchase order",
           "Submits the vendor reference for the displayed issued purchase order and refreshes its lifecycle state.",

@@ -10,9 +10,6 @@ import {
   InfoTip,
   ModuleHero,
   SectionTitle,
-  StatCard,
-  StaggerGrid,
-  StaggerItem,
   money,
   type Column,
   type IconName,
@@ -22,6 +19,7 @@ import { Guard, useSession } from '@intra/auth';
 import type { ProcurementRequest, RequestStatus } from '../types';
 import { useProcurementRequests } from '../localStore';
 import { formatDate, statusLabel } from '../labels';
+import { QueueFilters } from '../components/QueueFilters';
 
 const STATUS_TONE: Record<RequestStatus, 'slate' | 'cyan' | 'amber' | 'emerald' | 'rose'> = {
   draft: 'slate',
@@ -94,7 +92,7 @@ const FILTER_LABEL: Record<FilterKey, string> = {
 };
 
 export function RequestsPage() {
-  const { rows, loading } = useProcurementRequests();
+  const { rows, loading, error: readError, refresh } = useProcurementRequests();
   const { profile } = useSession();
   const firstName = profile?.name?.split(/\s+/)[0] ?? 'Procurement';
   const [params, setParams] = useSearchParams();
@@ -130,9 +128,7 @@ export function RequestsPage() {
     setParams(params, { replace: false });
   };
 
-  // PR-1: ONE KPI surface. The StatCards below are the counts AND the
-  // filters (active card ringed); the hero carries no numbers and the old
-  // count-tabs row is gone.
+  // Counts and filters share one compact queue control.
   const filterCards: Array<{
     key: FilterKey;
     label: string;
@@ -148,7 +144,7 @@ export function RequestsPage() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-4">
       <ModuleHero
         eyebrow="Procurement workspace"
         title="Purchase requests"
@@ -163,30 +159,7 @@ export function RequestsPage() {
         }
       />
 
-      <StaggerGrid className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {filterCards.map((c) => {
-          const active = filter === c.key;
-          return (
-            <StaggerItem
-              key={c.key}
-              className={
-                active
-                  ? 'rounded-2xl ring-2 ring-brand-500 ring-offset-2 ring-offset-app'
-                  : undefined
-              }
-            >
-              <StatCard
-                label={c.label}
-                value={c.value}
-                icon={c.icon}
-                tone={c.tone}
-                hint={active ? 'Showing below' : c.hint}
-                onClick={() => applyFilter(c.key)}
-              />
-            </StaggerItem>
-          );
-        })}
-      </StaggerGrid>
+      <QueueFilters items={filterCards} value={filter} onChange={applyFilter} />
 
       <div>
         <SectionTitle
@@ -194,7 +167,7 @@ export function RequestsPage() {
           subtitle={
             filter === 'all'
               ? undefined
-              : `Filtered to ${FILTER_LABEL[filter]} — tap a card above to change scope.`
+              : `Filtered to ${FILTER_LABEL[filter]}`
           }
           action={
             <InfoTip
@@ -204,7 +177,7 @@ export function RequestsPage() {
           }
         />
 
-        {loading ? (
+        {readError ? <div role="alert"><p>{readError}</p><button type="button" className="btn-outline" disabled={loading} onClick={() => void refresh()}>Retry requests</button></div> : loading ? (
           <div className="h-24 animate-pulse rounded-2xl bg-inset" aria-hidden />
         ) : visibleRows.length === 0 ? (
           <EmptyState
@@ -213,7 +186,7 @@ export function RequestsPage() {
             message={
               filter === 'all'
                 ? 'Draft your first request — it will appear right here for the procurement officer to review.'
-                : 'Nothing in this bucket right now. Tap a card above to see other requests.'
+                : 'No requests match this status.'
             }
             action={
               <Guard module="procurement" cap="create_request" fallback={null}>
@@ -225,6 +198,7 @@ export function RequestsPage() {
           />
         ) : (
           <DataTable
+            density="compact"
             rows={visibleRows}
             columns={columns}
             keyOf={(row) => row.id}

@@ -1066,6 +1066,7 @@ function roleGuide(definition) {
 }
 
 const SOURCE_ROOT_HEADINGS = {
+  "sept11-ux-remediation-candidate": "September 11 UX Remediation Candidate",
   "sept9-wms-feedback": "September 9 WMS Feedback: Fixes And Tester Instructions",
   "sept11-uat-usability-performance": "September 11 UAT Update",
   "reviewed-task-training": "Reviewed Task Training",
@@ -1405,6 +1406,7 @@ function markdownHeadings(source) {
 }
 
 const LEGACY_TARGET_BY_SOURCE_ID = {
+  "sept11-ux-remediation-candidate": ["system", "source-references", "source-sept11-ux-remediation-candidate"],
   "sept9-wms-feedback": ["system", "source-references", "source-sept9-wms-feedback"],
   "sept11-uat-usability-performance": ["system", "source-references", "source-sept11-uat-usability-performance"],
   "user-manual": ["home", "home", "document-controls"],

@@ -1,7 +1,8 @@
 "use client";
 
 import { useSearchParams, usePathname } from "next/navigation";
-import { OnboardingCenter } from "@intra/learning";
+import { useEffect, useRef } from 'react';
+import { OnboardingCenter, taskRequirementIds, taskSelectionQuery, useOptionalLearning } from "@intra/learning";
 import { TaskStart } from "./TaskStart";
 import { useAvailableTasks } from "./TaskStartLoader";
 
@@ -9,16 +10,28 @@ export function TaskLearningWorkspace({ audience = "internal" }: { audience?: "i
   const tasks = useAvailableTasks();
   const params = useSearchParams();
   const pathname = usePathname();
+  const learning = useOptionalLearning();
+  const workspace = useRef<HTMLDivElement>(null);
+  const previousTask = useRef(params.get('task'));
   const selectedTask = tasks.find((task) => task.id === params.get("task"));
+  useEffect(() => {
+    if (previousTask.current === selectedTask?.id) return;
+    previousTask.current = selectedTask?.id ?? null;
+    if (!selectedTask) return;
+    const target = workspace.current?.querySelector<HTMLElement>('[data-task-id] h2');
+    if (target) {
+      target.tabIndex = -1;
+      target.focus();
+    }
+  }, [selectedTask]);
   const chooser = <TaskStart tasks={tasks} selectedTaskId={selectedTask?.id} onSelect={(task) => {
-    const next = new URLSearchParams(params.toString());
-    next.set("task", task.id);
-    next.set("next", task.actionHref);
-    // Task selection is local view state; Next synchronizes native history with search params.
-    window.history.replaceState(null, "", `${pathname}?${next}`);
+    if (task.id === selectedTask?.id) return;
+    const requirementIds = taskRequirementIds(learning && !learning.loading && !learning.stale ? learning.snapshot : null, audience, task.actionCapabilities);
+    const next = taskSelectionQuery(new URLSearchParams(params.toString()), task, requirementIds);
+    window.history.pushState(null, "", `${pathname}?${next}`);
   }} />;
   return (
-    <div className="space-y-6">
+    <div ref={workspace} className="space-y-6">
       {selectedTask ? <details className="border-b border-line">
         <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-muted">Change task</summary>
         {chooser}

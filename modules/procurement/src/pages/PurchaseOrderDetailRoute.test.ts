@@ -7,12 +7,15 @@ import { PurchaseOrderDetailRoute } from './PurchaseOrderDetailRoute';
 const state = vi.hoisted(() => ({
   loading: false,
   item: null as null | Record<string, unknown>,
+  error: undefined as string | undefined,
 }));
 
 vi.mock('../localStore', () => ({
   useAcceptanceWorkItem: () => ({
     loading: state.loading,
     item: state.item,
+    error: state.error,
+    refresh: vi.fn(),
     recordAcceptance: vi.fn(),
   }),
   usePurchaseOrders: () => ({ rows: [], loading: false }),
@@ -41,6 +44,7 @@ function render(canViewFullDetail: boolean) {
 beforeEach(() => {
   state.loading = false;
   state.item = null;
+  state.error = undefined;
 });
 
 it('keeps full purchase-order roles on the commercial detail surface', () => {
@@ -64,4 +68,12 @@ it('renders the scoped acceptance surface for an assigned requester', () => {
 
 it('falls back to ownership-checked detail for non-stock requester acceptance', () => {
   expect(render(false)).toMatch(/Full purchase order detail/);
+});
+
+it('retains the scoped record and retry warning after a failed acceptance read', () => {
+  state.error = 'Records could not be loaded. Please retry.';
+  const html = render(false);
+  expect(html).toContain('Goods acceptance unavailable');
+  expect(html).toContain('Retry goods acceptance');
+  expect(html).not.toContain('Full purchase order detail');
 });

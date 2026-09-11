@@ -1,14 +1,16 @@
 # Task-first Coverage Inventory
 
-Date: 2026-09-06; inventory updated September 11 for the documented View order details control and the previously documented Attach inspection evidence control missing from this snapshot. Scope: Task7 shared guide composition and bounded Task2 content inventory. NOT a release sign-off or completed Task11 pilot. The new local screenshots do not establish live exact-control certification.
+Date: 2026-09-06; inventory updated September 11 for the local UX remediation instructions, including the previously documented order-detail and inspection-evidence controls. Scope: current knowledge inventory, including candidate instructions on existing feature routes. A feature's existing live classification does not certify its new candidate controls as deployed. NOT a release sign-off or completed Task11 pilot. Local screenshots do not establish live exact-control certification.
 
 ## Exact Baseline
 
-68 features:59 live,0 limited,9 coming soon. 282 documented controls:273 live and9 non-executable roadmap controls. 26 flows,58 decision nodes,14 distinct policy-reference strings,53 existing evidence records. Zero unresolved mapped flow/role targets and zero existing graph-validator errors in the focused baseline.
+68 features: 59 live, 0 limited, 9 coming soon. 291 documented controls: 282 on live-classified features and 9 non-executable roadmap controls. 26 flows, 58 decision nodes, 14 distinct policy-reference strings, 53 existing evidence records. Zero unresolved mapped flow/role targets and zero graph-validator errors in the current inventory.
 
-All273 live controls have written behavior/validation/result and an owned feature reference. **Zero exact control-name/hotspot evidence matches.** This does not mean53 images are absent: their recorded scope does not establish every control. All282 inventory rows remain unverified for release evidence. No new screenshots or capture dates were fabricated.
+All 282 controls on live-classified features have written behavior/validation/result and an owned feature reference. **Zero exact control-name/hotspot evidence matches.** This does not mean 53 images are absent: their recorded scope does not establish every control. All 291 inventory rows remain unverified for release evidence. The validator reports 287 missing action-evidence bindings, including 5 existing flow-node bindings. No new screenshots, capture dates or acceptance states were fabricated.
 
 The snapshot below is intentionally exact. Changes require reviewing this inventory and its test, not reducing expected counts or treating a new control as implicitly verified. The inventory is current content, not a second task catalog.
+
+Regenerate the table and JSON snapshot with `node scripts/docs/build-task-coverage-snapshot.mjs`; check freshness with the same command plus `--check`. Review the narrative counts and exact expectations in `apps/shell/lib/knowledge/coverage.test.ts` alongside each inventory change. This generator does not change screenshot metadata or the separate certification manifest.
 
 ## Mapping and Limitations
 
@@ -33,16 +35,16 @@ StepWorkspace retains exact branch callback identity and permission behavior. Ti
 | feature-sign-in | live | 3 | /login | Platform | identity-and-access |
 | feature-reset-password | live | 2 | /reset-password | Platform | identity-and-access |
 | feature-knowledge-library | live | 5 | /knowledge | Platform | Reference only |
-| feature-role-onboarding | live | 3 | /onboarding | Platform | identity-and-access |
+| feature-role-onboarding | live | 4 | /onboarding | Platform | identity-and-access |
 | feature-vendor-onboarding | live | 3 | /vendor/onboarding | Legal | vendor-accreditation |
 | feature-offline-status | live | 2 | /~offline | Platform | exception-and-recovery |
-| feature-my-work | live | 3 | /work | Platform | exception-and-recovery |
+| feature-my-work | live | 6 | /work | Platform | exception-and-recovery |
 | feature-events-workspace | live | 4 | /events | Events Operations | event-intent-and-fulfillment, event-fulfillment |
 | feature-insights-workspace | live | 8 | /insights | Data and Insights | exception-and-recovery |
 | feature-product-governance | live | 5 | /product | Product | product-launch-governance, pricing-and-costing, exception-and-recovery |
 | feature-admin-governance | live | 3 | /admin | Platform | administration, identity-and-access, doa-governance, access-recertification-offboarding, audit-incident-handling |
 | feature-admin-users | live | 3 | /admin/users | Platform | identity-and-access, administration |
-| feature-admin-audit | live | 4 | /admin/audit | Platform | administration, identity-and-access, audit-incident-handling |
+| feature-admin-audit | live | 7 | /admin/audit | Platform | administration, identity-and-access, audit-incident-handling |
 | feature-admin-departments | live | 5 | /admin/departments | Platform | administration, identity-and-access, doa-governance |
 | feature-admin-doa | live | 5 | /admin/doa | Platform | doa-governance, administration, procure-to-pay |
 | feature-warehouse-dashboard | live | 6 | /warehouse | Warehouse | warehouse-setup, receive-to-putaway, quality-disposition, event-fulfillment, returns-reconciliation, cycle-count-adjustment, pricing-and-costing, exception-and-recovery |
@@ -52,7 +54,7 @@ StepWorkspace retains exact branch callback identity and permission behavior. Ti
 | feature-warehouse-product-detail | live | 8 | /warehouse/inventory/:id | Warehouse | receive-to-putaway, quality-disposition, returns-reconciliation, cycle-count-adjustment, pricing-and-costing |
 | feature-warehouse-receiving | live | 5 | /warehouse/receiving | Warehouse | receive-to-putaway, quality-disposition |
 | feature-warehouse-allocations | live | 5 | /warehouse/allocations | Warehouse | event-fulfillment, returns-reconciliation, allocation-event-return |
-| feature-warehouse-fulfillment | live | 16 | /warehouse/fulfillment | Warehouse | outbound-fulfillment, event-fulfillment, receive-to-putaway, returns-reconciliation, procure-to-pay, pricing-and-costing |
+| feature-warehouse-fulfillment | live | 17 | /warehouse/fulfillment | Warehouse | outbound-fulfillment, event-fulfillment, receive-to-putaway, returns-reconciliation, procure-to-pay, pricing-and-costing |
 | feature-warehouse-returns | live | 4 | /warehouse/returns | Warehouse | returns-reconciliation, allocation-event-return |
 | feature-warehouse-storage | live | 5 | /warehouse/storage | Warehouse | warehouse-setup, receive-to-putaway |
 | feature-warehouse-events | live | 4 | /warehouse/events | Warehouse | event-fulfillment, allocation-event-return |
@@ -76,14 +78,14 @@ StepWorkspace retains exact branch callback identity and permission behavior. Ti
 | feature-procurement-request-detail | live | 6 | /procurement/requests/:id | Procurement | procure-to-pay, vendor-accreditation |
 | feature-procurement-approvals | live | 5 | /procurement/approvals | Procurement | procure-to-pay, doa-governance, vendor-accreditation |
 | feature-procurement-purchase-orders | live | 3 | /procurement/purchase-orders | Procurement | procure-to-pay, vendor-accreditation, receive-to-putaway |
-| feature-procurement-po-detail | live | 7 | /procurement/purchase-orders/:id | Procurement | procure-to-pay, vendor-accreditation, receive-to-putaway |
-| feature-legal-cases | live | 3 | /legal | Legal | vendor-accreditation |
+| feature-procurement-po-detail | live | 8 | /procurement/purchase-orders/:id | Procurement | procure-to-pay, vendor-accreditation, receive-to-putaway |
+| feature-legal-cases | live | 4 | /legal | Legal | vendor-accreditation |
 | feature-legal-case-detail | live | 7 | /legal/cases/:id | Legal | vendor-accreditation |
 | feature-legal-case-application | live | 2 | /legal/cases/:id/application | Legal | vendor-accreditation |
 | feature-legal-sign-instrument | live | 2 | /legal/cases/:id/sign/:code | Legal | vendor-accreditation |
 | feature-legal-invite-vendor | live | 3 | /legal/invites/new | Legal | vendor-accreditation |
 | feature-vendor-cases | live | 2 | /vendor | Legal | vendor-accreditation, vendor-application-submission |
-| feature-vendor-purchase-orders | live | 1 | /vendor/purchase-orders | Legal | procure-to-pay |
+| feature-vendor-purchase-orders | live | 2 | /vendor/purchase-orders | Legal | procure-to-pay |
 | feature-vendor-case-detail | live | 6 | /vendor/cases/:id | Legal | vendor-accreditation, vendor-application-submission |
 | feature-vendor-application | live | 6 | /vendor/cases/:id/application | Legal | vendor-accreditation, vendor-application-submission |
 | feature-vendor-sign-instrument | live | 3 | /vendor/cases/:id/sign/:code | Legal | vendor-accreditation |
@@ -123,7 +125,7 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
 {
   "counts": {
     "features": 68,
-    "controls": 282,
+    "controls": 293,
     "liveFeatures": 59,
     "limitedFeatures": 0,
     "comingSoonFeatures": 9,
@@ -265,6 +267,16 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
       "unverified": true
     },
     {
+      "key": "role-onboarding:Change task / All eligible tasks",
+      "referenceId": "feature-role-onboarding",
+      "availability": "live",
+      "flowIds": [
+        "identity-and-access"
+      ],
+      "evidenceIds": [],
+      "unverified": true
+    },
+    {
       "key": "role-onboarding:Start or resume requirement",
       "referenceId": "feature-role-onboarding",
       "availability": "live",
@@ -345,7 +357,7 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
       "unverified": true
     },
     {
-      "key": "my-work:Source filter",
+      "key": "my-work:Needs your action / Waiting on someone else / Recently completed",
       "referenceId": "feature-my-work",
       "availability": "live",
       "flowIds": [
@@ -355,7 +367,37 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
       "unverified": true
     },
     {
-      "key": "my-work:Open source",
+      "key": "my-work:How work is assigned",
+      "referenceId": "feature-my-work",
+      "availability": "live",
+      "flowIds": [
+        "exception-and-recovery"
+      ],
+      "evidenceIds": [],
+      "unverified": true
+    },
+    {
+      "key": "my-work:Module",
+      "referenceId": "feature-my-work",
+      "availability": "live",
+      "flowIds": [
+        "exception-and-recovery"
+      ],
+      "evidenceIds": [],
+      "unverified": true
+    },
+    {
+      "key": "my-work:Open record",
+      "referenceId": "feature-my-work",
+      "availability": "live",
+      "flowIds": [
+        "exception-and-recovery"
+      ],
+      "evidenceIds": [],
+      "unverified": true
+    },
+    {
+      "key": "my-work:Search work",
       "referenceId": "feature-my-work",
       "availability": "live",
       "flowIds": [
@@ -634,7 +676,7 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
       "unverified": true
     },
     {
-      "key": "admin-audit:Search evidence",
+      "key": "admin-audit:Search audit history / Search",
       "referenceId": "feature-admin-audit",
       "availability": "live",
       "flowIds": [
@@ -646,7 +688,7 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
       "unverified": true
     },
     {
-      "key": "admin-audit:Filter action",
+      "key": "admin-audit:From (UTC+08) / Through (UTC+08)",
       "referenceId": "feature-admin-audit",
       "availability": "live",
       "flowIds": [
@@ -659,6 +701,42 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
     },
     {
       "key": "admin-audit:Filter module",
+      "referenceId": "feature-admin-audit",
+      "availability": "live",
+      "flowIds": [
+        "administration",
+        "identity-and-access",
+        "audit-incident-handling"
+      ],
+      "evidenceIds": [],
+      "unverified": true
+    },
+    {
+      "key": "admin-audit:Continue searching / Older results / Previous",
+      "referenceId": "feature-admin-audit",
+      "availability": "live",
+      "flowIds": [
+        "administration",
+        "identity-and-access",
+        "audit-incident-handling"
+      ],
+      "evidenceIds": [],
+      "unverified": true
+    },
+    {
+      "key": "admin-audit:Export current page CSV",
+      "referenceId": "feature-admin-audit",
+      "availability": "live",
+      "flowIds": [
+        "administration",
+        "identity-and-access",
+        "audit-incident-handling"
+      ],
+      "evidenceIds": [],
+      "unverified": true
+    },
+    {
+      "key": "admin-audit:Retry audit history",
       "referenceId": "feature-admin-audit",
       "availability": "live",
       "flowIds": [
@@ -1280,6 +1358,21 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
         "event-fulfillment",
         "returns-reconciliation",
         "allocation-event-return"
+      ],
+      "evidenceIds": [],
+      "unverified": true
+    },
+    {
+      "key": "warehouse-fulfillment:Queue filters",
+      "referenceId": "feature-warehouse-fulfillment",
+      "availability": "live",
+      "flowIds": [
+        "outbound-fulfillment",
+        "event-fulfillment",
+        "receive-to-putaway",
+        "returns-reconciliation",
+        "procure-to-pay",
+        "pricing-and-costing"
       ],
       "evidenceIds": [],
       "unverified": true
@@ -2905,6 +2998,18 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
       "unverified": true
     },
     {
+      "key": "procurement-po-detail:Add policy evidence",
+      "referenceId": "feature-procurement-po-detail",
+      "availability": "live",
+      "flowIds": [
+        "procure-to-pay",
+        "vendor-accreditation",
+        "receive-to-putaway"
+      ],
+      "evidenceIds": [],
+      "unverified": true
+    },
+    {
       "key": "procurement-po-detail:Approve award",
       "referenceId": "feature-procurement-po-detail",
       "availability": "live",
@@ -2984,6 +3089,16 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
         "procure-to-pay",
         "vendor-accreditation",
         "receive-to-putaway"
+      ],
+      "evidenceIds": [],
+      "unverified": true
+    },
+    {
+      "key": "legal-cases:Accreditation cases / Vendor lifecycle",
+      "referenceId": "feature-legal-cases",
+      "availability": "live",
+      "flowIds": [
+        "vendor-accreditation"
       ],
       "evidenceIds": [],
       "unverified": true
@@ -3176,6 +3291,16 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
       "flowIds": [
         "vendor-accreditation",
         "vendor-application-submission"
+      ],
+      "evidenceIds": [],
+      "unverified": true
+    },
+    {
+      "key": "vendor-purchase-orders:Purchase orders / Back to vendor portal",
+      "referenceId": "feature-vendor-purchase-orders",
+      "availability": "live",
+      "flowIds": [
+        "procure-to-pay"
       ],
       "evidenceIds": [],
       "unverified": true
@@ -3454,8 +3579,8 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
 
 ## Verification and Remaining Work
 
-Local verification: coverage, FeatureGuide, taskGuidance and guideComponents tests pass 64/64 across four files. The updated section assertions retain explicit error-recovery and completion-evidence content checks. Scoped lint and the subsequent shell-wide typecheck pass. The initial typecheck found an unrelated unknown-to-string error at app/api/knowledge/experience/route.ts:28, resolved by its owner; no unrelated source edit was made. API tests are outside the default knowledge-test discovery and remain with integration.
+Historical local verification (before the September 11 UX inventory update): coverage, FeatureGuide, taskGuidance and guideComponents tests passed 64/64 across four files. The updated section assertions retained explicit error-recovery and completion-evidence content checks. Scoped lint and the subsequent shell-wide typecheck passed. The initial typecheck found an unrelated unknown-to-string error at app/api/knowledge/experience/route.ts:28, resolved by its owner; no unrelated source edit was made. API tests are outside the default knowledge-test discovery and remain with integration.
 
-The standalone handbook was regenerated from 36 source documents using the existing documentation command; freshness validation and documentation tests (85/85) pass. These are local candidate checks, not deployed or human-pilot acceptance. No browser, application build or live capture was run for this work.
+Historical handbook verification: the standalone handbook was regenerated from 36 source documents using the existing documentation command; freshness validation and documentation tests (85/85) passed. These are earlier local checks, not verification of the current September 11 candidate, deployment or human-pilot acceptance. Current documentation checks are recorded in the September 11 UX candidate release note.
 
 Evidence/QA owner: post-freeze accepted control/state desktop+mobile captures and rendered review. Process owners: confirm current fields, prerequisites, next owners, governed policy versions and explicit bounded recovery. Integration: connect stable task catalog coverage without replacing exact reference mappings. Pilot owner: execute docs/training/task-first-pilot-protocol.md; no participant results yet.

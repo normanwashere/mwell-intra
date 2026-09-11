@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Guard, useSession } from "@intra/auth";
 import {
   Badge,
@@ -9,32 +9,15 @@ import {
   EmptyState,
   Field,
   Input,
-  ModuleHero,
   Skeleton,
-  useToast,
 } from "@intra/ui";
+import { AdminHeader } from '../AdminHeader';
+import { auditPageCsv, type AuditPage } from '@shell/lib/adminAuditQuery';
 import {
   auditActorLabel,
   auditEntityLabel,
   auditEventSummary,
 } from "@shell/lib/auditPresentation";
-
-interface ActivityRow {
-  readonly id: number;
-  readonly module: string | null;
-  readonly entity_type: string | null;
-  readonly entity_id: string | null;
-  readonly action: string | null;
-  readonly actor: string | null;
-  readonly detail: Record<string, unknown> | null;
-  readonly created_at: string;
-}
-
-interface ActorRow {
-  readonly id: string;
-  readonly full_name: string | null;
-  readonly email: string;
-}
 
 export default function AdminAuditPage() {
   return (
@@ -45,156 +28,112 @@ export default function AdminAuditPage() {
 }
 
 function AdminAuditInner() {
-  const { mode, supabaseClient } = useSession();
-  const toast = useToast();
-  const core = useMemo(
-    () => supabaseClient?.schema("core") ?? null,
-    [supabaseClient],
-  );
-  const [rows, setRows] = useState<ActivityRow[]>([]);
-  const [actors, setActors] = useState<Map<string, string>>(new Map());
+  const { mode, profile } = useSession();
+  const [result, setResult] = useState<AuditPage | null>(null);
+  const actors = useMemo(() => new Map(Object.entries(result?.actors ?? {})), [result]);
   const [query, setQuery] = useState("");
-  const [moduleFilter, setModuleFilter] = useState("all");
+  const [moduleFilter, setModuleFilter] = useState("");
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [filters, setFilters] = useState({ query: '', module: '', from: '', to: '' });
+  const [cursors, setCursors] = useState<(number | null)[]>([null]);
+  const [snapshot, setSnapshot] = useState<number | null>(null);
+  const [retry, setRetry] = useState(0);
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(mode === "supabase");
-
-  const load = useCallback(async () => {
-    if (!core || mode !== "supabase") {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    const [activityResult, actorResult] = await Promise.all([
-      core
-        .from("activity_log")
-        .select("id,module,entity_type,entity_id,action,actor,detail,created_at")
-        .order("created_at", { ascending: false })
-        .limit(250),
-      core.from("profiles").select("id,full_name,email"),
-    ]);
-    setLoading(false);
-    if (activityResult.error || actorResult.error) {
-      toast.error(
-        activityResult.error?.message ??
-          actorResult.error?.message ??
-          "Unable to load audit history.",
-      );
-      return;
-    }
-    setRows((activityResult.data ?? []) as ActivityRow[]);
-    setActors(
-      new Map(
-        ((actorResult.data ?? []) as ActorRow[]).map((actor) => [
-          actor.id,
-          actor.full_name ?? actor.email,
-        ]),
-      ),
-    );
-  }, [core, mode, toast]);
-
+  const before = cursors[cursors.length - 1];
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (mode !== 'supabase') return;
+    const controller = new AbortController();
+    setResult(null);
+    setError(null);
+    setLoading(true);
+    const params = new URLSearchParams({ q: filters.query, module: filters.module, from: filters.from, to: filters.to });
+    if (before !== null) params.set('before', String(before));
+    if (snapshot !== null) params.set('snapshot', String(snapshot));
+    void (async () => {
+      try {
+        const response = await fetch(`/api/admin/audit?${params}`, { signal: controller.signal, cache: 'no-store' });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error || 'Audit history could not be loaded.');
+        if (!controller.signal.aborted) setResult(body as AuditPage);
+      } catch (error) {
+        if (!controller.signal.aborted) setError(error instanceof Error ? error.message : 'Audit history could not be loaded.');
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    })();
+    return () => controller.abort();
+  }, [mode, profile?.id, filters, before, snapshot, retry]);
 
-  const modules = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          rows
-            .map((row) => row.module)
-            .filter((moduleName): moduleName is string => Boolean(moduleName)),
-        ),
-      ).sort(),
-    [rows],
-  );
-  const filtered = useMemo(() => {
-    const normalized = query.trim().toLocaleLowerCase();
-    return rows.filter((row) => {
-      if (moduleFilter !== "all" && row.module !== moduleFilter) return false;
-      if (!normalized) return true;
-      return [
-        row.module,
-        row.entity_type,
-        row.entity_id,
-        row.action,
-        actors.get(row.actor ?? "") ?? row.actor,
-        JSON.stringify(row.detail ?? {}),
-      ]
-        .join(" ")
-        .toLocaleLowerCase()
-        .includes(normalized);
-    });
-  }, [actors, moduleFilter, query, rows]);
+  const filtered = result?.rows ?? [];
+  const draftChanged = query !== filters.query || moduleFilter !== filters.module || from !== filters.from || to !== filters.to;
 
   const exportCsv = () => {
-    const escape = (value: unknown) =>
-      `"${String(value ?? "").replaceAll('"', '""')}"`;
-    const csv = [
-      ["Time", "Module", "Action", "Entity", "Actor", "Detail"]
-        .map(escape)
-        .join(","),
-      ...filtered.map((row) =>
-        [
-          row.created_at,
-          row.module,
-          row.action,
-          `${row.entity_type}:${row.entity_id}`,
-          actors.get(row.actor ?? "") ?? row.actor,
-          JSON.stringify(row.detail ?? {}),
-        ]
-          .map(escape)
-          .join(","),
-      ),
-    ].join("\n");
+    if (!result || mode !== 'supabase' || loading || error || draftChanged) return;
+    const csv = auditPageCsv(result);
     const href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
     const link = document.createElement("a");
     link.href = href;
-    link.download = `mwell-intra-audit-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `mwell-intra-audit-page-${cursors.length}-${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     URL.revokeObjectURL(href);
   };
 
   return (
     <div className="min-w-0 max-w-full space-y-6">
-      <ModuleHero
-        eyebrow="Platform governance"
+      <AdminHeader
         title="Audit history"
-        description="Review retained administrative and cross-module changes by actor, record, and time."
-        icon="shield"
         action={
-          <Button variant="outline" onClick={exportCsv} disabled={!filtered.length}>
-            Export CSV
+          <Button variant="outline" onClick={exportCsv} disabled={mode !== 'supabase' || !filtered.length || loading || Boolean(error) || draftChanged}>
+            Export current page CSV
           </Button>
         }
       />
-      <Card className="p-4 sm:p-5">
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_14rem]">
+      <form className="border-b border-line pb-4" onSubmit={event => {
+        event.preventDefault();
+        setResult(null); setLoading(true); setCursors([null]); setSnapshot(null);
+        setFilters({ query, module: moduleFilter, from, to });
+      }}>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
           <Field label="Search audit history" htmlFor="audit-search">
             <Input
               id="audit-search"
               type="search"
+              maxLength={200}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Actor, action, entity, reference"
             />
           </Field>
           <Field label="Module" htmlFor="audit-module">
-            <select
+            <Input
               id="audit-module"
-              className="input-base min-h-11 w-full"
               value={moduleFilter}
+              maxLength={80}
+              placeholder="All modules"
+              list="audit-modules"
               onChange={(event) => setModuleFilter(event.target.value)}
-            >
-              <option value="all">All modules</option>
-              {modules.map((moduleName) => (
-                <option key={moduleName} value={moduleName}>
-                  {moduleName}
-                </option>
-              ))}
-            </select>
+            />
+            <datalist id="audit-modules">
+              {['core', 'warehouse', 'procurement', 'legal', 'events', 'product', 'finance', 'learning', 'insights'].map(name => <option key={name} value={name} />)}
+            </datalist>
           </Field>
+          <Field label="From (UTC+08)" htmlFor="audit-from"><Input id="audit-from" type="date" value={from} onChange={event => setFrom(event.target.value)} /></Field>
+          <Field label="Through (UTC+08)" htmlFor="audit-to"><Input id="audit-to" type="date" value={to} onChange={event => setTo(event.target.value)} /></Field>
         </div>
-      </Card>
-      {loading ? (
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <Button type="submit" icon="search" disabled={mode !== 'supabase'}>Search</Button>
+          <p className="text-sm text-muted">Retained authorized events · {filters.from || 'Earliest retained'} to {filters.to || 'Latest retained'} · Newest recorded first</p>
+          {draftChanged && <p role="status" className="text-sm text-muted">Unapplied filters</p>}
+        </div>
+      </form>
+      {mode !== 'supabase' ? <p role="status">Audit history is unavailable in this read-only preview.</p> : error ? (
+        <div role="alert" className="border-l-4 border-rose-500 bg-rose-50 p-4 text-rose-900">
+          <p className="font-semibold">Audit history unavailable</p><p>{error}</p>
+          <Button className="mt-3" variant="outline" icon="rotate" onClick={() => setRetry(value => value + 1)}>Retry audit history</Button>
+        </div>
+      ) : loading ? (
         <div className="space-y-2">
           <Skeleton className="h-24 w-full" />
           <Skeleton className="h-24 w-full" />
@@ -202,8 +141,8 @@ function AdminAuditInner() {
       ) : filtered.length === 0 ? (
         <EmptyState
           icon="shield"
-          title="No matching audit events"
-          message="Administrative and governed workflow changes appear here."
+          title={result?.searchPending ? 'Search unfinished' : 'No matching audit events'}
+          message={result?.searchPending ? 'No matches in this segment. Older retained events remain to be searched.' : 'No matches in the remaining authorized history for these filters.'}
         />
       ) : (
         <ol className="min-w-0 max-w-full space-y-3">
@@ -262,6 +201,13 @@ function AdminAuditInner() {
           ))}
         </ol>
       )}
+      {result && !loading && !error && mode === 'supabase' && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
+        <p role="status" className="text-sm text-muted">Page {cursors.length} · {filtered.length} events on this page · {result.scanned} retained events checked · {result.searchPending ? 'Search unfinished: older history remains' : result.next === null ? 'End of matching history' : 'More matching events available'}</p>
+        <div className="flex gap-2">
+          <Button variant="outline" disabled={cursors.length === 1 || draftChanged} onClick={() => { setLoading(true); setCursors(value => value.slice(0, -1)); }}>Previous</Button>
+          <Button variant="outline" disabled={result.next === null || draftChanged} onClick={() => { setLoading(true); setSnapshot(result.snapshot); setCursors(value => [...value, result.next]); }}>{result.searchPending ? 'Continue searching' : 'Older results'}</Button>
+        </div>
+      </div>}
     </div>
   );
 }

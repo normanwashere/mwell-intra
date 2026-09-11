@@ -4,14 +4,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Badge,
   Button,
-  Card,
   Field,
   Input,
-  ModuleHero,
   useToast,
 } from "@intra/ui";
 import { useCan, useSession } from "@intra/auth";
 import { PolicyProfileSection } from "./PolicyProfileSection";
+import { AdminHeader, AdminSections } from '../AdminHeader';
 
 type Tier =
   "dept_head" | "procurement_head" | "finance" | "legal" | "final_approver";
@@ -353,9 +352,9 @@ function DoaWorkspace({ canManagePolicy }: { canManagePolicy: boolean }) {
           typeof row.approver_user_id === "string" ? row.approver_user_id : "",
       })),
     );
-    document
-      .getElementById("doa-editor")
-      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const editor = document.getElementById('doa-editor');
+    editor?.focus({ preventScroll: true });
+    editor?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     toast.toast(
       `Loaded ${departmentNameByCode.get(matrix.department) ?? matrix.department}. Update the version and assignments, then save a new draft.`,
     );
@@ -363,30 +362,28 @@ function DoaWorkspace({ canManagePolicy }: { canManagePolicy: boolean }) {
 
   return (
     <div aria-busy={workspaceLoading} className="space-y-6 pb-44 md:pb-8">
-      <ModuleHero
-        eyebrow="Intra governance"
+      <AdminHeader
         title="Delegation of Authority"
-        description="Maintain department-specific approval ladders. Configuration access never grants approval authority."
-        icon="clipboard"
       />
-      <section aria-labelledby="coverage-heading">
+      <AdminSections items={[{ id: 'doa-coverage', label: 'Department coverage' }, { id: 'doa-policies', label: 'Policy profiles' }, { id: 'doa-editor', label: 'Matrix editor' }]} />
+      <section id="doa-coverage" tabIndex={-1} className="scroll-mt-24" aria-labelledby="coverage-heading">
         <h2
           id="coverage-heading"
           className="mb-3 text-lg font-semibold text-ink"
         >
           Department coverage
         </h2>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className="divide-y divide-line border-y border-line">
           {matrices.map((matrix) => (
-            <Card
+            <div
               key={matrix.id}
               role="group"
               aria-label={`${departmentNameByCode.get(matrix.department) ?? matrix.department} ${matrix.version} DOA matrix`}
-              className="min-w-0 overflow-hidden p-4"
+              className="grid min-w-0 gap-3 px-2 py-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center"
             >
-              <div className="flex items-start justify-between gap-3">
+              <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h3 className="truncate font-semibold text-ink">
+                  <h3 className="break-words font-semibold text-ink">
                     {departmentNameByCode.get(matrix.department) ??
                       matrix.department}
                   </h3>
@@ -403,7 +400,7 @@ function DoaWorkspace({ canManagePolicy }: { canManagePolicy: boolean }) {
                 </Badge>
               </div>
               {matrix.id !== "preview" && (
-                <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                <div className="flex flex-wrap gap-2">
                   <Button
                     className="scroll-mt-24 w-full sm:w-auto"
                     size="sm"
@@ -427,7 +424,7 @@ function DoaWorkspace({ canManagePolicy }: { canManagePolicy: boolean }) {
                   )}
                 </div>
               )}
-            </Card>
+            </div>
           ))}
           {matrices.length === 0 && (
             <p className="text-sm text-muted">
@@ -441,8 +438,8 @@ function DoaWorkspace({ canManagePolicy }: { canManagePolicy: boolean }) {
         mode={mode}
         client={supabaseClient as never}
       />
-      <div id="doa-editor" className="scroll-mt-24">
-        <Card className="p-4 sm:p-5">
+      <div id="doa-editor" tabIndex={-1} className="scroll-mt-24">
+        <section aria-label="Matrix editor" className="border-y border-line py-4">
           <h2 className="text-lg font-semibold text-ink">
             Create department matrix
           </h2>
@@ -640,7 +637,7 @@ function DoaWorkspace({ canManagePolicy }: { canManagePolicy: boolean }) {
               {saving ? "Saving..." : "Save draft"}
             </Button>
           </div>
-        </Card>
+        </section>
       </div>
       <div
         data-mobile-action-bar="true"

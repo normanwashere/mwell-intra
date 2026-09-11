@@ -10,6 +10,7 @@
 
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { localDestination } from './lib/localDestination';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -33,16 +34,6 @@ function isPublicPath(pathname: string): boolean {
   // Static assets (the matcher already skips most; belt-and-suspenders for
   // service-worker/scripts and any extension the matcher regex misses).
   return /\.(?:svg|png|jpg|jpeg|gif|webp|ico|js|mjs|css|map|txt|json|woff2?)$/i.test(pathname);
-}
-
-// Only a same-origin PATHNAME may round-trip through ?redirect= — never a
-// scheme or protocol-relative URL ("//evil.example"), so the login page can
-// safely `router.replace(redirect)` without an open-redirect hole.
-function sanitizeRedirectPath(pathname: string): string {
-  if (!pathname.startsWith('/') || pathname.startsWith('//') || pathname.includes('://')) {
-    return '/';
-  }
-  return pathname;
 }
 
 export async function proxy(request: NextRequest) {
@@ -92,7 +83,7 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   if (!user && !isPublicPath(pathname)) {
     const loginUrl = new URL('/login', request.url);
-    const redirectTo = sanitizeRedirectPath(pathname);
+    const redirectTo = localDestination(pathname + request.nextUrl.search);
     if (redirectTo !== '/') loginUrl.searchParams.set('redirect', redirectTo);
     const redirect = NextResponse.redirect(loginUrl);
     // Carry any freshly-rotated auth cookies onto the redirect response.

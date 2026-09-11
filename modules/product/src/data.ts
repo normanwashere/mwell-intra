@@ -176,7 +176,7 @@ function evidence(value: unknown): ReadinessEvidence[] {
   });
 }
 
-function mapReadiness(row: UnknownRow): ReadinessPackage | null {
+export function mapReadiness(row: UnknownRow): ReadinessPackage | null {
   const id = text(row.id);
   const productId = text(row.product_id);
   if (!id || !productId) return null;
@@ -187,6 +187,10 @@ function mapReadiness(row: UnknownRow): ReadinessPackage | null {
     version: numberValue(row.version, 1),
     status: text(row.status, "draft") as ReadinessPackage["status"],
     evidence: evidence(row.evidence),
+    // Live acknowledge_operations_handoff requires current approval, not active kit publication.
+    // Active kit creation itself depends on this handoff (product.can_launch).
+    kitRequired: false,
+    isCurrent: row.is_current === true,
     conditions: text(row.conditions),
     preparedBy: text(row.prepared_by),
     submittedBy: optionalText(row.submitted_by),
@@ -252,13 +256,25 @@ export async function loadLiveProductWorkspace(
           .limit(250)
       : emptyResult(),
   ]);
-  const warnings = [readinessResult.error, pricingResult.error]
+  const readiness = (readinessResult.data ?? [])
+    .map(row => mapReadiness(row as UnknownRow))
+    .filter((row): row is ReadinessPackage => Boolean(row));
+  const kits = readiness.length ? await client.schema('warehouse').from('kit_definitions')
+    .select('id,product_id,version,status,product_approval_reference')
+    .in('product_id', [...new Set(readiness.map(item => item.productId))])
+    .order('version', { ascending: false }).limit(1000) : { data: [], error: null };
+  for (const item of readiness) {
+    const kit = (kits.data ?? []).find(row => (row as UnknownRow).product_id === item.productId) as UnknownRow | undefined;
+    item.kitPublication = kits.error ? { status: 'unavailable' } : !kit ? { status: 'not_visible' }
+      : ['draft', 'active', 'retired'].includes(text(kit.status))
+        ? { status: text(kit.status) as 'draft' | 'active' | 'retired', id: text(kit.id), version: numberValue(kit.version), approvalReference: text(kit.product_approval_reference) }
+        : { status: 'unavailable' };
+  }
+  const warnings = [readinessResult.error, pricingResult.error, kits.error]
     .filter((error): error is { message: string } => Boolean(error))
     .map((error) => error.message);
   return {
-    readiness: (readinessResult.data ?? [])
-      .map((row) => mapReadiness(row as UnknownRow))
-      .filter((row): row is ReadinessPackage => Boolean(row)),
+    readiness,
     pricing: (pricingResult.data ?? [])
       .map((row) => mapPrice(row as UnknownRow))
       .filter((row): row is PriceProposal => Boolean(row)),

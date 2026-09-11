@@ -58,3 +58,11 @@ it('continues to admit authenticated page requests', async () => {
   expect(response.headers.get('location')).toBeNull();
   expect(response.headers.get('x-middleware-next')).toBe('1');
 });
+
+it.each(['/knowledge?article=feature-my-work', '/onboarding?task=inspect-audit-history&next=%2Fadmin%2Faudit'])('retains guide/task query through cold login: %s', async path => {
+  const { proxy } = await import('@shell/proxy');
+  const response = await proxy(new NextRequest(`https://intra.test${path}`));
+  const destination = new URL(response.headers.get('location')!);
+  expect(destination.pathname).toBe('/login');
+  expect(destination.searchParams.get('redirect')).toBe(path);
+});

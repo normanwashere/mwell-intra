@@ -4,12 +4,10 @@ import Link from "next/link";
 import { Guard } from "@intra/auth";
 import {
   Badge,
-  Card,
   HeroChipButton,
   Icon,
-  ModuleHero,
-  SectionTitle,
 } from "@intra/ui";
+import { AdminHeader } from './AdminHeader';
 
 const areas = [
   {
@@ -57,12 +55,9 @@ const areas = [
 export default function AdministrationPage() {
   return (
     <Guard module="core" cap="manage_rbac">
-      <div className="space-y-7">
-        <ModuleHero
-          eyebrow="Platform governance"
+      <div className="space-y-4">
+        <AdminHeader
           title="Administration"
-          description="Manage accountable access, organization structure, approval authority, and retained audit evidence."
-          icon="shield"
           action={
             <HeroChipButton
               href="/knowledge?flow=administration&view=flow"
@@ -71,43 +66,35 @@ export default function AdministrationPage() {
               Open governance runbook
             </HeroChipButton>
           }
-          accessory={<Badge tone="emerald">Governed workspace</Badge>}
         />
-        <section aria-labelledby="admin-areas">
-          <SectionTitle
-            id="admin-areas"
-            eyebrow="Configuration"
-            title="Administration areas"
-            subtitle="Choose the record type you need to govern. Changes retain actor, effective date, and history."
-          />
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <section aria-label="Administration areas">
+          <div className="divide-y divide-line border-y border-line">
             {areas.map((area) => (
-              <Card
+              <Link
                 key={area.href}
-                className="workflow-launcher flex min-h-44 flex-col p-5"
+                href={area.href}
+                aria-label={`Open ${area.title}`}
+                className="group grid min-w-0 grid-cols-[2.5rem_minmax(0,1fr)_1rem] items-start gap-3 px-2 py-4 transition hover:bg-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500 sm:grid-cols-[2.5rem_minmax(0,1fr)_auto_1rem] sm:items-center"
                 data-tone={area.status === "Live" ? "brand" : "cyan"}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <span className="grid h-10 w-10 place-items-center bg-brand-50 text-brand-700">
+                  <span className="grid h-10 w-10 place-items-center rounded-md bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300">
                     <Icon name={area.icon} className="h-5 w-5" />
                   </span>
+                <div className="min-w-0">
+                  <h2 className="break-words text-base font-bold text-ink">
+                    {area.title}
+                  </h2>
+                  <p className="mt-1 break-words text-sm text-muted">
+                    {area.summary}
+                  </p>
+                </div>
+                <div className="col-start-2 row-start-2 sm:col-start-3 sm:row-start-1">
                   <Badge tone={area.status === "Live" ? "emerald" : "cyan"}>
                     {area.status}
                   </Badge>
                 </div>
-                <h2 className="mt-4 text-lg font-bold text-ink">
-                  {area.title}
-                </h2>
-                <p className="mt-2 flex-1 text-sm leading-6 text-muted">
-                  {area.summary}
-                </p>
-                <Link
-                  href={area.href}
-                  className="btn-outline mt-4 w-full justify-between"
-                >
-                  Open <Icon name="arrowRight" className="h-4 w-4" />
-                </Link>
-              </Card>
+                <Icon name="arrowRight" className="col-start-3 row-start-1 mt-1 h-4 w-4 text-faint group-hover:text-brand-700 sm:col-start-4 sm:mt-0" />
+              </Link>
             ))}
           </div>
         </section>

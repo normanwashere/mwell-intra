@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { useRef, useState } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -46,6 +47,29 @@ function ModalHarness() {
 }
 
 describe("shared dialog accessibility", () => {
+  it("makes read-only Sheet content a named keyboard region without losing focus containment", async () => {
+    const user = userEvent.setup();
+    function ReadOnlySheet() {
+      const [open, setOpen] = useState(false);
+      return <><button onClick={() => setOpen(true)}>View order</button>
+        <Sheet open={open} onOpenChange={setOpen} title="Order details">
+          <p>Read-only order history</p>
+        </Sheet></>;
+    }
+    render(<ReadOnlySheet />);
+    const trigger = screen.getByRole('button', { name: 'View order' });
+    await user.click(trigger);
+    const region = screen.getByRole('region', { name: 'Order details content' });
+    expect(region).toHaveAttribute('tabindex', '0');
+    expect(region).toHaveClass('overscroll-contain');
+    await user.tab();
+    expect(region).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
+    await user.keyboard('{Escape}');
+    expect(trigger).toHaveFocus();
+  });
+
   it("keeps Sheet focus inside and restores it after Escape", async () => {
     const user = userEvent.setup();
     render(<SheetHarness />);

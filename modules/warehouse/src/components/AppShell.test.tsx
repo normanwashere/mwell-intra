@@ -12,6 +12,16 @@ function LocationProbe() {
 }
 
 describe("AppShell navigation", () => {
+  it('names active Warehouse alerts consistently and exposes the main keyboard scroller', async () => {
+    renderWithProviders(<AppShell>Read-only exceptions</AppShell>);
+    const main = await screen.findByRole('main', { name: 'Warehouse workspace' });
+    expect(main).toHaveAttribute('tabindex', '0');
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /^Warehouse alerts \(\d+ active\)$/ }));
+    const dialog = await screen.findByRole('dialog', { name: 'Warehouse alerts' });
+    expect(dialog).toHaveTextContent('Highest priority first');
+    expect(dialog).toHaveTextContent('not unread notifications');
+  });
   it('opens actor-owned conflict details with keyboard and does not discard on inspection', async () => {
     _resetMemoryQueue();
     const entry = await enqueue('relocate', { actor: 'logistics_supervisor@mwell', idempotencyKey: 'local-conflict', fromBinId: 'RACK-A', toBinId: 'RACK-B', quantity: 2 });
@@ -258,13 +268,13 @@ describe("AppShell navigation", () => {
     renderWithProviders(<AppShell>content</AppShell>);
     await screen.findByRole("navigation", { name: "Primary" });
 
-    const alertsButton = screen.getByTitle("Module alerts");
+    const alertsButton = screen.getByTitle("Warehouse alerts");
     expect(alertsButton).toHaveAttribute(
       "aria-label",
-      expect.stringMatching(/^Module alerts \(\d+\)$/),
+      expect.stringMatching(/^Warehouse alerts \(\d+ active\)$/),
     );
     const alertCount = Number(
-      alertsButton.getAttribute("aria-label")?.match(/\((\d+)\)/)?.[1] ?? 0,
+      alertsButton.getAttribute("aria-label")?.match(/\((\d+) active\)/)?.[1] ?? 0,
     );
     const countBadge = within(alertsButton).queryByText(/^\d+$/);
     if (alertCount > 0) {
@@ -276,7 +286,7 @@ describe("AppShell navigation", () => {
 
     await user.click(alertsButton);
     expect(
-      await screen.findByRole("dialog", { name: /notifications/i }),
+      await screen.findByRole("dialog", { name: 'Warehouse alerts' }),
     ).toBeInTheDocument();
   });
 

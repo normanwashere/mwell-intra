@@ -8,7 +8,7 @@ import { useAcceptanceWorkItem } from '../localStore';
 type AcceptanceWorkItemController = ReturnType<typeof useAcceptanceWorkItem>;
 
 export function AcceptanceWorkItemView({
-  controller: { item, loading, recordAcceptance },
+  controller: { item, loading, error: readError, refresh, recordAcceptance },
 }: {
   controller: AcceptanceWorkItemController;
 }) {
@@ -24,6 +24,7 @@ export function AcceptanceWorkItemView({
   })) ?? [], [item, quantities]);
 
   if (loading) return <p className="p-4 text-sm text-muted">Loading goods acceptance...</p>;
+  if (readError) return <div role="alert" className="space-y-3 p-4"><h1 className="text-xl font-bold">Goods acceptance unavailable</h1><p>{readError}</p><p>The acceptance responsibility could not be verified. Retry this record before proceeding.</p><button type="button" className="btn-outline" onClick={() => void refresh()}>Retry goods acceptance</button></div>;
   if (!item) return <Navigate to="/" replace />;
 
   const submit = async () => {

@@ -12,13 +12,11 @@ import { Button, Card, Field, Icon, Input, userFacingError } from "@intra/ui";
 import { useSession } from "@intra/auth";
 import { MwellIntraLogo } from "@shell/components/MwellIntraLogo";
 import { authorizedPostLoginPath } from "@shell/lib/navigation";
+import { localDestination } from "@shell/lib/localDestination";
 
 /** Only allow local same-origin paths in ?redirect to prevent open-redirect. */
 function safeRedirect(candidate: string | null): string {
-  if (!candidate) return "/";
-  if (!candidate.startsWith("/") || candidate.startsWith("//")) return "/";
-  if (candidate === "/warehouse") return "/warehouse/";
-  return candidate;
+  return localDestination(candidate);
 }
 
 function replaceDocument(path: string): void {

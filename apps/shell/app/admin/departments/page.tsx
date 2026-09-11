@@ -9,12 +9,12 @@ import {
   Field,
   Icon,
   Input,
-  ModuleHero,
   Sheet,
   Skeleton,
   useToast,
   userFacingError,
 } from "@intra/ui";
+import { AdminHeader } from '../AdminHeader';
 
 interface Department {
   readonly id: string;
@@ -542,11 +542,8 @@ function DepartmentAdministration() {
 
   return (
     <div className="space-y-6">
-      <ModuleHero
-        eyebrow="Platform administration"
+      <AdminHeader
         title="Departments"
-        description="Maintain accountable organization units and reporting relationships."
-        icon="building"
         action={
           <Button icon="plus" onClick={() => openCreate()} disabled={!isLive}>
             Add department

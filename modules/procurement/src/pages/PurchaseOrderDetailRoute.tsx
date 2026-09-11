@@ -11,10 +11,10 @@ export function PurchaseOrderDetailRoute({
   canViewFullDetail: boolean;
 }) {
   const { id = '' } = useParams();
-  const acceptance = useAcceptanceWorkItem(id);
+  const acceptance = useAcceptanceWorkItem(canViewFullDetail ? '' : id);
 
   if (canViewFullDetail) return <PODetailPage />;
-  if (acceptance.loading || acceptance.item) {
+  if (acceptance.loading || acceptance.error || acceptance.item) {
     return <AcceptanceWorkItemView controller={acceptance} />;
   }
 

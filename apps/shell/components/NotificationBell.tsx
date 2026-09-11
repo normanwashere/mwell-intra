@@ -20,6 +20,7 @@ import { useSession } from '@intra/auth';
 import { ENABLE_NOTIFICATIONS } from '@shell/lib/supabase/env';
 import type { ShellSupabaseClient } from '@shell/lib/supabase/types';
 import { cx } from '@shell/lib/cx';
+import { authorizedPostLoginPath, type ShellAccess } from '@shell/lib/navigation';
 
 /** How often we re-fetch notifications in supabase mode. */
 const POLL_INTERVAL_MS = 60_000;
@@ -68,8 +69,16 @@ export function sortNotifications(rows: NotificationRow[], unreadOnly: boolean, 
   });
 }
 
+export function notificationRecordHref(row: NotificationRow): string | null {
+  if (!row.entity_id) return null;
+  const id = encodeURIComponent(row.entity_id);
+  if (row.entity_type === 'procurement_request') return `/procurement/requests/${id}`;
+  if (row.entity_type === 'purchase_order') return `/procurement/purchase-orders/${id}`;
+  return null;
+}
+
 export function NotificationBell() {
-  const { profile, mode, supabaseClient } = useSession();
+  const { profile, mode, supabaseClient, userRoles, userCapabilities } = useSession();
   const client = supabaseClient as ShellSupabaseClient | null;
 
   // Memory mode OR no client OR signed-out → no-op (dimmed bell, no popover).
@@ -248,6 +257,8 @@ export function NotificationBell() {
           </div>
           {readError && <p role="alert" className="border-b border-line py-3 text-sm text-rose-800 dark:text-rose-300">{readError}</p>}
           <NotificationResults
+            access={{ mode, userRoles, userCapabilities }}
+            profileKind={profile?.kind}
             rows={sortNotifications(rows, unreadOnly, unreadFirst)}
             initialFetch={initialFetch}
             loadFailed={loadFailed}
@@ -267,7 +278,9 @@ export function notificationSummary(initialFetch: boolean, loadFailed: boolean, 
   return unread > 0 ? `${unread} unread` : 'All read';
 }
 
-export function NotificationResults({ rows, initialFetch, loadFailed, refreshing, busyId, onMarkRead, onRetry }: {
+export function NotificationResults({ rows, initialFetch, loadFailed, refreshing, busyId, onMarkRead, onRetry, access, profileKind }: {
+  access?: ShellAccess;
+  profileKind?: 'employee' | 'vendor';
   rows: NotificationRow[];
   initialFetch: boolean;
   loadFailed: boolean;
@@ -302,10 +315,10 @@ export function NotificationResults({ rows, initialFetch, loadFailed, refreshing
                   <Icon name="check" className="h-5 w-5" />
                 </span>
                 <p className="text-sm font-medium text-ink">
-                  You're all caught up
+                  No notifications in this view
                 </p>
                 <p className="text-xs text-faint">
-                  New alerts appear here as soon as they land.
+                  Only the latest {MAX_ROWS} notifications are included. Check My Work for outstanding tasks.
                 </p>
               </li>
             ) : (
@@ -313,6 +326,10 @@ export function NotificationResults({ rows, initialFetch, loadFailed, refreshing
                 <NotificationItem
                   key={row.id}
                   row={row}
+                  href={(() => {
+                    const candidate = notificationRecordHref(row);
+                    return candidate && access && profileKind && authorizedPostLoginPath(candidate, access, profileKind) === candidate ? candidate : undefined;
+                  })()}
                   busy={busyId !== null}
                   onMarkRead={onMarkRead}
                 />
@@ -327,7 +344,9 @@ export function NotificationItem({
   row,
   busy,
   onMarkRead,
+  href,
 }: {
+  href?: string;
   row: NotificationRow;
   busy: boolean;
   onMarkRead: (id: string) => Promise<void>;
@@ -361,6 +380,7 @@ export function NotificationItem({
           {row.entity_type ? ` · ${row.entity_type.replace(/_/g, ' ')}` : ''}
         </p>
         {row.entity_id && <p className="mt-1 text-xs text-muted [overflow-wrap:anywhere]">Record reference: {row.entity_id}</p>}
+        {href && <a href={href} className="inline-flex min-h-11 items-center gap-2 font-semibold text-brand-700 focus-visible:outline focus-visible:outline-2">Open record <Icon name="arrowRight" className="h-4 w-4" /></a>}
         <p className="mt-1 text-xs text-muted">{unread ? 'Unread' : 'Read'}</p>
       </div>
       {unread && (

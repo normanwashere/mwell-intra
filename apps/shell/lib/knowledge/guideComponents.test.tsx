@@ -488,8 +488,7 @@ describe("production guide rendering contracts", () => {
     }
   });
 
-  it("renders exact policies, controls, fields, and flows for every documented feature", () => {
-    for (const feature of KNOWLEDGE_CONTENT.features) {
+  it.each(KNOWLEDGE_CONTENT.features)("renders exact policies, controls, fields, and flows for $id", (feature) => {
       const markup = renderToStaticMarkup(
         <FeatureGuide
           feature={feature}
@@ -522,6 +521,5 @@ describe("production guide rendering contracts", () => {
       for (const route of feature.routes)
         if (route.includes(":"))
           expect(markup).not.toContain(`href="${route}"`);
-    }
   });
 });

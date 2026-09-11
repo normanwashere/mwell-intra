@@ -135,7 +135,7 @@ export function FinanceActivityTable({ activity, canPrepare = false }: { activit
   );
 
   return (
-    <section aria-labelledby="finance-activity-title" className="space-y-3">
+    <section id="finance-activity" tabIndex={-1} aria-labelledby="finance-activity-title" className="space-y-3">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <SectionTitle
           title="Cross-module activity"

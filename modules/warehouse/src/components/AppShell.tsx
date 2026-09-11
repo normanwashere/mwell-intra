@@ -465,13 +465,12 @@ export function AppShell({ children }: { children: ReactNode }) {
               <span className="hidden min-[420px]:block">
                 <ThemeToggle />
               </span>
-              {/* Branded "Module alerts" (not "Notifications") so it doesn't
-                  contradict the shell's disabled demo bell (SH-7). */}
+              {/* Active warehouse issues are distinct from persisted suite notifications. */}
               <button
                 type="button"
                 onClick={() => setNotifOpen(true)}
-                aria-label={`Module alerts (${notifications.length})`}
-                title="Module alerts"
+                aria-label={`Warehouse alerts (${notifications.length} active)`}
+                title="Warehouse alerts"
                 className="relative grid h-11 w-11 place-items-center rounded-full text-muted transition hover:bg-inset hover:text-ink"
               >
                 <Icon name="bell" />
@@ -528,7 +527,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <main
           data-testid="warehouse-scroll-region"
-          className="mx-auto min-h-0 w-full max-w-5xl flex-1 scroll-pb-[calc(5rem+env(safe-area-inset-bottom))] overflow-y-auto overscroll-contain px-4 py-5 pb-[calc(7.5rem+env(safe-area-inset-bottom))] sm:px-6 md:overflow-visible md:pb-10 xl:max-w-6xl"
+          aria-label="Warehouse workspace"
+          tabIndex={0}
+          className="mx-auto min-h-0 w-full max-w-5xl flex-1 scroll-pb-[calc(5rem+env(safe-area-inset-bottom))] overflow-y-auto overscroll-contain px-4 py-5 pb-[calc(7.5rem+env(safe-area-inset-bottom))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500 sm:px-6 md:overflow-visible md:pb-10 xl:max-w-6xl"
         >
           {unresolvedLegacyCount > 0 && (
             <div role="status" aria-label="Unresolved legacy queue" className="mb-4 space-y-1 border-y border-amber-300 bg-amber-50 px-3 py-3 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100">
@@ -675,12 +676,12 @@ export function AppShell({ children }: { children: ReactNode }) {
         </ul>
       </Sheet>
 
-      {/* Notifications drawer */}
+      {/* Warehouse alerts drawer */}
       <Sheet
         open={notifOpen}
         onOpenChange={setNotifOpen}
-        title="Notifications"
-        description={`${notifications.length} current warehouse alerts. Highest priority first.`}
+        title="Warehouse alerts"
+        description={`${notifications.length} active warehouse issues, not unread notifications. Highest priority first; alerts remain until the underlying issue is resolved.`}
         side="right"
       >
         {notifications.length === 0 ? (

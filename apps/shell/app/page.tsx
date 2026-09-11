@@ -1,14 +1,11 @@
 "use client";
 
-// Landing / dashboard (spec §1). Greets the signed-in user with the suite hero
-// (matching the warehouse brand look), then surfaces cards for every surface
-// they can access — modules, the vendor portal, and admin tools.
+// Role-scoped entry points for modules, the vendor portal, and admin tools.
 
 import Link from "next/link";
 import {
   AnimatedNumber,
   Badge,
-  Card,
   EmptyState,
   HeroChipButton,
   Icon,
@@ -93,7 +90,7 @@ export default function DashboardPage() {
     icon: m.icon,
     tone: m.tone,
   }));
-  const quickAreas = cards.slice(0, 3);
+  const quickAreas = profile.kind === 'vendor' ? cards.slice(0, 3) : cards.filter(card => card.href === '/work');
 
   const firstName = profile.name?.split(/\s+/)[0] ?? "there";
 
@@ -105,31 +102,31 @@ export default function DashboardPage() {
           workspace" below. */}
       <ModuleHero
         eyebrow={`Welcome back, ${firstName}`}
-        title={profile.kind === "vendor" ? "Vendor workspace" : "Your Intra workspace"}
+        title={
+          profile.kind === "vendor"
+            ? "Vendor workspace"
+            : "Your Intra workspace"
+        }
         description={
           profile.kind === "vendor"
             ? "Continue accreditation, evidence, and required declarations for your organization."
-            : `Open the governed workspaces assigned to your ${profile.title ?? "current role"}.`
+            : "Start with your assignments, then open a module when you need its full workspace."
         }
         icon="grid"
         action={
           cards.length > 0 ? (
             <div className="flex flex-wrap gap-2">
               {quickAreas.map((c) => (
-                <HeroChipButton
-                  key={c.href}
-                  href={c.href}
-                  icon={c.icon}
-                >
+                <HeroChipButton key={c.href} href={c.href} icon={c.icon}>
                   {c.label}
                 </HeroChipButton>
               ))}
               {cards.length > quickAreas.length && (
                 <a
                   href="#workspace-areas"
-                  className="inline-flex min-h-11 items-center rounded-xl border border-line bg-surface px-3.5 py-2 text-xs font-semibold text-ink transition hover:bg-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"
+                  className="inline-flex min-h-11 items-center rounded-md border border-line bg-surface px-3.5 py-2 text-xs font-semibold text-ink transition hover:bg-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"
                 >
-                  +{cards.length - quickAreas.length} more below
+                  Browse all areas
                 </a>
               )}
             </div>
@@ -153,7 +150,11 @@ export default function DashboardPage() {
       <OnboardingStatusBand />
       <TaskStartLoader />
 
-      <div id="workspace-areas" className="scroll-mt-24">
+      <section
+        id="workspace-areas"
+        aria-label="Available workspace areas"
+        className="scroll-mt-24 space-y-3 border-t border-line pt-4"
+      >
         <SectionTitle
           eyebrow="Your workspace"
           title={cards.length > 0 ? "Available areas" : "No areas yet"}
@@ -176,84 +177,73 @@ export default function DashboardPage() {
             </div>
           }
         />
-      </div>
-
-      {cards.length === 0 ? (
-        <EmptyState
-          icon="info"
-          title="No areas yet"
-          message="You don't have access to an operational area yet. Contact your administrator to request the right role."
-          action={
-            <span
-              className={cx(
-                "chip",
-                mode === "supabase"
-                  ? "bg-inset text-muted"
-                  : "bg-amber-500/15 text-amber-800 dark:text-amber-300",
-              )}
-            >
-              {mode === "supabase" ? "Live backend" : "Demo mode · no backend"}
-            </span>
-          }
-        />
-      ) : (
-        <div
-          id="workspace-area-cards"
-          className={cx(
-            "grid gap-4",
-            cards.length === 1
-              ? "mx-auto max-w-md grid-cols-1"
-              : cards.length === 2
-                ? "sm:grid-cols-2"
-                : "sm:grid-cols-2 lg:grid-cols-3",
-          )}
-        >
-          {cards.map((c) => {
-            const badge = badges[c.href];
-            return (
-              <Link
-                key={c.href}
-                href={c.href}
-                className="block h-full"
+        {cards.length === 0 ? (
+          <EmptyState
+            icon="info"
+            title="No areas yet"
+            message="You don't have access to an operational area yet. Contact your administrator to request the right role."
+            action={
+              <span
+                className={cx(
+                  "chip",
+                  mode === "supabase"
+                    ? "bg-inset text-muted"
+                    : "bg-amber-500/15 text-amber-800 dark:text-amber-300",
+                )}
               >
-                <Card
-                  interactive
+                {mode === "supabase"
+                  ? "Live backend"
+                  : "Demo mode · no backend"}
+              </span>
+            }
+          />
+        ) : (
+          <div
+            id="workspace-area-cards"
+            className="grid border-t border-line lg:grid-cols-2 lg:gap-x-6"
+          >
+            {cards.map((c) => {
+              const badge = badges[c.href];
+              return (
+                <Link
+                  key={c.href}
+                  href={c.href}
                   data-tone={c.tone}
-                  className="workflow-launcher group flex h-full min-h-36 flex-col gap-3"
+                  className="group grid min-w-0 grid-cols-[2.25rem_minmax(0,1fr)_1rem] items-start gap-3 border-b border-line px-2 py-4 transition hover:bg-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500"
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <span
-                      className={cx(
-                        "grid h-11 w-11 place-items-center rounded-xl",
-                        TONE_CLASS[c.tone],
-                      )}
-                    >
-                      <Icon name={c.icon} />
-                    </span>
-                    {badge ? (
-                      <span className="chip bg-amber-500/15 font-semibold text-amber-800 dark:text-amber-300">
-                        {badge.label}
-                      </span>
-                    ) : null}
-                  </div>
+                  <span
+                    className={cx(
+                      "grid h-9 w-9 shrink-0 place-items-center rounded-md",
+                      TONE_CLASS[c.tone],
+                    )}
+                  >
+                    <Icon name={c.icon} />
+                  </span>
                   <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                       <h2 className="font-display text-base font-bold text-ink">
                         {c.label}
                       </h2>
-                      <Icon
-                        name="arrowRight"
-                        className="h-4 w-4 text-faint transition group-hover:translate-x-0.5 group-hover:text-brand-600 dark:group-hover:text-brand-300"
-                      />
+                      {badge ? (
+                        <span className="text-xs font-semibold text-amber-800 dark:text-amber-300">
+                          {badge.label}
+                        </span>
+                      ) : null}
                     </div>
-                    <p className="mt-0.5 text-sm text-muted">{c.description}</p>
+                    <p className="mt-1 break-words text-sm text-muted">
+                      {c.description}
+                    </p>
                   </div>
-                </Card>
-              </Link>
-            );
-          })}
-        </div>
-      )}
+                  <Icon
+                    name="arrowRight"
+                    className="mt-1 h-4 w-4 text-faint transition group-hover:translate-x-0.5 group-hover:text-brand-600 dark:group-hover:text-brand-300"
+                  />
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

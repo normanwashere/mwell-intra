@@ -20,6 +20,7 @@ import { CaseDetailPage } from "./pages/CaseDetailPage";
 import { InviteVendorPage } from "./pages/InviteVendorPage";
 import { SignInstrumentPage } from "./pages/SignInstrumentPage";
 import { VendorApplicationPage } from "./pages/VendorApplicationPage";
+import { switchVendorAccount } from './accountRecovery';
 import { LegalTabs } from "./components/LegalTabs";
 import { LEGAL_ROUTE_BY_ID } from "./routes";
 import {
@@ -57,6 +58,19 @@ function ScrollToTopOnRouteChange() {
 export function LegalApp({ basename = "/legal" }: LegalAppProps) {
   const basenameReady = useNormalizeBasenamePath(basename);
   const { profile, loading, signOut, mode, supabaseClient } = useSession();
+  const [switchingAccount, setSwitchingAccount] = useState(false);
+  const [switchError, setSwitchError] = useState('');
+  async function switchAccount() {
+    setSwitchingAccount(true);
+    setSwitchError('');
+    const destination = `${window.location.pathname}${window.location.search}`;
+    try {
+      await switchVendorAccount(signOut, destination, href => window.location.assign(href));
+    } catch {
+      setSwitchError('Could not sign out. Please try switching accounts again.');
+      setSwitchingAccount(false);
+    }
+  }
   const isVendorSurface = basename.startsWith("/vendor");
   const [vendorInviteSearch, setVendorInviteSearch] = useState<string | null>(
     null,
@@ -146,14 +160,17 @@ export function LegalApp({ basename = "/legal" }: LegalAppProps) {
               Back to dashboard
             </a>
             {isVendorSurface && (
-              <a
-                href="/login"
+              <button
+                type="button"
+                disabled={switchingAccount}
+                onClick={() => void switchAccount()}
                 className="inline-flex min-h-11 items-center justify-center rounded-xl border border-line bg-surface px-3 py-2 text-xs font-semibold text-ink hover:bg-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-app"
               >
-                Sign in with a different account
-              </a>
+                {switchingAccount ? 'Signing out...' : 'Sign in with a different account'}
+              </button>
             )}
           </div>
+          {switchError && <p role="alert">{switchError}</p>}
         </div>
       </div>
     );
@@ -417,6 +434,10 @@ function VendorChrome({
           </button>
         </div>
       </div>
+      <nav aria-label="Vendor workspace" className="mx-auto flex max-w-5xl flex-wrap gap-4 px-4 pb-2 sm:px-6">
+        <a className="inline-flex min-h-11 items-center text-sm font-semibold hover:underline" href="/vendor">Applications</a>
+        <a className="inline-flex min-h-11 items-center text-sm font-semibold hover:underline" href="/vendor/purchase-orders">Purchase orders</a>
+      </nav>
     </header>
   );
 }

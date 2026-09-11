@@ -31,18 +31,23 @@ describe("account menu viewport recovery", () => {
     expect(hook).toContain("observer.disconnect()");
     expect(hook).toContain("previous.maxHeight === next.maxHeight ? previous : next");
   });
-  it("preserves Notifications' existing 20rem preferred desktop width", () => {
+  it("supports a 20rem preferred width for a header popover", () => {
     expect(accountMenuBounds({ anchorRight: 1300, anchorBottom: 56, anchorHeight: 44,
       viewportWidth: 1440, viewportBottom: 900, rootFontSize: 16, preferredWidthRem: 20,
     }).width).toBe(320);
   });
   it("bounds the whole Notifications panel and removes its nested list scroller", () => {
     const source = readFileSync(new URL("../components/NotificationBell.tsx", import.meta.url), "utf8");
-    expect(source).toContain("useHeaderPopoverBounds(open && !disabled, triggerRef, 20)");
-    expect(source).toContain("overflow-y-auto overscroll-contain");
+    const sheet = readFileSync(new URL("../../../packages/ui/src/Sheet.tsx", import.meta.url), "utf8");
+    expect(source).toContain('<Sheet open={open && !disabled} onOpenChange={setOpen} side="right" title="Notifications"');
+    expect(sheet).toContain('Dialog.Root open={open} onOpenChange={onOpenChange}');
+    expect(sheet).toContain('Dialog.Content');
+    expect(sheet).toContain("overflow-y-auto overscroll-contain");
     expect(source).not.toContain("max-h-96");
-    expect(source).toContain("event.key === 'Escape'");
-    expect(source).toContain("triggerRef.current?.focus()");
+    expect(sheet).toContain('Dialog.Close');
+    expect(sheet).toContain('onCloseAutoFocus');
+    expect(sheet).toContain('returnFocusRef.current.focus()');
+    expect(source).toContain('aria-haspopup="dialog"');
     expect(source).toContain("client.rpc('mark_notification_read'");
     expect(source).toContain("min-h-11 min-w-11 max-w-full whitespace-normal");
     expect(source).toContain("flex min-w-0 flex-wrap items-start gap-3");

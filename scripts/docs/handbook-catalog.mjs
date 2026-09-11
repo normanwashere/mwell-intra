@@ -14,6 +14,20 @@ export const HANDBOOK_TABS = Object.freeze([
 
 const CATALOG = [
   {
+    source: "docs/releases/2026-09-11-UX-REMEDIATION-CANDIDATE.md",
+    id: "sept11-ux-remediation-candidate",
+    title: "September 11 UX Remediation (Local Candidate, Not Live)",
+    primaryTab: "release",
+    relatedTabs: ["workflows", "roles"],
+    contentType: "release-note",
+    audience: ["operator", "trainer", "release-reviewer"],
+    summary: "Local candidate instructions for preserved links, task selection, bounded audit search, scoped evidence and recovery. Not a deployment or all-findings acceptance claim.",
+    keywords: ["september 11", "ux", "candidate", "audit", "continuation", "kit publication", "recovery"],
+    sortOrder: 2,
+    collapse: "reference",
+    relatedSources: ["docs/manual/MWELL_INTRA_USER_MANUAL.md"],
+  },
+  {
     source: "docs/releases/2026-09-11-UAT-USABILITY-PERFORMANCE.md",
     id: "sept11-uat-usability-performance",
     title: "September 11 UAT Update",

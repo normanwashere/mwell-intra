@@ -22,6 +22,14 @@ export interface ReadinessPackage {
   evidence: ReadinessEvidence[];
   /** Explicit approval of the launch kit/bundle dependency, when applicable. */
   kitApproved?: boolean;
+  kitRequired?: boolean;
+  isCurrent?: boolean;
+  kitPublication?: {
+    status: 'draft' | 'active' | 'retired' | 'not_visible' | 'unavailable';
+    id?: string;
+    version?: number;
+    approvalReference?: string;
+  };
   conditions: string;
   preparedBy: string;
   submittedBy: string | null;

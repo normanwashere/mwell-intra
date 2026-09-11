@@ -131,7 +131,8 @@ describe("LegalApp access-denied recovery", () => {
     expect(html).not.toContain("No legal access");
     expect(html).toContain('href="/"');
     expect(html).toContain("Back to dashboard");
-    expect(html).toContain('href="/login"');
+    expect(html).not.toContain('href="/login"');
+    expect(html).toContain('<button type="button"');
     expect(html).toContain("Sign in with a different account");
   });
 

@@ -8,13 +8,11 @@ import {
   DataTable,
   EmptyState,
   Field,
-  HeroChipButton,
-  HeroStat,
   Icon,
   InfoTip,
-  ModuleHero,
   SectionTitle,
   Sheet,
+  WorkflowSummary,
   money,
   useToast,
   type Column,
@@ -61,6 +59,15 @@ import {
 import { createGovernedAttachmentUrl, type GovernedAccessClient } from '../attachments';
 import { attachmentSizeLabel } from '../evidencePresentation';
 import { RequestRevisionEditor } from '../components/RequestRevisionEditor';
+import { requestWorkflowSummary } from '../workflowSummary';
+
+export function requestSubmissionSuccessMessage(
+  request: Parameters<typeof requestWorkflowSummary>[0],
+  hasLinkedPo = false,
+): string {
+  const summary = requestWorkflowSummary(request, { allowed: false, blockers: [] }, hasLinkedPo);
+  return `Request status recorded: ${summary.status}. Next: ${summary.owner}. ${summary.nextStep}`;
+}
 
 /** Compose a blocking message from an unmet submit-readiness result. */
 function readinessMessage(r: SubmitReadiness): string {
@@ -119,7 +126,7 @@ export function RequestDetailPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { rows, submit, cancel, update, refresh, loading } = useProcurementRequests();
+  const { rows, submit, cancel, update, refresh, loading, error: readError } = useProcurementRequests();
   const { rows: pos, add: addPO } = usePurchaseOrders();
   const vendors = useProcurementVendors();
   const history = useApprovalHistory(id);
@@ -177,7 +184,7 @@ export function RequestDetailPage() {
           error(readinessMessage(readiness));
         } else {
           const ok = await submit(req.id);
-          if (ok) success('Request submitted for approval');
+          if (ok) success(requestSubmissionSuccessMessage(ok, pos.some((po) => po.requestId === ok.id)));
         }
       })();
       searchParams.delete('submit');
@@ -253,6 +260,7 @@ export function RequestDetailPage() {
     return events.sort((a, b) => b.at.localeCompare(a.at));
   }, [req, history, linkedPo]);
 
+  if (readError) return <div role="alert" className="space-y-3"><WorkflowSummary status="Request unavailable" owner="Request viewer" nextStep="Retry this request. Its current status and next responsibility are not verified." blocker={readError} tone="warning" /><button type="button" className="btn-outline" onClick={() => void refresh()}>Retry request</button><Link to="/requests" className="btn-ghost">Back to requests</Link></div>;
   if (loading) {
     return (
       <div className="mx-auto max-w-4xl space-y-4">
@@ -373,7 +381,7 @@ export function RequestDetailPage() {
       return;
     }
     const ok = await submit(req.id);
-    if (ok) success('Request submitted for approval');
+    if (ok) success(requestSubmissionSuccessMessage(ok, pos.some((po) => po.requestId === ok.id)));
     else error('Could not submit — try again.');
   }
   async function handleCancel() {
@@ -451,34 +459,25 @@ export function RequestDetailPage() {
     .join(' · ');
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <ModuleHero
-        eyebrow={
-          req.department || req.costCenter
-            ? [req.department, req.costCenter].filter(Boolean).join(' \u00b7 ')
-            : 'Purchase request'
-        }
-        title={req.title}
-        description={req.description || undefined}
-        icon="cart"
-        action={
-          <HeroChipButton href="/procurement" icon="arrowRight">
-            Back to list
-          </HeroChipButton>
-        }
-        accessory={
-          <div className="flex flex-wrap items-end gap-3">
-            <HeroStat label="Status">
-              <Badge tone={STATUS_TONE[req.status]}>{statusLabel(req.status)}</Badge>
-            </HeroStat>
-            <HeroStat label="Estimated total" align="right">
-              <p className="tnum font-display text-2xl font-extrabold text-ink">
-                {req.estimatedAmount != null ? money(req.estimatedAmount) : '—'}
-              </p>
-            </HeroStat>
+    <div className="mx-auto min-w-0 max-w-5xl space-y-5">
+      <header className="space-y-2">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1 basis-56">
+            <p className="text-xs font-semibold text-muted [overflow-wrap:anywhere]">
+              {req.department || req.costCenter ? [req.department, req.costCenter].filter(Boolean).join(' · ') : 'Purchase request'}
+            </p>
+            <h1 className="mt-1 text-xl font-bold text-ink [overflow-wrap:anywhere]">{req.title}</h1>
           </div>
-        }
-      />
+          <a href="/procurement" className="btn-ghost btn-sm">Back to list</a>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <Badge tone={STATUS_TONE[req.status]}>{statusLabel(req.status)}</Badge>
+          <p className="text-sm text-muted">Estimated total <strong className="tnum ml-1 text-ink">{req.estimatedAmount != null ? money(req.estimatedAmount) : '—'}</strong></p>
+        </div>
+        {req.description && <p className="text-sm text-muted [overflow-wrap:anywhere]">{req.description}</p>}
+      </header>
+
+      <WorkflowSummary {...requestWorkflowSummary(req, submitGate, Boolean(linkedPo))} />
 
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
         <span>{metaLine}</span>
@@ -514,7 +513,7 @@ export function RequestDetailPage() {
             title="Procurement route decision"
             subtitle="Procurement chooses the mode; the policy computes the solicitation document and governance tier."
           />
-          <Card>
+          <div className="min-w-0 border-t border-line py-3">
             {displayedRoute && routeRecommendation ? <ProcurementRoutePanel
               value={displayedRoute}
               recommendation={routeRecommendation}
@@ -532,12 +531,12 @@ export function RequestDetailPage() {
                 Confirm procurement route
               </button>
             )}
-          </Card>
+          </div>
         </div>
       )}
 
       {req.status === 'draft' && req.compliance?.routeConfirmed && displayedRoute && (
-        <Card aria-label="Confirmed procurement route" className="p-4 sm:p-5">
+        <div aria-label="Confirmed procurement route" className="min-w-0 border-y border-line py-3">
           <h2 className="text-base font-semibold text-ink">Confirmed procurement route</h2>
           <dl className="mt-3 grid gap-3 sm:grid-cols-3 text-sm">
             <div><dt className="text-muted">Solicitation</dt><dd className="font-semibold text-ink">{displayedRoute.solicitationType.toUpperCase()}</dd></div>
@@ -547,11 +546,11 @@ export function RequestDetailPage() {
           <div className="mt-3 rounded-md border border-line bg-inset p-3 text-sm text-muted">
             <strong className="text-ink">Applied policy profile:</strong> {appliedPolicyProfileSummary(routeProfile, displayedRoute.policyProfileId)}
           </div>
-        </Card>
+        </div>
       )}
 
       {displayedRoute && displayedRoute.procurementMode !== 'competitive_bidding' && (
-        <Card aria-label="Governed exception workspace" className="p-4 sm:p-5">
+        <div aria-label="Governed exception workspace" className="min-w-0 border-y border-line py-3">
           <ExceptionWorkspace
             requestId={req.id}
             mode={displayedRoute.procurementMode}
@@ -560,7 +559,7 @@ export function RequestDetailPage() {
             initialEvidence={req.exceptionPack}
             onChanged={refresh}
           />
-        </Card>
+        </div>
       )}
 
       {req.status === 'draft' &&
@@ -571,7 +570,7 @@ export function RequestDetailPage() {
               title="Competitive sourcing"
               subtitle="Close the response window, document commercial and technical evidence, then record an explicit best-value recommendation before award."
             />
-            <Card>
+            <div className="min-w-0 border-t border-line py-3">
               <SourcingWorkspace
                 requestId={req.id}
                 method={req.route.solicitationType === 'rfp' ? 'rfp' : 'rfq'}
@@ -581,7 +580,7 @@ export function RequestDetailPage() {
                 vendors={vendors}
                 onChanged={refresh}
               />
-            </Card>
+            </div>
           </div>
         )}
 

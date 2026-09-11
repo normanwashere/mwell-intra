@@ -24,12 +24,20 @@ export function validateReadinessSubmission(
   return errors;
 }
 
+export function kitReadiness(readiness: Pick<ReadinessPackage, 'kitRequired' | 'kitApproved'>) {
+  if (readiness.kitRequired === false) return { state: 'not_required', label: 'Not required before handoff', ready: true } as const;
+  if (readiness.kitApproved === true) return { state: 'approved', label: 'Verified', ready: true } as const;
+  if (readiness.kitRequired === true || readiness.kitApproved === false) return { state: 'required', label: 'Required before handoff', ready: false } as const;
+  return { state: 'unknown', label: 'Unknown - confirm kit requirement with Product', ready: false } as const;
+}
+
 export function canAcknowledgeOperationsHandoff(
   readiness: ReadinessPackage,
 ): boolean {
   return (
     readiness.status === "approved" &&
-    readiness.kitApproved !== false &&
+    readiness.isCurrent !== false &&
+    kitReadiness(readiness).ready &&
     readiness.evidence.every((item) => !item.required || item.verified) &&
     readiness.operationsAcknowledgedAt === null
   );
@@ -38,7 +46,8 @@ export function canAcknowledgeOperationsHandoff(
 export function canLaunchFromReadiness(readiness: ReadinessPackage): boolean {
   return (
     readiness.status === "approved" &&
-    readiness.kitApproved !== false &&
+    readiness.isCurrent !== false &&
+    kitReadiness(readiness).ready &&
     readiness.evidence.every((item) => !item.required || item.verified) &&
     Boolean(
       readiness.operationsAcknowledgedBy &&

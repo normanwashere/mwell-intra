@@ -10,25 +10,16 @@ import {
   EvidenceAttachment,
   useEvidenceAttachment,
   Field,
-  HeroChipButton,
   Icon,
-  ModuleHero,
-  SectionTitle,
+  PageHeader,
   Sheet,
   SignInPrompt,
   SkeletonList,
   SkeletonStats,
-  StatCard,
   useToast,
 } from "@intra/ui";
-import {
-  canApproveEventSettlement,
-  canAccessEvents,
-  canCloseEvents,
-  canCreateEvents,
-  canManageEvents,
-  canRequestEventFulfillment,
-} from "./access";
+import { EVENT_LEARNING_TASKS, eventCapabilityAllowed, eventRequestHref } from './capabilities';
+import { EventWorkflowSummary } from './EventWorkflowSummary';
 import {
   eventReconciliationHandoff,
   useEventsData,
@@ -86,7 +77,8 @@ export function EventsApp({
   eventId?: string;
   openCreate?: boolean;
 }) {
-  const { profile, userRoles, loading: sessionLoading } = useSession();
+  const { profile, userRoles, mode, userCapabilities, roleCapabilities, loading: sessionLoading } = useSession();
+  const allowed = (cap: Parameters<typeof eventCapabilityAllowed>[1]) => eventCapabilityAllowed(userRoles, cap, mode, userCapabilities?.events);
   const {
     data,
     loading,
@@ -108,6 +100,7 @@ export function EventsApp({
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [lastHandoff, setLastHandoff] = useState<{ id: string; eventId: string } | null>(null);
   const [manageOpen, setManageOpen] = useState(false);
   const [manageAction, setManageAction] =
     useState<EventManagementAction>("edit");
@@ -132,6 +125,7 @@ export function EventsApp({
   const reconciliationSaving = useRef(false);
   useEffect(() => {
     setReconciliationOpen(false);
+    setLastHandoff(null);
     setOpeningEvidence(false);
     setEvidenceLink('');
     evidenceOperation.current = null;
@@ -200,7 +194,7 @@ export function EventsApp({
     );
   }
   if (!profile) return <SignInPrompt module="Events" basename="/events" />;
-  if (!canAccessEvents(userRoles)) {
+  if (!allowed('view_events')) {
     return (
       <div
         role="alert"
@@ -226,10 +220,20 @@ export function EventsApp({
   const selectedEvent = eventId
     ? data.events.find((event) => event.id === eventId)
     : undefined;
-  const mayManage = canManageEvents(userRoles);
-  const mayClose = canCloseEvents(userRoles);
-  const mayRequest = canRequestEventFulfillment(userRoles);
-  const mayApproveReconciliation = canApproveEventSettlement(userRoles);
+  const mayManage = allowed('manage_events') && !error;
+  const mayClose = allowed('close_event') && !error;
+  const mayRequest = allowed('request_fulfillment') && !error;
+  const mayApproveReconciliation = allowed('approve_settlement') && !error;
+  const lockedActions = ['create_event', 'manage_events', 'close_event', 'request_fulfillment', 'approve_settlement'].filter(cap => mode === 'supabase' && roleCapabilities?.events?.includes(cap) && !userCapabilities?.events?.includes(cap));
+  const recovery = lockedActions.length > 0 && <div role="status" className="space-y-2 border-l-4 border-amber-500 p-3 text-sm">
+    <p>Assigned actions unavailable. Complete required learning or refresh your access with your administrator.</p>
+    <ul>{lockedActions.map(cap => <li key={cap}><a className="inline-flex min-h-11 items-center underline" href={`/onboarding?task=${EVENT_LEARNING_TASKS[cap]!.task}&next=${encodeURIComponent(eventId ? `/events/${encodeURIComponent(eventId)}` : '/events')}`}>Resume {EVENT_LEARNING_TASKS[cap]!.label} learning</a></li>)}</ul>
+    <a className="inline-flex min-h-11 items-center underline" href={`/onboarding?next=${encodeURIComponent(eventId ? `/events/${encodeURIComponent(eventId)}` : '/events')}`}>Review Events prerequisites</a>
+  </div>;
+  const readFailure = error && <div role="alert" className="space-y-2 border-l-4 border-amber-500 p-3 text-sm">
+    <p><strong>Event data unavailable.</strong> {userFacingError(error)} {selectedEvent ? 'Displayed data may be stale. Actions are paused until refresh succeeds.' : 'The event could not be checked.'}</p>
+    <button type="button" className="btn-ghost min-h-11" onClick={() => void refresh()}>Retry</button>
+  </div>;
   const reconciliation = data.reconciliations?.find(
     (record) => record.eventId === selectedEvent?.id,
   );
@@ -243,7 +247,7 @@ export function EventsApp({
       : undefined;
 
   const openManagement = (action: EventManagementAction) => {
-    if (!selectedEvent) return;
+    if (!selectedEvent || !(action === 'edit' || action === 'reschedule' || action === 'transfer_owner' ? mayManage : mayClose)) return;
     setManageAction(action);
     setManageReason("");
     setManageErrors({});
@@ -259,7 +263,7 @@ export function EventsApp({
   };
 
   const submitManagement = async () => {
-    if (!selectedEvent) return;
+    if (!selectedEvent || saving || !(manageAction === 'edit' || manageAction === 'reschedule' || manageAction === 'transfer_owner' ? mayManage : mayClose)) return;
     const validation = validateEventManagementFields(
       manageAction,
       manageDraft,
@@ -345,7 +349,9 @@ export function EventsApp({
     }
     setSaving(true);
     try {
-      await requestFulfillment(request);
+      if (!mayRequest || saving) return;
+      const handoff = await requestFulfillment(request);
+      if (handoff?.id) setLastHandoff(handoff);
       toast.success(
         isDemo
           ? "Demo Warehouse handoff recorded locally. It has not been sent to Warehouse."
@@ -382,6 +388,7 @@ export function EventsApp({
   };
 
   const submitReconciliation = async () => {
+    if (reconciliationAction === 'approve' ? !mayApproveReconciliation : !mayManage) return;
     if (error || loading) {
       setReconciliationErrors({ outcomes: "Refresh the event custody data before saving or submitting outcomes." });
       return;
@@ -457,6 +464,7 @@ export function EventsApp({
     }
   };
   if (eventId) {
+    if (!selectedEvent && error) return <div className="space-y-4">{readFailure}<a href="/events" className="btn-ghost">Back to events</a></div>;
     if (!selectedEvent) {
       return (
         <EmptyState
@@ -474,14 +482,15 @@ export function EventsApp({
     }
     return (
       <div className="space-y-6">
+        {readFailure}
+        {recovery}
         <a href="/events" className="btn-ghost w-fit">
           <Icon name="chevron" className="h-4 w-4 rotate-180" /> Events
         </a>
-        <ModuleHero
+        <PageHeader
           eyebrow="Event lifecycle"
           title={selectedEvent.name}
-          description={`${formatDate(selectedEvent.startDate)}${selectedEvent.endDate ? ` to ${formatDate(selectedEvent.endDate)}` : ""}`}
-          icon="calendar"
+          subtitle={`${formatDate(selectedEvent.startDate)}${selectedEvent.endDate ? ` to ${formatDate(selectedEvent.endDate)}` : ""}`}
           action={
             mayRequest &&
             ["planned", "active"].includes(selectedEvent.lifecycle) ? (
@@ -519,12 +528,13 @@ export function EventsApp({
               </button>
             ) : undefined
           }
-          accessory={
+          status={
             <Badge tone={LIFECYCLE_TONE[selectedEvent.lifecycle]}>
               {selectedEvent.lifecycle}
             </Badge>
           }
         />
+        <EventWorkflowSummary event={selectedEvent} reconciliation={reconciliation} handoff={reconciliationHandoff} readFailed={Boolean(error)} />
         <Card className="overflow-hidden p-0">
           <dl
             aria-label="Event custody totals"
@@ -553,6 +563,10 @@ export function EventsApp({
             ))}
           </dl>
         </Card>
+        {(data.fulfillmentHandoffs?.some(item => item.eventId === eventId) || lastHandoff?.eventId === eventId) && <section aria-label="Warehouse handoffs" className="space-y-2 border-y border-line py-3">
+          <h2 className="text-base font-semibold">Warehouse handoffs</h2>
+          {[...(lastHandoff?.eventId === eventId ? [lastHandoff] : []), ...(data.fulfillmentHandoffs ?? []).filter(item => item.eventId === eventId && item.id !== lastHandoff?.id)].map(item => <p key={item.id} className="break-all text-sm">Next responsibility: Warehouse. <a className="inline-flex min-h-11 items-center underline" href={eventRequestHref(item.id, eventId)}>Open stock request {item.id}</a></p>)}
+        </section>}
         <Card className="space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
@@ -612,18 +626,6 @@ export function EventsApp({
                 <div className="space-y-3 border-t border-line pt-4">
                   <dl className="grid gap-3 text-sm sm:grid-cols-2">
                     <div>
-                      <dt className="text-xs font-semibold text-faint">Current stage</dt>
-                      <dd className="mt-1 font-semibold text-ink">
-                        {reconciliationHandoff.stage}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs font-semibold text-faint">Current owner</dt>
-                      <dd className="mt-1 font-semibold text-ink">
-                        {reconciliationHandoff.owner}
-                      </dd>
-                    </div>
-                    <div>
                       <dt className="text-xs font-semibold text-faint">Required evidence</dt>
                       <dd className="mt-1 text-ink">
                         {reconciliation.evidenceUrl ? "Evidence attached" : "Evidence missing"}
@@ -636,22 +638,6 @@ export function EventsApp({
                       </dd>
                     </div>
                   </dl>
-                  {reconciliationHandoff.blockers.length > 0 && (
-                    <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
-                      <p className="font-semibold">Blockers</p>
-                      <ul className="mt-1 list-disc space-y-1 pl-5">
-                        {reconciliationHandoff.blockers.map((blocker) => (
-                          <li key={blocker}>{blocker}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  <div>
-                    <p className="text-xs font-semibold text-faint">Next action</p>
-                    <p className="mt-1 text-sm text-ink">
-                      {reconciliationHandoff.nextAction}
-                    </p>
-                  </div>
                 </div>
               )}
             </>
@@ -778,7 +764,7 @@ export function EventsApp({
         </Card>
 
         <Sheet
-          open={reconciliationOpen}
+          open={reconciliationOpen && (reconciliationAction === 'approve' ? mayApproveReconciliation : mayManage)}
           onOpenChange={setReconciliationOpen}
           title={
             reconciliationAction === "approve"
@@ -920,7 +906,7 @@ export function EventsApp({
           </div>
         </Sheet>
         <Sheet
-          open={manageOpen}
+          open={manageOpen && (manageAction === 'edit' || manageAction === 'reschedule' || manageAction === 'transfer_owner' ? mayManage : mayClose)}
           onOpenChange={(nextOpen) => {
             setManageOpen(nextOpen);
             if (!nextOpen) setManageErrors({});
@@ -1099,7 +1085,7 @@ export function EventsApp({
         </Sheet>
 
         <Sheet
-          open={fulfillmentOpen}
+          open={fulfillmentOpen && mayRequest}
           onOpenChange={(nextOpen) => {
             setFulfillmentOpen(nextOpen);
             if (!nextOpen) setFulfillmentErrors({});
@@ -1324,6 +1310,7 @@ export function EventsApp({
   }
 
   const submit = async () => {
+    if (!allowed('create_event') || error || saving) return;
     const validation = validateEventDraftFields(draft);
     setFormErrors(validation);
     const firstField = validation.name
@@ -1356,28 +1343,26 @@ export function EventsApp({
   };
 
   return (
-    <div className="space-y-6">
-      <ModuleHero
-        eyebrow="Event operations"
-        title="Event planning and fulfillment"
-        description="Plan activations, monitor readiness, and hand physical fulfillment to Warehouse without losing the event trail."
-        icon="calendar"
-        action={
-          canCreateEvents(userRoles) ? (
+    <div className="space-y-4">
+      {recovery}
+      <PageHeader title="Events" icon="calendar" action={
+        <div className="flex flex-wrap items-center gap-2">
+          {allowed('create_event') && !error ? (
             <button
               type="button"
-              className="btn-primary"
+              className="btn-outline inline-flex min-h-11 items-center gap-2"
               onClick={() => setOpen(true)}
             >
               <Icon name="plus" className="h-4 w-4" /> New event
             </button>
           ) : (
-            <HeroChipButton href="/knowledge?topic=events" icon="info">
+            <a href="/knowledge?article=feature-events-workspace" className="btn-ghost min-h-11">
+              <Icon name="info" className="h-4 w-4" />
               Event guide
-            </HeroChipButton>
-          )
-        }
-      />
+            </a>
+          )}
+        </div>
+      } />
 
       {error && (
         <div
@@ -1397,33 +1382,31 @@ export function EventsApp({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard
-          label="All events"
-          value={data.events.length}
-          icon="calendar"
-        />
-        <StatCard label="Planned" value={summary.planned} icon="clipboard" />
-        <StatCard label="Active" value={summary.active} icon="trend" />
-        <StatCard label="Units issued" value={summary.issued} icon="box" />
-      </div>
+      <section aria-label="Event totals" className="border-y border-line py-3">
+        <dl className="grid grid-cols-4 gap-2 sm:gap-4">
+          {[
+            ['All events', data.events.length],
+            ['Planned', summary.planned],
+            ['Active', summary.active],
+            ['Units issued', summary.issued],
+          ].map(([label, value]) => <div key={label} className="min-w-0">
+            <dt className="min-h-8 break-words text-xs text-muted sm:min-h-0">{label}</dt>
+            <dd className="mt-1 break-all text-xl font-bold tabular-nums text-ink">{value}</dd>
+          </div>)}
+        </dl>
+      </section>
 
       <section aria-labelledby="event-list-title" className="space-y-3">
-        <SectionTitle
-          id="event-list-title"
-          eyebrow="Lifecycle"
-          title="Event readiness and fulfillment"
-          subtitle="Follow demand, approval, Warehouse handoff, event custody, and reconciliation in one record."
-        />
-        {data.events.length === 0 ? (
+        <h2 id="event-list-title" className="sr-only">Event readiness and fulfillment</h2>
+        {data.events.length === 0 && !error ? (
           <EmptyState icon="calendar" title="No events yet" />
         ) : (
-          <div className="grid gap-3 xl:grid-cols-2">
+          <div className="grid gap-3">
             {data.events.map((event) => (
-              <Card key={event.id} className="space-y-4">
+              <Card key={event.id} className="grid min-w-0 items-center gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto]">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <h3 className="font-display text-lg font-bold text-ink">
+                    <h3 className="break-words font-display text-base font-bold text-ink">
                       {event.name}
                     </h3>
                     <p className="mt-1 text-sm text-muted">
@@ -1435,7 +1418,7 @@ export function EventsApp({
                     {event.lifecycle}
                   </Badge>
                 </div>
-                <div className="grid grid-cols-3 gap-2 rounded-lg bg-surface-2 p-3 text-center">
+                <div className="grid min-w-0 grid-cols-3 gap-3 border-y border-line py-3 text-center lg:border-y-0 lg:border-l lg:pl-4">
                   <div>
                     <p className="text-lg font-bold text-ink">
                       {event.reservedUnits}
@@ -1455,10 +1438,10 @@ export function EventsApp({
                     <p className="text-xs text-muted">Returned</p>
                   </div>
                 </div>
-                <div className="flex flex-col gap-2 sm:flex-row">
+                <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
                   <a
                     href={`/events/${encodeURIComponent(event.id)}`}
-                    className="btn-primary flex-1"
+                    className="btn-outline flex-1"
                   >
                     View event <Icon name="arrowRight" className="h-4 w-4" />
                   </a>
@@ -1470,7 +1453,7 @@ export function EventsApp({
       </section>
 
       <Sheet
-        open={open}
+        open={open && allowed('create_event') && !error}
         onOpenChange={setOpen}
         title="Create event"
         description="Set the operational intent. Products and quantities are requested after creation."

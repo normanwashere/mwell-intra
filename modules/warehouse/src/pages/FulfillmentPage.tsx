@@ -1,4 +1,4 @@
-import { userFacingError } from '@intra/ui';
+import { userFacingError, WorkflowSummary } from '@intra/ui';
 import {
   useCallback,
   useEffect,
@@ -44,6 +44,38 @@ import { downloadText } from "@/app/download";
 import { fulfillmentOrdersToCsv } from "@/domain/orderIntakeOptions";
 import { useSession } from "@/auth/session";
 import { actorName } from "@/domain/format";
+import { orderWorkflowSummary, requestWorkflowSummary, returnWorkflowSummary } from "@/domain/workflowSummary";
+
+// Warehouse mutations confirm success as a boolean, not a returned order record.
+export function fulfillmentAdvanceSuccessMessage(
+  order: Pick<FulfillmentOrder, "externalReference" | "deliveryMethod">,
+  action: FulfillmentAction,
+): string {
+  if (action === "allocate")
+    return `${order.externalReference} allocation recorded. Next: Warehouse operator starts picking the reserved order lines.`;
+  if (action === "start_picking")
+    return `${order.externalReference} picking started. Next: Warehouse operator confirms scanned quantities, serials, bins, and pick evidence before packing.`;
+  if (action === "release") {
+    const outcome = `${order.externalReference} release recorded.`;
+    if (order.deliveryMethod === "shipment")
+      return `${outcome} Next: Courier / Warehouse delivery team tracks delivery, then records proof-of-delivery reference and evidence. Release does not confirm delivery.`;
+    if (["internal_handover", "event_handover", "third_party_transfer"].includes(order.deliveryMethod))
+      return `${outcome} Next: The recipient or another authorized staff member confirms receipt with a reference and proof. The releasing operator cannot confirm receipt.`;
+    return `${outcome} Next: Warehouse supervisor must verify the delivery method and next handoff. Release does not confirm receipt.`;
+  }
+  return `${order.externalReference} update recorded. Next: Warehouse supervisor verifies the current order before further handoff.`;
+}
+
+export function returnResolutionSuccessMessage(resolution: Exclude<ReturnResolution, "pending">): string {
+  const nextStep = {
+    replacement: "Warehouse reviews the linked replacement order for allocation and fulfillment; Customer Service confirms receipt and records the customer reference and closure evidence.",
+    re_kit: "Warehouse creates a re-kit work order using the approved kit definition and inspected components; Customer Service confirms the final disposition and records the customer reference and closure evidence.",
+    refund: "Customer Service confirms the refund outcome using the recorded Finance reference and records the customer reference and closure evidence.",
+    vendor_return: "Warehouse coordinates the supplier return using the recorded RMA; Customer Service confirms the final disposition and records the customer reference and closure evidence.",
+    write_off: "Customer Service confirms the final disposition and records the customer reference and closure evidence. Quality Control must verify any separate stock disposition.",
+  }[resolution];
+  return `Return resolution recorded (${titleCase(resolution)}). Next: ${nextStep}`;
+}
 
 function useEvidencePending() {
   const pendingKeys = useRef(new Set<string>());
@@ -268,17 +300,19 @@ function QueueCounters({
   counters,
   selected,
   onSelect,
+  compactMobile = false,
 }: {
   label: string;
   counters: Array<{ id: string; label: string; count: number }>;
   selected: string;
   onSelect: (id: string) => void;
+  compactMobile?: boolean;
 }) {
   return (
     <div
       role="group"
       aria-label={label}
-      className={`grid grid-cols-2 divide-x divide-line border-y border-line bg-surface sm:grid-cols-3 ${counters.length === 6 ? 'lg:grid-cols-6' : counters.length === 4 ? 'lg:grid-cols-4' : 'lg:grid-cols-5'}`}
+      className={`${compactMobile ? 'hidden sm:grid' : 'grid'} min-w-0 grid-cols-2 auto-rows-fr gap-px border-y border-line bg-line ${counters.length === 4 ? 'sm:grid-cols-4' : 'sm:grid-cols-3'} ${counters.length === 6 ? 'xl:grid-cols-6' : counters.length === 4 ? 'xl:grid-cols-4' : 'xl:grid-cols-5'}`}
     >
       {counters.map((counter) => (
         <button
@@ -287,9 +321,9 @@ function QueueCounters({
           aria-label={`${counter.label}: ${counter.count}`}
           aria-pressed={selected === counter.id}
           onClick={() => onSelect(counter.id)}
-          className={`min-h-20 min-w-0 border-b-2 px-3 py-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500 ${selected === counter.id ? "border-brand-500 bg-brand-500/10" : "border-transparent hover:bg-inset"}`}
+          className={`flex min-h-11 min-w-0 flex-col justify-between border-b-2 px-3 py-3 text-left transition focus-visible:relative focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500 ${selected === counter.id ? "border-brand-500 bg-brand-50 dark:bg-brand-900" : "border-transparent bg-surface hover:bg-inset"}`}
         >
-          <span className="block text-xs leading-4 text-muted">
+          <span className="block min-h-8 break-words text-xs leading-4 text-muted">
             {counter.label}
           </span>
           <span className="mt-1 block font-display text-xl font-bold tabular-nums text-ink">
@@ -310,9 +344,41 @@ function matchesOrderStatus(order: FulfillmentOrder, filter: string) {
   return order.status === filter;
 }
 
+const ORDER_STATUSES = ['active', 'floor_work', 'all', 'pick_queue', 'received', 'allocated', 'picking', 'packing', 'ready', 'released', 'completed', 'cancelled'];
+const REQUEST_STATUSES = ['all', 'draft', 'pending_approval', 'approved', 'rejected', 'allocated', 'issued', 'closed', 'cancelled'];
+
+// Keep read-only navigation in history; action sheets and unsaved drafts stay local.
+function useFulfillmentNavigation() {
+  const [params, setParams] = useSearchParams();
+  const latestParams = useRef(params);
+  useEffect(() => { latestParams.current = params; }, [params]);
+  const update = (values: Record<string, string | undefined>, replace = false) => {
+    // React Router does not queue search-param updates like React state setters.
+    const next = new URLSearchParams(latestParams.current);
+    for (const [key, value] of Object.entries(values)) {
+      if (value === undefined || value === '') next.delete(key);
+      else next.set(key, value);
+    }
+    latestParams.current = next;
+    setParams(next, { replace });
+  };
+  return { params, update };
+}
+
+function scopedRecord<T extends { id: string }>(rows: T[], selector: string | null) {
+  if (!selector || !/^[a-zA-Z0-9_-]{1,128}$/.test(selector)) return undefined;
+  return rows.find((row) => row.id === selector);
+}
+
+function UnavailableRecordSheet({ kind, onClose }: { kind: string; onClose: () => void }) {
+  return <Sheet open title={`${kind} unavailable`} onOpenChange={(open) => { if (!open) onClose(); }}>
+    <p className="text-sm text-muted">This record is not available in your current warehouse view. Close this panel to return to the queue, or refresh to check again.</p>
+  </Sheet>;
+}
+
 export function FulfillmentPage() {
   const warehouse = useWarehouse();
-  const { data, role, roleLabel, can, actor, identityId } = warehouse;
+  const { data, role, can, actor, identityId } = warehouse;
   const [searchParams, setSearchParams] = useSearchParams();
 
   const canCreateOrder = can("request_fulfillment");
@@ -337,6 +403,7 @@ export function FulfillmentPage() {
     ? TABS.filter(
         (item) =>
           item.id === "orders" ||
+          (item.id === "requests" && canRequestStock) ||
           (item.id === "returns" &&
             (canIntakeReturn || canManageReturns || canReviewFinanceReturn)),
       )
@@ -367,16 +434,18 @@ export function FulfillmentPage() {
   const selectTab = (nextTab: WorkspaceTab) => {
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set("tab", nextTab);
+    nextParams.delete("order");
+    nextParams.delete("request");
     setSearchParams(nextParams);
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3 sm:space-y-5">
       <PageHeader
         title={isFloorOperator ? "Pick & Pack" : "Fulfillment"}
         subtitle={
           isFloorOperator
-            ? `${roleLabel} queue for allocation, scanning, packing, and controlled release`
+            ? "Allocation, pick, pack, and controlled release"
             : "One controlled queue from demand through warehouse release"
         }
         icon="list"
@@ -398,7 +467,7 @@ export function FulfillmentPage() {
 
       {visibleTabs.length > 1 && (
         <div
-          className="grid grid-cols-2 gap-1 rounded-xl bg-inset p-1 sm:grid-cols-4"
+          className={`grid ${visibleTabs.length === 3 ? 'grid-cols-3' : 'grid-cols-2'} gap-1 rounded-lg bg-inset p-1 sm:grid-cols-4`}
           role="tablist"
           aria-label="Fulfillment workspace"
         >
@@ -527,7 +596,7 @@ function OrdersWorkspace({
   const warehouse = useWarehouse();
   const { createFulfillmentOrder, advanceFulfillmentOrder } = warehouse;
   const { profile } = useSession();
-  const [orderSearchParams] = useSearchParams();
+  const { params: orderSearchParams, update: updateNavigation } = useFulfillmentNavigation();
   const toast = useToast();
   const [createOpen, setCreateOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -538,21 +607,22 @@ function OrdersWorkspace({
   const [cancelOrder, setCancelOrder] = useState<FulfillmentOrder>();
   const [acknowledgeOrder, setAcknowledgeOrder] = useState<FulfillmentOrder>();
   const [trackingOrder, setTrackingOrder] = useState<FulfillmentOrder>();
-  const [detailOrder, setDetailOrder] = useState<FulfillmentOrder>();
-  const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState(() => orderSearchParams.get("filter") === "floor_work" ? "floor_work" : "active");
-  const [channelFilter, setChannelFilter] = useState("all");
-  useEffect(() => {
-    if (orderSearchParams.get("filter") !== "floor_work") return;
-    setStatusFilter("floor_work");
-    setQuery("");
-    setChannelFilter("all");
-  }, [orderSearchParams]);
+  const orderSelector = orderSearchParams.get("order");
+  const detailOrder = scopedRecord(orders, orderSelector);
+  const setDetailOrder = (order?: FulfillmentOrder) => updateNavigation({ order: order?.id, request: undefined }, !order);
+  const query = (orderSearchParams.get("q") ?? "").slice(0, 200);
+  const setQuery = (value: string) => updateNavigation({ q: value.slice(0, 200) }, true);
+  const requestedStatus = orderSearchParams.get("status") ?? (orderSearchParams.get("filter") === "floor_work" ? "floor_work" : "active");
+  const statusFilter = ORDER_STATUSES.includes(requestedStatus) ? requestedStatus : "active";
+  const setStatusFilter = (value: string) => updateNavigation({ status: value, filter: undefined });
   const channelOptions = [
     ...new Set(
       orders.map((order) => order.ecommerceChannel).filter(Boolean) as string[],
     ),
   ].sort();
+  const requestedChannel = orderSearchParams.get("channel") ?? "all";
+  const channelFilter = channelOptions.includes(requestedChannel) ? requestedChannel : "all";
+  const setChannelFilter = (value: string) => updateNavigation({ channel: value });
   const filteredOrders = orders.filter((order) => {
     const normalized = query.trim().toLowerCase();
     const matchesQuery =
@@ -569,6 +639,8 @@ function OrdersWorkspace({
       channelFilter === "all" || order.ecommerceChannel === channelFilter;
     return matchesQuery && matchesStatus && matchesChannel;
   });
+  const thirdPartyOrders = orders.filter((order) => order.source === "third_party");
+  const thirdPartySales = formatPhp(thirdPartyOrders.reduce((sum, order) => sum + (order.grossSalesAmount ?? 0), 0));
 
   const advance = async (
     order: FulfillmentOrder,
@@ -579,7 +651,7 @@ function OrdersWorkspace({
     setWorkingId(undefined);
     if (ok)
       toast.success(
-        `${order.externalReference} moved to ${titleCase(action === "allocate" ? "allocated" : "picking")}.`,
+        fulfillmentAdvanceSuccessMessage(order, action),
       );
   };
 
@@ -587,6 +659,7 @@ function OrdersWorkspace({
     <section className="space-y-4" aria-labelledby="orders-title">
       <QueueCounters
         label="Order counters"
+        compactMobile
         counters={[
           { id: "active", label: "Active work" },
           { id: "received", label: "Waiting allocation" },
@@ -601,27 +674,29 @@ function OrdersWorkspace({
         }))}
         selected={statusFilter === "floor_work" ? "active" : statusFilter}
         onSelect={(status) => {
-          setStatusFilter(status);
-          setQuery("");
-          setChannelFilter("all");
+          updateNavigation({ status, filter: undefined, q: undefined, channel: undefined });
         }}
       />
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
+      <div className="flex flex-wrap items-center justify-between gap-2 sm:items-end">
+        <div className="min-w-0">
           <h2
             id="orders-title"
-            className="font-display text-lg font-bold text-ink"
+            className="sr-only font-display text-lg font-bold text-ink sm:not-sr-only"
           >
             Orders and event demand
           </h2>
           <Link to={FLOOR_WORK_PATH} className="inline-flex min-h-11 min-w-11 items-center text-sm text-brand-600 underline">Floor work</Link>
-          <p className="text-sm text-muted">
+          <p className="hidden text-sm text-muted sm:block">
             Ecommerce, event, and third-party demand through pick, pack,
             release, and settlement.
           </p>
         </div>
-        {(canCreate || filteredOrders.length > 0) && (
-          <div className="grid gap-2 sm:flex">
+        {(canCreate || filteredOrders.length > 0 || thirdPartyOrders.length > 0) && (
+          <div className="flex flex-wrap items-center gap-2">
+            <details className="relative">
+              <summary className="min-h-11 cursor-pointer rounded-lg px-3 py-3 text-sm font-semibold text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500">Queue tools</summary>
+              <div className="z-20 grid w-60 max-w-[calc(100vw-2rem)] gap-2 rounded-lg border border-line bg-surface p-2 shadow-e2 sm:absolute sm:right-0">
+                {thirdPartyOrders.length > 0 && <p className="p-2 text-sm text-muted sm:hidden">Third-party event sales: <span className="font-semibold text-ink">{thirdPartySales}</span>. Finance owns settlement.</p>}
             {filteredOrders.length > 0 && (
               <button
                 type="button"
@@ -637,7 +712,6 @@ function OrdersWorkspace({
               </button>
             )}
             {canCreate && (
-              <>
                 <button
                   type="button"
                   className="btn-outline w-full sm:w-auto"
@@ -646,18 +720,25 @@ function OrdersWorkspace({
                   <Icon name="upload" className="h-4 w-4" /> Import existing
                   tracker
                 </button>
+            )}
+              </div>
+            </details>
+            {canCreate && (
                 <button
                   type="button"
-                  className="btn-primary w-full sm:w-auto"
+                  aria-label="New order / demand"
+                  className="btn-primary"
                   onClick={() => setCreateOpen(true)}
                 >
-                  <Icon name="plus" className="h-4 w-4" /> New order / demand
+                  <Icon name="plus" className="h-4 w-4" />
+                  <span className="sm:hidden">New demand</span>
+                  <span className="hidden sm:inline">New order / demand</span>
                 </button>
-              </>
             )}
           </div>
         )}
       </div>
+      <div className="hidden sm:block">
       <HandoffRail
         steps={[
           {
@@ -674,8 +755,9 @@ function OrdersWorkspace({
           },
         ]}
       />
+      </div>
 
-      <div className="grid gap-2 rounded-xl border border-line bg-surface p-3 md:grid-cols-[minmax(14rem,1fr)_12rem_12rem]">
+      <div className="grid grid-cols-2 gap-2 border-y border-line py-3 md:grid-cols-[minmax(14rem,1fr)_12rem_12rem] [&>div:first-child]:col-span-2 md:[&>div:first-child]:col-span-1">
         <Field label="Search orders" htmlFor="fulfillment-search">
           <input
             id="fulfillment-search"
@@ -693,10 +775,10 @@ function OrdersWorkspace({
             value={statusFilter}
             onChange={(event) => setStatusFilter(event.target.value)}
           >
-            <option value="active">Active work</option>
-            <option value="floor_work">Floor work</option>
-            <option value="all">All statuses</option>
-            <option value="pick_queue">Allocated and picking</option>
+            <option value="active">Active work ({orders.filter((order) => matchesOrderStatus(order, 'active')).length})</option>
+            <option value="floor_work">Floor work ({orders.filter((order) => matchesOrderStatus(order, 'floor_work')).length})</option>
+            <option value="all">All statuses ({orders.length})</option>
+            <option value="pick_queue">Allocated and picking ({orders.filter((order) => matchesOrderStatus(order, 'pick_queue')).length})</option>
             {[
               "received",
               "allocated",
@@ -708,7 +790,7 @@ function OrdersWorkspace({
               "cancelled",
             ].map((status) => (
               <option key={status} value={status}>
-                {titleCase(status)}
+                {titleCase(status)} ({orders.filter((order) => matchesOrderStatus(order, status)).length})
               </option>
             ))}
           </select>
@@ -730,8 +812,8 @@ function OrdersWorkspace({
         </Field>
       </div>
 
-      {orders.some((order) => order.source === "third_party") && (
-        <div className="flex flex-col gap-1 border-l-4 border-emerald-500 bg-emerald-500/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      {thirdPartyOrders.length > 0 && (
+        <div className="hidden flex-col gap-1 border-l-4 border-emerald-500 bg-emerald-500/10 px-4 py-3 sm:flex sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-semibold text-ink">
               Third-party event sales
@@ -742,15 +824,7 @@ function OrdersWorkspace({
             </p>
           </div>
           <p className="font-display text-xl font-bold text-ink">
-            {new Intl.NumberFormat("en-PH", {
-              style: "currency",
-              currency: "PHP",
-              currencyDisplay: "code",
-            }).format(
-              orders
-                .filter((order) => order.source === "third_party")
-                .reduce((sum, order) => sum + (order.grossSalesAmount ?? 0), 0),
-            )}
+            {thirdPartySales}
           </p>
         </div>
       )}
@@ -1022,6 +1096,7 @@ function OrdersWorkspace({
         showCommercial={!floorMode}
         onClose={() => setDetailOrder(undefined)}
       />
+      {orderSelector !== null && !detailOrder && <UnavailableRecordSheet kind="Order" onClose={() => setDetailOrder(undefined)} />}
     </section>
   );
 }
@@ -1045,7 +1120,7 @@ function OrderDetailsSheet({
   showCommercial: boolean;
   onClose: () => void;
 }) {
-  const { data } = useWarehouse();
+  const { data, actor, identityId } = useWarehouse();
   if (!order) return null;
   const request = data?.departmentStockRequests.find(item => item.fulfillmentOrderId === order.id);
   const internal = order.source === 'department_request';
@@ -1077,13 +1152,17 @@ function OrderDetailsSheet({
       description="Fulfillment record, controlled customer details, and shipment history."
       size="wide"
     >
+      <WorkflowSummary {...orderWorkflowSummary(order, { actorIds: [actor, identityId], units: data?.units })}>
+        <a className="inline-flex min-h-11 items-center text-sm underline" href={order.status === 'released' && order.deliveryMethod === 'shipment' ? '#shipment-timeline-title' : '#order-lines-title'}>
+          {order.status === 'released' && order.deliveryMethod === 'shipment' ? 'Review shipment timeline' : 'Review order lines'}
+        </a>
+      </WorkflowSummary>
       <div className="grid min-w-0 gap-6 md:grid-cols-2 [&>section]:min-w-0 [&>section]:border-b [&>section]:border-line [&>section]:pb-5">
         <section aria-label="Operational summary" className="space-y-2 border-b border-line pb-3 text-sm md:col-span-2 [overflow-wrap:anywhere]">
           <p className="font-semibold text-ink">{titleCase(order.status)} / {order.externalReference}</p>
           <ul>{order.lines.map((line) => <li key={line.productId}>{line.quantity} x {products.find((product) => product.id === line.productId)?.name ?? line.productId}</li>)}</ul>
           <p className="break-words">Destination: {address ? `${address.addressLine}, ${address.city}, ${address.province} ${address.postalCode}` : order.requestingDepartment ?? "Not provided"}</p>
           {order.deliveryMethod === "shipment" && <p className="break-words">{order.courier ?? "Courier not provided"} / {order.waybillNumber ?? "Waybill not provided"}</p>}
-          {order.status === "ready" && <p>Next owner: a warehouse operator other than the packer.</p>}
         </section>
         {replacementCases.length > 0 && (
           <section aria-label="Replacement linkage" className="space-y-3 border-b border-line pb-3 text-sm">
@@ -1999,8 +2078,8 @@ function PackSheet({
       pendingCommand.current = null;
       toast.success(
         shipment
-          ? "Packing confirmed. The shipment is ready for release."
-          : "Handover prepared. A second operator must release it.",
+          ? "Packing confirmed. Next: A Warehouse operator other than the packer releases the shipment to the courier; delivery confirmation follows."
+          : "Handover prepared. Next: A Warehouse operator other than the packer releases the items; recipient confirmation follows.",
       );
       onClose();
     } else { setQueued(warehouse.lastActionStatus === "queued"); setUnconfirmed(true); }
@@ -2775,10 +2854,19 @@ function RequestsWorkspace({
   const toast = useToast();
   const [open, setOpen] = useState(false);
   const [workingId, setWorkingId] = useState<string>();
-  const [detailId, setDetailId] = useState<string>();
+  const { params, update: updateNavigation } = useFulfillmentNavigation();
+  const detailId = params.get("request");
+  const setDetailId = (id?: string) => updateNavigation({ request: id, order: undefined }, !id);
   const [acknowledgeOrder, setAcknowledgeOrder] = useState<FulfillmentOrder>();
-  const [statusFilter, setStatusFilter] = useState("all");
-  const detailRequest = requests.find((request) => request.id === detailId);
+  const requestedStatus = params.get("requestStatus") ?? "all";
+  const statusFilter = REQUEST_STATUSES.includes(requestedStatus) ? requestedStatus : "all";
+  const setStatusFilter = (value: string) => updateNavigation({ requestStatus: value });
+  const detailRequest = scopedRecord(requests, detailId);
+  const linkedOrder = scopedRecord(warehouse.data?.fulfillmentOrders ?? [], detailRequest?.fulfillmentOrderId ?? null);
+  const linkedOrderParams = new URLSearchParams(params);
+  linkedOrderParams.set('tab', 'orders');
+  linkedOrderParams.delete('request');
+  if (linkedOrder) linkedOrderParams.set('order', linkedOrder.id);
   const filteredRequests = requests.filter(
     (request) => statusFilter === "all" || request.status === statusFilter,
   );
@@ -2820,7 +2908,11 @@ function RequestsWorkspace({
     setWorkingId(undefined);
     if (ok) {
       setDetailId(undefined);
-      toast.success(`Request ${decision}.`);
+      toast.success(
+        decision === "approved"
+          ? "Request approved. Next: Warehouse reviews the fulfillment order, verifies available stock and quality holds, then allocates for picking."
+          : "Request rejected. Next: Requester reviews the decision with the approver and prepares a new corrected request if still needed. The original request stays rejected.",
+      );
     }
   };
   return (
@@ -2871,8 +2963,8 @@ function RequestsWorkspace({
             task: "States the purpose, cost center, and required date.",
           },
           {
-            owner: "Department approver",
-            task: "Confirms budget and business need.",
+            owner: "Authorized reviewer",
+            task: "Approves or rejects the request; cannot decide their own request.",
           },
           {
             owner: "Warehouse operator",
@@ -2961,7 +3053,9 @@ function RequestsWorkspace({
             ) : receiptAction(detailRequest)
           }
         >
-          <StatusBadge status={detailRequest.status} />
+          <WorkflowSummary {...requestWorkflowSummary(detailRequest, linkedOrder, { actorIds: [actor, identityId, profile?.id], units: warehouse.data?.units })}>
+            {linkedOrder && <Link className="inline-flex min-h-11 items-center text-sm underline" to={`?${linkedOrderParams.toString()}`}>Open fulfillment order</Link>}
+          </WorkflowSummary>
           <table
             className="mt-4 w-full table-fixed text-left text-sm"
             aria-label="Requested items"
@@ -3066,6 +3160,7 @@ function RequestsWorkspace({
           </details>
         </Sheet>
       )}
+      {detailId !== null && !detailRequest && <UnavailableRecordSheet kind="Request" onClose={() => setDetailId(undefined)} />}
       <AcknowledgeReceiptSheet
         key={acknowledgeOrder?.id}
         order={acknowledgeOrder}
@@ -3156,7 +3251,7 @@ function CreateRequestSheet({
     });
     setSaving(false);
     if (ok) {
-      toast.success("Stock request sent for approval.");
+      toast.success("Stock request submitted. Next: An authorized Warehouse / Procurement reviewer other than the requester approves or rejects it; approval creates fulfillment demand.");
       onOpenChange(false);
       setPurpose("");
       setCostCenter("");
@@ -3579,7 +3674,7 @@ function CreateReturnSheet({
     });
     setSaving(false);
     if (ok) {
-      toast.success("Return case sent to warehouse intake.");
+      toast.success("Return case submitted. Next: Warehouse returns team confirms physical intake, inspection, and quarantine before resolution. Finance records refunds; Customer Service confirms customer closure afterward.");
       onOpenChange(false);
       setSerial("");
       setSourceOrder("");
@@ -3797,7 +3892,7 @@ function ResolveReturnSheet({
     try {
       const ok = await resolve(pendingCommand.current);
       if (ok) {
-        toast.success("Return resolution recorded.");
+        toast.success(returnResolutionSuccessMessage(pendingCommand.current.resolution));
         onClose();
       } else {
         setError(
@@ -3841,6 +3936,7 @@ function ResolveReturnSheet({
         className="space-y-4"
         onSubmit={(event) => void submit(event)}
       >
+        <WorkflowSummary {...returnWorkflowSummary(record)} />
         <section aria-label="Return case context" className="border-y border-line py-4 text-sm [overflow-wrap:anywhere]">
           <dl className="grid gap-3 sm:grid-cols-2">
             <div><dt className="text-xs text-muted">Original order</dt><dd className="font-semibold">{originalOrder?.externalReference ?? (record.sourceOrderId ? `${record.sourceOrderId} (reference unavailable)` : 'Not linked to an order')}</dd></div>
@@ -4060,7 +4156,7 @@ function CloseReturnSheet({
     });
     setSaving(false);
     if (ok) {
-      toast.success("Customer closure recorded.");
+      toast.success("Customer closure recorded. No further customer-case handoff; Quality Control must verify any separate stock release. Customer closure does not release quarantined stock.");
       onClose();
     }
   };
@@ -4088,6 +4184,7 @@ function CloseReturnSheet({
         className="space-y-4"
         onSubmit={(event) => void submit(event)}
       >
+        <WorkflowSummary {...returnWorkflowSummary(record)} />
         <Field
           label="Customer resolution reference"
           htmlFor="customer-resolution-reference"

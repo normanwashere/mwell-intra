@@ -20,7 +20,10 @@ import {
 import {
   canAcknowledgeOperationsHandoff,
   canDecidePriceProposal,
+  kitReadiness,
 } from "./domain";
+import { ReadinessEvidenceLink } from './ReadinessEvidenceLink';
+import { ReadinessWorkflowSummary } from './ReadinessWorkflowSummary';
 import { useProductWorkspace } from "./data";
 import type { PriceProposal, ReadinessPackage } from "./types";
 
@@ -202,7 +205,7 @@ export function ProductApp() {
 
   return (
     <div className="space-y-6">
-      {mode === 'supabase' && Object.entries({prepare_readiness: prepareReadiness, decide_go_live: decideGoLive, acknowledge_operations_handoff: acknowledgeHandoff, propose_pricing: proposePricing, approve_pricing: approvePricing}).some(([cap, allowed]) => !allowed && roleCapabilities?.product?.includes(cap)) && <p role="status">Some assigned Product actions require certification. <a className="underline" href="/onboarding">Complete Product onboarding</a></p>}
+      {mode === 'supabase' && Object.entries({prepare_readiness: prepareReadiness, decide_go_live: decideGoLive, acknowledge_operations_handoff: acknowledgeHandoff, propose_pricing: proposePricing, approve_pricing: approvePricing}).some(([cap, allowed]) => !allowed && roleCapabilities?.product?.includes(cap)) && <p role="status">Some assigned Product actions require certification. <a className="underline" href={`/onboarding?task=review-product-decisions&next=${encodeURIComponent(typeof window === 'undefined' ? '/product' : `/product${window.location.search}${window.location.hash}`)}`}>Complete Product onboarding</a></p>}
       <ModuleHero
         eyebrow="Product governance"
         title="Product readiness"
@@ -245,6 +248,10 @@ export function ProductApp() {
         }
       />
 
+      <nav aria-label="Product sections" className="flex flex-wrap gap-4 border-b border-line text-sm">
+        <a href="#readiness-queue-title" className="inline-flex min-h-11 items-center underline">Readiness and handoffs</a>
+        {viewPricing && <a href="#pricing-governance-title" className="inline-flex min-h-11 items-center underline">Pricing governance</a>}
+      </nav>
       {workspace.error && (
         <div
           role="status"
@@ -280,6 +287,7 @@ export function ProductApp() {
               <ReadinessCard
                 key={item.id}
                 item={item}
+                readFailed={Boolean(workspace.error)}
                 canDecide={decideGoLive}
                 canAcknowledge={acknowledgeHandoff}
                 onDecide={(decision) => {
@@ -466,6 +474,7 @@ function statusTone(
 
 function ReadinessCard({
   item,
+  readFailed,
   canDecide,
   canAcknowledge,
   handoffPending,
@@ -474,6 +483,7 @@ function ReadinessCard({
   onAcknowledge,
 }: {
   item: ReadinessPackage;
+  readFailed: boolean;
   canDecide: boolean;
   canAcknowledge: boolean;
   handoffPending: boolean;
@@ -482,6 +492,7 @@ function ReadinessCard({
   onAcknowledge: () => Promise<boolean>;
 }) {
   const handoffReady = canAcknowledge && canAcknowledgeOperationsHandoff(item);
+  const kit = kitReadiness(item);
   return (
     <article id={`readiness-${item.id}`} aria-label={`${item.title} readiness package`}>
       <Card className="space-y-4">
@@ -497,6 +508,7 @@ function ReadinessCard({
           </div>
           <Badge tone={statusTone(item.status)}>{item.status}</Badge>
         </div>
+        <ReadinessWorkflowSummary item={item} readFailed={readFailed || handoffIssue?.stale} />
         <DecisionReadback item={item} />
         <p className="text-sm break-words text-muted">
           Operations handoff: {item.operationsAcknowledgedAt
@@ -518,7 +530,7 @@ function ReadinessCard({
                 <strong className="font-semibold text-ink">
                   {evidenceItem.label}
                 </strong>{" "}
-                · {evidenceItem.reference}
+                <ReadinessEvidenceLink reference={evidenceItem.reference} />
               </span>
             </li>
           ))}
@@ -530,8 +542,15 @@ function ReadinessCard({
         )}
         <p className="text-sm text-muted">
           <strong className="text-ink">Kit approval:</strong>{" "}
-          {item.kitApproved ? "verified" : "required before launch"}
+          {kit.label}
         </p>
+        {item.kitPublication && <div className="space-y-1 text-sm text-muted">
+          <p><strong>Kit publication:</strong> {item.kitPublication.status === 'not_visible' ? 'No visible kit definition' : item.kitPublication.status === 'unavailable' ? 'Unavailable - refresh to check' : `${item.kitPublication.status} (version ${item.kitPublication.version})`}</p>
+          {item.kitPublication.approvalReference && <p className="break-all">Product approval reference: {item.kitPublication.approvalReference}</p>}
+          <p>Active kit publication follows the approved Operations handoff; it is not a prerequisite for acknowledgment.</p>
+        </div>}
+        {item.isCurrent === false && <p className="text-sm text-amber-800">This is not the current approved package. Open the current readiness package before acknowledging.</p>}
+        {!kit.ready && <p className="text-sm text-amber-800">Operations handoff is blocked. Ask Product to confirm the kit requirement and record its approval before retrying.</p>}
         {canDecide && item.status === "submitted" && (
           <div className="flex flex-wrap gap-2">
             <button
@@ -550,11 +569,11 @@ function ReadinessCard({
             </button>
           </div>
         )}
-        {handoffReady && (
+        {canAcknowledge && item.status === 'approved' && !item.operationsAcknowledgedAt && (
           <button
             type="button"
             className="btn-primary min-h-11 w-full"
-            disabled={handoffPending || handoffIssue?.stale}
+            disabled={!handoffReady || handoffPending || handoffIssue?.stale}
             aria-busy={handoffPending}
             onClick={() => void onAcknowledge()}
           >

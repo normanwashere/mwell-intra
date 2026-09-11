@@ -25,6 +25,7 @@ describe("Product remediation contract", () => {
     };
 
     expect(canLaunchFromReadiness({ ...readiness, kitApproved: false })).toBe(false);
-    expect(canLaunchFromReadiness(readiness)).toBe(true);
+    expect(canLaunchFromReadiness(readiness)).toBe(false);
+    expect(canLaunchFromReadiness({ ...readiness, kitApproved: true })).toBe(true);
   });
 });

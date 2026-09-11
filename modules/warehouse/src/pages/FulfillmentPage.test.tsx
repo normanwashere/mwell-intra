@@ -648,7 +648,8 @@ describe("FulfillmentPage", () => {
         }),
       ]);
     });
-    expect(await screen.findAllByText("PHP 8,640.00")).toHaveLength(2);
+    // Desktop summary, mobile tools summary, and the order's reported value.
+    expect(await screen.findAllByText("PHP 8,640.00")).toHaveLength(3);
     expect(
       screen.queryByRole("button", { name: "Allocate stock" }),
     ).not.toBeInTheDocument();
@@ -659,6 +660,7 @@ describe("FulfillmentPage", () => {
     const user = userEvent.setup();
     renderWithProviders(<FulfillmentPage />, { role: "operations", repo });
 
+    await user.click(await screen.findByText("Queue tools", { selector: "summary" }));
     await user.click(
       await screen.findByRole("button", { name: "Import existing tracker" }),
     );

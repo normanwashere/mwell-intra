@@ -11,6 +11,7 @@ import {
   type UserRoles,
 } from "@intra/rbac";
 import type { IconName, Tone } from "@intra/ui";
+import { localDestination } from './localDestination';
 
 export interface ModuleNav {
   readonly module: Module;
@@ -183,6 +184,12 @@ export function accessibleModules(access: ShellAccess): readonly ModuleNav[] {
   );
 }
 
+/** Navigation admission for Legal's assigned tier, not Procurement write authority. */
+export function hasScopedApprovalEntry(access: ShellAccess): boolean {
+  return access.userRoles.legal?.includes('legal_reviewer') === true &&
+    hasCapability(access, 'legal', 'view_dashboard');
+}
+
 function moduleDescription(item: ModuleNav, access: ShellAccess): string {
   if (
     item.module === "procurement" &&
@@ -233,6 +240,7 @@ export function workSources(access: ShellAccess): readonly WorkSource[] {
     if (hasModuleAccess(access, source)) sources.push(source);
   }
   if (canAccessFinance(access)) sources.push("finance");
+  if (hasScopedApprovalEntry(access) && !sources.includes('procurement')) sources.push('procurement');
   if (hasModuleAccess(access,'insights') || hasCapability(access,'warehouse','manage_finance_close') || hasCapability(access,'procurement','review_payment_readiness') || hasCapability(access,'core','manage_rbac') || hasCapability(access,'warehouse','resolve_exceptions') || hasCapability(access,'procurement','admin') || hasCapability(access,'legal','admin')) sources.push('insights');
   return sources;
 }
@@ -248,7 +256,19 @@ export function authorizedPostLoginPath(
   authorizationReady = true,
 ): string | null {
   if (!authorizationReady) return null;
+  const destination = localDestination(requestedPath);
+  const pathname = new URL(destination, 'https://intra.invalid').pathname;
+  const admitted = authorizedPathname(pathname, access, profileKind);
+  return admitted === pathname ? destination : admitted;
+}
+
+function authorizedPathname(
+  requestedPath: string,
+  access: ShellAccess,
+  profileKind: "employee" | "vendor",
+): string {
   if (requestedPath === "/") return "/";
+  if (requestedPath === '/procurement/approvals' && profileKind === 'employee' && hasScopedApprovalEntry(access)) return requestedPath;
   // A DOA variance reviewer may have no Procurement module role at all. Let
   // an employee reach one concrete request after sign-in so the page can ask
   // the authoritative evaluation_workspace RPC whether a decision is assigned.
@@ -301,6 +321,9 @@ export function dashboardAreas(
 
   if (profileKind === "employee") areas.push(WORK_NAV);
   areas.push(...accessibleModules(access));
+  if (profileKind === 'employee' && !hasModuleAccess(access, 'procurement') && hasScopedApprovalEntry(access)) {
+    areas.push({ href: '/procurement/approvals', label: 'Procurement approvals', description: 'Review requests assigned to your Legal approval tier.', icon: 'check', tone: 'accent' });
+  }
 
   if (profileKind === "vendor") areas.push(VENDOR_NAV);
   if (canAccessFinance(access)) areas.push(FINANCE_NAV);

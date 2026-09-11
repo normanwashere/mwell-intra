@@ -429,6 +429,7 @@ export async function loadLiveEvents(
     reconciliationResult,
     departmentResult,
     costCenterResult,
+    handoffResult,
   ] =
     await Promise.all([
       client
@@ -473,10 +474,13 @@ export async function loadLiveEvents(
         .eq("is_active", true)
         .order("code", { ascending: true })
         .limit(1000),
+      client.schema('warehouse').from('department_stock_requests')
+        .select('id,event_id,status,created_at').order('created_at', { ascending: false }).limit(1000),
     ]);
   const warnings: string[] = [];
+  if (handoffResult.error) warnings.push(`Warehouse handoffs unavailable: ${handoffResult.error.message}`);
   if (allocationResult.error) throw new Error(`Event custody unavailable: ${allocationResult.error.message}`);
-  if (eventResult.error) warnings.push(`Events: ${eventResult.error.message}`);
+  if (eventResult.error) throw new Error(`Events unavailable: ${eventResult.error.message}`);
   if (productResult.error)
     warnings.push("Products: " + productResult.error.message);
   if (reconciliationResult.error)
@@ -509,6 +513,9 @@ export async function loadLiveEvents(
     ? (costCenterResult.data as UnknownRow[])
     : [];
   return {
+    fulfillmentHandoffs: (Array.isArray(handoffResult.data) ? handoffResult.data as UnknownRow[] : [])
+      .filter(row => rows.some(event => event.id === row.event_id))
+      .map(row => ({ id: text(row.id), eventId: text(row.event_id), status: text(row.status), createdAt: text(row.created_at) })),
     events: rows.map((row): EventRecord => {
       const id = text(row.id);
       const total = totals.get(id) ?? { reserved: 0, issued: 0, returned: 0 };
@@ -743,7 +750,12 @@ export function useEventsData() {
         });
         return { id, eventId: input.eventId };
       }
-      return requestEventFulfillment(live, input);
+      const handoff = await requestEventFulfillment(live, input);
+      setData(current => ({ ...current, fulfillmentHandoffs: [
+        { ...handoff, status: 'pending_approval', createdAt: new Date().toISOString() },
+        ...(current.fulfillmentHandoffs ?? []).filter(item => item.id !== handoff.id),
+      ] }));
+      return handoff;
     },
     [live],
   );
