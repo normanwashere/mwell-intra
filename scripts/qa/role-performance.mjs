@@ -22,7 +22,7 @@ const routes = {
   operations_lead: ['/warehouse/approvals', '/warehouse/quality', '/warehouse/returns'],
   procurement_lead: ['/procurement/requests', '/procurement/purchase-orders', '/warehouse/purchase-orders'],
   finance_controller: ['/finance', '/warehouse/pricing', '/work'],
-  legal_compliance_lead: ['/legal/cases', '/legal/cases?view=lifecycle', '/work'],
+  legal_compliance_lead: ['/legal/', '/legal/?view=lifecycle', '/work'],
   marketing_events_lead: ['/events', '/warehouse/fulfillment?tab=requests', '/warehouse/inventory'],
   product_owner: ['/product', '/work', '/knowledge'],
   leadership_insights: ['/insights/finance', '/warehouse/reports', '/warehouse/data'],
@@ -71,7 +71,7 @@ try {
       const sizes = await req.sizes().catch(() => null);
       record.row.requests.push({ path: new URL(req.url()).pathname, host: new URL(req.url()).hostname, background: record.background, type: req.resourceType(), method: req.method(), timing: req.timing(),
         status: response?.status() ?? null, ms: Math.round(performance.now() - record.started),
-        bytes: sizes?.responseBodySize ?? null, failure: req.failure()?.errorText ?? null });
+        bytes: sizes ? Math.max(0, sizes.responseBodySize) : null, failure: req.failure()?.errorText ?? null });
       if (!record.background) { record.row.pending--; record.row.lastNetwork = performance.now(); }
     };
     page.on('requestfinished', finish);
@@ -113,6 +113,14 @@ try {
               });
               row.heading = await page.locator('main h1:visible,main h2:visible').first().innerText();
               row.notices = await page.locator('[role=alert]:visible').allTextContents();
+              row.finalUrl = page.url();
+              if (route.startsWith('/legal/')) {
+                assert.equal(new URL(row.finalUrl).pathname, '/legal/', 'Legal workspace redirected unexpectedly');
+                const lifecycle = new URL(origin + route).searchParams.get('view') === 'lifecycle';
+                assert.equal(new URL(row.finalUrl).searchParams.get('view') === 'lifecycle', lifecycle, 'Legal workspace selection was lost');
+                await page.getByRole('button', { name: lifecycle ? 'Vendor lifecycle' : 'Accreditation cases', exact: true }).filter({ visible: true }).waitFor();
+                assert.equal(await page.getByRole('button', { name: lifecycle ? 'Vendor lifecycle' : 'Accreditation cases', exact: true }).getAttribute('aria-pressed'), 'true');
+              }
               assert(!new URL(page.url()).pathname.startsWith('/login'), 'Session lost');
               assert(!/^Access denied|No .* access$/i.test(row.heading), 'Unexpected access denial');
               row.passed = row.errors.length === 0 && !row.requests.some(req => req.status >= 400 || (req.failure && !(req.background && req.failure === 'net::ERR_ABORTED')));
