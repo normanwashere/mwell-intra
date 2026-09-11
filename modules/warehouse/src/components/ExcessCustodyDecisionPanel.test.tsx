@@ -102,14 +102,14 @@ it('keeps preview mode read-only even when a client object is present', async ()
   expect(from).not.toHaveBeenCalled();
 });
 
-it('preserves the storage error message and permits retry without recording disposition', async () => {
+it('explains storage access errors and permits retry without recording disposition', async () => {
   upload.mockResolvedValueOnce({ error: { message: 'Storage policy denied upload' } });
   const user = userEvent.setup();
   const onDecision = vi.fn();
   render(<ExcessCustodyDecisionPanel items={[item]} onDecision={onDecision} />);
   await user.click(screen.getByRole('button', { name: /review excess custody/i }));
   await user.upload(screen.getByLabelText('Upload evidence'), new File(['png'], 'proof.png', { type: 'image/png' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent('Evidence upload failed: Storage policy denied upload');
+  expect(await screen.findByRole('alert')).toHaveTextContent('Ask your administrator to check your account and the record access.');
   expect(onDecision).not.toHaveBeenCalled();
   await user.click(screen.getByRole('button', { name: 'Retry upload' }));
   expect(await screen.findByText('proof.png', { exact: true })).toBeVisible();

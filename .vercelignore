@@ -43,6 +43,7 @@ output/
 .playwright-cli/
 .pwcli/
 .tmp/
+tmp/
 .codex-tmp/
 outputs/
 deliverables/

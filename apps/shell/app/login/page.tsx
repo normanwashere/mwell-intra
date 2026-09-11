@@ -8,7 +8,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import * as m from "framer-motion/m";
-import { Button, Card, Field, Icon, Input } from "@intra/ui";
+import { Button, Card, Field, Icon, Input, userFacingError } from "@intra/ui";
 import { useSession } from "@intra/auth";
 import { MwellIntraLogo } from "@shell/components/MwellIntraLogo";
 import { authorizedPostLoginPath } from "@shell/lib/navigation";
@@ -175,7 +175,7 @@ export default function LoginPage() {
                 className="text-sm font-medium text-rose-600 dark:text-rose-300"
                 role="alert"
               >
-                {authError}
+                {userFacingError(authError, 'sign-in')}
               </p>
             )}
             {notice && (

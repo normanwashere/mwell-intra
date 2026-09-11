@@ -1,3 +1,4 @@
+import { userFacingError } from '@intra/ui';
 import { useEffect, useRef, useState } from "react";
 import { useWarehouse } from "@/app/store";
 import { toStockState } from "@/data/repository";
@@ -257,7 +258,7 @@ function ReservationEditor({
               role="alert"
               className="break-words text-sm text-rose-600 dark:text-rose-300"
             >
-              {error}
+              {userFacingError(error)}
             </p>
           )}
           <button

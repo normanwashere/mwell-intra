@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Badge, Button, Icon } from "@intra/ui";
+import { Badge, Button, Icon, userFacingError } from "@intra/ui";
 import { useLearning } from "./LearningProvider";
 import type { RequirementDefinition, RequirementProgress } from "./types";
 
@@ -111,7 +111,7 @@ export function PolicyAcknowledgment({
           >Acknowledge policy</Button>
         </>
       )}
-      {error && <p role="alert" className="text-sm font-medium text-rose-700 dark:text-rose-300">{error}</p>}
+      {error && <p role="alert" className="text-sm font-medium text-rose-700 dark:text-rose-300">{userFacingError(error)}</p>}
     </section>
   );
 }

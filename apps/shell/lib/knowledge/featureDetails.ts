@@ -31,9 +31,9 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         control(
           "Open notification",
-          "Navigates to the governed record referenced by a shell notification.",
-          "The notification needs a valid internal route visible to this user.",
-          "The referenced record opens and unread state can be cleared separately.",
+          "Opens the latest 10 accessible notifications with record references, All/Unread filters and Unread first/Newest first sorting. Periodic checks pause while the tab is hidden; returning to the tab refreshes notifications without reloading the page.",
+          "Notifications require a signed-in live session. The unread count covers this latest list, not all historical notifications. Warehouse Module alerts are a separate urgency-sorted list of current stock and reservation alerts.",
+          "Reading, filtering and sorting do not change a transaction or mark anything read. Mark read explicitly updates that notification; if confirmation fails, refresh to check before retrying. Only accessible Warehouse alerts offer a destination link.",
         ),
         control(
           "Use primary navigation",
@@ -1092,6 +1092,12 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
     "warehouse-fulfillment": {
       controls: [
         control(
+          "View order details",
+          "Opens the order reference, status, lines, picked quantities and serials, saved instructions and activity. Internal requests also show the source request date, requester when available, department, purpose, required date and cost center.",
+          "The order and source request must be accessible to the current role. Missing source information is stated explicitly. Commercial information keeps its existing permission checks; payment is not applicable to internal requests.",
+          "A read-only detail panel opens. Customer shipments retain their shipment timeline; internal handovers show their saved recipient and reference. No stock or status changes are made.",
+        ),
+        control(
           "Create order or demand",
           "Records a complete multi-line ecommerce order directly in Intra, or records internal-event and third-party sales demand from the same source selector.",
           "Every reference must be unique. Ecommerce requires channel, customer and contact, complete delivery address, an eligible payment state, and valid product lines. Event demand needs an event; third-party demand also needs its external location and reported PHP sales value.",
@@ -1153,7 +1159,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         control(
           "Acknowledge receipt",
-          "Records proof that an internal, event, or third-party recipient accepted released stock. Use the receiving party's reference and upload its acceptance photo; this is not the dispatch confirmation.",
+          "Records proof that an internal, event, or third-party recipient accepted released stock. In Department requests, eligible requesters can use Acknowledge receipt directly on the issued request or inside View request, without switching to Orders and events. Enter the receiving party's reference and upload its acceptance photo; this is not the dispatch confirmation.",
           "An acknowledgment reference and evidence are required, and the acknowledger cannot be the releasing operator.",
           "The order and its linked department request become Completed and Closed.",
         ),
@@ -1173,7 +1179,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Create return or re-kit work",
           "Lets Customer Service scan or enter the returned serial, identifies its original released order when available, and records warehouse resolution and Product-approved open-box re-kit lineage.",
           "Returns use the existing unit serial, not a newly invented serial. An unmatched serial is visibly flagged for investigation instead of being silently linked to the wrong order. Replacement resolution requires confirmed original or new customer/delivery details; a new destination needs a reason. Active kits require a Product approval reference.",
-          "The return preserves its original-order lineage when found and receives a controlled resolution or a traceable re-kit work order.",
+          "The return list and resolution form display Original order alongside the case, item, serial and reported issue. An unavailable source reference is labelled, never guessed. Viewing or closing the form does not resolve it; saving still uses the existing controlled resolution or traceable re-kit flow.",
         ),
         control(
           "Complete re-kit",

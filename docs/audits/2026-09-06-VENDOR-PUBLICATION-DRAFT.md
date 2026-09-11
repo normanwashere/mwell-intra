@@ -88,8 +88,10 @@ Proposed ordered mandatory composition:
 | 1 | `vendor.vendor_representative.evidence-and-acknowledgments.v1` | 1 |
 | 2 | `vendor.role.core.vendor_portal.capability-practice.v1` | 1 |
 
-Preserve the existing practice-to-orientation prerequisite. Add only the new
-evidence-to-orientation prerequisite. Do not invent a practice-to-evidence edge.
+Preserve the existing practice-to-orientation prerequisite. Add the new
+evidence-to-orientation and practice-to-evidence prerequisites. The latter is
+explicitly present in candidate `0363ae28843d474bcb0efd4802bb91f15c9b135b`;
+the earlier packet omitted it and was not graph-equivalent to that candidate.
 Preserve the sole verified capability outcome: the existing practice requirement
 maps to `core.submit_accreditation`. Evidence has no outcome.
 
@@ -164,7 +166,11 @@ null on the rehearsed drafts.
 
 The rehearsal fails on existing target content rather than overwriting it and
 can be repeated after rollback. It copies existing prerequisite/outcome rows,
-adds only the evidence-to-orientation edge, and leaves old rows unchanged.
+adds the evidence-to-orientation and practice-to-evidence edges, and leaves old
+rows unchanged. It fails closed on baseline prerequisite/outcome drift and checks
+that all three proposed edges resolve within the curriculum in ascending order,
+which excludes cycles. Evidence receives no capability outcome. Actual-SQL tests
+assert exact edges (1 -> 0, 2 -> 0, 2 -> 1), rollback preservation, and drift denial.
 This is draft preparation, not a tested production publication/activation tool.
 
 Verification: `node --test scripts/publish-vendor-evidence-learning.test.mjs`:

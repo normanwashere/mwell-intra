@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import { Icon } from './Icon';
+import { userFacingError } from './userFacingError';
 
 export interface EvidenceDocument {
   reference: string;
@@ -220,7 +221,7 @@ export function EvidenceAttachment({ attachment, upload: customUpload, uploadSco
       <Icon name="download" className="h-4 w-4" />
     </button>}
     {attachment.pending && <p role="status" className="text-sm text-muted">{attachment.file ? 'Uploading evidence...' : 'Loading documents...'}</p>}
-    {attachment.error && <p id={`${inputId}-error`} role="alert" className="text-sm text-rose-700 dark:text-rose-300">{attachment.error}</p>}
+    {attachment.error && <p id={`${inputId}-error`} role="alert" className="text-sm text-rose-700 dark:text-rose-300">{userFacingError(attachment.error)}</p>}
     {attachment.error && attachment.file && upload && <button type="button" className="btn-outline btn-sm"
       disabled={disabled || attachment.pending} onClick={() => void attachment.upload(attachment.file!, upload)}>
       <Icon name="rotate" className="h-4 w-4" /> Retry upload

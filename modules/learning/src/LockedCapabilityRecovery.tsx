@@ -2,7 +2,7 @@
 
 import Link from "next/link.js";
 import { useEffect, useId, useState } from "react";
-import { Badge, Button, Icon } from "@intra/ui";
+import { Badge, Button, Icon, userFacingError } from "@intra/ui";
 import type { Module } from "@intra/rbac";
 import { useOptionalLearning } from "./LearningProvider";
 import { sanitizeOnboardingReturnPath } from "./orientationGate";
@@ -94,7 +94,7 @@ export function LockedCapabilityRecovery({
               >
                 {refreshing ? "Refreshing access" : "Refresh access"}
               </Button>
-              {refreshError && <p role="alert" className="mt-2 text-sm font-medium">{refreshError}</p>}
+              {refreshError && <p role="alert" className="mt-2 text-sm font-medium">{userFacingError(refreshError)}</p>}
             </div>
           )}
         </div>

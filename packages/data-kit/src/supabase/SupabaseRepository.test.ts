@@ -599,6 +599,47 @@ function makeMockClient(
 }
 
 describe("SupabaseRepository read model query shape", () => {
+  it('reads only the three stock datasets for stock calculations', async () => {
+    const seed = buildSeed();
+    const { client, queries } = makeMockClient(seed);
+    const result = await new SupabaseRepository(client).getStockState();
+    expect(result.products).toHaveLength(seed.products.length);
+    expect(result.units).toHaveLength(seed.units.length);
+    expect(result.stockLevels).toHaveLength(seed.stockLevels.length);
+    expect(queries.map(query => query.table).sort()).toEqual(['inventory_units', 'products', 'stock_levels']);
+  });
+
+  it('does not load unrelated order and return histories before reserving stock', async () => {
+    const seed = buildSeed();
+    const { client, queries, calls } = makeMockClient(seed);
+    await new SupabaseRepository(client).reserve({ eventId: 'evt-makati', productId: 'doctor-token', quantity: 1, actor: 'test' });
+    expect(queries.map(query => query.table).sort()).toEqual(['allocations', 'inventory_units', 'products', 'stock_levels']);
+    expect(calls.at(-1)?.fn).toBe('reserve');
+  });
+
+  it('checks only purchase orders when cancelling a PO and still rejects missing records', async () => {
+    const { client, queries, calls } = makeMockClient(buildSeed());
+    await expect(new SupabaseRepository(client).cancelPurchaseOrder({ poId: 'missing', actor: 'test' })).rejects.toThrow('Purchase order not found');
+    expect(queries.map(query => query.table)).toEqual(['purchase_orders']);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('checks only allocations when cancelling an allocation', async () => {
+    const seed = buildSeed();
+    const allocation = seed.allocations.find(row => row.status === 'reserved')!;
+    const { client, queries, calls } = makeMockClient(seed);
+    await new SupabaseRepository(client).cancelAllocation({ allocationId: allocation.id, actor: 'test' });
+    expect(queries.map(query => query.table)).toEqual(['allocations']);
+    expect(calls.at(-1)?.fn).toBe('cancel_allocation');
+  });
+
+  it('checks only products before rejecting an unknown product edit', async () => {
+    const { client, queries, calls } = makeMockClient(buildSeed());
+    await expect(new SupabaseRepository(client).updateProduct({ productId: 'missing', patch: { name: 'Changed' }, actor: 'test' })).rejects.toThrow('Product not found');
+    expect(queries.map(query => query.table)).toEqual(['products']);
+    expect(calls).toHaveLength(0);
+  });
+
   it("uses explicit projections and bounds operational history", async () => {
     const { client, queries } = makeMockClient(buildSeed());
     await new SupabaseRepository(client).getData();

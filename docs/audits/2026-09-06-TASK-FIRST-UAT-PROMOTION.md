@@ -2,6 +2,12 @@
 
 ## Current Decision
 
+Update: the [September 7 automated rehearsal](2026-09-07-AUTOMATED-ONBOARDING-REHEARSAL.md)
+completed 22/22 navigation cases but failed six strict readiness cases across
+Operations Associate, Procurement Lead and Finance on both viewports. This adds
+Procurement changed-task coverage to the earlier four warnings. It does not
+clear the promotion hold or replace genuine content approval or a human pilot.
+
 **HOLD public promotion and full certification.** Protected application candidate
 `0363ae2` is built and healthy. Public UAT remains `7083373`; production is untouched.
 

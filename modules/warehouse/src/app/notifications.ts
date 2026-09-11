@@ -66,5 +66,6 @@ export function buildNotifications(
     });
   }
 
-  return notifications;
+  const priority = (tone: Tone) => tone === 'rose' ? 0 : tone === 'amber' ? 1 : 2;
+  return notifications.sort((a, b) => priority(a.tone) - priority(b.tone) || a.title.localeCompare(b.title) || a.id.localeCompare(b.id));
 }

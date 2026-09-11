@@ -61,6 +61,30 @@ async function details(record: FulfillmentOrder) {
 }
 
 describe("September 9 fulfillment evidence and linkage", () => {
+  it('distinguishes an internal handover from a customer shipment and shows stored order context', async () => {
+    const record = order({ id: 'internal', source: 'department_request', deliveryMethod: 'internal_handover',
+      requestingDepartment: 'marketing', orderNotes: 'Collect at the warehouse desk',
+      handoverRecipientName: 'Test Recipient', handoverReference: 'HANDOVER-11',
+      pickedAt: '2026-09-09T02:00:00Z', lines: [{ productId: 'doctor-token', quantity: 1, pickedQuantity: 1, pickedSerialNumbers: ['SERIAL-11'] }] });
+    const data = buildSeed();
+    data.fulfillmentOrders = [record];
+    data.departmentStockRequests = [{ id: 'request-11', requestingDepartment: 'marketing', purpose: 'Client welcome pack', costCenter: 'MKT-11',
+      requiredDate: '2026-09-12', expenseTreatment: 'expense', status: 'approved', requestedBy: 'requester', requestedByName: 'Test Requester',
+      requestedAt: '2026-09-08T01:00:00Z', fulfillmentOrderId: record.id, lines: record.lines }];
+    renderWithProviders(<FulfillmentPage />, { repo: makeRepo(data), route: '/fulfillment?tab=orders' });
+    fireEvent.click(await screen.findByRole('button', { name: 'View order details' }));
+    const dialog = await screen.findByRole('dialog', { name: `Order details / ${record.externalReference}` });
+    expect(within(dialog).getByText('Request recorded')).toBeVisible();
+    expect(within(dialog).getByText('Not applicable to internal requests')).toBeVisible();
+    expect(within(dialog).getByText('Test Requester')).toBeVisible();
+    expect(within(dialog).getByText('Client welcome pack')).toBeVisible();
+    expect(within(dialog).getByText('MKT-11')).toBeVisible();
+    expect(within(dialog).getByText('Collect at the warehouse desk')).toBeVisible();
+    expect(within(dialog).queryByText('Shipment timeline')).not.toBeInTheDocument();
+    expect(within(dialog).getByText(/HANDOVER-11/)).toBeVisible();
+    fireEvent.click(within(dialog).getByText(/Picked serials/));
+    expect(within(dialog).getByText('SERIAL-11')).toBeVisible();
+  });
   it("opens persisted POD evidence even when shipment history is empty", async () => {
     const dialog = await details(
       order({
@@ -215,10 +239,16 @@ async function receiptSetup({
   role = "warehouse_operator",
   capabilities = ["issue_items"],
   deliveryMethod = "internal_handover",
+  workspace = 'orders',
+  requestedBy = 'marketing@mwell',
+  orderStatus = 'released',
 }: {
   releasedBy?: string;
   deliveryMethod?: FulfillmentOrder["deliveryMethod"];
   role?: "warehouse_operator" | "marketing";
+  workspace?: 'orders' | 'requests';
+  requestedBy?: string;
+  orderStatus?: FulfillmentOrder['status'];
   capabilities?: (
     "issue_items" | "request_stock" | "request_fulfillment" | "reserve_allocate"
   )[];
@@ -227,13 +257,19 @@ async function receiptSetup({
   data.fulfillmentOrders = [
     order({
       source: "department_request",
-      status: "released",
+      status: orderStatus,
       deliveryMethod,
       releasedBy,
       handoverRecipientName: "Maya Santos",
       handoverRecipientDepartment: "Marketing",
     }),
   ];
+  if (workspace === 'requests') data.departmentStockRequests = [{
+    id: 'marketing-request', fulfillmentOrderId: 'order-feedback', requestedBy,
+    requestingDepartment: 'marketing', requestedAt: '2026-09-09T00:00:00Z',
+    purpose: 'Giveaway for Ms A.', costCenter: 'CC-4100', requiredDate: '2026-09-10',
+    expenseTreatment: 'expense', status: 'issued', lines: [{ productId: 'doctor-token', quantity: 1 }],
+  }];
   const repo = makeRepo(data);
   const advance = vi.spyOn(repo, "advanceFulfillmentOrder");
   renderWithProviders(<FulfillmentPage />, {
@@ -241,9 +277,9 @@ async function receiptSetup({
     role,
     capabilities,
     source: "supabase",
-    route: "/fulfillment?tab=orders",
+    route: `/fulfillment?tab=${workspace}`,
   });
-  fireEvent.click(
+  if (workspace === 'orders') fireEvent.click(
     await screen.findByRole("button", { name: "Released follow-up: 1" }),
   );
   return { repo, advance };
@@ -271,6 +307,44 @@ function upload(dialog: HTMLElement) {
 
 describe("September 9 recipient acknowledgment", () => {
   beforeEach(() => vi.mocked(uploadEvidence).mockReset());
+
+  it('lets the Marketing requester acknowledge directly from Department requests with the existing evidence contract', async () => {
+    const { repo, advance } = await receiptSetup({ workspace: 'requests', role: 'marketing', capabilities: ['request_stock'] });
+    const dialog = await openReceipt();
+    expect(within(dialog).getByRole('button', { name: 'Confirm receipt' })).toBeDisabled();
+    fireEvent.change(within(dialog).getByLabelText('Acknowledgment reference'), { target: { value: 'MKT-ACK-11' } });
+    expect(within(dialog).getByRole('button', { name: 'Confirm receipt' })).toBeDisabled();
+    vi.mocked(uploadEvidence).mockResolvedValueOnce('acceptance/marketing.jpg');
+    upload(dialog);
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Confirm receipt' })).toBeEnabled());
+    fireEvent.submit(dialog.querySelector('form')!);
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    expect(advance).toHaveBeenCalledOnce();
+    expect((await repo.getData()).fulfillmentOrders[0]).toMatchObject({ status: 'completed', acknowledgementReference: 'MKT-ACK-11' });
+    expect(await screen.findByText(/Receipt acknowledged/)).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Acknowledge receipt' })).not.toBeInTheDocument();
+  });
+
+  it('offers the same receipt form inside View request and cancelling does not save', async () => {
+    const { advance } = await receiptSetup({ workspace: 'requests', role: 'marketing', capabilities: ['request_stock'] });
+    fireEvent.click(await screen.findByRole('button', { name: 'View request' }));
+    const review = await screen.findByRole('dialog', { name: 'Review request' });
+    fireEvent.click(within(review).getByRole('button', { name: 'Acknowledge receipt' }));
+    const receipt = await screen.findByRole('dialog', { name: 'Acknowledge receipt / SEPT9-ORDER' });
+    fireEvent.click(within(receipt).getByRole('button', { name: 'Close' }));
+    expect(review).toBeVisible();
+    expect(advance).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { releasedBy: 'marketing@mwell' }, { requestedBy: 'other-requester' },
+    { orderStatus: 'ready' as const }, { deliveryMethod: 'shipment' as const },
+  ])('does not grant requester acknowledgment when blocked: %j', async overrides => {
+    const { advance } = await receiptSetup({ workspace: 'requests', role: 'marketing', capabilities: ['request_stock'], ...overrides });
+    await screen.findByRole('button', { name: 'View request' });
+    expect(screen.queryByRole('button', { name: 'Acknowledge receipt' })).not.toBeInTheDocument();
+    expect(advance).not.toHaveBeenCalled();
+  });
 
   it("does not expose receipt acknowledgment for a released shipment", async () => {
     const { advance } = await receiptSetup({ deliveryMethod: "shipment" });
@@ -397,7 +471,7 @@ describe("September 9 recipient acknowledgment", () => {
     );
     upload(dialog);
     expect(await within(dialog).findByRole("alert")).toHaveTextContent(
-      "Connection lost",
+      "We cannot confirm whether this action finished.",
     );
     expect(
       within(dialog).getByRole("button", { name: "Confirm receipt" }),
@@ -545,6 +619,14 @@ function newReplacementDestination(dialog: HTMLElement) {
 }
 
 describe("Replacement delivery contract selection", () => {
+  it('shows the original order in the return list and resolution without changing the record', async () => {
+    const { dialog, resolve } = await replacementSetup(true);
+    expect(within(dialog).getByRole('region', { name: 'Return case context' })).toHaveTextContent('SEPT9-ORDER');
+    expect(within(dialog).getByRole('region', { name: 'Return case context' })).toHaveTextContent('Damaged on arrival');
+    expect(resolve).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(await screen.findByRole('list', { name: 'Customer return cases' })).toHaveTextContent('Original order: SEPT9-ORDER');
+  });
   it.each(["original", "new"] as const)(
     "persists the %s destination through the real page and memory repository",
     async (mode) => {

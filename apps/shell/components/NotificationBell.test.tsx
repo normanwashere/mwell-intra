@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@intra/auth", () => ({ useSession: vi.fn() }));
 vi.mock("@shell/lib/supabase/env", () => ({ ENABLE_NOTIFICATIONS: false }));
 
-import { NotificationItem, NotificationResults, notificationSummary } from "./NotificationBell";
+import { NotificationItem, NotificationResults, notificationSummary, sortNotifications } from "./NotificationBell";
 
 describe("NotificationItem local rendered fixture", () => {
   beforeEach(() => vi.stubGlobal("React", React));
@@ -25,7 +25,8 @@ describe("NotificationItem local rendered fixture", () => {
     expect(markup).toContain("min-h-11 min-w-11 max-w-full whitespace-normal");
     expect(markup).toContain("[overflow-wrap:anywhere]");
     expect(markup).not.toContain("truncate");
-    expect(markup).toContain('role="menuitem"');
+    expect(markup).not.toContain('role="menuitem"');
+    expect(markup).toContain('Record reference: local-test-id');
     expect(onMarkRead).not.toHaveBeenCalled();
   });
   it("retains disabled busy state and omits the mutation action for read notifications", () => {
@@ -59,5 +60,14 @@ describe("NotificationItem local rendered fixture", () => {
     expect(markup).toContain("caught up");
     expect(markup).not.toContain('role="alert"');
     expect(notificationSummary(true, false, 0)).toBe("All read");
+  });
+  it('sorts unread first, supports date ordering and filters without mutating the fetched list', () => {
+    const read = { ...row, id: 'read', read_at: row.created_at, created_at: '2026-09-11T00:00:00Z' };
+    const recentUnread = { ...row, id: 'recent', created_at: '2026-09-10T00:00:00Z' };
+    const rows = [read, row, recentUnread];
+    expect(sortNotifications(rows, false, true).map(item => item.id)).toEqual(['recent', row.id, 'read']);
+    expect(sortNotifications(rows, false, false).map(item => item.id)).toEqual(['read', 'recent', row.id]);
+    expect(sortNotifications(rows, true, false).map(item => item.id)).toEqual(['recent', row.id]);
+    expect(rows).toEqual([read, row, recentUnread]);
   });
 });

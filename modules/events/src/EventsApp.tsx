@@ -1,5 +1,6 @@
 "use client";
 
+import { userFacingError } from '@intra/ui';
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSession } from "@intra/auth";
 import {
@@ -1384,7 +1385,7 @@ export function EventsApp({
           className="flex flex-col gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between"
         >
           <p>
-            <strong>Some event data is unavailable.</strong> {error}
+            <strong>Some event data is unavailable.</strong> {userFacingError(error)}
           </p>
           <button
             type="button"

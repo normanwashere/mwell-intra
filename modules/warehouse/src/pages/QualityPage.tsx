@@ -1,3 +1,4 @@
+import { userFacingError } from '@intra/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { tasksReturnPath } from '@/domain/taskNavigation';
@@ -214,7 +215,7 @@ export function QualityPage() {
         <Link to={tasksReturnPath(params)} className="btn-ghost btn-sm">Back to tasks</Link>
       </div>}
 
-      {queueError ? <div role="alert" className="rounded-lg border border-rose-400 p-4"><p>{queueError}</p><button type="button" disabled={loading} className="btn-ghost mt-2" onClick={() => void reloadControls()}>Retry quality queue</button></div> : loading ? (
+      {queueError ? <div role="alert" className="rounded-lg border border-rose-400 p-4"><p>{userFacingError(queueError)}</p><button type="button" disabled={loading} className="btn-ghost mt-2" onClick={() => void reloadControls()}>Retry quality queue</button></div> : loading ? (
         <p className="text-sm text-muted">Loading quality controls...</p>
       ) : tab === 'pending' ? (
         shownPending.length === 0 ? <EmptyState icon="clipboard" title={search ? 'No matching inspections' : 'No inspections waiting'} /> : (

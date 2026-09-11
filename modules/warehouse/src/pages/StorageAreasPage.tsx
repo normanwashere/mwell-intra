@@ -1,3 +1,4 @@
+import { userFacingError } from '@intra/ui';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { tasksReturnPath } from '@/domain/taskNavigation';
@@ -585,7 +586,7 @@ export function StorageAreasPage() {
           </Field>
           {error && (
             <p role="alert" className="text-sm text-rose-600 dark:text-rose-300">
-              {error}
+              {userFacingError(error)}
             </p>
           )}
         </div>
@@ -701,7 +702,7 @@ export function StorageAreasPage() {
           </Field>
           {putawayError && (
             <p role="alert" className="text-sm text-rose-600 dark:text-rose-300">
-              {putawayError}
+              {userFacingError(putawayError)}
             </p>
           )}
         </div>

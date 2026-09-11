@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Badge, Button, Textarea } from "@intra/ui";
+import { Badge, Button, Textarea, userFacingError } from "@intra/ui";
 import { useLearning } from "./LearningProvider";
 import type {
   AssessmentResult,
@@ -92,7 +92,7 @@ export function AssessmentRunner({
         >
           {supportSent ? "Support requested" : "Request support"}
         </Button>
-        {error && <p role="alert" className="text-sm font-medium text-rose-700 dark:text-rose-300">{error}</p>}
+        {error && <p role="alert" className="text-sm font-medium text-rose-700 dark:text-rose-300">{userFacingError(error)}</p>}
       </section>
     );
   }
@@ -189,7 +189,7 @@ export function AssessmentRunner({
           >Submit answers</Button>
         )}
       </div>
-      {error && <p role="alert" className="text-sm font-medium text-rose-700 dark:text-rose-300">{error}</p>}
+      {error && <p role="alert" className="text-sm font-medium text-rose-700 dark:text-rose-300">{userFacingError(error)}</p>}
     </section>
   );
 }

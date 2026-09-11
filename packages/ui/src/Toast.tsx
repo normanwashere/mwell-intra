@@ -15,6 +15,7 @@ import * as m from 'framer-motion/m';
 import { clsx } from 'clsx';
 import { Icon, type IconName } from './Icon';
 import { SPRING_SNAPPY } from './motion/tokens';
+import { userFacingError } from './userFacingError';
 
 export type ToastTone = 'success' | 'error' | 'info';
 
@@ -52,6 +53,10 @@ export const TOAST_STACK_CLASS =
   'pointer-events-none fixed inset-x-0 bottom-[calc(var(--shell-mobile-nav-clearance,5.5rem)+0.75rem+env(safe-area-inset-bottom))] z-[60] flex max-h-[calc(100dvh-var(--shell-mobile-nav-clearance,5.5rem)-6rem)] flex-col items-center gap-3 overflow-y-auto px-3 sm:bottom-0 sm:items-end sm:max-h-[calc(100dvh-2rem)] sm:px-6 sm:pb-6';
 
 export const MAX_VISIBLE_TOASTS = 3;
+
+export function toastReadingTime(message: string, tone: ToastTone): number {
+  return tone === 'error' ? Math.min(30000, Math.max(12000, message.split(/\s+/).length * 400)) : 3800;
+}
 
 export const TOAST_MOTION_STATES = {
   initial: { opacity: 0, scale: 0.98 },
@@ -93,8 +98,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const toast = useCallback(
     (message: string, tone: ToastTone = 'info') => {
-      const normalizedMessage = message.trim();
-      if (!normalizedMessage) return;
+      if (!message.trim()) return;
+      const normalizedMessage = tone === 'error' ? userFacingError(message) : message.trim();
       const candidate = {
         id: ++counter.current,
         message: normalizedMessage,
@@ -118,7 +123,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       if (existingTimer) clearTimeout(existingTimer);
       timers.current.set(
         id,
-        setTimeout(() => remove(id), 3800),
+        setTimeout(() => remove(id), toastReadingTime(normalizedMessage, tone)),
       );
       toastsRef.current = next;
       setToasts(next);

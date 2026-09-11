@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSession } from '@intra/auth';
 import { PaymentDocumentField, PaymentDocumentLink, type PaymentDocument } from './PaymentDocumentField';
-import { Badge, Icon, money } from '@intra/ui';
+import { Badge, Icon, money, userFacingError } from '@intra/ui';
 import type {
   AcceptancePack,
   PaymentReadinessPack,
@@ -218,7 +218,7 @@ export function PaymentReadinessPanel({
     <div className="space-y-4">
       {canReadPaymentEvidence && packDocuments.length > 0 && <section aria-label="Payment pack documents" className="space-y-2">{packDocuments.map(document => <PaymentDocumentLink key={document.id} document={document} />)}</section>}
       {mode === 'supabase' && !loading && !canReadPaymentEvidence && <p className="text-sm text-muted">Payment evidence is not in your scope.</p>}
-      {canReadPaymentEvidence && !canPrepare && prepareError && <p role="alert" className="text-sm text-rose-700 [overflow-wrap:anywhere]">{prepareError}</p>}
+      {canReadPaymentEvidence && !canPrepare && prepareError && <p role="alert" className="text-sm text-rose-700 [overflow-wrap:anywhere]">{userFacingError(prepareError)}</p>}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="font-semibold text-ink">Acceptance and payment readiness</h3>
@@ -520,7 +520,7 @@ export function PaymentReadinessPanel({
               />
             </label>
           ))}
-          {prepareError && <p role="alert" className="text-sm text-rose-700 [overflow-wrap:anywhere]">{prepareError}</p>}
+          {prepareError && <p role="alert" className="text-sm text-rose-700 [overflow-wrap:anywhere]">{userFacingError(prepareError)}</p>}
           <button
             type="button"
             className="btn-primary w-full sm:w-auto"

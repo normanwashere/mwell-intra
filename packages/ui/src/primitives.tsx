@@ -2,6 +2,7 @@ import { clsx } from "clsx";
 import type { HTMLAttributes, ReactNode } from "react";
 import { Icon, type IconName } from "./Icon";
 import { StatValue } from "./StatValue";
+import { userFacingError } from "./userFacingError";
 
 export function Card({
   children,
@@ -450,7 +451,7 @@ export function Field({
           className="mt-1 text-xs font-medium text-rose-600 dark:text-rose-300"
           role="alert"
         >
-          {error}
+          {userFacingError(error)}
         </p>
       ) : (
         hint && <p className="mt-1 text-xs text-faint">{hint}</p>

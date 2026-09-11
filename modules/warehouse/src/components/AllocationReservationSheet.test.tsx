@@ -167,7 +167,7 @@ describe("AllocationReservationSheet recovery", () => {
     try {
       await user.click(within(dialog).getByRole("button", { name: "Reserve" }));
       expect(await within(dialog).findByRole("alert")).toHaveTextContent(
-        /storage unavailable/i,
+        /Your draft could not be saved in this browser/i,
       );
       expect(reserve).not.toHaveBeenCalled();
     } finally {

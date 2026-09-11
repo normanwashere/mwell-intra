@@ -1,132 +1,129 @@
 # September 9 WMS Feedback: Fixes And Tester Instructions
 
-This responds to the September 9 comments on pages 1-5 of `wms comments (6).pdf`. Updated September 10, 2026.
+Hi team,
+
+We've reviewed your September 9 feedback and released the updates to [live UAT](https://mwell-intra-uat.vercel.app). Thanks for pointing out where you were getting stuck. Several items needed changes in the app, not just additional instructions.
 
 ## The Short Answer
 
-**The code changes are now live on UAT.** Revision `044ee26` was promoted on September 10 at 14:32 UTC (22:32 Singapore/Philippines), together with both database updates. Operations Associate sign-in, returns guidance, receiving validation and desktop/mobile receiving layout were checked on the live site. This is a deployment smoke check, not completion of every transaction scenario.
+**You can retry the updated flows now.** If you see **A new version is available**, click **Reload** first. Your sample products, POs and orders are still available; we did not delete your test data or use up stock during the deployment checks.
 
-The rejected Jacket-S barcode still needs the reported label matched to its PO: the live product table was checked, and `MW-JCKT-333354` is not registered. We improved the error message but did not guess or replace the product mapping. Stock holds and missing historical customer details need record-specific follow-up; they cannot be fixed by bypassing checks or guessing information.
+We checked sign-in, receiving validation, the receiving layout on desktop and mobile, the return instructions and access to Pick & Pack on UAT. We also ran automated checks before deployment. We have not yet repeated every complete transaction on the live version, so we're keeping those checks open.
 
-Existing tester data has not been deleted or rewritten.
+The Jacket-S barcode is the main item we still need your help with. Details are below.
 
 ## What We Changed And How To Continue
 
-The instructions below describe the update now available at https://mwell-intra-uat.vercel.app. If an existing tab shows **A new version is available**, use its **Reload** button before retesting.
-
 ### 1. What Does Exception Reason Mean?
 
-It means something was wrong with the delivery, not that you are asking for an exemption. We added clearer wording and examples in receiving.
+We clarified this in the receiving form. It means there is an issue with the delivery, such as missing, damaged, excess or unidentified items. It is not a request for an exemption.
 
-For example, enter "Received 8 of 10 items; 2 missing" for a shortage, or describe the damage you found. If everything arrived correctly, you do not need to make up an exception reason. The check remains for deliveries with actual problems.
-
-**Resolution: clearer instructions in the form; no removal of receiving checks.**
+For example, you can enter **"Received 8 of 10 items; 2 missing."** If the delivery is complete and correct, you do not need to enter an exception reason.
 
 ### 2. Receiving Takes Too Much Space, And The Buttons Are Hard To Follow
 
-We made the missing-information list compact and expandable. Selecting an item takes you to the field that needs attention. Save progress and Confirm now sit together on desktop and stack on mobile.
+We made the list of missing requirements smaller and expandable. Click a requirement to go straight to the field you need to complete. We also placed the action buttons together on desktop and stacked them on mobile.
 
-Use **Save progress** when you are not finished. Use **Confirm** when the receipt is complete and ready to record. Saving a draft does not add stock to inventory.
+Use **Save progress** if you need to finish later. Use **Confirm governed receipt** when you're ready to record the receipt. Saving progress alone does not add stock.
 
-**Resolution: layout and navigation changed in code; now deployed to UAT.**
+Please try reopening the same PO and check whether the revised layout is easier to follow.
 
 ### 3. Why Is The Jacket-S Barcode Rejected?
 
-We changed the message to show which product and mapped barcode the app expects. It still rejects a code for the wrong size or product.
+**This specific barcode is still open.** We checked UAT and found that `MW-JCKT-333354` is not registered in the product barcode table. The sample Jacket-S products have different codes depending on the test set.
 
-**The specific code `MW-JCKT-333354` is not resolved yet.** It is absent from the live UAT product barcode table. The sample Jacket-S records use set-specific codes, such as `MWUAT-SEP07-JACKET-S` and `MWUAT-SEP08-TESTER1-JACKET-S`. We still need the reported PO and physical label to establish which mapping should apply. A better error message is not a correction to that mapping.
+We updated the rejection message to show the product and barcode the app expects. However, we have not changed the product's barcode, because we still need to match your label to the correct PO line.
 
-For this item, please provide the PO number, exact line/size, scanned value and a photo of the label if those are not already available in the report. We can then determine whether the product mapping needs correction or the label belongs to a different item. Do not use another size's barcode just to continue.
+Please send us the **PO number, item/size and a clear photo of the barcode label** you scanned. We already have the reported value, `MW-JCKT-333354`; let us know if your latest scan produces something different. We'll use those details to determine whether the mapping needs correcting. Please don't scan a different size's barcode just to get past the check.
 
 ### 4. I Scanned The Wrong Serial During Relocation
 
-We added a removal control beside each selected serial. You can remove just the wrong one without restarting the entire move, and scan it again if needed.
+You can now remove an individual serial from the relocation list without starting over.
 
-**Resolution: individual scan correction added; now deployed to UAT.**
+Please try scanning two units, removing one, and checking that only the intended unit remains selected. You can scan a removed serial again if you need to add it back.
 
 ### 5. My Relocation Progress Disappeared
 
-The app now keeps a draft for that product and your account in the same browser. Reopen the move to continue, or choose **Resume draft** after refreshing. Use **Discard** when you intentionally want to start over. An outdated draft is flagged for review.
+We added draft recovery. You can close and reopen the relocation form to continue your work. After refreshing, choose **Resume draft**. Choose **Discard** only when you want to start again.
 
-This is browser-local recovery, not syncing between devices or accounts.
-
-**Resolution: draft recovery added and locally tested, including refresh and resume.**
+Please use the **same account and browser on the same device**. These drafts do not transfer between devices or accounts. The app will flag an outdated draft so you can review it before moving stock.
 
 ### 6. Why Can I Not Move Stock That Is On Hold?
 
-The hold should still stop the move. We improved the checks and message so the app explains the blocker and keeps your relocation draft instead of leaving you to start again.
+Stock on hold should remain blocked until Quality reviews it. We improved the message and kept your relocation draft so the block doesn't force you to redo your work.
 
-The person responsible for Quality needs to review that exact unit or lot and record the appropriate outcome. Being in General area does not mean the stock passed inspection. You can remove the held serial from your selection and continue with eligible units.
+If only one selected unit is held, remove that serial and continue with the eligible units. Ask the person handling Quality to review the held unit or lot. **General area** is a storage location, not confirmation that inspection passed.
 
-**Resolution: better handling of the block, not automatic release of held stock.** If the hold appears wrong, send the receipt reference and serial or lot so the correct record can be reviewed.
+If the hold looks incorrect, send us the receipt reference and affected serial or lot. We'll investigate the record; we haven't removed holds automatically.
 
 ### 7. Why Am I Seeing Another Account's Sync Conflict?
 
-We corrected how pending work is separated by account. The current user should only see and act on their own pending items. Switching accounts also stops the remaining queued work from continuing under the wrong account.
+We fixed the account separation for pending work and sync conflicts. You should only see and act on your own pending items. Switching accounts also stops the remaining queued work from running under the wrong account.
 
-Older saved items with no recorded owner need a separate check. The administrator must compare them with the actual receipt or movement history before anyone retries or clears them. Otherwise, a move that already succeeded could be submitted twice. We have not deleted those items or assigned them to whichever account happens to be signed in.
-
-**Resolution: account separation fixed in code. Any older unowned work still needs reconciliation.**
+Older saved work without an identified owner still needs checking. If you see that warning, send us a screenshot, the account you were using and the approximate time of the operation. We'll help coordinate a check against the receipt or movement history before it is retried or cleared. Please don't resubmit the move just to remove the warning, because it may have already been recorded.
 
 ### 8. I Cannot See All Serials In A Bin
 
-Selecting the bin count now filters the serial list to that bin. We also added **Load more**, so the list no longer stops at the first 30 units. You can use the bin and text filters together.
+Clicking a bin count now filters the serial list to that bin. We also added **Load more** so you can view units beyond the first 30.
 
-**Resolution: bin filtering and access to the remaining serials added; now deployed to UAT.**
+Please select a bin, check its serials, and use **Load more** where available. You can combine this with the text search and clear the bin filter when you want to see other bins.
 
 ### 9. It Says Evidence Is Attached, But Where Is The Delivery Photo?
 
-We changed Order details to display saved proof images, including evidence saved in the order history. We also fixed the photo viewer so you can close the preview and return to the order on desktop and mobile.
+We updated Order details to show saved proof images, including evidence in the order history. We also fixed the photo viewer so you can close the image and return to the order.
 
-Include completed orders in your filter, open the order, then open its proof photo. If the file is missing or cannot be accessed, the app should say so. This fix cannot recreate a photo that was never saved.
+Please include **Completed** orders in the status filter, open the order details, and try opening its proof photo.
 
-**Resolution: viewing and closing saved evidence fixed locally. Actual uploaded files still need verification on UAT.**
+If an image is still unavailable, send us the order reference and a screenshot of the message. We'll check that specific saved file. The viewer fix cannot recover a photo that was never uploaded or saved.
 
 ### 10. Where Do The Replacement Customer And Address Come From?
 
-The replacement flow now shows the original order and return reference. You choose whether to use the original delivery details or enter a new destination. A new destination requires a reason, and incomplete delivery details are blocked before submission.
+The replacement flow now shows the original order and return reference. You can choose the original delivery details or enter a new destination. A new destination requires a reason, and the form checks for complete delivery information.
 
-The replacement saves its own confirmed destination without changing the original order. We also fixed a retry issue that could reopen a closed case and record a second return movement.
+Please review the customer's details before submitting, then reopen the replacement order to check that the destination was saved correctly. The original order is not overwritten.
 
-**Resolution: replacement details and retry handling fixed in code; database update and UAT rollout complete.** Older orders with missing addresses still need the customer's confirmed destination. We have not filled them with guessed details.
+We also fixed an issue where retrying a closed return case could record a duplicate return movement. For older orders with no address, you still need a customer-confirmed destination; we haven't filled missing addresses with assumed information.
 
 ### 11. Who Should Acknowledge Receipt? Can They Attach A Photo?
 
-Release and acknowledgment are separate actions. The person releasing the goods must not acknowledge their own handover. We added acceptance-evidence upload and corrected the action access so an eligible requester can acknowledge without receiving pick, pack or release permissions.
+Yes, you can now attach evidence when recording acceptance. We also corrected access so an eligible requester can acknowledge the handover without needing pick, pack or release permissions.
 
-For an internal, event or third-party handover, the eligible requester or an authorized person other than the releaser can record acceptance and attach evidence. For a courier shipment, use **Update delivery** with proof instead; handover acknowledgment must not bypass delivery proof.
+The person who releases the goods cannot acknowledge their own handover. For an internal, event or third-party handover, use the eligible requester or another authorized person to record acceptance. For courier shipments, use **Update delivery** and attach delivery proof instead.
 
-**Resolution: evidence upload and access handling changed; database update and UAT rollout complete.** One rule needs to be explicit: the current system allows an authorized person to record acceptance on the recipient's behalf. If Legal or Operations requires only the named recipient to sign personally, that is a further policy and identity-check change, not something already implemented.
+One point we'd like you to confirm with Operations or Legal: **may an authorized person record acceptance on the recipient's behalf, or must the named recipient do it personally?** The app currently allows an authorized person other than the releaser to record it. We have not introduced a recipient-only signature rule.
 
 ### 12. Should I Use Allocation Return Or Returns Receiving?
 
-We added guidance where you make this choice:
+We've added guidance in the app to make this clearer.
 
-- **Returning items issued for an event or allocation:** start from that issued allocation and use its linked return flow. Do not enter the same physical return again as a separate receipt.
-- **Receiving returned stock for inspection:** Returns receiving records the physical intake into inspection staging; it is not a shortcut around an existing allocation return.
-- **Customer refund or replacement:** use the customer return case and the unit's original serial number. If the serial is already in your current scan list, there is no need to scan it again or create a new serial.
+- **Returning stock from an event allocation:** open the original issued allocation and use its linked return flow.
+- **Recording physical return intake for inspection:** use Returns receiving where the return is not already being recorded through its allocation.
+- **Processing a customer refund or replacement:** use the customer return case in Fulfillment. Receiving the physical item does not itself approve a refund or replacement.
 
-**Resolution: clearer in-app routing instructions. These remain distinct processes, not two entries required for the same return.**
+Please don't record the same physical return in both Allocation Return and Returns receiving. Use the item's existing serial number. If it is already in your current scan list, you don't need to scan it again or create a new serial.
 
-## What We Still Need From The Tester
+## What We Still Need From You
 
-You do not need to re-explain the layout, missing controls or lost-progress reports. We had enough information to implement those changes.
+You don't need to explain the original layout or missing-button reports again. We have addressed those in the update.
 
-The main unresolved fact is the **Jacket-S label and its matching PO line**. A record reference is also needed if a particular hold looks incorrect. For an old order without a delivery address, the destination must come from the customer or a verified order record.
+Please help us with these specific items:
 
-Separately, Operations or Legal can confirm whether acceptance may be recorded on a recipient's behalf. The existing rule remains in place unless that policy is changed.
+- **Jacket-S:** the PO number, item/size and barcode-label photo.
+- **A hold or sync warning that still looks wrong:** the record reference and a screenshot, plus the account and approximate time for a sync issue.
+- **Acknowledgment:** confirmation from Operations or Legal on whether acceptance can be recorded on the recipient's behalf.
 
-Please share only the relevant record details, not passwords or a full customer list.
+For a replacement with missing historical delivery details, please use the destination confirmed by the customer. You don't need to send a full customer list or any passwords.
 
 ## What Happens Next
 
-**The deployment is complete. The remaining work is transaction retesting and the record-specific follow-up below.**
+We've also prepared clearer error messages after the PO 0001 and MW-PWR-0002 reports. That wording update is not live yet. For PO 0001, the receiving issue needs an independent Warehouse Supervisor's decision under Receive and inspect > Controlled receipt decisions; don't receive those units again. MW-PWR-0002 is waiting for inspection, not automatically marked damaged. An authorized person other than the receiver should inspect it under Quality Control > Pending. Other held units need the warehouse supervisor's review. You can remove a held unit from your move selection and continue with eligible units without removing the hold itself.
 
-1. Completed: both database changes and the matching app are on UAT. Production was not changed.
-2. Repeat the reported receiving, relocation, account-switching, inventory, delivery-photo, replacement and acknowledgment scenarios on UAT, on desktop and mobile. Check the saved records after reload, not just the success message.
-3. The live barcode lookup is complete. Match the reported label to its PO before deciding whether the mapping needs correction.
-4. Testers can now retry the updated flows. Keep any remaining failure tied to its PO/order, exact step and screenshot; the deployment does not close an untested transaction automatically.
+Please retry the flows you reported using your existing UAT records. For anything you submit, reopen the record afterward to check that the details were saved, rather than relying only on the success message.
 
-For the deployment team, the installed migrations are `20260910133142_replacement_delivery_confirmation.sql` and `20260910140118_fulfillment_handover_acknowledgment_guard.sql`. They do not repair historical orders automatically.
+If you're still blocked, send us the **PO/order reference, the account used, the last step you completed and a screenshot of the error**. We'll investigate from that exact point so you don't have to describe the whole process again.
 
-**Bottom line: the update is live and ready for tester use, but the feedback is not fully closed.** Full live transaction retesting, the physical-label match, uploaded delivery evidence and real recipient acceptance remain separate checks. The deployment smoke checks did not consume seeded stock.
+We'll continue the remaining live transaction checks on our side. The update is available now, but we're keeping the barcode match and unverified transaction outcomes open rather than marking the entire report resolved.
+
+Development Team
+
+Updated September 10, 2026. Covers the September 9 comments on pages 1-5 of `wms comments (6).pdf`.

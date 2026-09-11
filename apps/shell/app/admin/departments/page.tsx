@@ -13,6 +13,7 @@ import {
   Sheet,
   Skeleton,
   useToast,
+  userFacingError,
 } from "@intra/ui";
 
 interface Department {
@@ -564,7 +565,7 @@ function DepartmentAdministration() {
           role="alert"
           className="border-l-4 border-rose-500 bg-rose-50 p-4 text-sm text-rose-900"
         >
-          {error}
+          {userFacingError(error)}
         </div>
       )}
 

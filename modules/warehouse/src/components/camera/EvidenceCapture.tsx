@@ -1,3 +1,4 @@
+import { userFacingError } from '@intra/ui';
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Icon } from "../Icon";
 import { useSession } from "@intra/auth";
@@ -186,7 +187,7 @@ export function EvidenceCapture({
       />
       {error && (
         <p role="alert" className="text-xs text-amber-600 dark:text-amber-400">
-          {error}
+          {userFacingError(error)}
         </p>
       )}
       {urls.length > 0 && (

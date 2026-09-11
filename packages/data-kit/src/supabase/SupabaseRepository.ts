@@ -49,7 +49,6 @@ import { poStatusAfterReceipt } from "../domain/purchaseOrders";
 import { applyProductPatch, buildNewProduct } from "../domain/products";
 import { normalizeSafeHttpsUrl } from "../domain/urlSafety";
 import {
-  toStockState,
   type CancelAllocationInput,
   type CancelPurchaseOrderInput,
   type CreateEventInput,
@@ -310,7 +309,12 @@ export class SupabaseRepository implements WarehouseControlRepository {
   }
 
   async getStockState() {
-    return toStockState(await this.getData());
+    const [products, units, stockLevels] = await Promise.all([
+      this.select("products", rowToProduct),
+      this.select("inventory_units", rowToUnit),
+      this.select("stock_levels", rowToStockLevel),
+    ]);
+    return { products, units, stockLevels };
   }
 
   private async selectDepartmentStockRequests() {
@@ -741,7 +745,7 @@ export class SupabaseRepository implements WarehouseControlRepository {
       this.assertReceiveReplayMatches(existing, input);
       return existing;
     }
-    const data = await this.getData();
+    const products = await this.select("products", rowToProduct);
     const receipt: Receipt = {
       id: receiptId,
       supplierId: input.supplierId,
@@ -765,7 +769,7 @@ export class SupabaseRepository implements WarehouseControlRepository {
     const stockByKey = new Map<string, Row>();
 
     for (const [lineIndex, line] of input.lines.entries()) {
-      const product = data.products.find((p) => p.id === line.productId);
+      const product = products.find((p) => p.id === line.productId);
       if (!product) throw new Error(`Unknown product: ${line.productId}`);
 
       // Capture a lot whenever a unit cost or lot code is supplied so receipts
@@ -978,10 +982,13 @@ export class SupabaseRepository implements WarehouseControlRepository {
     // Client-side pre-check keeps the UX error message friendly; the RPC
     // re-validates ATP inside its transaction so concurrent reservations can't
     // both pass against a stale snapshot.
-    const data = await this.getData();
+    const [stock, allocations] = await Promise.all([
+      this.getStockState(),
+      this.select("allocations", rowToAllocation),
+    ]);
     const result = validateReservation(
-      toStockState(data),
-      data.allocations,
+      stock,
+      allocations,
       input.productId,
       input.quantity,
     );
@@ -1012,8 +1019,11 @@ export class SupabaseRepository implements WarehouseControlRepository {
       });
       if (replay) return rowToAllocation(replay);
     }
-    const data = await this.getData();
-    const allocation = data.allocations.find(
+    const [data, allocations] = await Promise.all([
+      this.getStockState(),
+      this.select("allocations", rowToAllocation),
+    ]);
+    const allocation = allocations.find(
       (a) => a.id === input.allocationId,
     );
     if (!allocation) throw new Error("Allocation not found.");
@@ -1059,7 +1069,7 @@ export class SupabaseRepository implements WarehouseControlRepository {
 
     let sourceLocationId = input.sourceLocationId;
     if (sourceLocationId === undefined) {
-      const preferred = primaryStockLocation(toStockState(data), product.id);
+      const preferred = primaryStockLocation(data, product.id);
       const requestedSerials = new Set(input.serialNumbers ?? []);
       const locationIds = Array.from(
         new Set(
@@ -1287,9 +1297,9 @@ export class SupabaseRepository implements WarehouseControlRepository {
       });
       if (replay) return [rowToMovement(replay)];
     }
-    const data = await this.getData();
+    const data = await this.getStockState();
     const result = validateTransfer(
-      toStockState(data),
+      data,
       input.productId,
       input.fromLocationId,
       input.toLocationId,
@@ -1404,8 +1414,11 @@ export class SupabaseRepository implements WarehouseControlRepository {
   }
 
   async receiveAgainstPO(input: ReceiveAgainstPOInput): Promise<PurchaseOrder> {
-    const data = await this.getData();
-    const po = data.purchaseOrders.find((p) => p.id === input.poId);
+    const [products, purchaseOrders] = await Promise.all([
+      this.select("products", rowToProduct),
+      this.select("purchase_orders", rowToPurchaseOrder),
+    ]);
+    const po = purchaseOrders.find((p) => p.id === input.poId);
     if (!po) throw new Error("Purchase order not found.");
     if (po.status === "cancelled")
       throw new Error("Cannot receive against a cancelled purchase order.");
@@ -1422,7 +1435,7 @@ export class SupabaseRepository implements WarehouseControlRepository {
 
     for (const line of input.lines) {
       if (line.quantityReceived <= 0) continue;
-      const product = data.products.find((p) => p.id === line.productId);
+      const product = products.find((p) => p.id === line.productId);
       if (!product) throw new Error(`Unknown product: ${line.productId}`);
 
       const poLine = projectedLines.find((l) => l.productId === line.productId);
@@ -1494,8 +1507,8 @@ export class SupabaseRepository implements WarehouseControlRepository {
   async cancelPurchaseOrder(
     input: CancelPurchaseOrderInput,
   ): Promise<PurchaseOrder> {
-    const data = await this.getData();
-    const po = data.purchaseOrders.find((p) => p.id === input.poId);
+    const purchaseOrders = await this.select("purchase_orders", rowToPurchaseOrder);
+    const po = purchaseOrders.find((p) => p.id === input.poId);
     if (!po) throw new Error("Purchase order not found.");
     if (po.status === "received")
       throw new Error("Cannot cancel a fully received purchase order.");
@@ -1521,8 +1534,8 @@ export class SupabaseRepository implements WarehouseControlRepository {
   }
 
   async cancelAllocation(input: CancelAllocationInput): Promise<Allocation> {
-    const data = await this.getData();
-    const allocation = data.allocations.find(
+    const allocations = await this.select("allocations", rowToAllocation);
+    const allocation = allocations.find(
       (a) => a.id === input.allocationId,
     );
     if (!allocation) throw new Error("Allocation not found.");
@@ -1636,8 +1649,8 @@ export class SupabaseRepository implements WarehouseControlRepository {
   }
 
   async createProduct(input: CreateProductInput): Promise<Product> {
-    const data = await this.getData();
-    const product = buildNewProduct(uid("prod"), input, data.products);
+    const products = await this.select("products", rowToProduct);
+    const product = buildNewProduct(uid("prod"), input, products);
     const { error } = await this.db
       .from("products")
       .insert(productToRow(product));
@@ -1646,8 +1659,8 @@ export class SupabaseRepository implements WarehouseControlRepository {
   }
 
   async updateProduct(input: UpdateProductInput): Promise<Product> {
-    const data = await this.getData();
-    const current = data.products.find((p) => p.id === input.productId);
+    const products = await this.select("products", rowToProduct);
+    const current = products.find((p) => p.id === input.productId);
     if (!current) throw new Error("Product not found.");
     // Validate + compute the next product, then persist the changed columns.
     const next = applyProductPatch(current, input.patch);
@@ -1941,7 +1954,7 @@ export class SupabaseRepository implements WarehouseControlRepository {
     if ((input.fromBinId ?? undefined) === (input.toBinId ?? undefined)) {
       throw new Error("Source and destination bins must differ.");
     }
-    const data = await this.getData();
+    const data = await this.getStockState();
     const product = data.products.find((p) => p.id === input.productId);
     if (!product) throw new Error("Product not found.");
     const createdAt = new Date().toISOString();

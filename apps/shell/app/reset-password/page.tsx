@@ -8,7 +8,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import * as m from "framer-motion/m";
-import { Button, Card, Field, HeroStat, Icon, Input } from "@intra/ui";
+import { Button, Card, Field, HeroStat, Icon, Input, userFacingError } from "@intra/ui";
 import { useSession } from "@intra/auth";
 import { MwellIntraLogo } from "@shell/components/MwellIntraLogo";
 
@@ -171,7 +171,7 @@ export default function ResetPasswordPage() {
                   className="text-sm font-medium text-rose-600 dark:text-rose-300"
                   role="alert"
                 >
-                  {error}
+                  {userFacingError(error)}
                 </p>
               )}
               <Button

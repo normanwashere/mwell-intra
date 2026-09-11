@@ -1,3 +1,4 @@
+import { userFacingError } from '@intra/ui';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useWarehouse } from '@/app/store';
@@ -54,7 +55,7 @@ export function TasksPage() {
           { value: 'completed', label: 'Completed' },
         ]}
       />
-      {error ? <div role="alert"><p>{error}</p><button type="button" className="btn-ghost mt-2" onClick={() => setReloadVersion(v => v + 1)}>Retry task queue</button></div> : loading ? <p className="text-sm text-muted">Loading tasks...</p> : shown.length === 0 ? (
+      {error ? <div role="alert"><p>{userFacingError(error)}</p><button type="button" className="btn-ghost mt-2" onClick={() => setReloadVersion(v => v + 1)}>Retry task queue</button></div> : loading ? <p className="text-sm text-muted">Loading tasks...</p> : shown.length === 0 ? (
         <EmptyState icon="clipboard" title={`No ${status} tasks`} />
       ) : (
         <ul className="divide-y divide-line rounded-xl border border-line bg-surface" aria-label={`${status} tasks`}>

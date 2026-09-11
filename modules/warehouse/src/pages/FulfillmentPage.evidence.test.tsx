@@ -228,7 +228,7 @@ describe("Fulfillment evidence commit gates", () => {
       within(dialog).getByRole("button", { name: "Save delivery update" }),
     ).toBeDisabled();
     expect(within(dialog).getByRole("alert")).toHaveTextContent(
-      "Connection lost",
+      "We cannot confirm whether this action finished.",
     );
     fireEvent.submit(dialog.querySelector("form")!);
     expect(advance).not.toHaveBeenCalled();

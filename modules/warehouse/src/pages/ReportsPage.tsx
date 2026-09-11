@@ -1,3 +1,4 @@
+import { userFacingError } from '@intra/ui';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { InventoryPosition } from '@intra/data-kit';
 import { useWarehouse } from '@/app/store';
@@ -66,7 +67,7 @@ export function ReportsPage() {
   return (
     <div className="space-y-4">
       <PageHeader title="Inventory position report" icon="history" subtitle="On-hand, commitments, holds, unavailable, and available stock" />
-      {error && <p role="alert" className="rounded-lg bg-rose-500/10 p-3 text-sm text-rose-700 dark:text-rose-300">{error}</p>}
+      {error && <p role="alert" className="rounded-lg bg-rose-500/10 p-3 text-sm text-rose-700 dark:text-rose-300">{userFacingError(error)}</p>}
       <Card className="grid gap-3 sm:grid-cols-3">
         <Field label="Location filter" htmlFor="report-location"><select id="report-location" className="input" value={locationId} onChange={(event) => setLocationId(event.target.value)}><option value="all">All locations</option>{data.locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select></Field>
         <Field label="Product filter" htmlFor="report-product"><select id="report-product" className="input" value={productId} onChange={(event) => setProductId(event.target.value)}><option value="all">All products</option>{data.products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select></Field>

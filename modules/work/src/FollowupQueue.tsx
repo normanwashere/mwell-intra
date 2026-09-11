@@ -1,4 +1,5 @@
 'use client';
+import { userFacingError } from '@intra/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSession } from '@intra/auth';
 
@@ -52,7 +53,7 @@ export function FollowupQueue() {
   return <section aria-label="Leadership follow-ups" className="space-y-3 border-t border-line pt-4">
     <h2 className="text-lg font-semibold">Leadership follow-ups</h2>
     {loading && <p role="status">Loading follow-ups...</p>}
-    {error && <p role="alert">{error} <button className="btn-outline" onClick={() => void refresh()}>Retry follow-ups</button></p>}
+    {error && <p role="alert">{userFacingError(error)} <button className="btn-outline" onClick={() => void refresh()}>Retry follow-ups</button></p>}
     {!loading && !error && !items.length && <p>No follow-ups in your scope.</p>}
     {items.map(item => <article id={`followup-${item.id}`} key={item.id} className="border-b border-line py-3 space-y-2 [overflow-wrap:anywhere]">
       <h3 className="font-semibold">{item.metric_id} / {item.area}</h3>

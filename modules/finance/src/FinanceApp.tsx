@@ -1,5 +1,6 @@
 "use client";
 
+import { userFacingError } from '@intra/ui';
 import {
   Badge,
   Card,
@@ -115,7 +116,7 @@ export function FinanceApp() {
             <span className="font-semibold">
               Some Finance sources are unavailable.
             </span>{" "}
-            <span className="break-words">{error}</span>
+            <span className="break-words">{userFacingError(error)}</span>
           </p>
           <button
             type="button"

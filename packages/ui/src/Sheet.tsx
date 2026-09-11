@@ -90,7 +90,7 @@ export function Sheet({
       )}
       <div className="flex items-start justify-between gap-3 px-5 pb-3 pt-1.5 md:px-6 md:pb-4 md:pt-5">
         <div className="min-w-0">
-          <Dialog.Title className="font-display text-lg font-bold text-ink">
+          <Dialog.Title className="font-display text-lg font-bold text-ink [overflow-wrap:anywhere]">
             {title}
           </Dialog.Title>
           {description && (

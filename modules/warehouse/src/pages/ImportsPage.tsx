@@ -1,3 +1,4 @@
+import { userFacingError } from '@intra/ui';
 import { useState, type DragEvent } from 'react';
 import type { ImportIssue, ImportValidationResult, WarehouseImportKind } from '@intra/data-kit';
 import { useWarehouse } from '@/app/store';
@@ -178,7 +179,7 @@ export function ImportsPage() {
 
       {!online && <p role="alert" className="rounded-lg bg-amber-500/10 p-3 text-sm font-medium text-amber-800 dark:text-amber-200">Connect to the network before validating or applying an import.</p>}
       {!live && <p role="alert" className="rounded-lg bg-amber-500/10 p-3 text-sm font-medium text-amber-800 dark:text-amber-200">Imports require the live Supabase data source. Demo data cannot be import evidence.</p>}
-      {error && <p role="alert" className="rounded-lg bg-rose-500/10 p-3 text-sm font-medium text-rose-700 dark:text-rose-300">{error}</p>}
+      {error && <p role="alert" className="rounded-lg bg-rose-500/10 p-3 text-sm font-medium text-rose-700 dark:text-rose-300">{userFacingError(error)}</p>}
       {correctedFrom && <p className="text-sm font-medium text-ink">Correction of {correctedFrom}. The original evidence remains immutable.</p>}
 
       <Card>

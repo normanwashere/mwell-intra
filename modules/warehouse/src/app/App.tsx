@@ -1,3 +1,4 @@
+import { userFacingError } from '@intra/ui';
 import {
   Navigate,
   Route,
@@ -282,7 +283,7 @@ function LoadErrorShell({
         <h1 className="mt-4 text-xl font-bold text-ink">
           Warehouse data is unavailable
         </h1>
-        <p className="mt-2 max-w-md text-sm text-muted">{error}</p>
+        <p className="mt-2 max-w-md text-sm text-muted">{userFacingError(error)}</p>
         <button type="button" className="btn-primary mt-6" onClick={retry}>
           Retry loading data
         </button>

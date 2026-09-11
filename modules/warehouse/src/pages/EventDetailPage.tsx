@@ -1,3 +1,4 @@
+import { userFacingError } from '@intra/ui';
 import { useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useWarehouse } from "@/app/store";
@@ -534,7 +535,7 @@ export function EventDetailPage() {
                 role="alert"
                 className="text-sm text-rose-600 dark:text-rose-300"
               >
-                {error}
+                {userFacingError(error)}
               </p>
             )}
           </fieldset>

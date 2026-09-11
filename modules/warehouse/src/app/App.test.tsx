@@ -253,7 +253,7 @@ describe('App routing & guards', () => {
     renderWithProviders(<ControlFailureProbe />, { repo: new DeniedControlRepository() });
     fireEvent.click(screen.getByRole('button', { name: /run guarded command/i }));
     expect(await screen.findByText('false')).toBeInTheDocument();
-    expect(await screen.findByText(/not authorized: warehouse\.inspect_quality/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Your account does not have access to this action or record/)).toBeInTheDocument();
   });
 
   it('blocks live mutations before the repository when capability refresh is empty', async () => {

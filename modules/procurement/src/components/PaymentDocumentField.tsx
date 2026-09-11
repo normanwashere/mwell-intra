@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { userFacingError } from '@intra/ui';
 import { useSession } from '@intra/auth';
 import { attachmentMetadataForRpc, createGovernedAttachmentUrl, uploadRequestAttachments, type GovernedAccessClient } from '../attachments';
 
@@ -13,7 +14,7 @@ export function PaymentDocumentLink({ document }: { document: PaymentDocument })
       const link = await createGovernedAttachmentUrl(supabaseClient as unknown as GovernedAccessClient, document.id);
       window.open(link.url, '_blank', 'noopener,noreferrer');
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Document unavailable'); }
-  }}>Open {document.purpose}: {document.filename}</button>{error && <p role="alert">{error}</p>}</div>;
+  }}>Open {document.purpose}: {document.filename}</button>{error && <p role="alert">{userFacingError(error)}</p>}</div>;
 }
 export function PaymentDocumentField({ label, purpose, value, documents, poId, requestId, onChange, refresh }: {
   label: string; purpose: string; value: string; documents: PaymentDocument[];
@@ -43,6 +44,6 @@ export function PaymentDocumentField({ label, purpose, value, documents, poId, r
   return <div className="space-y-2">
     <label className="block text-sm font-semibold">{label}<select className="input mt-1" value={value} onChange={e => onChange(e.target.value)}><option value="">Select uploaded evidence</option>{documents.filter(d => d.purpose === purpose).map(d => <option key={d.id} value={d.id}>{d.filename}</option>)}</select></label>
     <div className="flex min-w-0 flex-wrap items-center gap-2"><input aria-label={`Upload ${label}`} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" disabled={busy} className="w-full min-w-0 text-sm sm:w-auto" onChange={e => void upload(e.target.files?.[0])} /><button type="button" className="btn-outline btn-sm" disabled={!value || busy} onClick={() => void open()}>Open document</button></div>
-    {error && <p role="alert" className="text-sm text-rose-700 [overflow-wrap:anywhere]">{error}</p>}
+    {error && <p role="alert" className="text-sm text-rose-700 [overflow-wrap:anywhere]">{userFacingError(error)}</p>}
   </div>;
 }

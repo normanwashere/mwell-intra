@@ -12,6 +12,25 @@ function LocationProbe() {
 }
 
 describe("AppShell navigation", () => {
+  it('opens actor-owned conflict details with keyboard and does not discard on inspection', async () => {
+    _resetMemoryQueue();
+    const entry = await enqueue('relocate', { actor: 'logistics_supervisor@mwell', idempotencyKey: 'local-conflict', fromBinId: 'RACK-A', toBinId: 'RACK-B', quantity: 2 });
+    await markConflict(entry.id, 'Insufficient stock');
+    const rendered = renderWithProviders(<AppShell>content</AppShell>);
+    try {
+      const user = userEvent.setup();
+      const trigger = await screen.findByRole('button', { name: /1 conflict.*View details/ });
+      trigger.focus();
+      await user.keyboard('{Enter}');
+      const dialog = await screen.findByRole('dialog', { name: 'Sync conflicts' });
+      expect(dialog).toHaveTextContent('Move stock between bins');
+      expect(dialog).toHaveTextContent('RACK-A');
+      expect(dialog).toHaveTextContent('RACK-B');
+      await user.keyboard('{Escape}');
+      expect(trigger).toHaveFocus();
+      expect(trigger).toHaveTextContent('1 conflict');
+    } finally { rendered.unmount(); _resetMemoryQueue(); }
+  });
   it('keeps metadata-only legacy recovery visible beyond toast expiry without exposing queue payloads', async () => {
     _resetMemoryQueue();
     await enqueue('transfer', { secret: 'unowned payload' });

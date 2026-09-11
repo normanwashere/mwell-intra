@@ -473,7 +473,7 @@ const ownerFor: Record<KnowledgeModule, string> = {
 
 const auditedNotification = (definition: FeatureDefinition): string => {
   if (definition.id === "shell-home")
-    return "The shell reads core.notifications and marks an opened item read; manage_notifications broadens the stream according to database policy.";
+    return "The shell reads the latest 10 accessible core.notifications. Opening, filtering or sorting does not mark them read; Mark read explicitly calls the existing protected action. The badge is the unread count within this list. manage_notifications broadens the stream according to database policy.";
   if (definition.id === "legal-invite-vendor")
     return "The page shows a success or error toast, while the protected invitation API invokes the delivery Edge Function; it does not write core.notifications directly.";
   if (definition.module === "warehouse")

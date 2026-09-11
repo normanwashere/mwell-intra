@@ -90,7 +90,7 @@ describe('authenticated evidence transport', () => {
     renderWithProviders(<InspectionSheet target={{ sourceType: 'receipt', sourceId: 'receipt-A', productId: 'shirt-l', productName: 'Shirt', quantity: 1 }} requiresEvidence onSubmit={submit} onOpenChange={() => undefined} />);
     const fileInput = screen.getByLabelText('Attach inspection evidence', { selector: 'input' });
     await userEvent.upload(fileInput, photo());
-    expect(await screen.findByRole('alert')).toHaveTextContent('Storage policy denied');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Ask your administrator to check your account and the record access.');
     expect(screen.getByRole('button', { name: 'Submit inspection' })).toBeDisabled();
     expect(submit).not.toHaveBeenCalled();
     await userEvent.upload(fileInput, photo());

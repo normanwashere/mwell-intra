@@ -5,7 +5,7 @@ import Link from "next/link.js";
 import { useRouter, useSearchParams } from "next/navigation.js";
 import { useSession } from "@intra/auth";
 import { MODULES } from "@intra/rbac";
-import { Badge, Button, Icon, Sheet } from "@intra/ui";
+import { Badge, Button, Icon, Sheet, userFacingError } from "@intra/ui";
 import { useLearning } from "./LearningProvider";
 import { OnboardingProgress } from "./OnboardingProgress";
 import { TaskLearningSummary } from "./TaskLearningSummary";
@@ -753,7 +753,7 @@ export function OnboardingCenter({
           className="border-b border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-900 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-100"
         >
           <p className="font-semibold">Training could not start</p>
-          <p>{trainingError}</p>
+          <p>{userFacingError(trainingError)}</p>
         </div>
       )}
 

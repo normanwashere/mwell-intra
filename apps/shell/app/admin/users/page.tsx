@@ -41,6 +41,7 @@ import {
   StaggerGrid,
   StaggerItem,
   useToast,
+  userFacingError,
   type Column,
 } from '@intra/ui';
 import { Guard, useSession } from '@intra/auth';
@@ -647,7 +648,7 @@ function LiveAdminUsers() {
             </span>
             <div className="min-w-0">
               <p className="font-semibold text-ink">Couldn&apos;t load users</p>
-              <p className="mt-0.5 text-sm text-muted">{error}</p>
+              <p className="mt-0.5 text-sm text-muted">{userFacingError(error)}</p>
             </div>
           </div>
         </Card>

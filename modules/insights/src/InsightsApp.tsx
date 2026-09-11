@@ -1,5 +1,6 @@
 "use client";
 
+import { userFacingError } from '@intra/ui';
 import { useEffect, useRef, useState } from "react";
 import { useSession } from "@intra/auth";
 import {
@@ -267,7 +268,7 @@ export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
           className="flex items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950"
         >
           <span>
-            <strong>Insights unavailable.</strong> {error}
+            <strong>Insights unavailable.</strong> {userFacingError(error)}
           </span>
           <button
             type="button"

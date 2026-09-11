@@ -1,3 +1,4 @@
+import { userFacingError } from '@intra/ui';
 import { useEffect, useRef, useState } from "react";
 import { useSession } from "@intra/auth";
 import { useWarehouse } from "@/app/store";
@@ -365,7 +366,7 @@ function AllocationReturnForm({
         />
         {error && (
           <p role="alert" className="text-sm text-rose-600 dark:text-rose-300">
-            {error}
+            {userFacingError(error)}
           </p>
         )}
       </fieldset>

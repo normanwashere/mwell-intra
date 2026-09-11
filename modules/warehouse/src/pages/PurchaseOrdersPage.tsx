@@ -1,3 +1,4 @@
+import { userFacingError } from '@intra/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { inboundQueue, isReceivableInbound } from "@/domain/workQueues";
 import { resolveProductScan } from "@/domain/productScan";
@@ -1652,7 +1653,7 @@ export function PurchaseOrdersPage() {
                 role="alert"
                 className="space-y-2 text-sm text-rose-700 dark:text-rose-300"
               >
-                <p>{draftError}</p>
+                <p>{userFacingError(draftError)}</p>
                 <button
                   type="button"
                   className="btn-ghost"
@@ -1667,7 +1668,7 @@ export function PurchaseOrdersPage() {
                 role="alert"
                 className="space-y-2 text-sm text-rose-700 dark:text-rose-300"
               >
-                <p>{draftSaveError}</p>
+                <p>{userFacingError(draftSaveError)}</p>
                 {draftConflict && !confirmDraftReload && (
                   <button
                     type="button"
@@ -1818,7 +1819,7 @@ export function PurchaseOrdersPage() {
                   role="alert"
                   className="text-sm text-rose-700 dark:text-rose-300"
                 >
-                  {bridgeEvidenceError}
+                  {userFacingError(bridgeEvidenceError)}
                 </p>
               )}
               <p id="bridge-exception-guidance" className="text-xs text-muted">
@@ -2163,7 +2164,7 @@ export function PurchaseOrdersPage() {
                         {lineErrors.length > 0 && (
                           <ul className="space-y-1 text-xs font-medium text-rose-700 dark:text-rose-300">
                             {lineErrors.map((error) => (
-                              <li key={error}>{error}</li>
+                              <li key={userFacingError(error)}>{error}</li>
                             ))}
                           </ul>
                         )}
@@ -2178,7 +2179,7 @@ export function PurchaseOrdersPage() {
                   key={error}
                   className="text-xs font-medium text-rose-700 dark:text-rose-300"
                 >
-                  {error}
+                  {userFacingError(error)}
                 </p>
               ))}
             </fieldset>

@@ -16,6 +16,7 @@ import { buildNotifications } from "@/app/notifications";
 import { Sheet, useToast, PageTransition } from "./ui";
 import { ThemeToggle } from "./ThemeToggle";
 import { ContextualHelpLink } from "@intra/ui";
+import { SyncConflictDetails } from './SyncConflictDetails';
 
 const MODULE_GROUP_ORDER: ModuleGroup[] = [
   "operate",
@@ -487,18 +488,18 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         {(offline || pendingSync > 0 || conflicts.length > 0) && (
           <div
-            className="flex shrink-0 flex-wrap items-center justify-center gap-3 bg-amber-500 px-4 py-1.5 text-xs font-semibold text-white"
+            className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-y border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-950 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
             role="status"
           >
             <span className="inline-flex items-center gap-1.5">
               <Icon name="alert" className="h-4 w-4" />
-              {source === "memory"
+              {offline && source === "memory"
                 ? "Offline — changes are saved locally and sync when you reconnect."
                 : offline
                   ? `Offline — ${pendingSync} change(s) queued and will sync automatically when you reconnect.`
                   : pendingSync > 0
                     ? `${pendingSync} change(s) syncing…`
-                    : null}
+                    : 'Some saved changes need review.'}
             </span>
             {source === "supabase" && pendingSync > 0 && !offline && (
               <button
@@ -514,10 +515,12 @@ export function AppShell({ children }: { children: ReactNode }) {
               <button
                 type="button"
                 onClick={() => setConflictsOpen(true)}
-                className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2 py-0.5"
+                aria-haspopup="dialog"
+                aria-expanded={conflictsOpen}
+                className="inline-flex min-h-11 items-center gap-2 rounded-md border border-amber-600 px-3 py-2 font-semibold underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
               >
                 <Icon name="alert" className="h-3.5 w-3.5" /> {conflicts.length}{" "}
-                conflict(s)
+                {conflicts.length === 1 ? 'conflict' : 'conflicts'} - View details
               </button>
             )}
           </div>
@@ -677,7 +680,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         open={notifOpen}
         onOpenChange={setNotifOpen}
         title="Notifications"
-        description={`${notifications.length} alert(s)`}
+        description={`${notifications.length} current warehouse alerts. Highest priority first.`}
         side="right"
       >
         {notifications.length === 0 ? (
@@ -702,8 +705,8 @@ export function AppShell({ children }: { children: ReactNode }) {
                     <Icon name={n.icon} className="h-4 w-4" />
                   </span>
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-ink">{n.title}</p>
-                    <p className="text-xs text-muted">{n.detail}</p>
+                    <p className="text-sm font-semibold text-ink [overflow-wrap:anywhere]">{n.title}</p>
+                    <p className="text-xs text-muted [overflow-wrap:anywhere]">{n.detail}</p>
                   </div>
                 </>
               );
@@ -712,13 +715,14 @@ export function AppShell({ children }: { children: ReactNode }) {
                   {n.to ? (
                     <button
                       type="button"
-                      className="flex w-full items-start gap-3 rounded-xl bg-inset p-3 text-left transition hover:bg-line"
+                      className="flex min-h-11 w-full items-start gap-3 rounded-lg bg-inset p-3 text-left transition hover:bg-line"
                       onClick={() => {
                         setNotifOpen(false);
                         navigate(n.to!);
                       }}
                     >
                       {inner}
+                      <Icon name="chevron" className="ml-auto mt-1 h-4 w-4 shrink-0" />
                     </button>
                   ) : (
                     <div className="flex items-start gap-3 rounded-xl bg-inset p-3">
@@ -768,34 +772,31 @@ export function AppShell({ children }: { children: ReactNode }) {
         open={conflictsOpen}
         onOpenChange={setConflictsOpen}
         title="Sync conflicts"
-        description="These changes could not be applied and need your attention."
+        description="These saved changes need review before you try again."
         side="right"
+        size="wide"
       >
+        <p tabIndex={-1} data-sheet-initial-focus className="mb-4 border-b border-line pb-4 text-sm text-muted focus:outline-none">Check the affected record and its history before submitting it again. Discard removes only this device's queued copy; it does not undo any change already saved on the server.</p>
         {conflicts.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted">No conflicts.</p>
         ) : (
           <ul className="space-y-2" aria-label="Conflicted changes">
             {conflicts.map((c) => (
-              <li key={c.id} className="rounded-xl bg-inset p-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-ink">
-                    {c.method}
-                  </span>
+              <li key={c.id} className="space-y-3 border-b border-line py-4 last:border-0">
+                <SyncConflictDetails entry={c} data={data} />
+                <div className="flex justify-end">
                   <button
                     type="button"
-                    className="text-xs font-medium text-brand-700 dark:text-brand-300"
+                    className="btn-outline min-h-11 text-sm"
                     onClick={() => {
                       void discardConflict(c.id).then(() => {
-                        toast.success("Discarded.");
-                      });
+                        toast.success("Queued copy discarded.");
+                      }).catch(() => toast.error("We could not confirm the queued copy was discarded. Reopen this list to check before trying again."));
                     }}
                   >
-                    Discard
+                    Discard queued copy
                   </button>
                 </div>
-                <p className="mt-1 text-xs text-rose-600 dark:text-rose-300">
-                  {c.error ?? "Conflict"}
-                </p>
               </li>
             ))}
           </ul>

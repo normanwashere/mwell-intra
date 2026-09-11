@@ -7,7 +7,7 @@ import {
   useState,
   type CSSProperties,
 } from "react";
-import { Button, Icon } from "@intra/ui";
+import { Button, Icon, userFacingError } from "@intra/ui";
 import type { TrainingPlacement, TrainingStep } from "./training/types";
 
 interface AnchorLayout {
@@ -226,7 +226,7 @@ export function CoachOverlay({
               role="alert"
               className="mt-3 border-l-2 border-rose-500 pl-3 text-sm font-semibold text-rose-800 dark:text-rose-200"
             >
-              {error}
+              {userFacingError(error)}
             </p>
           )}
           <h2

@@ -1,3 +1,4 @@
+import { userFacingError } from '@intra/ui';
 import {
   useCallback,
   useEffect,
@@ -277,7 +278,7 @@ function QueueCounters({
     <div
       role="group"
       aria-label={label}
-      className="grid grid-cols-2 border-y border-line bg-surface sm:grid-cols-3 lg:grid-cols-5"
+      className={`grid grid-cols-2 divide-x divide-line border-y border-line bg-surface sm:grid-cols-3 ${counters.length === 6 ? 'lg:grid-cols-6' : counters.length === 4 ? 'lg:grid-cols-4' : 'lg:grid-cols-5'}`}
     >
       {counters.map((counter) => (
         <button
@@ -1044,7 +1045,14 @@ function OrderDetailsSheet({
   showCommercial: boolean;
   onClose: () => void;
 }) {
+  const { data } = useWarehouse();
   if (!order) return null;
+  const request = data?.departmentStockRequests.find(item => item.fulfillmentOrderId === order.id);
+  const internal = order.source === 'department_request';
+  const milestones = [
+    ['Recorded', order.createdAt], ['Picked', order.pickedAt], ['Packed', order.packedAt],
+    ['Released', order.releasedAt], ['Recipient accepted', order.acknowledgedAt],
+  ].filter((item): item is [string, string] => !!item[1]);
   const safeDeliveryLink = normalizeSafeHttpsUrl(order.deliveryLink);
   const address = order.deliveryAddress;
   const replacementCases = returnCases.filter((record) => record.replacementOrderId === order.id);
@@ -1067,9 +1075,10 @@ function OrderDetailsSheet({
       }}
       title={`Order details / ${order.externalReference}`}
       description="Fulfillment record, controlled customer details, and shipment history."
+      size="wide"
     >
-      <div className="space-y-5">
-        <section aria-label="Operational summary" className="space-y-2 border-b border-line pb-3 text-sm">
+      <div className="grid min-w-0 gap-6 md:grid-cols-2 [&>section]:min-w-0 [&>section]:border-b [&>section]:border-line [&>section]:pb-5">
+        <section aria-label="Operational summary" className="space-y-2 border-b border-line pb-3 text-sm md:col-span-2 [overflow-wrap:anywhere]">
           <p className="font-semibold text-ink">{titleCase(order.status)} / {order.externalReference}</p>
           <ul>{order.lines.map((line) => <li key={line.productId}>{line.quantity} x {products.find((product) => product.id === line.productId)?.name ?? line.productId}</li>)}</ul>
           <p className="break-words">Destination: {address ? `${address.addressLine}, ${address.city}, ${address.province} ${address.postalCode}` : order.requestingDepartment ?? "Not provided"}</p>
@@ -1103,7 +1112,7 @@ function OrderDetailsSheet({
             )}
           </section>
         )}
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-xl border border-line bg-inset p-4 text-sm">
+        <dl className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-4 border-y border-line py-4 text-sm [overflow-wrap:anywhere]">
           <div>
             <dt className="text-xs text-faint">Channel</dt>
             <dd className="mt-1 font-semibold text-ink">
@@ -1111,15 +1120,15 @@ function OrderDetailsSheet({
             </dd>
           </div>
           <div>
-            <dt className="text-xs text-faint">Order date</dt>
+            <dt className="text-xs text-faint">{internal ? 'Request recorded' : 'Order date'}</dt>
             <dd className="mt-1 font-semibold text-ink">
-              {order.orderDate ?? "Not provided"}
+              {internal ? new Date(request?.requestedAt ?? order.createdAt).toLocaleString('en-PH') : order.orderDate ?? "Not recorded"}
             </dd>
           </div>
           <div>
             <dt className="text-xs text-faint">Payment</dt>
             <dd className="mt-1 font-semibold text-ink">
-              {order.paymentStatus
+              {internal ? 'Not applicable to internal requests' : order.paymentStatus
                 ? titleCase(order.paymentStatus)
                 : "Not provided"}
               {order.paymentMethod ? ` / ${order.paymentMethod}` : ""}
@@ -1140,6 +1149,17 @@ function OrderDetailsSheet({
             </div>
           )}
         </dl>
+
+        {internal && <section aria-label="Department request details" className="space-y-3 text-sm">
+          <h3 className="font-display text-base font-bold text-ink">Department request</h3>
+          <dl className="grid grid-cols-2 gap-4 [overflow-wrap:anywhere]">
+            <div><dt className="text-xs text-muted">Department</dt><dd>{request?.requestingDepartment ?? order.requestingDepartment ?? 'Not recorded'}</dd></div>
+            <div><dt className="text-xs text-muted">Requested by</dt><dd>{request?.requestedByName ?? 'Name not available in this view'}</dd></div>
+            <div><dt className="text-xs text-muted">Required date</dt><dd>{request?.requiredDate ?? 'Not recorded'}</dd></div>
+            <div><dt className="text-xs text-muted">Cost center</dt><dd>{request?.costCenter ?? 'Not recorded'}</dd></div>
+            <div className="col-span-2"><dt className="text-xs text-muted">Purpose</dt><dd>{request?.purpose ?? 'Original request details are not available in this view.'}</dd></div>
+          </dl>
+        </section>}
 
         {order.source === "ecommerce" && showCommercial && (
           <details aria-labelledby="commercial-title">
@@ -1277,7 +1297,7 @@ function OrderDetailsSheet({
           </section>
         )}
 
-        <section aria-labelledby="order-lines-title">
+        <section aria-labelledby="order-lines-title" className="md:col-span-2">
           <h3
             id="order-lines-title"
             className="font-display text-base font-bold text-ink"
@@ -1313,6 +1333,8 @@ function OrderDetailsSheet({
                       Picked from {bin.label ?? bin.code}
                     </p>
                   )}
+                  <p className="mt-2 text-sm text-muted">Picked: {line.pickedQuantity} of {line.quantity}</p>
+                  {line.pickedSerialNumbers.length > 0 && <details className="mt-2 text-sm"><summary className="cursor-pointer font-medium">Picked serials ({line.pickedSerialNumbers.length})</summary><ul className="mt-2 grid gap-1 break-all sm:grid-cols-2">{line.pickedSerialNumbers.map(serial => <li key={serial}>{serial}</li>)}</ul></details>}
                   {showCommercial && line.unitPrice !== undefined && (
                     <p className="mt-2 text-xs text-muted">
                       Unit price PHP {line.unitPrice.toLocaleString("en-PH")} ·
@@ -1390,7 +1412,7 @@ function OrderDetailsSheet({
             >
               Order instructions
             </h3>
-            <p className="mt-2 whitespace-pre-wrap rounded-xl border border-line bg-inset p-4 text-sm text-ink">
+            <p className="mt-2 whitespace-pre-wrap text-sm text-ink [overflow-wrap:anywhere]">
               {order.orderNotes}
             </p>
           </section>
@@ -1412,7 +1434,12 @@ function OrderDetailsSheet({
             <EvidenceGallery urls={order.acknowledgementEvidenceUrl ? [order.acknowledgementEvidenceUrl] : []} />
           </section>
         )}
-        <section aria-labelledby="shipment-timeline-title">
+        <section aria-label="Order activity" className="space-y-3 text-sm">
+          <h3 className="font-display text-base font-bold text-ink">Order activity</h3>
+          <ol className="divide-y divide-line">{milestones.map(([label, at]) => <li key={label} className="flex flex-wrap justify-between gap-2 py-2"><span className="font-medium">{label}</span><time dateTime={at} className="text-muted">{new Date(at).toLocaleString('en-PH')}</time></li>)}</ol>
+          {order.deliveryMethod !== 'shipment' && <dl className="grid grid-cols-2 gap-3"><div><dt className="text-xs text-muted">Handover recipient</dt><dd>{order.handoverRecipientName ?? 'Not recorded yet'}</dd></div><div><dt className="text-xs text-muted">Handover reference</dt><dd className="break-words">{order.handoverReference ?? 'Not recorded yet'}</dd></div></dl>}
+        </section>
+        {order.deliveryMethod === 'shipment' && <section aria-labelledby="shipment-timeline-title">
           <h3
             id="shipment-timeline-title"
             className="font-display text-base font-bold text-ink"
@@ -1454,7 +1481,7 @@ function OrderDetailsSheet({
               ))}
             </ol>
           )}
-        </section>
+        </section>}
       </div>
     </Sheet>
   );
@@ -2725,13 +2752,14 @@ function RequestsWorkspace({
   department: string;
   options: DepartmentRequestOption[];
 }) {
+  const warehouse = useWarehouse();
   const {
     createDepartmentStockRequest,
     decideDepartmentStockRequest,
     actor,
     identityId,
     source,
-  } = useWarehouse();
+  } = warehouse;
   const { profile } = useSession();
   const requesterName = (id: string, projectedName?: string) => {
     if (projectedName?.trim()) return projectedName.trim();
@@ -2748,11 +2776,37 @@ function RequestsWorkspace({
   const [open, setOpen] = useState(false);
   const [workingId, setWorkingId] = useState<string>();
   const [detailId, setDetailId] = useState<string>();
+  const [acknowledgeOrder, setAcknowledgeOrder] = useState<FulfillmentOrder>();
   const [statusFilter, setStatusFilter] = useState("all");
   const detailRequest = requests.find((request) => request.id === detailId);
   const filteredRequests = requests.filter(
     (request) => statusFilter === "all" || request.status === statusFilter,
   );
+  const receiptAction = (request: DepartmentStockRequest) => {
+    const order = warehouse.data?.fulfillmentOrders.find(candidate => candidate.id === request.fulfillmentOrderId);
+    if (request.status !== 'issued' && order?.status !== 'released' && !order?.acknowledgedAt) return null;
+    if (order?.acknowledgedAt) return (
+      <p className="mt-3 border-t border-line pt-3 text-sm text-muted">
+        Receipt acknowledged {requestDate(order.acknowledgedAt)}
+        {order.acknowledgementReference && <span className="block [overflow-wrap:anywhere]">Reference: {order.acknowledgementReference}</span>}
+      </p>
+    );
+    const unavailable = !order
+      ? 'The delivery record for this request is unavailable. Refresh the page; if it is still missing, ask the warehouse lead to check the linked order.'
+      : order.status === 'completed'
+        ? 'This order is already completed. Check its receipt evidence with the warehouse lead before taking further action.'
+        : receiptAcknowledgmentUnavailable(order, warehouse, profile?.id);
+    return (
+      <div className="mt-3 min-w-0 space-y-2 border-t border-line pt-3 text-sm">
+        {order && <p className="text-muted [overflow-wrap:anywhere]">Order: {order.externalReference}</p>}
+        {unavailable ? <p className="text-muted">{unavailable}</p> : (
+          <button type="button" className="btn-primary min-h-11 w-full sm:w-auto" onClick={() => setAcknowledgeOrder(order)}>
+            Acknowledge receipt
+          </button>
+        )}
+      </div>
+    );
+  };
   const decide = async (id: string, decision: "approved" | "rejected") => {
     if (
       workingId ||
@@ -2872,6 +2926,7 @@ function RequestsWorkspace({
               >
                 View request <Icon name="chevron" className="h-4 w-4" />
               </button>
+              {receiptAction(request)}
             </li>
           ))}
         </ul>
@@ -2903,7 +2958,7 @@ function RequestsWorkspace({
                   Approve
                 </button>
               </div>
-            ) : undefined
+            ) : receiptAction(detailRequest)
           }
         >
           <StatusBadge status={detailRequest.status} />
@@ -3011,6 +3066,11 @@ function RequestsWorkspace({
           </details>
         </Sheet>
       )}
+      <AcknowledgeReceiptSheet
+        key={acknowledgeOrder?.id}
+        order={acknowledgeOrder}
+        onClose={() => setAcknowledgeOrder(undefined)}
+      />
       <CreateRequestSheet
         open={open}
         onOpenChange={setOpen}
@@ -3401,6 +3461,7 @@ function ReturnsWorkspace({
                   <p className="text-xs text-muted">
                     {record.serialNumber ?? "Non-serialized item"}
                   </p>
+                  <p className="mt-2 break-words text-sm text-ink">Original order: <strong>{orders.find(order => order.id === record.sourceOrderId)?.externalReference ?? (record.sourceOrderId ? `${record.sourceOrderId} (reference unavailable)` : 'Not linked')}</strong></p>
                 </div>
                 <StatusBadge status={record.status} />
               </div>
@@ -3762,6 +3823,7 @@ function ResolveReturnSheet({
       title={
         mode === "finance" ? "Record finance refund" : "Resolve return case"
       }
+      size="wide"
       description="Quarantine the item first. Replacement creates a linked fulfillment order automatically."
       footer={
         <button
@@ -3779,12 +3841,21 @@ function ResolveReturnSheet({
         className="space-y-4"
         onSubmit={(event) => void submit(event)}
       >
+        <section aria-label="Return case context" className="border-y border-line py-4 text-sm [overflow-wrap:anywhere]">
+          <dl className="grid gap-3 sm:grid-cols-2">
+            <div><dt className="text-xs text-muted">Original order</dt><dd className="font-semibold">{originalOrder?.externalReference ?? (record.sourceOrderId ? `${record.sourceOrderId} (reference unavailable)` : 'Not linked to an order')}</dd></div>
+            <div><dt className="text-xs text-muted">Return case</dt><dd>{record.id}</dd></div>
+            <div><dt className="text-xs text-muted">Item</dt><dd>{data?.products.find(product => product.id === record.productId)?.name ?? record.productId}</dd></div>
+            <div><dt className="text-xs text-muted">Serial number</dt><dd>{record.serialNumber ?? 'Not recorded'}</dd></div>
+            <div className="sm:col-span-2"><dt className="text-xs text-muted">Reported issue</dt><dd>{record.defectDescription}</dd></div>
+          </dl>
+        </section>
         {error && (
           <p
             role="alert"
             className="text-sm text-amber-800 dark:text-amber-300"
           >
-            {error}
+            {userFacingError(error)}
           </p>
         )}
         <fieldset

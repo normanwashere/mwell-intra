@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Badge, Button, Card, Field, Input, Sheet, useToast } from '@intra/ui';
+import { Badge, Button, Card, Field, Input, Sheet, useToast, userFacingError } from '@intra/ui';
 import {
   MPIC_SOURCE_PROFILE,
   MWELL_OPERATING_PROFILE,
@@ -293,7 +293,7 @@ export function PolicyProfileSection({
       <Card className="p-4 sm:p-5">
         <h3 className="font-semibold text-ink">History and unresolved conflicts</h3>
         <p className="mt-1 text-sm text-muted">Activation history, draft author, checker, and unresolved policy conflicts are read from the governed profile records. A conflict needs a documented mapping and rationale before activation.</p>
-        {historyError ? <p role="alert" className="mt-3 text-sm text-danger">Could not load policy history: {historyError}</p> : null}
+        {historyError ? <p role="alert" className="mt-3 text-sm text-danger">Could not load policy history: {userFacingError(historyError)}</p> : null}
         <div className="mt-4 grid gap-3 lg:grid-cols-3">
           <div><h4 className="text-sm font-semibold text-ink">Profiles</h4><ul className="mt-2 space-y-2 text-sm text-muted">{profileHistory.length ? profileHistory.slice(0, 4).map((profile) => <li key={profile.id}><strong className="text-ink">{profile.code} {profile.version}</strong><br />{profile.status} · source {profile.source_document_status?.replaceAll('_', ' ') ?? 'status unavailable'} · effective {policyEffectiveDate(profile.effective_from)}<br />Maker {profile.created_by} · checker {profile.activated_by ?? 'Pending'}{profile.status === 'draft' && profile.source_document_status === 'approved' && canManage ? <button type="button" className="mt-1 text-link underline disabled:opacity-50" disabled={busy} onClick={() => void activateDraft(profile.id)}>Activate this approved draft as checker</button> : null}</li>) : <li>No governed profile history is available yet.</li>}</ul></div>
           <div><h4 className="text-sm font-semibold text-ink">Open conflicts</h4><ul className="mt-2 space-y-2 text-sm text-muted">{openConflicts.length ? openConflicts.slice(0, 4).map((conflict) => <li key={conflict.id}><strong className="text-ink">{conflict.parent_rule}</strong><br />{conflict.impact}<br /><button type="button" className="mt-1 text-link underline" onClick={() => { setConflictId(conflict.id); setConflictOpen(true); }}>Resolve this conflict</button></li>) : <li>No unresolved policy conflicts.</li>}</ul></div>

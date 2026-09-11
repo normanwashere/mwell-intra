@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSession } from '@intra/auth';
 import { CertifiedAction } from '@intra/learning';
-import { Badge, money } from '@intra/ui';
+import { Badge, money, userFacingError } from '@intra/ui';
 
 type VendorPo = {
   id: string;
@@ -40,7 +40,7 @@ export function VendorPurchaseOrderAcknowledgements() {
   return <main className="mx-auto max-w-4xl space-y-5 p-4 md:p-6" aria-label="Vendor PO acknowledgements">
     <nav aria-label="Vendor portal" className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3"><a href="/vendor/" className="btn-outline">Back to vendor portal</a><span className="text-sm [overflow-wrap:anywhere]">{profile.name}</span><button type="button" className="btn-ghost" onClick={() => void signOut()}>Sign out</button></nav>
     <header><h1 className="text-xl font-semibold text-ink">Purchase order acknowledgements</h1><p className="text-sm text-muted">Only purchase orders awarded to your organization appear here.</p></header>
-    {error ? <p role="alert" className="text-sm text-rose-700">{error}</p> : null}
+    {error ? <p role="alert" className="text-sm text-rose-700">{userFacingError(error)}</p> : null}
     {loading ? <p className="text-sm text-muted">Loading awarded purchase orders...</p> : null}
     {!loading && rows.length === 0 ? <p className="text-sm text-muted">No issued purchase orders require acknowledgement.</p> : null}
     {rows.map((po) => <section key={po.id} className="space-y-3 rounded-lg border border-line p-4">

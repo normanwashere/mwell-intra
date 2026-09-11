@@ -1,3 +1,4 @@
+import { userFacingError } from '@intra/ui';
 import { useMemo, useState } from 'react';
 import { useWarehouse } from '@/app/store';
 import type { Location } from '@/domain/types';
@@ -242,7 +243,7 @@ export function LocationsPage() {
           </Field>
           {error && (
             <p role="alert" className="text-sm text-rose-600 dark:text-rose-300">
-              {error}
+              {userFacingError(error)}
             </p>
           )}
         </div>

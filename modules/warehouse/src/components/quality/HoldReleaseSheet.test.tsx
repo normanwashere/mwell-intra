@@ -1,4 +1,5 @@
-import { render, screen, within } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
+import { renderWithProviders } from '@/test/renderWithProviders';
 import userEvent from '@testing-library/user-event';
 import { expect, it, vi } from 'vitest';
 import { HoldReleaseSheet } from './HoldReleaseSheet';
@@ -6,7 +7,7 @@ import { HoldReleaseSheet } from './HoldReleaseSheet';
 it('offers an evidence-backed atomic rejection to vendor return', async () => {
   const user = userEvent.setup();
   const onRejectToVendor = vi.fn().mockResolvedValue(true);
-  render(<HoldReleaseSheet
+  renderWithProviders(<HoldReleaseSheet
     hold={{ id: 'hold-1', inspectionId: 'qi-1', productId: 'product-1', locationId: 'loc-1',
       quantity: 2, status: 'active', reason: 'Damaged cartons', createdBy: 'operator-1',
       createdAt: '2026-07-15T01:00:00Z' }}

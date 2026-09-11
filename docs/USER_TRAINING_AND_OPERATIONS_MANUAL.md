@@ -1,5 +1,26 @@
 # User Training And Operations Manual
 
+## Marketing Request Receipt (Local Candidate)
+
+After Warehouse releases your items, open **Fulfillment > Department requests**. Find your issued request and select **Acknowledge receipt**, either on the request itself or inside **View request**. Check the linked order and recipient, enter the acceptance reference, attach recipient acceptance evidence, and select **Confirm receipt**. The request then shows **Receipt acknowledged** with the saved reference; the action is no longer offered. You do not need to switch to Orders and events.
+
+Only acknowledge items actually received. Warehouse release and recipient acceptance remain separate steps. The releasing operator cannot acknowledge their own release, even if they also hold the Marketing role. Unreleased orders cannot be acknowledged; courier shipments use delivery proof instead. If the linked order is missing, refresh and ask the warehouse lead to check it. Closing the form without confirmation does not record receipt.
+
+This entry point is tested locally on desktop and mobile; it is not yet deployed to live UAT.
+
+## Order Context And Alerts (Local Candidate)
+
+These presentation changes are verified locally, not yet deployed to UAT. The receiving, approval, pick/pack, return and release sequences remain unchanged.
+
+- **Conflicts:** Select **View details** in the warehouse banner. Each saved change shows its action, reason, affected product and available warehouse, bin, quantity, serial or line references. Check the record history with the warehouse lead before retrying. **Discard queued copy** removes only the device copy; it does not reverse stock already saved on the server.
+- **Return cases:** Check **Original order** in the case list and resolution form, alongside the case number, item, serial and reported issue. An unavailable reference is stated explicitly, not guessed. Confirm the destination as before; quarantine, independent decisions and Finance checks still apply.
+- **Order details:** Internal department requests show the recorded request date, requester name when available, department, purpose, cost center and required date. Payment is not applicable to an internal request. Order lines show picked quantities and expandable serials; order instructions, recorded activity and handover references remain together. Customer shipments retain their delivery timeline and authorized commercial details. Missing saved information is not fabricated.
+- **Notifications:** The main bell has All/Unread filters and Unread first/Newest first sorting. Its count covers only the latest 10 accessible notifications. Opening it does not mark anything read. Use **Mark read** explicitly. If confirmation fails, refresh to check before retrying. Warehouse **Module alerts** are separate current stock/reservation alerts, sorted by urgency, with links only where your role permits access; their count is not an unread count.
+
+Desktop order counters occupy a single row. Detail panels use the available desktop width and stack on smaller screens. Changing filters or closing a detail panel does not save a transaction.
+
+**Error-recovery practice, local candidate:** Read what happened, check whether the result is confirmed, then follow the named next step. If a PO receipt already awaits a decision, ask an independent Warehouse Supervisor to review the existing PO under Receive and inspect > Controlled receipt decisions. Do not receive the same units again. If a unit is waiting for inspection, ask an authorized person other than the receiver to inspect it under Quality Control > Pending. Other holds need the warehouse supervisor's review. A failed connection may hide a completed action: check history before submitting again. Report the record number, account, time and screenshot, never passwords or private links. The new wording is not yet live.
+
 ## September 9 Feedback: Receiving And Return Clarifications
 
 These refinements are deployed to UAT in revision `044ee26` on September 10, with both required database updates. Live checks covered Operations Associate access, receiving validation and desktop/mobile receiving layout, returns guidance and the Pick & Pack queue. Full transaction retesting remains separate.

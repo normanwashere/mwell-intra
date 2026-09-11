@@ -1,3 +1,4 @@
+import { userFacingError } from '@intra/ui';
 import { useState } from "react";
 import type { WarehouseData } from "@/data/repository";
 import { Field, ProductSelect, QuantityStepper } from "@/components/ui";
@@ -135,7 +136,7 @@ export function ReturnIntakeProduct({
           role="alert"
           className="break-words text-sm text-rose-600 dark:text-rose-300"
         >
-          {error}
+          {userFacingError(error)}
         </p>
       )}
     </fieldset>

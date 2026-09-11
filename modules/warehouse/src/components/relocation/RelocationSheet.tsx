@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { userFacingError } from '@intra/ui';
 import type { InventoryHold, Product, WarehouseData } from '@intra/data-kit';
 import { useWarehouse } from '@/app/store';
 import { WAREHOUSE_MUTATION_CAPABILITIES } from '@/app/authorization';
@@ -26,7 +27,7 @@ interface Props {
   onOpenChange: (open: boolean) => void;
 }
 
-const recoveryMessage = 'Move not confirmed. Your draft is retained. Check the reported error, refresh inventory, and verify these exact units or source-bin quantities and movement history before retrying. Active holds require Quality review; do not release a hold just to complete a move.';
+const recoveryMessage = 'Move not confirmed. Your draft is saved. Reopen inventory and check the selected units and movement history before trying again, so the same stock is not moved twice. If the result is still unclear, ask your warehouse supervisor to check it.';
 
 export function RelocationSheet(props: Props) {
   const { profile, mode } = useSession();
@@ -98,7 +99,7 @@ function ScopedRelocationSheet({ product, data, initialLocationId, open, onOpenC
       try {
         holds = await loadCompleteControlQueue(query => loadHolds({ ...query, status: 'active' }));
       } catch {
-        setError('Active holds could not be checked. No move was submitted. Your draft is retained; check your connection and retry the preflight.');
+        setError('Stock holds could not be checked. Nothing was moved. Your draft is saved. Check your connection and try Move stock again.');
         return;
       }
       // Scope changes or another tab's draft must not submit a stale operator's selection.
@@ -112,8 +113,11 @@ function ScopedRelocationSheet({ product, data, initialLocationId, open, onOpenC
             expectedProductId: product.id, expectedLocationId: selected.locationId, expectedBinId: selected.fromBinId || null });
           if (!result.ok) { setError(`${code}: ${result.message} Review the retained selection before retrying.`); return; }
           const unit = currentData.units.find(unit => unit.serialNumber === code && unit.productId === product.id)!;
-          if (sourceHolds.some(hold => hold.serialNumber === code && (hold.lotId ?? '') === (unit.lotId ?? ''))) {
-            setError(`Active hold blocks ${code}. Keep this unit in its source bin and request Quality review. Remove it from this draft to move other eligible units; do not release a hold just to complete a move.`);
+          const blockingHold = sourceHolds.find(hold => hold.serialNumber === code && (hold.lotId ?? '') === (unit.lotId ?? ''));
+          if (blockingHold) {
+            setError(blockingHold.reason === 'Awaiting independent quality inspection'
+              ? `${code} is waiting for inspection. Nothing was moved. Ask an authorized person other than the receiver to inspect it in Quality Control > Pending. Keep it in its current bin until accepted. Remove this unit from the selection to move the others.`
+              : `${code} cannot be moved because it is on hold. Nothing was moved. Keep it in its current bin and ask your warehouse supervisor to review the hold in Quality Control. Remove this unit from the selection to move the others. Do not remove the hold just to move stock.`);
             return;
           }
         }
@@ -143,7 +147,7 @@ function ScopedRelocationSheet({ product, data, initialLocationId, open, onOpenC
         if (draft.mounted.current) onOpenChange(false);
       }
     } catch {
-      setError(submitted ? recoveryMessage : 'Preflight could not be completed. No move was submitted. Keep this draft and retry after checking inventory.');
+      setError(submitted ? recoveryMessage : 'The stock check could not be completed. Nothing was moved. Your draft is saved. Reopen inventory and check the selected stock before trying again.');
     } finally {
       inFlight.current = false;
       setSaving(false);
@@ -208,7 +212,7 @@ function ScopedRelocationSheet({ product, data, initialLocationId, open, onOpenC
           {bins.length === 0 && <p className="text-sm text-muted">No storage areas set up for this warehouse yet. Add bins on the Storage areas page first.</p>}
         </fieldset>
         {saving && <p role="status" className="text-sm text-muted">Checking holds and confirming the move...</p>}
-        {error && <p role="alert" className="text-sm text-rose-600 dark:text-rose-300">{error}</p>}
+        {error && <p role="alert" className="text-sm text-rose-600 dark:text-rose-300">{userFacingError(error)}</p>}
       </div>
     </Sheet>
   );

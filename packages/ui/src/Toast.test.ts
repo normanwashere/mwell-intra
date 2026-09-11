@@ -6,6 +6,7 @@ import {
   TOAST_STACK_CLASS,
   TOAST_TONE_STYLES,
   coalesceToastQueue,
+  toastReadingTime,
   type ToastRecord,
 } from './Toast';
 
@@ -21,6 +22,13 @@ const item = (
 });
 
 describe('toast queue ergonomics', () => {
+  it('allows time to read error recovery steps without slowing success notices', () => {
+    expect(toastReadingTime('Check this field.', 'error')).toBe(12000);
+    expect(toastReadingTime(Array(50).fill('word').join(' '), 'error')).toBe(20000);
+    expect(toastReadingTime(Array(100).fill('word').join(' '), 'error')).toBe(30000);
+    expect(toastReadingTime('Saved', 'success')).toBe(3800);
+    expect(toastReadingTime('Updated', 'info')).toBe(3800);
+  });
   it('uses contrast-safe status tones', () => {
     expect(TOAST_TONE_STYLES.success.cls).toContain('bg-emerald-700');
     expect(TOAST_TONE_STYLES.error.cls).toContain('bg-rose-700');

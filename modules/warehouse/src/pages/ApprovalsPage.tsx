@@ -1,3 +1,4 @@
+import { userFacingError } from '@intra/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type { StockChangeRequest } from '@intra/data-kit';
@@ -98,7 +99,7 @@ export function ApprovalsPage() {
         ]}
       />
 
-      {loadError ? <div role="alert"><p>{loadError}</p><button type="button" className="btn-ghost mt-2" onClick={() => void reload()}>Retry approvals</button></div> : loading ? (
+      {loadError ? <div role="alert"><p>{userFacingError(loadError)}</p><button type="button" className="btn-ghost mt-2" onClick={() => void reload()}>Retry approvals</button></div> : loading ? (
         <p className="text-sm text-muted">Loading approvals...</p>
       ) : rows.length === 0 ? (
         <EmptyState icon="check" title="No approvals in this view" />

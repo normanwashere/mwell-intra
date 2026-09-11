@@ -1,4 +1,5 @@
 "use client";
+import { userFacingError } from '@intra/ui';
 import { deadlineLabel } from './deadline';
 import { FollowupQueue } from './FollowupQueue';
 
@@ -113,7 +114,7 @@ function EmployeeWorkApp({
           className="flex items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950"
         >
           <span>
-            <strong>Queue unavailable.</strong> {error}
+            <strong>Queue unavailable.</strong> {userFacingError(error)}
           </span>
           <button
             type="button"

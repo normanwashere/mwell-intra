@@ -1,9 +1,16 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { Card, ModuleHero } from "./primitives";
+import { Card, Field, ModuleHero } from "./primitives";
 import { readFileSync } from "node:fs";
 
 describe("Card DOM contract", () => {
+  it("renders plain-language field errors without losing the accessible label", () => {
+    const markup = renderToStaticMarkup(<Field label="PO" htmlFor="po" error="column doa_assignments.created_at does not exist"><input id="po" /></Field>);
+    expect(markup).toContain('for="po"');
+    expect(markup).toContain('role="alert"');
+    expect(markup).toContain('support team');
+    expect(markup).not.toContain('doa_assignments');
+  });
   it("forwards valid div attributes used by browser tests and accessibility", () => {
     const markup = renderToStaticMarkup(
       <Card data-testid="governed-card" aria-label="Governed record">

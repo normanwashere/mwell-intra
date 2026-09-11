@@ -1,3 +1,4 @@
+import { userFacingError } from '@intra/ui';
 import { useEffect, useRef, useState } from "react";
 import clsx from "clsx";
 import { Icon } from "../Icon";
@@ -160,7 +161,7 @@ export function BarcodeScanner({
 
       {error && (
         <p role="alert" className="text-sm text-amber-700 dark:text-amber-300">
-          {error}
+          {userFacingError(error)}
         </p>
       )}
 

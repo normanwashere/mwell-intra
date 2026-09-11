@@ -11,6 +11,7 @@ import {
   SectionTitle,
   SignaturePad,
   useToast,
+  userFacingError,
   type SignaturePayload,
 } from '@intra/ui';
 import { useCan, useSession } from '@intra/auth';
@@ -233,7 +234,7 @@ export function VendorApplicationPage() {
       <div role="alert">
         <Card className="mx-auto max-w-xl">
           <h1 className="font-display text-xl font-bold text-ink">Application could not be loaded</h1>
-          <p className="mt-2 text-sm text-muted">{loadError}</p>
+          <p className="mt-2 text-sm text-muted">{userFacingError(loadError)}</p>
           <Link to={caseRouteWithinModule(kase.id)} className="btn-primary mt-4">
             Return to case
           </Link>

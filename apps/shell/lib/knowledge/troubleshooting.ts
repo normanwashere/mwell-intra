@@ -212,7 +212,7 @@ export const TROUBLESHOOTING_GUIDES: TroubleshootingGuide[] = [
   {
     id: "trouble-offline-write",
     symptom: "Connection is lost while saving or submitting",
-    summary: "Determine whether the write committed before any retry.",
+    summary: "Check whether your action was saved before trying again.",
     module: "core",
     likelyCauses: [
       "Network interruption",
@@ -222,8 +222,11 @@ export const TROUBLESHOOTING_GUIDES: TroubleshootingGuide[] = [
     safeRecovery: [
       "Stop clicking",
       "Restore connectivity",
+      "If the warehouse banner shows conflicts, select View details. Read Why it needs attention and check the affected product, bin, quantity, serials or receipt lines. This opens a read-only view; it does not retry the change",
+      "Check history before discarding a queued copy. Discard queued copy only removes that copy from this device; it does not undo a change already saved on the server",
       "Refresh the record from its queue",
       "Check status and activity",
+      "If the message says the result is not confirmed, do not assume nothing was saved. Check the record history before submitting again. Send the record number, time and a screenshot to support if the outcome is unclear",
       "Retry only when no committed effect is present and the action is safe",
     ],
     dataImpact:
@@ -293,9 +296,10 @@ export const TROUBLESHOOTING_GUIDES: TroubleshootingGuide[] = [
     id: "trouble-quality-hold",
     symptom: "Stock remains on quality hold",
     summary:
-      "Pending inspection and quarantine keep stock unavailable until the authorized Quality disposition owner decides it.",
+      "Waiting for inspection does not mean the item is damaged. Check the reason to find the correct next step.",
     module: "warehouse",
     likelyCauses: [
+      "Pending inspection by someone other than the receiver",
       "Inspection evidence is incomplete",
       "Corrective action is pending",
       "Release authority has not decided",
@@ -303,6 +307,8 @@ export const TROUBLESHOOTING_GUIDES: TroubleshootingGuide[] = [
     ],
     safeRecovery: [
       "Open the inspection and hold reason",
+      "For waiting for inspection, ask an authorized person other than the receiver to open Quality Control > Pending, find the serial or receipt and complete the inspection. Acceptance releases the temporary inspection hold; do not release it manually",
+      "For another Quality hold, leave the item in its current bin and ask your warehouse supervisor to review the reason and supporting evidence in Quality Control. Remove the held unit from your move selection to move the other eligible units",
       "A received item in General area is not automatically QC accepted. Complete the linked inspection through the authorized Quality owner before ordinary relocation",
       "Confirm the receipt or return remains in quarantine and unavailable",
       "Attach permitted corrective evidence",
@@ -350,6 +356,7 @@ export const TROUBLESHOOTING_GUIDES: TroubleshootingGuide[] = [
       "Stop movements for the affected scope",
       "Recount and inspect ledger/activity",
       "Record the variance reason and evidence",
+      "If a PO item already has a receiving issue awaiting a decision, do not receive the same units again. Ask an independent Warehouse Supervisor to open Receive and inspect > Controlled receipt decisions and review the existing PO issue. The person who recorded the receipt cannot approve their own exception",
       "In governed PO receiving, Exception reason explains damaged, short, excess or unidentified quantities; it is not an exemption. Example: expected 100 jackets, received 95 clean and 5 damaged; delivery photos attached",
       "For non-serialized merchandise, scan the barcode mapped to the exact product or size and enter quantity. A wrong barcode is not a reason to invent serials or bypass the product check",
       "A return serial is the existing serial on the physical unit or its original issue/order record, not a new return number. Already scanned means it is already listed in this intake",

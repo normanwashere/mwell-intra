@@ -142,7 +142,7 @@ describe("action-specific receipt acknowledgment authorization", () => {
     expect(screen.getByLabelText("Action status")).toHaveTextContent("failed");
     expect(advance).not.toHaveBeenCalled();
     expect((await repo.getData()).fulfillmentOrders[0]?.status).toBe("released");
-    expect(screen.getByText(/Shipments require proof of delivery/)).toBeVisible();
+    expect(screen.getByText(/Use Update delivery and attach proof of delivery/)).toBeVisible();
   });
 
   it.each([

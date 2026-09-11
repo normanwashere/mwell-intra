@@ -98,11 +98,14 @@ describe("ProductDetailPage", () => {
     expect(within(await screen.findByRole("dialog")).getByLabelText("Relocate quantity")).toHaveValue(7);
   });
 
-  it("checks every hold page at submit and blocks an active selected serial without clearing it", async () => {
+  it.each([
+    ["Quality review", /SMART-WATCH-SN0001 cannot be moved because it is on hold/i, /warehouse supervisor/],
+    ["Awaiting independent quality inspection", /SMART-WATCH-SN0001 is waiting for inspection/i, /other than the receiver.*Quality Control > Pending/],
+  ])("blocks a selected serial with %s and explains who can help without clearing it", async (reason, message, nextStep) => {
     const user = userEvent.setup();
     const repo = makeRepo();
     const holds = vi.spyOn(repo, "listHolds").mockImplementation(async ({ cursor }) => cursor
-      ? { rows: [relocationHold()], total: 101 }
+      ? { rows: [relocationHold({ reason })], total: 101 }
       : { rows: Array.from({ length: 100 }, (_, i) => relocationHold({ id: `other-${i}`, productId: "shirt-l" })), nextCursor: "100", total: 101 });
     const move = vi.spyOn(repo, "relocate");
     const release = vi.spyOn(repo, "releaseHold");
@@ -112,7 +115,9 @@ describe("ProductDetailPage", () => {
     await scanRelocation(user, dialog, "SMART-WATCH-SN0001");
     await user.selectOptions(within(dialog).getByLabelText("To bin"), "bin-pasig-a1");
     await user.click(within(dialog).getByRole("button", { name: "Move stock" }));
-    await waitFor(() => expect(within(dialog).getByRole("alert")).toHaveTextContent(/active hold.*SMART-WATCH-SN0001/i));
+    await waitFor(() => expect(within(dialog).getByRole("alert")).toHaveTextContent(message));
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(nextStep);
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(/nothing was moved/i);
     expect(within(dialog).getByRole("alert")).toHaveTextContent(/quality/i);
     expect(within(dialog).getByRole("list", { name: "Accepted scans" })).toHaveTextContent("SMART-WATCH-SN0001");
     expect(holds).toHaveBeenCalledWith(expect.objectContaining({ cursor: "100" }));
@@ -341,9 +346,9 @@ describe("ProductDetailPage", () => {
     await user.keyboard("{Escape}");
     expect(dialog).toBeInTheDocument();
     await act(async () => rejectMove(new Error("Held serialized inventory cannot be transferred")));
-    await screen.findByText("Held serialized inventory cannot be transferred");
+    await screen.findByText(/This stock is on a Quality hold/);
     expect(within(dialog).getByRole("alert")).toHaveTextContent(/not confirmed/i);
-    expect(within(dialog).getByRole("alert")).toHaveTextContent(/movement history before retrying/i);
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(/movement history before trying again/i);
     expect(within(dialog).getByRole("list", { name: "Accepted scans" })).toHaveTextContent("SMART-WATCH-SN0001");
     expect((await repo.getData()).units.find((unit) => unit.serialNumber === "SMART-WATCH-SN0001")?.binId).toBeUndefined();
   });

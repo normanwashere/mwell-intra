@@ -37,6 +37,7 @@ export { money, compactMoney, number, relativeTime } from "./format";
 export { Sheet } from "./Sheet";
 export { Modal, type ModalProps } from "./Modal";
 export { ToastProvider, useToast } from "./Toast";
+export { userFacingError } from "./userFacingError";
 export {
   Skeleton,
   SkeletonCard,

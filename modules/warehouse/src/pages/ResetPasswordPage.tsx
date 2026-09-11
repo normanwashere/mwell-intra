@@ -1,3 +1,4 @@
+import { userFacingError } from '@intra/ui';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/auth/session';
@@ -110,7 +111,7 @@ export function ResetPasswordPage() {
             </div>
             {error && (
               <p role="alert" className="text-sm text-rose-600 dark:text-rose-300">
-                {error}
+                {userFacingError(error)}
               </p>
             )}
             <button
