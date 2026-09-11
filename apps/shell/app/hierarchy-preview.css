@@ -178,6 +178,7 @@ main:has(> .hierarchy-preview) { background: #eff2f4; }
 .order-record-layout > details > summary { cursor: pointer; min-height: 44px; }
 .order-record-layout .order-information { background: rgb(var(--c-inset)); border-radius: 4px; }
 .order-record-layout dt { color: rgb(var(--c-muted)); }
+.order-record-layout > [aria-labelledby="shipment-timeline-title"] { grid-column: 1 / -1; }
 .order-record-layout > section > .rounded-xl,
 .order-record-layout > details > .rounded-xl { border-radius: 4px; }
 .hp-request-columns {
@@ -196,6 +197,7 @@ main:has(> .hierarchy-preview) { background: #eff2f4; }
 .hp-work [aria-label="Leadership follow-ups"].flex p { color: rgb(var(--c-muted)); }
 .po-amendment-layout > .section-heading-band { background: rgb(var(--c-inset)); padding: 14px 16px; border-left: 3px solid rgb(var(--c-muted)); }
 .po-amendment-layout > .grid { padding: 16px; background: rgb(var(--c-surface)); align-items: start; }
+.po-amendment-layout > .grid > .grid > label { display: flex; flex-direction: column; justify-content: space-between; }
 .po-amendment-layout > p { padding: 0 16px; }
 @media (min-width: 1024px) {
   .hp-work .hp-request-row.card { margin-top: 0; border-top: 0; border-radius: 0; }

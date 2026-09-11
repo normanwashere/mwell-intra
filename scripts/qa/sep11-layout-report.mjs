@@ -31,6 +31,8 @@ try {
   for(const key of Object.keys(screens)) for(const width of ['1440','390']) {
     await page.locator('#screen').selectOption(key);await page.locator('#width').selectOption(width);
     await page.waitForFunction(()=>document.images[0].complete&&document.images[0].naturalWidth>0);
+    const expected=`layout-refined/${key}-${width}.png`;
+    if(await page.locator('#original').getAttribute('href')!==expected || await page.locator('#full').getAttribute('href')!==expected) throw new Error('Full-size link does not match the selected image');
   }
   console.log('Verified all 14 screenshot selections and full-size links.');
 } finally {await browser.close();}
