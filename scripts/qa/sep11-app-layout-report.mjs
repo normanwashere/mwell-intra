@@ -34,7 +34,8 @@ if (live) html = html.replace('LOCAL CANDIDATE · LIVE UAT NOT UPDATED', `LIVE U
   .replace('href="unit-tests.log"', 'href="retests.log"')
   .replace('href="warehouse-tests.log"', 'href="shell-final-tests.log"')
   .replace('Warehouse tests</a>', 'Final shell tests</a>')
+  .replace('Final shell tests</a></p>', 'Final shell tests</a> · <a href="readiness-verification.json">Live readiness verification</a> · <a href="database-final-tests.log">Read-boundary regression</a></p>')
   .replace('href="screens/results.json"', 'href="../sep11-app-layout/screens/results.json"')
-  .replace('the pending readiness migration and a real-user usability pilot remain separate. This page is not a deployment record.', 'and a real-user usability pilot remain separate. The ownerless-request readiness correction was applied to UAT and verified separately. Backend health confirmed the UAT project and release shown above. This is not all-transaction certification.');
+  .replace('Existing exact-step screenshot certification, the pending readiness migration and a real-user usability pilot remain separate. This page is not a deployment record.', 'Exact-step screenshot certification and a real-user usability pilot remain separate. The ownerless-request readiness correction was applied to UAT and verified separately. Backend health confirmed the UAT project and release shown above. This is not all-transaction certification.');
 await writeFile(live ? path.resolve('outputs/sep11-mywork-release/index.html') : path.join(root,'index.html'),html);
 console.log(JSON.stringify({passed,total:data.results.length,roles:roles.length}));

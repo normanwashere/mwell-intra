@@ -1,6 +1,20 @@
-# September 11 UX Remediation Candidate
+# September 11 UX Release and Verification
 
 Status update: app-wide UX changes and My Work were deployed to live UAT as `e26629ac1c09b68c2869f3320124bdc90bbbcadc`. The UAT health response confirmed the commit, UAT environment and Supabase project `kkoitlvydytdhlpxhuah`. The sections below retain earlier candidate evidence and are not the current deployment status.
+
+## Final UAT Result
+
+The final UX build is live at `https://mwell-intra-uat.vercel.app`, commit `343b3725814f962c70e517f32cf336258f41e74f`. Vercel's production build passed and the live health response confirmed this exact commit, `uat` and Supabase project `kkoitlvydytdhlpxhuah`. The main production app was not deployed by this pass.
+
+- **110/110 primary-screen checks passed:** 55 role/route pairs, all 11 configured UAT personas, desktop 1440x900 and mobile 390x844. Each check verified an authenticated content heading, viewport fit, shared-header bounds and absence of JavaScript, blocked-request or backend response errors. This covers configured personas, including their assigned combined capabilities, not every possible role combination.
+- **My Work navigation:** all 10 internal personas exercised the three work views at both widths, creating 60 additional interaction screenshots; search entry/clear and browser Back were checked. The vendor retains its own workspace. Search matching, source restriction, partial failure, session changes and history restoration also have focused component/helper tests.
+- **Visual review:** sampled real captures of My Work, Warehouse receiving and Pick & Pack, Events and Finance handoff were inspected. Mobile My Work was refined after the first capture. Every primary screen was captured, but this is not manual inspection of every field, modal, focus state or error state.
+- **Readiness defect resolved:** all four initially failing Procurement/Finance screens passed on this final run after the UAT migration. The live authenticated SQL check also confirmed all eight historical ownerless requests return requirements without granting acceptance authority.
+- **Documentation:** Knowledge Base checks passed (88); handbook/generator checks passed (87). The standalone HTML handbook was rebuilt. No exact-step evidence record was marked certified by these screen captures.
+
+Evidence: `outputs/sep11-mywork-release/index.html` is the filterable screenshot gallery. Raw results and the 170 primary/interaction PNGs are in `outputs/sep11-app-layout/uat-mywork-final/`. Build/deployment, component, documentation and SQL verification logs are in `outputs/sep11-mywork-release/`. The earlier 106/110 run remains in `outputs/sep11-app-layout/uat-mywork/`; it was not overwritten.
+
+Business transactions were blocked by this browser run, except normal sign-in and the existing learning-assignment initialization. No stock, PO, approval, payment or assessment was submitted. The real-user pilot and exact-control screenshot certification remain separate. The latest coverage snapshot has 293 controls, all unverified for exact-step acceptance; this release does not turn broad screenshots into that certification.
 
 ## Live Follow-Up
 

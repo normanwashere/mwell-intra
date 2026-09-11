@@ -2,6 +2,8 @@
 
 ## September 11 UX Remediation (Live UAT)
 
+The final UX build is live on **mwell-intra-uat.vercel.app**, release `343b372`. The final screen/navigation check passed all 110 primary captures across 11 test personas at desktop and mobile widths. This is not certification of every transaction. The release verification record retains the detailed coverage and limitations.
+
 The layout update is live on UAT, not only in the Knowledge Base: shared page headers and section boundaries, compact Home and Admin launchers, Warehouse shift queues and counters, Procurement filters and tables, Finance review areas, and Event lists. Existing form fields, actions, approvals, access rules and handoff order remain unchanged. Desktop pages group comparable information; mobile pages wrap the same controls.
 
 **Start with My Work:** Home gives employees a direct My Work entry while keeping all assigned modules available under Browse all areas. In My Work, choose **Needs your action**, **Waiting on someone else**, or **Recently completed**, then use **Search work** and **Module** to narrow the list. The address retains these choices, and browser Back restores the previous view. **Open record** and **View request** open the existing source without submitting anything. Tracking covers your latest supported purchase and department stock requests, within the window stated on screen, not every module's history. A closed, rejected or cancelled request is a final request disposition, not proof of delivery or payment. Failed tracking reads show a warning and Retry tracking rather than a misleading zero. Leadership follow-ups remain a separate section under the chosen view.

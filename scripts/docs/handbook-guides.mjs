@@ -1066,7 +1066,7 @@ function roleGuide(definition) {
 }
 
 const SOURCE_ROOT_HEADINGS = {
-  "sept11-ux-remediation-candidate": "September 11 UX Remediation Candidate",
+  "sept11-ux-remediation-candidate": "September 11 UX Release and Verification",
   "sept9-wms-feedback": "September 9 WMS Feedback: Fixes And Tester Instructions",
   "sept11-uat-usability-performance": "September 11 UAT Update",
   "reviewed-task-training": "Reviewed Task Training",
