@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 import { Inter, JetBrains_Mono, Poppins } from 'next/font/google';
 import '@intra/ui/styles.css';
 import './globals.css';
+import './hierarchy-preview.css';
 import { Providers } from './providers';
 import { ChromeGate } from '@shell/components/ChromeGate';
 import { ThemeScript } from '@shell/components/ThemeScript';

@@ -476,8 +476,8 @@ export function PODetailPage() {
     );
 
   return (
-    <div className="mx-auto min-w-0 max-w-4xl space-y-6 [overflow-wrap:anywhere]">
-      <header className="space-y-2">
+    <div className="hierarchy-preview hp-record mx-auto min-w-0 max-w-6xl space-y-6 [overflow-wrap:anywhere]">
+      <header className="hp-record-title space-y-2">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1 basis-56">
             <p className="text-xs font-semibold text-muted [overflow-wrap:anywhere]">Purchase order · {po.poNumber}</p>
@@ -588,7 +588,7 @@ export function PODetailPage() {
           </Card>
         )}
 
-      <nav aria-label="Purchase order sections" className="flex min-w-0 flex-wrap gap-x-4 gap-y-2 border-y border-line py-2 text-sm font-semibold">
+      <nav aria-label="Purchase order sections" className="hp-section-nav flex min-w-0 flex-wrap gap-x-4 gap-y-2 border-y border-line py-2 text-sm font-semibold">
         <Link className={sectionLinkClass} aria-current={selectedSection === 'lines' ? 'location' : undefined} to={{ search: location.search, hash: '#lines' }}>Line items</Link>
         {po.commitmentReadiness && <Link className={sectionLinkClass} aria-current={selectedSection === 'policy' ? 'location' : undefined} to={{ search: location.search, hash: '#policy' }}>Policy evidence</Link>}
         {(po.status === 'issued' || po.status === 'closed') && <Link className={sectionLinkClass} aria-current={selectedSection === 'receiving' ? 'location' : undefined} to={{ search: location.search, hash: '#receiving' }}>Receiving</Link>}

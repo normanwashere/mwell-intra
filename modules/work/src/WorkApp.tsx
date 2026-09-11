@@ -105,7 +105,7 @@ function EmployeeWorkApp({
     (item) => item.priority !== "normal",
   ).length;
   return (
-    <div className="space-y-6">
+    <div className="hierarchy-preview hp-work space-y-6">
       <PageHeader
         eyebrow="Personal queue"
         title="My Work"
@@ -117,7 +117,7 @@ function EmployeeWorkApp({
           </Badge>
         ) : undefined}
       />
-      <div className="grid grid-cols-3 gap-2 border-y border-line py-3" role="group" aria-label="Work views">
+      <div className="hp-view-tabs grid grid-cols-3 gap-2 border-y border-line py-3" role="group" aria-label="Work views">
         {([
           ['action', 'Needs your action', error || tracking.loading || tracking.errors.length ? null : visible.length + matchingTracking.filter(item => item.bucket === 'action').length],
           ['waiting', 'Waiting on someone else', tracking.loading || tracking.errors.length ? null : matchingTracking.filter(item => item.bucket === 'waiting').length],
@@ -143,7 +143,7 @@ function EmployeeWorkApp({
           </button>
         </div>
       )}
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-line pb-4 sm:grid-cols-[minmax(0,1fr)_14rem_auto]">
+      <div className="hp-toolbar grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-line pb-4 sm:grid-cols-[minmax(0,1fr)_14rem_auto]">
         <label className="col-span-2 min-w-0 text-sm font-medium text-muted sm:col-span-1">Search work
           <input className="input mt-1 w-full" type="search" maxLength={120} value={state.search} onChange={event => update({ search: event.target.value }, true)} placeholder="Record, status or next owner" />
         </label>
