@@ -54,4 +54,19 @@ describe('list return position', () => {
     renderHook(() => useListReturnPosition('user-a', 'action', true));
     expect(scroll).not.toHaveBeenCalled();
   });
+  it('cancels delayed restoration when the user starts scrolling', () => {
+    const callbacks: FrameRequestCallback[] = [];
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => { callbacks.push(callback); return callbacks.length; });
+    vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
+    const scroll = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    const first = renderHook(() => useListReturnPosition('user-a', 'waiting', true));
+    act(() => first.result.current.remember());first.unmount();
+    renderHook(() => useListReturnPosition('user-a', 'waiting', true));
+    act(() => { callbacks.shift()!(0); });
+    expect(scroll).toHaveBeenCalledTimes(1);
+    fireEvent.wheel(window);
+    act(() => { callbacks.shift()!(16); });
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect(sessionStorage.length).toBe(0);
+  });
 });

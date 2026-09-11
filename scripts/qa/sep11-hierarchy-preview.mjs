@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { checkConvenience } from './sep11-qol-checks.mjs';
 const require = createRequire(new URL('../../apps/shell/package.json', import.meta.url));
 const { chromium } = require('@playwright/test');
 const origin = process.env.PREVIEW_ORIGIN || 'https://mwell-intra-uat.vercel.app';
@@ -36,6 +37,7 @@ const results=[];
 const browser=await chromium.launch();
 try {
   for (const item of cases) {
+    if(process.env.PREVIEW_CASE && process.env.PREVIEW_CASE !== item.id) continue;
     const context=await browser.newContext({serviceWorkers:'block',reducedMotion:'reduce'});
     await context.addCookies(previewCookies);
     const blocked=[];
@@ -59,6 +61,7 @@ try {
     await page.waitForURL(u=>u.pathname!=='/login',{timeout:120000});
     authenticated=true;
     for(const width of [1440,390]) {
+      if(process.env.PREVIEW_WIDTH && Number(process.env.PREVIEW_WIDTH) !== width) continue;
       await page.setViewportSize({width,height:width===390?844:1000});
       await page.goto(origin+item.route,{timeout:120000,waitUntil:'domcontentloaded'});
       await page.locator('main h1:visible').first().waitFor();
@@ -72,6 +75,10 @@ try {
       await page.screenshot({path:path.join(output,`${item.id}-${width}.png`),animations:'disabled'});
       if(stage==='after') {
         assert.equal(await page.locator('.hierarchy-preview').count(),1);
+        if(process.env.PREVIEW_QOL === 'true') {
+          try { await checkConvenience({page,context,item,width,origin,output}); }
+          catch(error) { await page.screenshot({path:path.join(output,`${item.id}-${width}-failure.png`)});throw error; }
+        }
         if(process.env.PREVIEW_SIDEBAR === 'true') {
           const hide = page.getByRole('button',{name:'Hide side navigation',exact:true});
           if(width === 1440) {

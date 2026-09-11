@@ -22,6 +22,14 @@ export function useListReturnPosition(scope: string, view: string, ready: boolea
   useEffect(() => {
     if (!ready) return;
     let frame = 0;
+    let stopped = false;
+    const finish = () => {
+      stopped = true;
+      cancelAnimationFrame(frame);
+      interactions.forEach(type => window.removeEventListener(type, finish));
+      try { sessionStorage.removeItem(key); } catch { /* Storage may be unavailable. */ }
+    };
+    const interactions = ['wheel', 'touchstart', 'pointerdown', 'keydown'];
     try {
       const raw = sessionStorage.getItem(key);
       if (!raw) return;
@@ -29,12 +37,32 @@ export function useListReturnPosition(scope: string, view: string, ready: boolea
       if (!Number.isFinite(saved.top) || saved.top < 0 || !Number.isFinite(saved.at) || Date.now() - saved.at > 30 * 60_000) { sessionStorage.removeItem(key); return; }
       frame = requestAnimationFrame(() => {
         const parent = scrollElement();
-        if (parent) parent.scrollTop = saved.top;
-        else window.scrollTo({ top: saved.top, behavior: "instant" });
-        try { sessionStorage.removeItem(key); } catch { /* Storage can become unavailable after capture. */ }
+        const scroll = () => {
+          if (parent) parent.scrollTop = saved.top;
+          else window.scrollTo({ top: saved.top, behavior: 'instant' });
+        };
+        scroll();
+        // The existing compact header changes height after the first scroll.
+        // Align once more after layout settles, unless the user starts interacting.
+        const started = performance.now();
+        let lastSize = '', stableFrames = 0;
+        const settle = () => {
+          if (stopped) return;
+          const size = parent ? `${parent.scrollHeight}:${parent.clientHeight}` : `${document.documentElement.scrollHeight}:${innerHeight}`;
+          stableFrames = size === lastSize ? stableFrames + 1 : 0;
+          lastSize = size;
+          if (stableFrames >= 3 || performance.now() - started >= 1000) { scroll(); finish(); }
+          else frame = requestAnimationFrame(settle);
+        };
+        frame = requestAnimationFrame(settle);
       });
+      interactions.forEach(type => window.addEventListener(type, finish, { passive: true }));
     } catch { /* An unavailable checkpoint must never block navigation. */ }
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      stopped = true;
+      cancelAnimationFrame(frame);
+      interactions.forEach(type => window.removeEventListener(type, finish));
+    };
   }, [key, ready]);
 
   const remember = () => {

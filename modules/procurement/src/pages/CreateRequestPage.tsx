@@ -186,6 +186,7 @@ export function CreateRequestPage() {
   const [serverDraftStatus, setServerDraftStatus] = useState('');
   const lastSavedPayloadRef = useRef('');
   const hasUserEditsRef = useRef(false);
+  const initialPayloadRef = useRef('');
   const allowExitRef = useRef(false);
   const unsavedRef = useRef(false);
 
@@ -442,7 +443,8 @@ export function CreateRequestPage() {
     title,
   ]);
 
-  unsavedRef.current = (hasUserEditsRef.current && JSON.stringify(draftSnapshot) !== lastSavedPayloadRef.current) || attachments.length > 0;
+  if (!hasUserEditsRef.current) initialPayloadRef.current = JSON.stringify(draftSnapshot);
+  unsavedRef.current = (hasUserEditsRef.current && JSON.stringify(draftSnapshot) !== (lastSavedPayloadRef.current || initialPayloadRef.current)) || attachments.length > 0;
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
       if (!unsavedRef.current || allowExitRef.current) return;
