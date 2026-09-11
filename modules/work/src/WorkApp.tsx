@@ -111,25 +111,19 @@ function EmployeeWorkApp({
         title="My Work"
         subtitle="Your assignments and request handovers across departments."
         icon="clipboard"
-        action={
-          <a className="btn-outline" href="/knowledge?article=feature-my-work">
-            <Icon name="info" className="h-4 w-4" />
-            How work is assigned
-          </a>
-        }
         status={state.view === 'action' ? (
           <Badge tone={error || urgentCount ? "amber" : "slate"}>
             {error ? 'Queue unavailable' : `${urgentCount} priority items`}
           </Badge>
         ) : undefined}
       />
-      <div className="grid grid-cols-1 gap-2 border-y border-line py-3 sm:grid-cols-3" role="group" aria-label="Work views">
+      <div className="grid grid-cols-3 gap-2 border-y border-line py-3" role="group" aria-label="Work views">
         {([
           ['action', 'Needs your action', error || tracking.loading || tracking.errors.length ? null : visible.length + matchingTracking.filter(item => item.bucket === 'action').length],
           ['waiting', 'Waiting on someone else', tracking.loading || tracking.errors.length ? null : matchingTracking.filter(item => item.bucket === 'waiting').length],
           ['completed', 'Recently completed', tracking.loading || tracking.errors.length ? null : matchingTracking.filter(item => item.bucket === 'completed').length],
-        ] as const).map(([view, label, count]) => <button key={view} type="button" aria-pressed={state.view === view} onClick={() => update({ view })} className={`flex min-h-11 min-w-0 items-center justify-between gap-3 rounded-md border px-3 py-3 text-left text-sm font-semibold ${state.view === view ? 'border-brand-500 bg-brand-50 text-brand-800 dark:bg-brand-950 dark:text-brand-200' : 'border-transparent text-muted hover:bg-inset'}`}>
-          <span>{label}</span><span className="tnum">{count ?? '—'}</span>
+        ] as const).map(([view, label, count]) => <button key={view} type="button" aria-label={label} aria-pressed={state.view === view} onClick={() => update({ view })} className={`flex min-h-11 min-w-0 flex-col items-center justify-center gap-1 rounded-md border px-2 py-3 text-sm font-semibold sm:flex-row sm:justify-between sm:gap-3 sm:px-3 sm:text-left ${state.view === view ? 'border-brand-500 bg-brand-50 text-brand-800 dark:bg-brand-950 dark:text-brand-200' : 'border-transparent text-muted hover:bg-inset'}`}>
+          <span className="hidden sm:inline">{label}</span><span className="sm:hidden">{view === 'action' ? 'Action' : view === 'waiting' ? 'Waiting' : 'Completed'}</span><span className="tnum">{count ?? '—'}</span>
         </button>)}
       </div>
       {error && state.view === 'action' && (
@@ -149,8 +143,8 @@ function EmployeeWorkApp({
           </button>
         </div>
       )}
-      <div className="grid gap-3 border-b border-line pb-4 sm:grid-cols-[minmax(0,1fr)_14rem_auto]">
-        <label className="min-w-0 text-sm font-medium text-muted">Search work
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-line pb-4 sm:grid-cols-[minmax(0,1fr)_14rem_auto]">
+        <label className="col-span-2 min-w-0 text-sm font-medium text-muted sm:col-span-1">Search work
           <input className="input mt-1 w-full" type="search" maxLength={120} value={state.search} onChange={event => update({ search: event.target.value }, true)} placeholder="Record, status or next owner" />
         </label>
         <label className="min-w-0 text-sm font-medium text-muted">Module
@@ -216,6 +210,7 @@ function EmployeeWorkApp({
         </Card>)}
       </section>}
       <FollowupQueue view={state.view} source={state.source} search={state.search} />
+      <a className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-muted underline" href="/knowledge?article=feature-my-work"><Icon name="info" className="h-4 w-4" />How work is assigned</a>
     </div>
   );
 }

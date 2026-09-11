@@ -1,6 +1,13 @@
 # September 11 UX Remediation Candidate
 
-Status: local candidate only. No live publication or deployment is recorded by this note. This is separate from the earlier September 11 UAT performance and wording releases.
+Status update: app-wide UX changes and My Work were deployed to live UAT as `e26629ac1c09b68c2869f3320124bdc90bbbcadc`. The UAT health response confirmed the commit, UAT environment and Supabase project `kkoitlvydytdhlpxhuah`. The sections below retain earlier candidate evidence and are not the current deployment status.
+
+## Live Follow-Up
+
+- The first live pass captured 110 primary screens across 55 role/route pairs, all 11 test personas, at 1440px and 390px. 106 passed. The four failures were Procurement/Finance pages calling commitment readiness for eight older requests without a recorded requester. No business transactions were submitted during this pass.
+- Migration `20260911080134_restore_ownerless_commitment_readiness.sql` was applied to UAT. All eight affected records now return readiness requirements under the authenticated Procurement Lead. All eight retain `canRecordAcceptance: false`; request ownership and policy decisions were not changed. Nine isolated database tests cover the corrected read boundary, anonymous denial, unrelated users, explicit reviewers and unchanged policy requirements.
+- The final Work tests pass (55), and its TypeScript check passes. Live screenshot review prompted a follow-up mobile refinement: compact Action/Waiting/Completed controls, shorter filter layout and the help link below the work queues. The final deployment and browser retest are recorded separately when complete.
+- The broader final component/contract suites passed: UI 61, Work 55, Procurement 309, Finance 94, Legal 213, Events 61, Product 60, Insights 38 and Shell 728, with one skipped shell test. These are not all-transaction or human-pilot certification. Exact-control KB screenshot acceptance is unchanged.
 
 ## Documentation Scope
 

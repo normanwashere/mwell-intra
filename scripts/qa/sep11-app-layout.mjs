@@ -70,7 +70,13 @@ try {
         const blockedBefore = blocked.length;
         results.push(row);
         const onError = error => row.errors.push(error.message);
+        row.apiErrors = [];
+        const onResponse = response => {
+          const url = new URL(response.url());
+          if (url.hostname === 'kkoitlvydytdhlpxhuah.supabase.co' && response.status() >= 400) row.apiErrors.push({path:url.pathname,status:response.status()});
+        };
         page.on('pageerror', onError);
+        page.on('response', onResponse);
         try {
           await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
           await page.goto(origin + route, { timeout: 120000, waitUntil: 'domcontentloaded' });
@@ -118,11 +124,13 @@ try {
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth) <= 1,true);
           }
           assert.deepEqual(row.errors, [], 'No interaction errors');
+          assert.deepEqual(row.apiErrors, [], 'No failed backend reads');
           assert.deepEqual(blocked.slice(blockedBefore), [], 'No requests blocked during interaction');
           row.passed = true;
         } catch (error) { row.passed = false; row.error = error.message; }
         finally {
           page.off('pageerror', onError);
+          page.off('response', onResponse);
           await writeFile(path.join(output, 'results.json'), JSON.stringify({ health, origin, results, blocked, bootstrap }, null, 2));
         }
       }

@@ -1,7 +1,10 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 const root = path.resolve('outputs/sep11-app-layout');
-const data = JSON.parse(await readFile(path.join(root, 'final/results.json'), 'utf8'));
+const run = process.env.AUDIT_RUN ?? 'final';
+if (!/^[a-z0-9-]+$/.test(run)) throw new Error('Invalid evidence directory');
+const data = JSON.parse(await readFile(path.join(root, run, 'results.json'), 'utf8'));
+const live = data.origin === 'https://mwell-intra-uat.vercel.app';
 const escape = text => String(text).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
 const roles = [...new Set(data.results.map(row => row.role))];
 const passed = data.results.filter(row => row.passed).length;
@@ -15,11 +18,23 @@ let html = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="vie
 <details><summary>Evidence and remaining limits</summary><p><a href="final/results.json">Final DOM results</a> · <a href="screens/results.json">Initial captures</a> · <a href="unit-tests.log">Application tests</a> · <a href="warehouse-tests.log">Warehouse tests</a></p><p>A shared layout change is not proof that every workflow, control or screen state has been certified. Existing exact-step screenshot certification, the pending readiness migration and a real-user usability pilot remain separate. This page is not a deployment record.</p></details></main>
 <script>const controls=['role','width','search'].map(id=>document.getElementById(id));for(const c of controls)c.addEventListener('input',()=>{let count=0;document.querySelectorAll('article').forEach(a=>{a.hidden=Boolean(controls[0].value&&a.dataset.role!==controls[0].value||controls[1].value&&a.dataset.width!==controls[1].value||controls[2].value&&!a.dataset.route.toLowerCase().includes(controls[2].value.toLowerCase()));if(!a.hidden)count++;});document.getElementById('count').textContent=count+' screens';});</script></html>`;
 // These captures predate the final module stylesheet and harness corrections.
-html = html.replace('http://localhost:3022', 'http://localhost:3021')
+if (!live) html = html.replace('http://localhost:3022', 'http://localhost:3021')
   .replace('Open local app preview', 'Open existing local development app')
   .replace('captured screen checks passed', 'pre-final geometry checks passed; screenshot acceptance still pending')
   .replace('Final DOM results', 'Pre-final DOM results')
   .replaceAll("class=\"pass\">Passed", "class=\"status\">Geometry passed; retake pending")
   .replace('Initial development captures are retained separately; the final run waits for settled headings and uses normal page initialization.', 'These screenshots were captured before the final stylesheet fix. Visual review found missing Events desktop styles and test-harness-blocked read requests. Both were corrected, the production build passed, and the harness now rejects blocked-request captures. The environment blocked restarting the production preview, so post-build retakes remain pending. These images are not final clean-screen certification.');
-await writeFile(path.join(root,'index.html'),html);
+if (live) html = html.replace('LOCAL CANDIDATE · LIVE UAT NOT UPDATED', `LIVE UAT · ${escape(data.health.commit.slice(0,7))}`)
+  .replace('http://localhost:3022', data.origin + '/work')
+  .replace('Open local app preview', 'Open My Work on UAT')
+  .replace('46 primary role/route pairs', `${new Set(data.results.map(row => row.role + ':' + row.route)).size} primary role/route pairs`)
+  .replace('Local code reads UAT data.', 'These checks ran against the deployed UAT release, including My Work view changes, search entry and browser Back.')
+  .replace('Final DOM results', 'Live DOM and interaction results')
+  .replaceAll('final/', `../sep11-app-layout/${run}/`)
+  .replace('href="unit-tests.log"', 'href="retests.log"')
+  .replace('href="warehouse-tests.log"', 'href="shell-final-tests.log"')
+  .replace('Warehouse tests</a>', 'Final shell tests</a>')
+  .replace('href="screens/results.json"', 'href="../sep11-app-layout/screens/results.json"')
+  .replace('the pending readiness migration and a real-user usability pilot remain separate. This page is not a deployment record.', 'and a real-user usability pilot remain separate. The ownerless-request readiness correction was applied to UAT and verified separately. Backend health confirmed the UAT project and release shown above. This is not all-transaction certification.');
+await writeFile(live ? path.resolve('outputs/sep11-mywork-release/index.html') : path.join(root,'index.html'),html);
 console.log(JSON.stringify({passed,total:data.results.length,roles:roles.length}));
