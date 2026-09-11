@@ -447,6 +447,7 @@ export function PurchaseOrdersPage() {
           />
           {canAuthorPo && (
             <div className="grid gap-3 border-y border-line py-4 md:grid-cols-2">
+              <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
               <label className="text-sm font-semibold text-ink">
                 PO line
                 <select
@@ -478,7 +479,7 @@ export function PurchaseOrdersPage() {
                   onChange={(event) => setAmendedQuantity(Number(event.target.value))}
                 />
               </label>
-              <label className="text-sm font-semibold text-ink">
+              <label className="text-sm font-semibold text-ink sm:col-span-2">
                 Reason
                 <input
                   className="input mt-1.5"
@@ -486,6 +487,7 @@ export function PurchaseOrdersPage() {
                   onChange={(event) => setAmendmentReason(event.target.value)}
                 />
               </label>
+              </div>
               <EvidenceAttachment attachment={attachment} recordLabel={rows.find((po) => po.lines.some((line) => line.id === amendmentLineId))?.poNumber ?? 'Selected PO line'}
                 disabled={requestingAmendment || !amendmentLineId}
                 unavailableReason="New amendment uploads require a document-registration service. Existing request documents remain available."

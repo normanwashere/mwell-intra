@@ -1120,11 +1120,11 @@ function OrderDetailsSheet({
       description="Fulfillment record, controlled customer details, and shipment history."
       size="record"
     >
-      <RecordCopyActions reference={order.externalReference} href={`/warehouse/fulfillment?tab=orders&order=${encodeURIComponent(order.id)}`} />
       <WorkflowSummary {...orderWorkflowSummary(order, { actorIds: [actor, identityId], units: data?.units })}>
         <a className="inline-flex min-h-11 items-center text-sm underline" href={order.status === 'released' && order.deliveryMethod === 'shipment' ? '#shipment-timeline-title' : '#order-lines-title'}>
           {order.status === 'released' && order.deliveryMethod === 'shipment' ? 'Review shipment timeline' : 'Review order lines'}
         </a>
+        <RecordCopyActions reference={order.externalReference} href={`/warehouse/fulfillment?tab=orders&order=${encodeURIComponent(order.id)}`} />
       </WorkflowSummary>
       <div className="order-record-layout grid min-w-0 items-start gap-5 md:grid-cols-2 [&>section]:min-w-0 [&>section]:border-b [&>section]:border-line [&>section]:pb-4">
         <section aria-label="Operational summary" className="space-y-2 text-sm [overflow-wrap:anywhere]">

@@ -100,7 +100,7 @@ export function Sheet({
           )}
         </div>
         <Dialog.Close
-          className="grid min-h-11 min-w-11 shrink-0 place-items-center rounded-lg bg-inset text-muted transition hover:bg-line hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+          className="grid min-h-11 min-w-11 shrink-0 place-items-center rounded-lg border border-line bg-surface text-muted transition hover:bg-line hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
           aria-label="Close"
         >
           <Icon name="x" />

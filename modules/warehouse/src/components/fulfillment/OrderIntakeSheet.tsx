@@ -312,6 +312,7 @@ function ScopedOrderIntake({
       open={open}
       onOpenChange={(next) => { if (!inFlight.current && (next || draft.confirmClose())) onOpenChange(next); }}
       title="Create order or fulfillment demand"
+      size="record"
       description={
         ecommerce
           ? "Capture the complete commercial and delivery record once. Warehouse, Finance, and customer support use this same order."

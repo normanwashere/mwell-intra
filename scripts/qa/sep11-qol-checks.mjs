@@ -65,6 +65,7 @@ export async function checkConvenience({page, context, item, width, origin, outp
   }
   if (item.id === 'my-work') {
     const link=page.locator('a[aria-label^="Open tracked request:"]').last();
+    assert(await link.evaluate(el=>getComputedStyle(el).whiteSpace==='nowrap' && el.scrollWidth<=el.clientWidth+1), 'Request action label stays on one line without clipping');
     await link.scrollIntoViewIfNeeded();
     await page.waitForTimeout(300); // Let the existing compact header settle before measuring departure.
     const saved=await page.evaluate(()=>window.scrollY),original=page.url();

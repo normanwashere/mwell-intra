@@ -1,4 +1,4 @@
-/* Three-screen visual pilot. Shared tokens elsewhere remain unchanged. */
+/* Page hierarchy pilot and shared dialog surfaces. Workflow colors remain semantic. */
 .hierarchy-preview, .intra-sheet {
   --c-app: 239 242 244;
   --c-surface: 255 255 255;
@@ -152,11 +152,12 @@ main:has(> .hierarchy-preview) { background: #eff2f4; }
 }
 
 /* Dialog surfaces also apply to Radix portals outside the page wrapper. */
+.intra-sheet { overflow: hidden; }
 .intra-sheet-header { border-top: 3px solid var(--hp-active); background: var(--hp-band); }
 .intra-sheet-footer { background: var(--hp-band); }
 .intra-sheet-body { background: rgb(var(--c-surface)); }
 .intra-sheet-body > [aria-label="Workflow status"] {
-  margin: 12px 0 20px;
+  margin: 0 0 20px;
   padding: 14px 16px;
   border: 0;
   border-left: 4px solid var(--hp-active);

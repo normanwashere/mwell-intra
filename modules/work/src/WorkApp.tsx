@@ -205,11 +205,11 @@ function EmployeeWorkApp({
         {tracking.loading && <p role="status">Loading request tracking...</p>}
         {tracking.errors.length > 0 && <div role="alert" className="border-l-2 border-amber-500 px-3 py-2 text-sm"><strong>Some tracking records could not be loaded.</strong> The list may be incomplete. <button className="btn-outline" onClick={() => void tracking.refresh()}>Retry tracking</button></div>}
         {!tracking.loading && !tracking.errors.length && !tracked.length && <EmptyState icon="clipboard" title="No matching tracked requests" message="This view only covers the request types listed above. Other work may still be in progress." />}
-        {tracked.length > 0 && <div className="hp-request-columns hidden lg:grid lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_auto]" aria-hidden="true"><span>Request / status</span><span>Responsible team / next step</span><span className="w-32">Record</span></div>}
+        {tracked.length > 0 && <div className="hp-request-columns hidden lg:grid lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_auto]" aria-hidden="true"><span>Request / status</span><span>Responsible team / next step</span><span className="w-40">Record</span></div>}
         {tracked.map(item => <Card key={item.id} className="hp-request-row grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_auto]">
           <div className="min-w-0"><Badge tone="slate">{item.source}</Badge><h2 className="mt-2 break-words font-semibold [overflow-wrap:anywhere]">{item.title}</h2><p className="mt-1 text-sm text-muted">{item.status}</p></div>
           <div className="min-w-0 text-sm"><p className="font-semibold">{item.owner}</p><p className="mt-1 break-words text-muted [overflow-wrap:anywhere]">{item.nextStep}</p></div>
-          <a className="btn-outline justify-self-start self-center lg:w-32" href={item.href} aria-label={`Open tracked request: ${item.title}`}>View request<Icon name="arrowRight" className="h-4 w-4" /></a>
+          <a className="btn-outline justify-self-start self-center whitespace-nowrap lg:w-40" href={item.href} aria-label={`Open tracked request: ${item.title}`}>View request<Icon name="arrowRight" className="h-4 w-4" /></a>
         </Card>)}
       </section>}
       <FollowupQueue view={state.view} source={state.source} search={state.search} />
