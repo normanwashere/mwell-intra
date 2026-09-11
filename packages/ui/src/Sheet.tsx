@@ -116,7 +116,7 @@ export function Sheet({
         {children}
       </div>
       {footer && (
-        <div className="relative z-10 shrink-0 border-t border-line bg-surface px-5 py-3 md:px-6 md:py-4">
+        <div role="group" aria-label={`${title} actions`} className="relative z-10 shrink-0 border-t border-line bg-surface px-5 py-3 md:px-6 md:py-4">
           <div className="md:flex md:justify-end [&>button]:md:min-w-36 [&>button]:md:w-auto">
             {footer}
           </div>

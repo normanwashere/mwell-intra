@@ -13,12 +13,14 @@ import {
   Sheet,
   SignaturePad,
   WorkflowSummary,
+  RecordCopyActions,
   money,
   useToast,
   type Column,
   type SignaturePayload,
 } from '@intra/ui';
 import { Guard, useCan, useSession } from '@intra/auth';
+import { poReturnPath } from '../poListContext';
 import type { PurchaseOrder, PurchaseOrderLine, PurchaseOrderStatus } from '../types';
 import {
   isAccredited,
@@ -470,7 +472,7 @@ export function PODetailPage() {
         Open Warehouse handoff
       </HeroChipButton>
     ) : (
-      <a href="/procurement/purchase-orders" className="btn-ghost btn-sm">
+      <a href={poReturnPath(location.search)} className="btn-ghost btn-sm">
         Back to POs
       </a>
     );
@@ -488,6 +490,7 @@ export function PODetailPage() {
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <Badge tone={PO_TONE[po.status]}>{poStatusLabel(po.status)}</Badge>
           <p className="text-sm text-muted">Total <strong className="tnum ml-1 text-ink">{money(po.total)}</strong></p>
+          <RecordCopyActions reference={po.poNumber} href={`/procurement/purchase-orders/${encodeURIComponent(po.id)}`} />
         </div>
         {po.notes && <p className="text-sm text-muted [overflow-wrap:anywhere]">{po.notes}</p>}
       </header>

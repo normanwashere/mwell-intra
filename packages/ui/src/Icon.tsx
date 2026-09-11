@@ -11,6 +11,7 @@ export type IconName =
   | "truck"
   | "calendar"
   | "clipboard"
+  | "link"
   | "rotate"
   | "cart"
   | "coins"
@@ -49,6 +50,7 @@ export type IconName =
 // Icon geometry sourced from Lucide (lucide.dev, ISC license): clean, uniform
 // 24x24 stroke icons rendered with the shared SVG wrapper below.
 const ICONS: Record<IconName, ReactNode> = {
+  link: (<><path d="M9 17H7A5 5 0 0 1 7 7h2" /><path d="M15 7h2a5 5 0 0 1 0 10h-2" /><path d="M8 12h8" /></>),
   grid: (
     <>
       <rect width="7" height="7" x="3" y="3" rx="1" />

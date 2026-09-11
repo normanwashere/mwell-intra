@@ -310,7 +310,7 @@ function ScopedOrderIntake({
   return (
     <Sheet
       open={open}
-      onOpenChange={(next) => { if (!inFlight.current) onOpenChange(next); }}
+      onOpenChange={(next) => { if (!inFlight.current && (next || draft.confirmClose())) onOpenChange(next); }}
       title="Create order or fulfillment demand"
       description={
         ecommerce

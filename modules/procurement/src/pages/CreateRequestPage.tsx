@@ -185,6 +185,9 @@ export function CreateRequestPage() {
   const [serverDraftReady, setServerDraftReady] = useState(false);
   const [serverDraftStatus, setServerDraftStatus] = useState('');
   const lastSavedPayloadRef = useRef('');
+  const hasUserEditsRef = useRef(false);
+  const allowExitRef = useRef(false);
+  const unsavedRef = useRef(false);
 
   // Justification (Award Recommendation §9)
   const [needDesc, setNeedDesc] = useState('');
@@ -438,6 +441,17 @@ export function CreateRequestPage() {
     submitting,
     title,
   ]);
+
+  unsavedRef.current = (hasUserEditsRef.current && JSON.stringify(draftSnapshot) !== lastSavedPayloadRef.current) || attachments.length > 0;
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => {
+      if (!unsavedRef.current || allowExitRef.current) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, []);
 
   const total = useMemo(
     () =>
@@ -736,6 +750,7 @@ export function CreateRequestPage() {
         attachments,
         compliance,
       });
+      allowExitRef.current = true;
       if (andSubmit) {
         navigate(`/requests/${created.id}?submit=1`);
       } else {
@@ -828,7 +843,7 @@ export function CreateRequestPage() {
           </div>
         )}
 
-        <form className="space-y-6" onSubmit={(e) => handleSubmit(e, false)}>
+        <form className="space-y-6" onChangeCapture={() => { hasUserEditsRef.current = true; allowExitRef.current = false; }} onSubmit={(e) => handleSubmit(e, false)}>
           {/* ==================== STEP 1 — What ==================== */}
           {step === 1 && (
             <>
@@ -1735,6 +1750,8 @@ export function CreateRequestPage() {
           {/* Sticky wizard footer — Continue / Back / Save / Submit. */}
           <div
             data-mobile-action-bar="true"
+            role="group"
+            aria-label="Request actions"
             className="relative z-10 -mx-1 flex flex-wrap items-center justify-between gap-3 border-t border-line bg-app/95 px-1 py-3 md:sticky md:bottom-0 md:z-30 md:backdrop-blur"
           >
             {step > 1 ? (
@@ -1742,7 +1759,10 @@ export function CreateRequestPage() {
                 Back
               </button>
             ) : (
-              <Link to="/" className="btn-ghost">
+              <Link to="/" className="btn-ghost" onClick={(event) => {
+                if (unsavedRef.current && !window.confirm('Some changes or attachments are not saved yet. Leave this request? Choose Cancel to keep editing.')) event.preventDefault();
+                else allowExitRef.current = true;
+              }}>
                 Cancel
               </Link>
             )}

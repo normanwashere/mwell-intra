@@ -1,5 +1,5 @@
 "use client";
-import { userFacingError } from '@intra/ui';
+import { userFacingError, useListReturnPosition } from '@intra/ui';
 import { deadlineLabel } from './deadline';
 import { FollowupQueue } from './FollowupQueue';
 
@@ -76,7 +76,9 @@ function EmployeeWorkApp({
 }) {
   const { data, loading, error, refresh } = useWorkData(hasCapability);
   const tracking = useWorkTracking(allowedSources);
+  const { profile } = useSession();
   const [state, setState] = useState<WorkViewState>(INITIAL_WORK_VIEW);
+  const returnPosition = useListReturnPosition(`work:${profile?.id}`, JSON.stringify(state), !loading && !tracking.loading);
   const sourceKey = allowedSources.join(',');
   useEffect(() => {
     const restore = () => setState(readWorkView(window.location.search, sourceKey.split(',') as WorkSource[]));
@@ -105,7 +107,7 @@ function EmployeeWorkApp({
     (item) => item.priority !== "normal",
   ).length;
   return (
-    <div className="hierarchy-preview hp-work space-y-6">
+    <div ref={returnPosition.ref} onClickCapture={returnPosition.onClickCapture} className="hierarchy-preview hp-work space-y-6">
       <PageHeader
         eyebrow="Personal queue"
         title="My Work"

@@ -15,6 +15,7 @@ import {
   SectionTitle,
   money,
   useToast,
+  useListReturnPosition,
   type Column,
   type IconName,
   type Tone,
@@ -27,6 +28,7 @@ import { formatDate, poStatusLabel } from '../labels';
 import { poReceiptSummary } from '../evidencePresentation';
 import { ProcurementAccessDenied } from '../components/ProcurementAccessDenied';
 import { QueueFilters } from '../components/QueueFilters';
+import { poDetailPath, poListSort } from '../poListContext';
 import { makeTypedSignature } from '../signature';
 import { createGovernedAttachmentUrl, type GovernedAccessClient } from '../attachments';
 
@@ -166,6 +168,7 @@ export function PurchaseOrdersPage() {
     success('Purchase orders exported for Finance');
   };
   const filter = (params.get('filter') as PoFilter) ?? 'all';
+  const returnPosition = useListReturnPosition(`procurement-po:${profile?.id}`, JSON.stringify({ filter, ...poListSort(params) }), !loading && !amendmentQueueLoading);
   const refreshAmendmentQueue = useCallback(async (): Promise<boolean> => {
     if (mode !== 'supabase' || !supabaseClient) {
       setAmendmentQueueLoading(false);
@@ -363,7 +366,7 @@ export function PurchaseOrdersPage() {
   ];
 
   return (
-    <div className="min-w-0 space-y-4">
+    <div ref={returnPosition.ref} className="min-w-0 space-y-4">
       <ModuleHero
         eyebrow="Procurement workspace"
         title="Purchase orders"
@@ -427,8 +430,11 @@ export function PurchaseOrdersPage() {
             density="compact"
             rows={visibleRows}
             columns={columns}
+            sortKey={poListSort(params).key}
+            sortDir={poListSort(params).dir}
+            onSortChange={(key, dir) => { const next = new URLSearchParams(params); next.set('sort', key); next.set('dir', dir); setParams(next); }}
             keyOf={(r) => r.id}
-            onRowClick={(r) => navigate(`/purchase-orders/${r.id}`)}
+            onRowClick={(r) => { returnPosition.remember(); navigate(poDetailPath(r.id, params)); }}
           />
         )}
       </div>

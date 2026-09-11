@@ -226,6 +226,7 @@ export function useIntakeDraft<T>(
     }
   };
   return {
+    confirmClose: () => !unsaved || window.confirm("Some changes could not be saved on this device. Close without these changes? Choose Cancel to keep editing."),
     value,
     current,
     update,

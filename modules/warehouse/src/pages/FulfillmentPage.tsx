@@ -1,4 +1,4 @@
-import { userFacingError, WorkflowSummary } from '@intra/ui';
+import { userFacingError, WorkflowSummary, RecordCopyActions } from '@intra/ui';
 import {
   useCallback,
   useEffect,
@@ -1120,6 +1120,7 @@ function OrderDetailsSheet({
       description="Fulfillment record, controlled customer details, and shipment history."
       size="wide"
     >
+      <RecordCopyActions reference={order.externalReference} href={`/warehouse/fulfillment?tab=orders&order=${encodeURIComponent(order.id)}`} />
       <WorkflowSummary {...orderWorkflowSummary(order, { actorIds: [actor, identityId], units: data?.units })}>
         <a className="inline-flex min-h-11 items-center text-sm underline" href={order.status === 'released' && order.deliveryMethod === 'shipment' ? '#shipment-timeline-title' : '#order-lines-title'}>
           {order.status === 'released' && order.deliveryMethod === 'shipment' ? 'Review shipment timeline' : 'Review order lines'}

@@ -13,6 +13,20 @@ const mount = (scope = "draft:operator-a:return:new") => renderHook(() => useInt
 afterEach(() => { vi.restoreAllMocks(); identity.profile = { id: "operator-a" }; });
 
 describe("scoped intake drafts", () => {
+  it("asks before closing edits that storage failed to save and keeps Cancel non-destructive", () => {
+    const draft = mount('unsaved-close');
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementationOnce(() => { throw new Error('Full'); });
+    act(() => { draft.result.current.update({ ...initial, reference: 'KEEP-EDIT' }); });
+    expect(draft.result.current.confirmClose()).toBe(false);
+    expect(draft.result.current.value.reference).toBe('KEEP-EDIT');
+    confirm.mockReturnValue(true);
+    expect(draft.result.current.confirmClose()).toBe(true);
+    act(() => { draft.result.current.replace(draft.result.current.value, true); });
+    confirm.mockClear();
+    expect(draft.result.current.confirmClose()).toBe(true);
+    expect(confirm).not.toHaveBeenCalled();
+  });
   it("does not warn on refresh after editable progress is durably saved", () => {
     const draft = mount();
     act(() => { draft.result.current.update({ ...initial, reference: "SAVED" }); });
