@@ -43,7 +43,7 @@ const repositoryAst = ts.createSourceFile("repo.ts", repositorySource, ts.Script
 const receiveMethod = find(repositoryAst, n => ts.isMethodDeclaration(n) && n.name.getText(repositoryAst) === "receiveStock");
 const mapperSource = await readFile(new URL("../../packages/data-kit/src/supabase/mappers.ts", import.meta.url), "utf8");
 const mapperAst = ts.createSourceFile("mappers.ts", mapperSource, ts.ScriptTarget.Latest, true);
-const mapperCode = ["unitToRow", "lotToRow", "movementToRow", "rowToReceipt"].map(name =>
+const mapperCode = ["unitToRow", "lotToRow", "movementToRow", "rowToReceipt", "rowToProduct"].map(name =>
   find(mapperAst, n => ts.isFunctionDeclaration(n) && n.name?.text === name).getText(mapperAst).replace(/^export /, "")).join("\n");
 const receiveFromRepository = new Function(ts.transpileModule(`${mapperCode}\nreturn ({${receiveMethod.getText(repositoryAst)}}).receiveStock;`,
   { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } }).outputText)();
@@ -54,7 +54,10 @@ async function repositoryReceipt(db, overrides = {}) {
     select set_config('request.jwt.claim.sub','${receiver}',false)`);
   const receipt = await receiveFromRepository.call({
     findReceiptById: async () => undefined,
-    getData: async () => ({ products: [{ id: "product", sku: "SER", serialized: true }] }),
+    select: async (table, mapper) => {
+      assert.equal(table, "products", "Receiving should only load its required product data");
+      return [mapper({ id: "product", sku: "SER", serialized: true, unit_cost: 0 })];
+    },
     callRpc: async (name, payload) => {
       assert.equal(name, "receive_stock");
       assert.equal(payload.units[0].status, "pending_inspection");
