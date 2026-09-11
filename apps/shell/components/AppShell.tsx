@@ -368,7 +368,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <main
           data-shell-content="true"
-          className="shell-content mx-auto w-full max-w-[90rem] flex-1 px-4 py-5 sm:px-6 lg:px-8 md:pb-10"
+          className="workspace-hierarchy shell-content mx-auto w-full max-w-[90rem] flex-1 px-4 py-5 sm:px-6 lg:px-8 md:pb-10"
           style={{ "--shell-header": "4.5rem" } as CSSProperties}
         >
           {loading ? (

@@ -534,7 +534,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           data-testid="warehouse-scroll-region"
           aria-label="Warehouse workspace"
           tabIndex={0}
-          className="mx-auto min-h-0 w-full max-w-5xl flex-1 scroll-pb-[calc(5rem+env(safe-area-inset-bottom))] overflow-y-auto overscroll-contain px-4 py-5 pb-[calc(7.5rem+env(safe-area-inset-bottom))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500 sm:px-6 md:overflow-visible md:pb-10 xl:max-w-6xl"
+          className="workspace-hierarchy mx-auto min-h-0 w-full max-w-5xl flex-1 scroll-pb-[calc(5rem+env(safe-area-inset-bottom))] overflow-y-auto overscroll-contain px-4 py-5 pb-[calc(7.5rem+env(safe-area-inset-bottom))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500 sm:px-6 md:overflow-visible md:pb-10 xl:max-w-6xl"
         >
           {unresolvedLegacyCount > 0 && (
             <div role="status" aria-label="Unresolved legacy queue" className="mb-4 space-y-1 border-y border-amber-300 bg-amber-50 px-3 py-3 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100">

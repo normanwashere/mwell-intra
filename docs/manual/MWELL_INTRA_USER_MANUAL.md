@@ -1,5 +1,17 @@
 # Mwell Intra Standalone Operating Handbook
 
+## September 12 Workspace Layout
+
+The updated interface uses distinct page headers, shaded section headings and clearer dialog headers and footers across internal and vendor workspaces. Status colors still indicate the same business states. Your roles, approvals and transaction steps have not changed.
+
+- Use Hide navigation or Show navigation in the desktop header to give the record more room. This browser remembers the choice. The visible sidebar stays available while the page scrolls; mobile navigation is unchanged.
+- My Work shows compact request rows on desktop and stacked information on mobile. Open the source record to act; the queue does not approve or complete it for you.
+- Order details and order intake use wider desktop dialogs, with related information grouped together and a separate action footer. On mobile, scroll the dialog body to reach the remaining fields.
+- On supported lists, opening a record and returning restores list context. Copy reference copies the identifier; Copy link copies the canonical record address, not your personal list filters. The recipient still needs access.
+- The procurement request form warns on browser exit or its Cancel action when unsaved. Order intake warns when its local draft could not be saved. These are not universal warnings for every in-app link; save important work before navigating away.
+
+Earlier dated sections below describe their respective releases. This layout update does not replace the process instructions or authorization requirements.
+
 ## September 11 UX Remediation (Live UAT)
 
 The final UX build is live on **mwell-intra-uat.vercel.app**, release `343b372`. The final screen/navigation check passed all 110 primary captures across 11 test personas at desktop and mobile widths. This is not certification of every transaction. The release verification record retains the detailed coverage and limitations.

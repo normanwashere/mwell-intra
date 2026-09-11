@@ -42,6 +42,12 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "The selected workspace opens and the current destination remains visibly identified.",
         ),
         control(
+          "Hide navigation / Show navigation",
+          "Use the desktop header control to hide or restore the sidebar. The browser remembers the choice; the visible sidebar stays reachable while the page scrolls.",
+          "Desktop only. Mobile navigation and role-authorized destinations are unchanged.",
+          "The workspace gains room without changing the current record, approval step or permissions. Page and section bands distinguish the same work across internal and vendor screens.",
+        ),
+        control(
           "View account details",
           "Opens the account menu to show the active job persona, department, responsibility, and each scoped module role.",
           "The values come from the authenticated profile and current role assignments; this menu cannot grant authority.",

@@ -14,6 +14,20 @@ export const HANDBOOK_TABS = Object.freeze([
 
 const CATALOG = [
   {
+    source: "docs/releases/2026-09-12-WORKSPACE-LAYOUT.md",
+    id: "sept12-workspace-layout",
+    title: "September 12 Workspace Layout",
+    primaryTab: "release",
+    relatedTabs: ["workflows", "roles", "infrastructure"],
+    contentType: "release-note",
+    audience: ["operator", "trainer", "release-reviewer"],
+    summary: "Shared page hierarchy, desktop navigation and dialog refinements, with unchanged workflow boundaries and live verification requirements.",
+    keywords: ["september 12", "layout", "sidebar", "dialogs", "mobile", "desktop"],
+    sortOrder: 1,
+    collapse: "reference",
+    relatedSources: ["docs/manual/MWELL_INTRA_USER_MANUAL.md"],
+  },
+  {
     source: "docs/releases/2026-09-11-UX-REMEDIATION-CANDIDATE.md",
     id: "sept11-ux-remediation-candidate",
     title: "September 11 UX Release and Verification",

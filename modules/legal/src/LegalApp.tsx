@@ -232,7 +232,7 @@ export function LegalApp({ basename = "/legal" }: LegalAppProps) {
       )}
       <ScrollToTopOnRouteChange />
       {isVendor ? (
-        <main className="mx-auto w-full max-w-5xl px-4 py-5 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6">
+        <main className="workspace-hierarchy mx-auto w-full max-w-5xl px-4 py-5 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6">
           {routes}
         </main>
       ) : (

@@ -1,5 +1,13 @@
 # User Training And Operations Manual
 
+## September 12 Interface Training
+
+Rehearse the same business workflow with the updated workspace hierarchy: identify the page, its section heading, current status, responsible role and next action. The visual changes do not create new permissions or change approval order.
+
+Desktop users can hide/show navigation from the header; the browser remembers the choice. The sidebar remains reachable while scrolling. My Work uses compact desktop rows and mobile stacked records. Open a supported order dialog and locate its grouped information, scrollable body, close control and separate footer. Copy a record reference and link, then return to its list and confirm context is retained. A copied link never bypasses recipient access checks.
+
+Explain the limits: unsaved warnings cover browser exit/Cancel on procurement requests and failed local draft persistence on order intake, not every SPA navigation. Save before leaving other forms. Automated layout checks are not evidence that a tester has completed a business transaction.
+
 ## Marketing Request Receipt (Live UAT, September 11)
 
 After Warehouse releases your items, open **Fulfillment > Department requests**. Find your issued request and select **Acknowledge receipt**, either on the request itself or inside **View request**. Check the linked order and recipient, enter the acceptance reference, attach recipient acceptance evidence, and select **Confirm receipt**. The request then shows **Receipt acknowledged** with the saved reference; the action is no longer offered. You do not need to switch to Orders and events.

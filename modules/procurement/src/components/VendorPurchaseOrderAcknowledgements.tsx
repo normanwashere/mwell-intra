@@ -33,7 +33,7 @@ export function VendorPurchaseOrderAcknowledgements() {
   });
 
   if (profile?.kind !== 'vendor') return <p role="alert" className="p-6 text-sm text-muted">Vendor access is required.</p>;
-  return <main className="mx-auto max-w-4xl space-y-5 p-4 md:p-6" aria-label="Vendor PO acknowledgements">
+  return <main className="workspace-hierarchy mx-auto max-w-4xl space-y-5 p-4 md:p-6" aria-label="Vendor PO acknowledgements">
     <nav aria-label="Vendor portal" className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3"><a href="/vendor/" className="btn-outline">Back to vendor portal</a><span className="text-sm [overflow-wrap:anywhere]">{profile.name}</span><button type="button" className="btn-ghost" onClick={() => void signOut()}>Sign out</button></nav>
     <header><h1 className="text-xl font-semibold text-ink">Purchase order acknowledgements</h1><p className="text-sm text-muted">Only purchase orders awarded to your organization appear here.</p></header>
     {error ? <p role="alert" className="text-sm text-rose-700">{userFacingError(error)}</p> : null}

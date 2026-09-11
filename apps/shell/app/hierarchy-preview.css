@@ -1,5 +1,5 @@
-/* Page hierarchy pilot and shared dialog surfaces. Workflow colors remain semantic. */
-.hierarchy-preview, .intra-sheet {
+/* Shared workspace hierarchy; workflow-specific treatments stay scoped below. */
+.workspace-hierarchy, .hierarchy-preview, .intra-sheet {
   --c-app: 239 242 244;
   --c-surface: 255 255 255;
   --surface: #ffffff;
@@ -12,7 +12,7 @@
   --hp-active-ink: #ffffff;
   color: rgb(var(--c-ink));
 }
-.dark .hierarchy-preview, .dark .intra-sheet {
+.dark .workspace-hierarchy, .dark .hierarchy-preview, .dark .intra-sheet {
   --c-app: 23 27 31;
   --c-surface: 35 41 47;
   --surface: #23292f;
@@ -24,10 +24,13 @@
   --hp-active: #84c8ff;
   --hp-active-ink: #092941;
 }
+.workspace-hierarchy,
 .shell-content:has(.hierarchy-preview),
 main:has(> .hierarchy-preview) { background: #eff2f4; }
+.dark .workspace-hierarchy,
 .dark .shell-content:has(.hierarchy-preview),
 .dark main:has(> .hierarchy-preview) { background: #171b1f; }
+.workspace-hierarchy .page-header-band,
 .hierarchy-preview .page-header-band,
 .hierarchy-preview .hp-record-title {
   background: rgb(var(--c-surface));
@@ -35,8 +38,9 @@ main:has(> .hierarchy-preview) { background: #eff2f4; }
   border-bottom: 3px solid var(--hp-active);
   padding: 18px 20px;
 }
+.workspace-hierarchy .page-header-band h1,
 .hierarchy-preview h1 { font-size: 28px; line-height: 1.25; }
-.hierarchy-preview [data-workspace-icon] {
+.workspace-hierarchy [data-workspace-icon], .hierarchy-preview [data-workspace-icon] {
   background: var(--hp-active);
   border-color: var(--hp-active);
   color: var(--hp-active-ink);
@@ -47,11 +51,12 @@ main:has(> .hierarchy-preview) { background: #eff2f4; }
   border: 0;
   border-bottom: 1px solid rgb(var(--c-line));
 }
+.workspace-hierarchy :is(input,select,textarea).input,
 .hierarchy-preview :is(input,select,textarea).input {
   background: rgb(var(--c-surface));
   border-radius: 6px;
 }
-.hierarchy-preview .card {
+.workspace-hierarchy .card, .hierarchy-preview .card {
   border-radius: 6px;
   box-shadow: none;
 }
@@ -114,7 +119,7 @@ main:has(> .hierarchy-preview) { background: #eff2f4; }
 }
 .hierarchy-preview .hp-guidance > ol { grid-template-columns: 1fr; margin-bottom: 12px; border-radius: 6px; }
 .hierarchy-preview .hp-guidance li span { white-space: normal; }
-.hierarchy-preview .section-heading-band {
+.workspace-hierarchy .section-heading-band, .hierarchy-preview .section-heading-band {
   margin-bottom: 0;
   background: var(--hp-band);
   border: 0;
@@ -137,13 +142,14 @@ main:has(> .hierarchy-preview) { background: #eff2f4; }
   color: var(--hp-active-ink);
 }
 .hp-record > :is(#lines,#policy,#receiving,#payment) { background: rgb(var(--c-surface)); }
+.workspace-hierarchy :is(button,a,input,select,textarea,summary):focus-visible,
 .hierarchy-preview :is(button,a,input,select,textarea,summary):focus-visible {
   outline: 3px solid var(--hp-active);
   outline-offset: 3px;
 }
 @media (max-width: 639px) {
-  .hierarchy-preview h1 { font-size: 24px; }
-  .hierarchy-preview .page-header-band, .hierarchy-preview .hp-record-title { padding: 16px; }
+  .workspace-hierarchy .page-header-band h1, .hierarchy-preview h1 { font-size: 24px; }
+  .workspace-hierarchy .page-header-band, .hierarchy-preview .page-header-band, .hierarchy-preview .hp-record-title { padding: 16px; }
   .hierarchy-preview .hp-view-tabs > button { padding: 12px 6px; }
   .hierarchy-preview .hp-toolbar { padding: 12px; }
   .hp-record > [aria-label="Workflow status"] { padding: 14px; }

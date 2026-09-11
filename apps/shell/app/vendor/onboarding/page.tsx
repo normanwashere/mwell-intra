@@ -46,7 +46,7 @@ export default function VendorOnboardingPage() {
           </div>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6">
+      <main className="workspace-hierarchy mx-auto w-full max-w-5xl px-4 py-6 sm:px-6">
         <Suspense><TaskLearningWorkspace audience="vendor" /></Suspense>
       </main>
     </div>

@@ -43,6 +43,7 @@ const browser = await chromium.launch();
 try {
   for (const persona of CURRENT_LIVE_ROLES) {
     if (process.env.AUDIT_ROLES && !process.env.AUDIT_ROLES.split(',').includes(persona.role)) continue;
+    console.log(`Checking ${persona.role} on desktop and mobile`);
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, serviceWorkers: 'block', reducedMotion: 'reduce' });
     await context.route('**/*', route => {
       const req = route.request(), url = new URL(req.url());
@@ -96,6 +97,12 @@ try {
           row.screenshot = `${persona.role}-${index}-${width}.png`;
           await page.screenshot({ path: path.join(output, row.screenshot), animations: 'disabled' });
           assert(row.headings.length, 'No content heading');
+          if (process.env.AUDIT_SHARED_HIERARCHY === '1') {
+            assert(await page.locator('main.workspace-hierarchy:visible').count() > 0, 'Shared workspace hierarchy missing');
+            for (const header of await page.locator('main .page-header-band:visible').all()) {
+              assert.equal(await header.evaluate(el => getComputedStyle(el).borderBottomWidth), '3px', 'Page hierarchy styling not applied');
+            }
+          }
           assert(!new URL(row.url).pathname.startsWith('/login'), 'Session lost');
           assert(!/^Access denied|No (?:warehouse|procurement|legal|admin) access/m.test(await page.locator('body').innerText()), 'Unexpected access denial');
           assert(row.dom.overflow <= 1, 'Document horizontal overflow');

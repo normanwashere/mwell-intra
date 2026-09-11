@@ -1066,6 +1066,7 @@ function roleGuide(definition) {
 }
 
 const SOURCE_ROOT_HEADINGS = {
+  "sept12-workspace-layout": "September 12 Workspace Layout Release",
   "sept11-ux-remediation-candidate": "September 11 UX Release and Verification",
   "sept9-wms-feedback": "September 9 WMS Feedback: Fixes And Tester Instructions",
   "sept11-uat-usability-performance": "September 11 UAT Update",

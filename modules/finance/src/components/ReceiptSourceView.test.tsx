@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ReceiptSourceView } from './ReceiptSourceView';
 let root: Root; let host: HTMLDivElement;
 const source = { type: 'warehouse_receipt' as const, id: 'r1', module: 'warehouse', reference: 'RCPT-001', party: 'Vendor', amount: 100, occurred_at: '2026-09-11', href: '/warehouse/receiving?receipt=r1' };
-beforeEach(() => { (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; host = document.createElement('div'); document.body.append(host); root = createRoot(host); });
+beforeEach(() => { (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true; host = document.createElement('div'); document.body.append(host); root = createRoot(host); });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
 it('reauthorizes the exact receipt and shows a read-only source without a receiving link', async () => {
   const searchSources = vi.fn().mockResolvedValue([source]);
