@@ -72,6 +72,37 @@ try {
       await page.screenshot({path:path.join(output,`${item.id}-${width}.png`),animations:'disabled'});
       if(stage==='after') {
         assert.equal(await page.locator('.hierarchy-preview').count(),1);
+        if(process.env.PREVIEW_SIDEBAR === 'true') {
+          const hide = page.getByRole('button',{name:'Hide side navigation',exact:true});
+          if(width === 1440) {
+            const controls = await hide.getAttribute('aria-controls');
+            const aside = page.locator('#'+controls);
+            assert(await aside.isVisible());
+            const header = page.locator('header').first();
+            const beforeWidth = (await header.boundingBox()).width;
+            const routeBefore = page.url();
+            await hide.focus();await page.keyboard.press('Enter');
+            const show = page.getByRole('button',{name:'Show side navigation',exact:true});
+            assert.equal(await aside.isVisible(),false);
+            assert.equal(await show.getAttribute('aria-expanded'),'false');
+            assert.equal(page.url(),routeBefore);
+            assert((await header.boundingBox()).width > beforeWidth);
+            assert(await show.evaluate(el=>el===document.activeElement));
+            await page.screenshot({path:path.join(output,`${item.id}-${width}-nav-hidden.png`)});
+            await page.reload();await show.waitFor();
+            assert.equal(await aside.isVisible(),false);
+            await page.setViewportSize({width:390,height:844});
+            assert.equal(await show.isVisible(),false);
+            assert(await page.getByRole('navigation',{name:'Primary mobile',exact:true}).isVisible());
+            await page.setViewportSize({width:1440,height:1000});
+            await show.focus();await page.keyboard.press('Space');
+            assert(await aside.isVisible());
+            assert.equal(await hide.getAttribute('aria-expanded'),'true');
+          } else {
+            assert.equal(await hide.isVisible(),false);
+            assert(await page.getByRole('navigation',{name:'Primary mobile',exact:true}).isVisible());
+          }
+        }
         if(item.id==='pick-pack') {
           const toolsMenu=page.getByText('Queue tools',{exact:true});
           await toolsMenu.click();

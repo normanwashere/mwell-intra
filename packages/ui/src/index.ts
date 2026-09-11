@@ -102,3 +102,4 @@ export {
   type DonutSlice,
 } from "./charts/DonutChart";
 export { TrendChip, type TrendChipProps } from "./charts/TrendChip";
+export { DesktopNavigationToggle, useDesktopNavigation } from "./DesktopNavigation";

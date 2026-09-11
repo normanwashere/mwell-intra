@@ -15,7 +15,7 @@ import {
 import { buildNotifications } from "@/app/notifications";
 import { Sheet, useToast, PageTransition } from "./ui";
 import { ThemeToggle } from "./ThemeToggle";
-import { ContextualHelpLink } from "@intra/ui";
+import { ContextualHelpLink, DesktopNavigationToggle, useDesktopNavigation } from "@intra/ui";
 import { SyncConflictDetails } from './SyncConflictDetails';
 
 const MODULE_GROUP_ORDER: ModuleGroup[] = [
@@ -166,6 +166,7 @@ const routeMatches = (pattern: string, pathname: string) => {
 };
 
 export function AppShell({ children }: { children: ReactNode }) {
+  const desktopNavigation = useDesktopNavigation();
   const {
     role,
     roleLabel,
@@ -312,7 +313,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="h-dvh overflow-hidden bg-app md:flex md:h-auto md:min-h-screen md:overflow-visible">
       {/* Desktop sidebar */}
-      <aside className="hidden w-60 shrink-0 flex-col border-r border-line bg-surface md:flex lg:w-64">
+      <aside id="warehouse-side-navigation" style={desktopNavigation.hidden ? { display: "none" } : undefined} className="hidden w-60 shrink-0 flex-col border-r border-line bg-surface md:flex lg:w-64">
         <div className="safe-top flex items-center gap-2 px-5 py-5">
           <a
             href="/"
@@ -426,12 +427,15 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
             {/* Visual brand only — the semantic <h1> belongs to each page's
                 header so documents never carry two level-1 headings (WH-1). */}
+            <div className="hidden min-w-0 flex-1 items-center gap-3 md:flex">
+            <DesktopNavigationToggle hidden={desktopNavigation.hidden} onToggle={desktopNavigation.toggle} controls="warehouse-side-navigation" />
             <p
-              className="hidden font-display text-lg font-bold text-ink md:block"
+              className="font-display text-lg font-bold text-ink"
               aria-hidden="true"
             >
               Intra <span className="text-faint">|</span> Warehouse
             </p>
+            </div>
             <div className="flex items-center gap-1.5">
               <span
                 className={clsx(
@@ -526,6 +530,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         )}
 
         <main
+          style={desktopNavigation.hidden ? { maxWidth: "none" } : undefined}
           data-testid="warehouse-scroll-region"
           aria-label="Warehouse workspace"
           tabIndex={0}

@@ -9,7 +9,7 @@ import Link from "next/link";
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { useReducedMotion } from "framer-motion";
 import * as m from "framer-motion/m";
-import { Icon, PageTransition, Sheet, useTaskHelp, type IconName } from "@intra/ui";
+import { Icon, PageTransition, Sheet, useTaskHelp, DesktopNavigationToggle, useDesktopNavigation, type IconName } from "@intra/ui";
 import { useSession } from "@intra/auth";
 import {
   FINANCE_NAV,
@@ -68,6 +68,7 @@ function mobileNavLabel(label: string): string {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
+  const desktopNavigation = useDesktopNavigation();
   const taskHelp = useTaskHelp();
   const { profile, userRoles, userCapabilities, roleCapabilities, mode, loading } = useSession();
   const access = { mode, userRoles, userCapabilities };
@@ -178,6 +179,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {/* Desktop icon rail */}
       <aside
+        id="suite-side-navigation"
+        style={desktopNavigation.hidden ? { display: "none" } : undefined}
         className="safe-top hidden w-[4.75rem] shrink-0 flex-col items-center border-r border-line bg-surface py-4 md:flex lg:w-[15rem] lg:items-stretch"
         aria-label="Primary"
       >
@@ -278,6 +281,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               )}
             </div>
             <div className="hidden min-w-0 flex-1 items-center gap-4 md:flex">
+              <DesktopNavigationToggle hidden={desktopNavigation.hidden} onToggle={desktopNavigation.toggle} controls="suite-side-navigation" />
               <p
                 className="truncate font-display text-title text-ink"
                 aria-hidden="true"
