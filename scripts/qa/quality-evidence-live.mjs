@@ -72,20 +72,21 @@ try {
   report.checks.push({check:'exact persisted photo opens and decodes',inspectionId:id,passed:true});
   await capture('photo-preview-desktop.png');
   await page.keyboard.press('Escape');
-  let failOnce=true;
+  let failPhotos=true, injectedFailures=0;
   await page.route('**/rest/v1/quality_inspections?*',async route=>{
     const url=new URL(route.request().url());
-    if(failOnce && url.searchParams.get('select')==='evidence_urls' && url.searchParams.get('id')===`eq.${id}`) {
-      failOnce=false; await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({message:'Synthetic photo-read failure for UAT verification'})});
+    if(failPhotos && url.searchParams.get('select')==='evidence_urls' && url.searchParams.get('id')===`eq.${id}`) {
+      injectedFailures++; await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({message:'Synthetic photo-read failure for UAT verification'})});
     } else await route.continue();
   });
   await page.goto(origin+`/warehouse/quality?inspection=${id}`);
   await page.getByRole('button',{name:'Retry photos',exact:true}).waitFor();
   await capture('photo-retry-desktop.png');
+  failPhotos=false;
   await page.getByRole('button',{name:'Retry photos',exact:true}).click();
   await page.getByRole('button',{name:/View \d+ evidence photo/}).waitFor();
-  assert.equal(failOnce,false);
-  report.checks.push({check:'injected read failure recovers without a business mutation',passed:true});
+  assert(injectedFailures>0);
+  report.checks.push({check:'injected read failure recovers without a business mutation',injectedFailures,passed:true});
   await page.unroute('**/rest/v1/quality_inspections?*');
   await page.setViewportSize({width:390,height:844});
   await page.reload();
@@ -105,7 +106,13 @@ try {
   assert(observed.length>beforeScroll,'Scrolling must load newly visible photos');
   await capture('completed-mobile-scroll.png');
   report.checks.push({check:'mobile scroll loads previously offscreen photos',beforeScroll,afterScroll:observed.length,totalWithEvidence,passed:true});
+  await Promise.all(parseJobs);
   report.passed=true;
 } catch(error) { report.passed=false;report.error=error.message;await capture('failure.png');throw error; }
-finally { await writeFile(path.join(output,'results.json'),JSON.stringify(report,null,2)); await context.close();await browser.close(); }
+finally {
+  page.removeAllListeners('response');
+  await Promise.allSettled(parseJobs);
+  await writeFile(path.join(output,'results.json'),JSON.stringify(report,null,2));
+  await context.close();await browser.close();
+}
 console.log(JSON.stringify(report));
