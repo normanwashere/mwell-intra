@@ -27,7 +27,7 @@ Deploy to the existing mwell-intra-uat project using its configured production-t
 Updated references: standalone operating handbook, training/operations manual, technical/functional specification, training handover and in-app navigation guidance. Historical screenshots retain their historical labels; fresh release screenshots belong in the live validation gallery.
 **Quality Evidence and KB Performance Follow-up**
 
-- Quality now reads complete inspection metadata without eagerly downloading all photos. Completed photos load on visibility and retain exact-record preview and retry. The full inspection API remains available to other consumers.
+- Quality now reads complete inspection metadata without eagerly downloading all photos. Completed photos load on visibility and retain exact-record preview and retry. Preview buttons wait until their image URL is ready before accepting clicks. The full inspection API remains available to other consumers.
 - The additive, SELECT-only summary view uses caller RLS. The original 493 inspection records and 6,385,637 bytes of evidence were unchanged by the migration, verified by an identical content hash.
 - The KB server route is configured for Tokyo (`hnd1`), near UAT Supabase (`ap-northeast-1`), instead of Virginia. Server authentication and vendor/employee content boundaries are unchanged.
 - Removed in-app article dependencies from the standalone operating handbook. The strict launch-artifact gate now passes locally; it has not been relaxed.

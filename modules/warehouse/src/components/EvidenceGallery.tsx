@@ -60,6 +60,8 @@ export function EvidenceGallery({
       <>
       <button
         type="button"
+        disabled={!src}
+        aria-busy={!src}
         onClick={() => src && setLightbox(src)}
         className={`relative inline-block ${className ?? ''}`}
         aria-label={`View ${list.length} evidence photo(s)`}
@@ -101,6 +103,8 @@ export function EvidenceGallery({
               ) : (
                 <button
                   type="button"
+                  disabled={!src}
+                  aria-busy={!src}
                   onClick={() => src && setLightbox(src)}
                   className="block w-full"
                   aria-label="View evidence photo"

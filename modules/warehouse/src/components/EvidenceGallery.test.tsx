@@ -6,6 +6,15 @@ import { EvidenceGallery } from './EvidenceGallery';
 vi.mock('@intra/auth', () => ({ useSession: () => ({ mode: 'memory', supabaseClient: null, profile: null }) }));
 
 describe('EvidenceGallery', () => {
+  it.each(['thumb', 'grid'] as const)('does not accept a %s preview click until evidence is resolved', async size => {
+    render(<EvidenceGallery urls={['data:image/png;base64,eA==']} size={size} />);
+    const button = screen.getByRole('button', { name: /view.*evidence photo/i });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute('aria-busy', 'true');
+    await screen.findByRole('img', { name: 'Evidence' });
+    expect(button).toBeEnabled();
+    expect(button).toHaveAttribute('aria-busy', 'false');
+  });
   it.each(['thumb', 'grid'] as const)('portals %s lightbox outside buttons, closes with Close/Escape and restores focus without warnings', async (size) => {
     const errors = vi.spyOn(console, 'error');
     try {

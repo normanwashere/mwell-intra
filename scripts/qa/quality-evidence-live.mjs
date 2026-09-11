@@ -5,7 +5,9 @@ import path from 'node:path';
 const require=createRequire(new URL('../../apps/shell/package.json',import.meta.url));
 const { chromium }=require('@playwright/test');
 const origin='https://mwell-intra-uat.vercel.app';
-const output=path.resolve('outputs/sep12-performance/quality-live');
+const run=process.env.QUALITY_RUN??'quality-live';
+assert(/^[a-z0-9-]+$/.test(run));
+const output=path.resolve('outputs/sep12-performance',run);
 assert(process.env.AUDIT_PASSWORD);
 const health=await(await fetch(origin+'/api/health',{cache:'no-store'})).json();
 assert.equal(health.deployment.appEnv,'uat');
@@ -25,7 +27,11 @@ page.on('response',response=>{
   }));
   if(url.pathname.endsWith('/quality_inspections') && url.searchParams.get('select')==='evidence_urls') {
     observed.push(url.searchParams.get('id'));
-    if(response.ok()) parseJobs.push(response.json().then(row=>details.set(url.searchParams.get('id').replace(/^eq\./,''),row.evidence_urls)));
+    if(response.ok()) parseJobs.push(response.json().then(body=>{
+      const row=Array.isArray(body)?body[0]:body;
+      assert(Array.isArray(row?.evidence_urls),'Exact-photo response must contain evidence');
+      details.set(url.searchParams.get('id').replace(/^eq\./,''),row.evidence_urls);
+    }));
   }
 });
 const capture=async name=>{ await page.screenshot({path:path.join(output,name),animations:'disabled'});report.screenshots.push(name); };
@@ -45,10 +51,12 @@ try {
   await page.getByRole('tab',{name:'Completed',exact:true}).click();
   const firstPhoto=page.getByRole('button',{name:/View \d+ evidence photo/}).first();
   await firstPhoto.waitFor();
+  await firstPhoto.getByRole('img', { name: 'Evidence', exact: true }).waitFor();
   await Promise.all(parseJobs);
   const totalWithEvidence=[...summaries.values()].filter(row=>row.disposition!=='pending'&&row.evidence_count>0).length;
-  assert(observed.length<totalWithEvidence,'Offscreen photos should not all be downloaded');
-  report.checks.push({check:'visible-only photo requests',visibleRequests:observed.length,totalWithEvidence,passed:true});
+  assert(observed.length<=totalWithEvidence,'Each completed record should load at most once');
+  assert(observed.every(value=>summaries.get(value.replace(/^eq\./,'')).disposition!=='pending'),'Completed must not fetch pending photos');
+  report.checks.push({check:'Completed reads only its photo records; desktop currently fits all five',visibleRequests:observed.length,totalWithEvidence,passed:true});
   const row=firstPhoto.locator('xpath=ancestor::li[1]');
   const id=(await row.getAttribute('aria-label')).replace('Inspection ','');
   await capture('completed-desktop.png');
@@ -85,6 +93,18 @@ try {
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
   await capture('completed-mobile.png');
   report.checks.push({check:'mobile exact-record link, thumbnail and no horizontal page overflow',passed:true});
+  await page.goto(origin+'/warehouse/quality');
+  await page.getByText(/\d+ pending inspections/).waitFor();
+  observed.length=0;
+  await page.getByRole('tab',{name:'Completed',exact:true}).click();
+  await page.getByRole('button',{name:/View \d+ evidence photo/}).first().getByRole('img',{name:'Evidence',exact:true}).waitFor();
+  const beforeScroll=observed.length;
+  assert(beforeScroll<totalWithEvidence,'Mobile must leave offscreen photo records unloaded');
+  await page.getByRole('list',{name:'Completed inspections'}).getByRole('listitem').last().scrollIntoViewIfNeeded();
+  await page.getByRole('list',{name:'Completed inspections'}).getByRole('listitem').last().getByRole('img',{name:'Evidence',exact:true}).waitFor();
+  assert(observed.length>beforeScroll,'Scrolling must load newly visible photos');
+  await capture('completed-mobile-scroll.png');
+  report.checks.push({check:'mobile scroll loads previously offscreen photos',beforeScroll,afterScroll:observed.length,totalWithEvidence,passed:true});
   report.passed=true;
 } catch(error) { report.passed=false;report.error=error.message;await capture('failure.png');throw error; }
 finally { await writeFile(path.join(output,'results.json'),JSON.stringify(report,null,2)); await context.close();await browser.close(); }
