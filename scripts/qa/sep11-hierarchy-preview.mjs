@@ -22,7 +22,9 @@ if(stage==='after' && origin.startsWith('https:')) {
   assert(process.env.PREVIEW_SHA, 'Verify the exact isolated preview build');
   assert.equal(health.commit,process.env.PREVIEW_SHA);
 }
-const output = path.resolve('outputs/sep11-hierarchy-preview', stage);
+const run=process.env.PREVIEW_RUN||stage;
+assert(/^[a-z0-9-]+$/.test(run));
+const output = path.resolve('outputs/sep11-hierarchy-preview', run);
 await mkdir(output, {recursive:true});
 const cases = [
   {id:'pick-pack',email:'operations.associate',route:'/warehouse/fulfillment?tab=orders&filter=floor_work'},
