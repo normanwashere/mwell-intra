@@ -567,7 +567,10 @@ test("certifies mandatory first-login onboarding before module route and transac
   assert.match(source, /assertAuditIdentityScope/);
   assert.match(source, /visibleEnabledOrientationLauncher/);
   assert.match(source, /Start \.\+ orientation/);
-  assert.match(source, /Finish review/);
+  assert.match(source, /import \{ finishGuidedDialog/);
+  const driver = await readFile(new URL('./orientation-driver.mjs', import.meta.url), 'utf8');
+  assert.match(driver, /Finish review/);
+  assert.match(workflow, /node --test scripts\/qa\/orientation-driver\.browser\.test\.mjs/);
   assert.match(source, /Continue to My Work/);
   assert.match(source, /Continue to vendor onboarding/);
   assert.match(source, /assertApprovedMutationTarget/);

@@ -1,3 +1,4 @@
+import { finishGuidedDialog, ASSESSMENT_ANSWERS, waitForAssessmentResult } from './orientation-driver.mjs';
 import { createRequire } from "node:module";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -84,100 +85,6 @@ async function login(page, email) {
   });
 }
 
-async function finishGuidedDialog(page) {
-  const dialog = page.getByRole("dialog");
-  await dialog.waitFor({ state: "visible", timeout: 10_000 });
-  for (let step = 0; step < 20; step += 1) {
-    if (!(await dialog.isVisible().catch(() => false))) return;
-
-    const requirementClosed = dialog.getByText(
-      "Learning requirement is not in progress",
-      { exact: true },
-    );
-    if (await requirementClosed.isVisible().catch(() => false)) {
-      await dialog.getByRole("button", { name: "Exit training" }).click();
-      await dialog.waitFor({ state: "hidden", timeout: 10_000 });
-      return;
-    }
-
-    const finish = dialog.getByRole("button", { name: "Finish review" });
-    if (await finish.isVisible().catch(() => false)) {
-      await finish.click();
-      await dialog.waitFor({ state: "hidden", timeout: 15_000 });
-      return;
-    }
-
-    const choiceGroup = dialog.getByRole("group");
-    if (await choiceGroup.isVisible().catch(() => false)) {
-      const heading = dialog.locator("#training-coach-title");
-      const initialHeading = (await heading.textContent())?.trim() ?? "";
-      const choices = choiceGroup.getByRole("button");
-      let advanced = false;
-      for (let choiceIndex = 0; choiceIndex < (await choices.count()); choiceIndex += 1) {
-        const candidate = choices.nth(choiceIndex);
-        if (!(await candidate.isVisible()) || !(await candidate.isEnabled())) continue;
-        const initialAlert = await dialog
-          .getByRole("alert")
-          .textContent()
-          .catch(() => "");
-        await candidate.click();
-        await page
-          .waitForFunction(
-            ({ expectedHeading, expectedAlert }) => {
-              const activeDialog = [...document.querySelectorAll('[role="dialog"]')]
-                .find((element) => element.getClientRects().length > 0);
-              if (!activeDialog) return true;
-              const currentHeading = activeDialog
-                .querySelector("#training-coach-title")
-                ?.textContent?.trim();
-              const currentAlert = activeDialog
-                .querySelector('[role="alert"]')
-                ?.textContent?.trim();
-              return (
-                currentHeading !== expectedHeading ||
-                Boolean(currentAlert && currentAlert !== expectedAlert)
-              );
-            },
-            { expectedHeading: initialHeading, expectedAlert: initialAlert?.trim() ?? "" },
-            { timeout: 10_000 },
-          )
-          .catch(() => undefined);
-        if (!(await dialog.isVisible().catch(() => false))) return;
-        if (await requirementClosed.isVisible().catch(() => false)) {
-          await dialog.getByRole("button", { name: "Exit training" }).click();
-          await dialog.waitFor({ state: "hidden", timeout: 10_000 });
-          return;
-        }
-        if (((await heading.textContent())?.trim() ?? "") !== initialHeading) {
-          advanced = true;
-          break;
-        }
-        await candidate.waitFor({ state: "visible", timeout: 5_000 });
-      }
-      if (!advanced) {
-        throw new Error(`No governed choice advanced training step ${initialHeading}.`);
-      }
-      continue;
-    }
-
-    const next = dialog.getByRole("button", { name: "Continue" });
-    if (await next.isVisible().catch(() => false)) {
-      await next.click();
-      continue;
-    }
-
-    // A shared orientation can complete while another assignment dialog is
-    // open. In that case React closes the dialog instead of rendering the next
-    // control, which is a valid terminal state for this certifier.
-    await Promise.race([
-      dialog.waitFor({ state: "hidden", timeout: 10_000 }),
-      next.waitFor({ state: "visible", timeout: 10_000 }),
-      finish.waitFor({ state: "visible", timeout: 10_000 }),
-    ]).catch(() => undefined);
-  }
-  if (!(await dialog.isVisible().catch(() => false))) return;
-  throw new Error("Role orientation exceeded the bounded step count.");
-}
 
 async function finishPolicyDialog(page, dialog) {
   await dialog
@@ -192,18 +99,9 @@ async function finishPolicyDialog(page, dialog) {
   await dialog.waitFor({ state: "hidden", timeout: 10_000 });
 }
 
-const ASSESSMENT_ANSWERS = new Map([
-  [
-    "What must be recorded before serialized stock can be received?",
-    "Delivery date, batch, and every unit serial",
-  ],
-  [
-    "What should happen when received stock is damaged or unidentified?",
-    "Keep it in controlled quality custody",
-  ],
-]);
 
 async function finishAssessmentDialog(page, dialog) {
+  const title = (await dialog.getByRole('heading').first().innerText()).trim();
   for (let questionIndex = 0; questionIndex < 20; questionIndex += 1) {
     const passed = dialog.getByText("Assessment passed");
     if (await passed.isVisible().catch(() => false)) {
@@ -220,7 +118,8 @@ async function finishAssessmentDialog(page, dialog) {
     const submit = dialog.getByRole("button", { name: "Submit answers" });
     if (await submit.isVisible().catch(() => false)) {
       await submit.click();
-      await passed.waitFor({ state: "visible", timeout: 15_000 });
+      await waitForAssessmentResult(page, title);
+      if (!(await dialog.isVisible())) return;
       continue;
     }
     await dialog.getByRole("button", { name: "Next question" }).click();
@@ -434,6 +333,7 @@ try {
       protectionBypass,
     });
     const page = await context.newPage();
+    page.setDefaultTimeout(15_000);
     const consoleErrors = [];
     page.on("pageerror", (error) => consoleErrors.push(error.message));
     page.on("console", (message) => {
@@ -463,7 +363,7 @@ try {
         status: "failed",
         error: error instanceof Error ? error.message : String(error),
       });
-      console.error(`FAIL ${viewportName} ${persona.role}`);
+      console.error(`FAIL ${viewportName} ${persona.role}: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       await context.close();
     }
