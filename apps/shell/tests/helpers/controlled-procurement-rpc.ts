@@ -1,4 +1,5 @@
 import type { BrowserContext, Route } from '@playwright/test';
+import { createHash } from 'node:crypto';
 
 export const CONTROLLED_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'http://127.0.0.1:54321';
 export const CONTROLLED_ANON_KEY = 'controlled-rpc-anon-key';
@@ -265,6 +266,7 @@ export class ControlledProcurementRpcFixture {
   };
   purchaseOrder: Record<string, unknown> | null = null;
   lifecycle: Record<string, unknown> | null = null;
+  private task9: { certified: boolean; acknowledgement?: { actorId: string; revision: number; reference: string; documentHash: string } } | null = null;
   monitoring: Array<Record<string, unknown>> = [];
   task10: { acceptance: boolean; prepared: boolean; accepted: boolean; released: boolean; closureRequested: boolean; closed: boolean; vendorCurrent: boolean; legalRevision: number; clearanceOpened: boolean } | null = null;
   private readonly varianceAssignments = [
@@ -442,10 +444,27 @@ export class ControlledProcurementRpcFixture {
     };
   }
 
-  prepareTask9PurchaseOrder() {
+  prepareTask9PurchaseOrder({ certified = true }: { certified?: boolean } = {}) {
+    // Mock an already-authorized vendor; this does not certify invitation or learning completion.
+    this.task9 = { certified };
     this.purchaseOrder = { id: 'controlled-po-task-9', po_number: 'PO-CONTROLLED-009', core_vendor_id: 'vendor-1', vendor_name: 'Acme Medical Supplies, Inc.', status: 'issued', total: 1000, lines: [{ id: 'line-1', description: 'Controlled clinical supply', quantity: 1, receivedQuantity: 0 }], created_at: '2026-08-22T00:00:00.000Z', updated_at: '2026-08-22T00:00:00.000Z' };
+    Object.assign(this.purchaseOrder, {
+      expected_date: '2026-09-01',
+      lines: [{ id: 'line-1', description: 'Controlled clinical supply', quantity: 1, receivedQuantity: 0, unitPrice: 1000, uom: 'ea' }],
+      terms: {
+        paymentTerms: 'Net 30 after acceptance', deliveryTerms: 'Deliver to controlled receiving site',
+        shippingTerms: 'Vendor pays freight', scopeOfWork: 'One controlled clinical supply',
+        acceptanceCriteria: 'Quantity and condition verified', validityPeriod: 'Valid through 2026-09-01',
+      },
+    });
     this.lifecycle = { purchaseOrderId: 'controlled-po-task-9', revision: 2, issuedAt: '2026-08-22T00:00:00.000Z', sentAt: '2026-08-22T00:00:00.000Z', acknowledgementDueAt: '2026-08-24T00:00:00.000Z', acknowledgementStatus: 'pending', deliveryNoticeStatus: 'pending', qualityRecoveryStatus: 'payment_hold', closureStatus: 'blocked' };
     this.monitoring = [{ id: 'controlled-po-task-9:weekly', purchaseOrderId: 'controlled-po-task-9', kind: 'quality_recovery', owner: 'Procurement', ageHours: 52, dueAt: '2026-08-24T00:00:00.000Z', nextAction: 'Maintain vendor notice, RMA, credit, and payment hold' }];
+  }
+
+  private task9Document() {
+    const document = { lines: this.purchaseOrder!.lines, total: this.purchaseOrder!.total, expectedDate: this.purchaseOrder!.expected_date, terms: this.purchaseOrder!.terms };
+    // Deterministic mock hash, not an assertion of PostgreSQL JSONB hash equivalence.
+    return { ...document, documentHash: createHash('sha256').update(JSON.stringify(document)).digest('hex') };
   }
 
   prepareTask10PurchaseOrder() {
@@ -704,6 +723,10 @@ export class ControlledProcurementRpcFixture {
 
   private handleRpc(route: Route, actor: Actor, schema: string, name: string, payload: Record<string, unknown>) {
     if (schema === 'core' && name === 'my_capability_snapshot') {
+      if (this.task9 && actor.id === ACTORS.vendor.id) {
+        const roleCapabilities = { ...actor.capabilities, core: [...(actor.capabilities.core ?? []), 'submit_accreditation'] };
+        return response(route, { roleCapabilities, userCapabilities: this.task9.certified ? roleCapabilities : actor.capabilities });
+      }
       return response(route, { roleCapabilities: actor.capabilities, userCapabilities: actor.capabilities });
     }
     if (schema === 'learning' && (name === 'resolve_assignments' || name === 'my_learning_snapshot')) {
@@ -823,10 +846,28 @@ export class ControlledProcurementRpcFixture {
       }
     }
 
-    if (name === 'vendor_purchase_order_acknowledgements') return actor.vendorId === 'vendor-1' && this.purchaseOrder && this.lifecycle ? response(route, [{ id: this.purchaseOrder.id, poNumber: this.purchaseOrder.po_number, vendorName: this.purchaseOrder.vendor_name, lifecycle: this.lifecycle }]) : response(route, []);
+    if (name === 'vendor_purchase_order_acknowledgements') {
+      if (this.task9) return this.purchaseOrder?.status === 'issued' && actor.vendorId === this.purchaseOrder.core_vendor_id && this.lifecycle
+        ? response(route, [{ id: this.purchaseOrder.id, poNumber: this.purchaseOrder.po_number, vendorName: this.purchaseOrder.vendor_name, ...this.task9Document(), lifecycle: this.lifecycle }])
+        : response(route, []);
+      return actor.vendorId === 'vendor-1' && this.purchaseOrder && this.lifecycle ? response(route, [{ id: this.purchaseOrder.id, poNumber: this.purchaseOrder.po_number, vendorName: this.purchaseOrder.vendor_name, lifecycle: this.lifecycle }]) : response(route, []);
+    }
     if (name === 'purchase_order_lifecycle') return this.lifecycle ? response(route, { ...this.lifecycle }) : failure(route, 'PO lifecycle not found', 404);
     if (name === 'review_open_purchase_orders') return actor.id === ACTORS.procurement.id ? response(route, this.monitoring) : failure(route, 'Procurement monitoring authority is required', 403);
     if (name === 'acknowledge_purchase_order') {
+      if (this.task9) {
+        if (schema !== 'procurement' || actor.id !== ACTORS.vendor.id || !this.task9.certified || actor.vendorId !== this.purchaseOrder?.core_vendor_id) return failure(route, 'Certified awarded vendor authority is required', 403);
+        if (!this.lifecycle || this.purchaseOrder?.status !== 'issued' || payload.purchase_order_id !== this.purchaseOrder.id) return failure(route, 'Issued purchase order and lifecycle are required');
+        const documentHash = this.task9Document().documentHash;
+        const reference = String(payload.acknowledgement_reference ?? '').trim();
+        if (payload.document_hash !== documentHash || !reference) return failure(route, 'Current document hash and acknowledgement reference are required');
+        const previous = this.task9.acknowledgement;
+        if (previous && previous.actorId === actor.id && previous.revision === payload.expected_revision && previous.reference === reference && previous.documentHash === documentHash) return response(route, { ...this.lifecycle, replayed: true });
+        if (payload.expected_revision !== this.lifecycle.revision || this.lifecycle.acknowledgementStatus === 'acknowledged') return failure(route, 'Purchase order revision changed; review it again');
+        this.task9.acknowledgement = { actorId: actor.id, revision: Number(payload.expected_revision), reference, documentHash };
+        this.lifecycle = { ...this.lifecycle, revision: Number(this.lifecycle.revision) + 1, acknowledgedAt: '2026-08-23T00:00:00.000Z', acknowledgementStatus: 'acknowledged', acknowledgementReference: reference };
+        return response(route, { ...this.lifecycle, replayed: false });
+      }
       if (actor.id !== ACTORS.vendor.id || payload.purchase_order_id !== this.purchaseOrder?.id || Number(payload.expected_revision) !== Number(this.lifecycle?.revision)) return failure(route, 'Only the awarded vendor may acknowledge this PO', 403);
       this.lifecycle = { ...this.lifecycle!, revision: Number(this.lifecycle!.revision) + 1, acknowledgedAt: '2026-08-23T00:00:00.000Z', acknowledgementStatus: 'acknowledged' };
       return response(route, { ...this.lifecycle, replayed: false });

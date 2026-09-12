@@ -2,6 +2,8 @@
 
 ## September 12 Interface Training
 
+**Vendor practice:** Use an accepted vendor account with completed assigned training, without adding an internal department role. Review an awarded PO, enter a reference, acknowledge the displayed revision, and refresh to check the saved result. Confirm that an empty reference, an unread document, or changed document cannot be acknowledged. Invitation-form completion is not application submission or Legal handoff; record those as separate training steps.
+
 **Invitation delivery:** Show the difference between a saved accreditation case, pending email, failed email, and confirmed sending. For a sending-limit message, contact the administrator before retrying the existing invitation; do not create another case. Once delivery is resolved, test the current invitation link and vendor acceptance. A CI account's synthetic accepted-invitation prerequisite does not prove this journey.
 
 **Multi-role and updated assignments:** Demonstrate an older completed assignment beside pending training, including two assignments of the same version. Start or Resume the pending item and verify the correct attempt opens. Retrying an assessment must keep that selected assignment. Older completion evidence remains unchanged.

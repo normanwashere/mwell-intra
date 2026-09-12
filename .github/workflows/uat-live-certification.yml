@@ -92,6 +92,8 @@ jobs:
             scripts/verify-warehouse-custody-truncate.pglite.test.mjs
       - name: Verify requester-name and return authorization regressions
         run: node --test --test-concurrency=1 scripts/verify-department-request-names.pglite.test.mjs scripts/verify-replacement-delivery.pglite.test.mjs scripts/verify-authority-plan-performance.pglite.test.mjs
+      - name: Verify vendor training authority and recorded journey evidence
+        run: node --test scripts/verify-vendor-certification-scope.pglite.test.mjs scripts/qa/recorded-vendor-evidence.test.mjs scripts/qa/controlled-po-acknowledgement.test.mjs scripts/qa/role-api-performance.test.mjs
       - name: Verify quality summary evidence and caller authorization
         run: node --test scripts/verify-quality-queue-evidence.pglite.test.mjs
       - name: Verify governed receiving delivery-date and quantity contracts

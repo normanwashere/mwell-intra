@@ -2,6 +2,8 @@
 
 ## September 12 Workspace Layout
 
+**Vendor training and PO acknowledgment:** Accept your current invitation and complete the assigned vendor training. No internal department membership is needed. Open **Purchase order acknowledgements**, choose **Read purchase order**, review the document, enter an acknowledgment reference, and select **Acknowledge revision**. The saved status remains after refresh. If the document changes, review the updated revision before retrying. On narrow screens, long case-status labels wrap so the full message remains readable.
+
 **Vendor invitation recovery:** A saved case does not mean the invitation email was sent. If the service reaches its sending limit, ask your administrator to check email delivery before using **Retry invitation email** on the existing case. Do not create a duplicate case. Pending delivery is not confirmed delivery. Vendor access still requires acceptance of the current invitation.
 
 **Starting updated training:** Start, Resume and assessment retries open the assignment selected on the page. An older completed version does not replace the newer training you still need to finish. Previous completion records are kept.

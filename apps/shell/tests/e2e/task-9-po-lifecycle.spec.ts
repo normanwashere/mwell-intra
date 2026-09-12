@@ -1,6 +1,4 @@
 import { expect, test, type Page } from '@playwright/test';
-import { mkdirSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { actor, ControlledProcurementRpcFixture, installControlledRpc } from '../helpers/controlled-procurement-rpc';
 
 async function signIn(page: Page, actorKey: 'vendor' | 'unrelatedVendor' | 'procurement') {
@@ -15,18 +13,33 @@ async function signIn(page: Page, actorKey: 'vendor' | 'unrelatedVendor' | 'proc
 test('Task 9 controlled lifecycle covers vendor acknowledgement, procurement delivery, monitoring, and quality recovery', async ({ browser }, testInfo) => {
   const fixture = new ControlledProcurementRpcFixture();
   fixture.prepareTask9PurchaseOrder();
-  const evidenceDir = resolve(process.cwd(), '../../docs/qa/evidence');
-  mkdirSync(evidenceDir, { recursive: true });
 
   const vendorContext = await browser.newContext({ viewport: testInfo.project.use.viewport });
   await installControlledRpc(vendorContext, fixture, 'vendor');
   const vendor = await vendorContext.newPage();
   await signIn(vendor, 'vendor');
   await expect(vendor.getByRole('main', { name: 'Vendor PO acknowledgements' })).toBeVisible();
+  const acknowledge = vendor.getByRole('button', { name: 'Acknowledge revision 2', exact: true });
+  await expect(acknowledge).toBeDisabled();
   await vendor.getByLabel('Acknowledgement reference for PO-CONTROLLED-009').fill('ACK-CONTROLLED-009');
-  await vendor.getByRole('button', { name: 'Acknowledge purchase order' }).click();
+  await expect(acknowledge).toBeDisabled();
+  await vendor.getByText('Read purchase order', { exact: true }).click();
+  await expect(vendor.getByText('Controlled clinical supply', { exact: true })).toBeVisible();
+  await expect(vendor.getByText('Expected delivery: 2026-09-01', { exact: true })).toBeVisible();
+  await expect(acknowledge).toBeEnabled();
+  await acknowledge.click();
   await expect(vendor.getByText('acknowledged', { exact: true })).toBeVisible();
-  await vendor.screenshot({ path: resolve(evidenceDir, `task-9-vendor-ack-${testInfo.project.name}.png`), fullPage: true });
+  await expect(vendor.getByText('Revision 3', { exact: true })).toBeVisible();
+  const [ackCall] = fixture.callsNamed('acknowledge_purchase_order');
+  expect(fixture.callsNamed('acknowledge_purchase_order')).toHaveLength(1);
+  expect(ackCall).toMatchObject({ actor: actor('vendor').id, schema: 'procurement', payload: {
+    purchase_order_id: 'controlled-po-task-9', expected_revision: 2,
+    acknowledgement_reference: 'ACK-CONTROLLED-009', document_hash: expect.stringMatching(/^[a-f0-9]{64}$/),
+  } });
+  await vendor.reload();
+  await expect(vendor.getByText('acknowledged', { exact: true })).toBeVisible();
+  await expect(vendor.getByRole('button', { name: /^Acknowledge revision/ })).toHaveCount(0);
+  await vendor.screenshot({ path: testInfo.outputPath(`task-9-controlled-vendor-ack-${testInfo.project.name}.png`), fullPage: true });
   await vendorContext.close();
 
   const unrelatedContext = await browser.newContext({ viewport: testInfo.project.use.viewport });
@@ -45,6 +58,6 @@ test('Task 9 controlled lifecycle covers vendor acknowledgement, procurement del
   await procurement.getByRole('button', { name: 'Record delivery notice' }).click();
   await expect(procurement.getByText('Delivery notice recorded')).toBeVisible();
   await expect(procurement.getByText('Maintain vendor notice, RMA, credit, and payment hold')).toBeVisible();
-  await procurement.screenshot({ path: resolve(evidenceDir, `task-9-quality-recovery-${testInfo.project.name}.png`), fullPage: true });
+  await procurement.screenshot({ path: testInfo.outputPath(`task-9-controlled-quality-recovery-${testInfo.project.name}.png`), fullPage: true });
   await procurementContext.close();
 });

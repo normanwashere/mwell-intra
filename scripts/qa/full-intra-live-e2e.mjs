@@ -14,6 +14,7 @@ import {
   evaluateScenarioCoverage,
   scenarioCoverageFailures,
   workflowScenarioEvidence,
+  recordedWorkflowScenarioEvidence,
 } from "./live-e2e-scenarios.mjs";
 import {
   createAuditDatabaseClient,
@@ -1266,17 +1267,37 @@ async function auditKeyboardAndHotspots(page) {
     const recheckReachability = async (element, initial) => {
       const windowScroll = { left: scrollX, top: scrollY };
       const containers = scrollContainers(element);
-      element.scrollIntoView({ block: "center", inline: "center" });
-      await nextPaint();
-      await nextPaint();
-      const recheck = probe(element);
-      for (const container of containers) {
-        container.element.scrollTo(container.left, container.top);
+      const attempts = [];
+      let recheck;
+      try {
+        // Async home sections can move the target after scrolling but before
+        // hit testing. Re-center only on observed movement, never waive a hit.
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          element.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
+          const beforePaint = element.getBoundingClientRect().toJSON();
+          await nextPaint();
+          await nextPaint();
+          recheck = probe(element);
+          const layoutShifted = ["left", "top", "width", "height"].some(
+            (key) => Math.abs(beforePaint[key] - recheck.diagnostics.rect[key]) > 0.5,
+          );
+          attempts.push({ beforePaint, ...recheck.diagnostics, layoutShifted });
+          if (!layoutShifted) break;
+          if (attempt === 2) {
+            recheck.reachable = false;
+            recheck.diagnostics.reason = "unstable-layout";
+          }
+        }
+      } finally {
+        for (const container of containers) {
+          container.element.scrollTo({ left: container.left, top: container.top, behavior: "instant" });
+        }
+        scrollTo({ ...windowScroll, behavior: "instant" });
+        await nextPaint();
       }
-      scrollTo(windowScroll.left, windowScroll.top);
-      await nextPaint();
       return {
         ...recheck,
+        diagnostics: { ...recheck.diagnostics, attempts },
         initialBlocker: initial.blocker,
         recheckedAfterScroll: true,
       };
@@ -8415,7 +8436,7 @@ async function runWorkflow(browser, viewport, user, workflow) {
       interactionProblems,
       interactionAudit,
       intermediateEvidence,
-      scenarioEvidence: workflowScenarioEvidence(workflow.name),
+      scenarioEvidence: recordedWorkflowScenarioEvidence(workflow.name, result),
       evidenceScreenshot,
       evidenceScreenshots,
       consoleErrors: Array.from(new Set(consoleErrors)).slice(0, 12),

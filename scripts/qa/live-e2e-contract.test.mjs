@@ -966,14 +966,14 @@ test("interaction reachability rechecks blocked controls without hiding real fix
   assert.match(source, /element\.closest\("label"\)/);
   assert.match(
     source,
-    /element\.scrollIntoView\(\{ block: "center", inline: "center" \}\)/,
+    /element\.scrollIntoView\(\{ block: "center", inline: "center", behavior: "instant" \}\)/,
   );
   assert.match(source, /await nextPaint\(\);\s*await nextPaint\(\);/);
   assert.match(
     source,
-    /container\.element\.scrollTo\(container\.left, container\.top\)/,
+    /container\.element\.scrollTo\(\{ left: container\.left, top: container\.top, behavior: "instant" \}\)/,
   );
-  assert.match(source, /scrollTo\(windowScroll\.left, windowScroll\.top\)/);
+  assert.match(source, /scrollTo\(\{ \.\.\.windowScroll, behavior: "instant" \}\)/);
   assert.match(source, /recheckedAfterScroll/);
   assert.doesNotMatch(source, /position\s*===?\s*["']fixed["']/);
 });

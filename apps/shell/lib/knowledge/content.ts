@@ -466,7 +466,7 @@ const procedureArticles: KnowledgeArticle[] = [
       ],
       [
         "Vendor activates account",
-        "Use the secure invitation/reset link and enter the Vendor Portal.",
+        "Use the secure invitation/reset link, accept the current invitation, and complete your assigned vendor training. You do not need an internal department role. For an awarded purchase order, open Read purchase order, review the current revision, enter your acknowledgement reference, then acknowledge that revision. Refresh to confirm the saved status; do not repeat the action to fix a display issue.",
       ],
       [
         "Complete application",

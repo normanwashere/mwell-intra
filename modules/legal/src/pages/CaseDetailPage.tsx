@@ -498,7 +498,11 @@ export function CaseDetailPage() {
               Back to cases
             </a>
           }
-          status={<Badge tone={CASE_STATUS_TONE[effectiveStatus]}>{statusLabel}</Badge>}
+          status={
+            <span className="min-w-0 max-w-full [&>.chip]:max-w-full [&>.chip]:whitespace-normal [&>.chip]:[overflow-wrap:anywhere]">
+              <Badge tone={CASE_STATUS_TONE[effectiveStatus]}>{statusLabel}</Badge>
+            </span>
+          }
         />
       </div>
 

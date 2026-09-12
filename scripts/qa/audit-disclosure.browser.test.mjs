@@ -139,6 +139,92 @@ test("reachable long-page input still passes and scroll recheck restores nested 
   }, 1280);
 });
 
+// Reproduce task recommendations arriving between scrollIntoView and the
+// hotspot helper's paint wait, without relying on a wall-clock network delay.
+async function installLateHomeSection(page, { overlay = false, continuous = false } = {}) {
+  await page.evaluate(({ overlay, continuous }) => {
+    const target = document.querySelector("#home-target");
+    const nativeScroll = target.scrollIntoView.bind(target);
+    window.homeScrollAttempts = 0;
+    target.scrollIntoView = (options) => {
+      nativeScroll(options);
+      window.homeScrollAttempts += 1;
+      if (continuous || window.homeScrollAttempts === 1) {
+        requestAnimationFrame(() => {
+          const section = document.querySelector("#late-tasks");
+          section.style.height = `${section.offsetHeight + 704}px`;
+          if (overlay) {
+            const blocker = document.createElement("div");
+            blocker.id = "late-overlay";
+            blocker.setAttribute("aria-label", "Blocking overlay");
+            blocker.style.cssText = "position:fixed;inset:0;z-index:9999;background:white";
+            document.body.append(blocker);
+          }
+        });
+      }
+    };
+  }, { overlay, continuous });
+}
+
+const lateHomeFixture = `<style>html{overflow-anchor:none}#home-target{display:block;width:300px;height:101px}</style><button>Start</button><div style="height:1000px"></div><div id="late-tasks"></div><a id="home-target" href="#home">Warehouse inventory and receiving</a><div style="height:1000px"></div>`;
+
+test("mobile home hotspot is re-centered after a 704px late task-section insertion", async () => {
+  await fixture(lateHomeFixture, async page => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await installLateHomeSection(page);
+    const result = await helpers.auditKeyboardAndHotspots(page);
+    assert.deepEqual(result.interceptedTargets, []);
+    assert.equal(result.focusAfterTab.tag, "button");
+    assert.equal(result.focusAfterTab.label, "Start");
+    assert.equal(result.focusEscapedDialog, false);
+    assert.equal(await page.evaluate(() => window.homeScrollAttempts), 2);
+    assert.equal(await page.evaluate(() => scrollY), 0);
+    await page.locator("#home-target").click();
+    assert.equal(await page.evaluate(() => location.hash), "#home");
+  }, 390);
+});
+
+test("late layout insertion cannot hide a real overlay or waive a 43px mobile target", async () => {
+  await fixture(lateHomeFixture, async page => {
+    await page.locator("#home-target").evaluate(element => { element.style.height = "43px"; });
+    await installLateHomeSection(page, { overlay: true });
+    const result = await helpers.auditKeyboardAndHotspots(page);
+    const failure = result.interceptedTargets.find(item => item.targetIdentity.id === "home-target");
+    assert.ok(failure);
+    assert.equal(failure.blocker, "Blocking overlay");
+    assert.equal(failure.recheckProbe.reason, "blocked");
+    assert.ok(failure.recheckProbe.samples.every(sample => sample.hit.id === "late-overlay"));
+    assert.ok(result.undersizedTargets.some(item => item.height === 43));
+    assert.equal(await page.evaluate(() => scrollY), 0);
+  }, 390);
+});
+
+test("continuously shifting mobile targets fail within three scroll attempts", async () => {
+  await fixture(lateHomeFixture, async page => {
+    await installLateHomeSection(page, { continuous: true });
+    const result = await helpers.auditKeyboardAndHotspots(page);
+    const failure = result.interceptedTargets.find(item => item.targetIdentity.id === "home-target");
+    assert.ok(failure);
+    assert.equal(failure.recheckProbe.reason, "unstable-layout");
+    assert.equal(failure.recheckProbe.attempts.length, 3);
+    assert.equal(await page.evaluate(() => window.homeScrollAttempts), 3);
+    assert.equal(await page.evaluate(() => scrollY), 0);
+  }, 390);
+});
+
+test("hotspot scroll and restoration are instant even with smooth nested scrolling", async () => {
+  await fixture(`<style>html{scroll-behavior:smooth}</style><button>Start</button><div style="height:1000px"></div><div id="scroller" style="height:200px;overflow:auto;scroll-behavior:smooth"><div style="height:2000px"></div><button id="nested-target">Inspect receipt</button></div><div style="height:1000px"></div>`, async page => {
+    const result = await helpers.auditKeyboardAndHotspots(page);
+    assert.deepEqual(result.interceptedTargets, []);
+    assert.ok(result.recheckedTargetCount > 0);
+    assert.equal(await page.locator("#scroller").evaluate(element => element.scrollTop), 0);
+    assert.equal(await page.evaluate(() => scrollY), 0);
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.equal(await page.locator("#scroller").evaluate(element => element.scrollTop), 0);
+    assert.equal(await page.evaluate(() => scrollY), 0);
+  }, 390);
+});
+
 test("semantic route readiness waits for delayed quality hydration, not merely its heading", async () => {
   await fixture(`<p id="loading">Loading quality controls...</p>`, async page => {
     const initial = await helpers.routeReadinessSnapshot(page);

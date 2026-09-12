@@ -618,6 +618,26 @@ export function workflowScenarioEvidence(workflow) {
   return (evidenceByWorkflow.get(workflow) ?? []).map((item) => ({ ...item }));
 }
 
+export function recordedWorkflowScenarioEvidence(workflow, result) {
+  if (result?.ok === false || result?.interactionSurfaceOnly) return [];
+  const registered = workflowScenarioEvidence(workflow);
+  if (workflow !== "legal vendor invite") return registered;
+  // Creating an invitation is not an application submission or a Legal handoff.
+  const savedCase = result?.checkpoint?.matched === 1;
+  const savedInvite = result?.inviteCheckpoint?.matched === 1;
+  if (!savedCase || !savedInvite) return [];
+  const accepted = result?.acceptanceCheckpoint?.matched === 1;
+  return registered.map(item => ({
+    ...item,
+    actors: accepted
+      ? ["legal_compliance_lead", "vendor_representative"]
+      : ["legal_compliance_lead"],
+    cases: accepted && result?.replayStatus === 409
+      ? ["authorized", "duplicate"] : ["authorized"],
+    checkpoints: ["invite-created", "case-visible"],
+  }));
+}
+
 function missing(required, covered) {
   const values = new Set(covered);
   return required.filter((item) => !values.has(item));

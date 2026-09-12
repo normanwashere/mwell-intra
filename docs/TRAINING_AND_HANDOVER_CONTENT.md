@@ -2,6 +2,8 @@
 
 ## September 12 Layout Handover
 
+**Vendor and mobile follow-up:** Vendor training completion does not require an internal department role. Demonstrate accepted invitation, assigned learning, PO document review, reference entry, revision-bound acknowledgment and refresh as separate steps. Keep email delivery deferred until actually tested. For QA handover, retain before/after 320px status-label screenshots and geometry-aware hotspot regressions. Form-only vendor checks must never count as application submission or Legal handoff.
+
 **Certification #174 follow-up:** The run failed despite passing all 11 fresh-account training checks and 17 governed scenarios per viewport. Its isolated vendors lacked accepted-invitation prerequisites; receiving tests referenced photos that were never uploaded. These are test-fixture defects, not reasons to weaken authorization or image checks. Synthetic route prerequisites do not certify vendor invitations. Sending-limit failures need an approved SMTP service/setup owner; use the existing case after configuration is resolved. Pending delivery must not be shown as sent. Keep coverage failures visible until the complete live rerun passes.
 
 **Assignment-selection regression:** Independent review identified an older ID-only Resume lookup that could open completed work instead of a pending assignment. Onboarding launchers and assessment retries now retain the exact selected assignment and version. Verify same-version multi-role assignments, updated versions, retry binding, and rejection of an assignment outside the selected requirement. No old completion is erased.
