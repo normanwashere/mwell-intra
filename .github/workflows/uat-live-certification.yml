@@ -26,7 +26,7 @@ jobs:
   prepare:
     name: Verify contracts and reconcile UAT personas
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 60
     environment: uat
     outputs:
       audit_date: ${{ steps.audit_identity.outputs.audit_date }}
@@ -112,6 +112,8 @@ jobs:
         run: node --test scripts/qa/uat-ci-resilience.test.mjs
       - name: Verify UAT persona provisioner contract
         run: pnpm test:provision:uat
+      - name: Verify isolated audit identity contracts
+        run: node --test scripts/qa/uat-audit-identities.test.mjs
       - name: Reconcile guarded UAT personas
         run: pnpm provision:test:uat
       - name: Verify active UAT procurement policy baseline
@@ -138,6 +140,41 @@ jobs:
           AUDIT_OUTPUT_PATH: test-results/onboarding-mobile-390.json
           AUDIT_EVIDENCE_DIR: test-results/onboarding-evidence
         run: pnpm certify:onboarding-live
+      - name: Reconcile isolated critical-check identities
+        env:
+          AUDIT_IDENTITY_SCOPE: critical
+        run: pnpm provision:test:uat
+      - name: Complete isolated critical-check orientations
+        env:
+          AUDIT_IDENTITY_SCOPE: critical
+          AUDIT_VIEWPORT: desktop-1440
+          AUDIT_ORIENTATION_MUTATIONS: "true"
+          AUDIT_MUTATIONS: "true"
+          AUDIT_OUTPUT_PATH: test-results/critical-onboarding.json
+          AUDIT_EVIDENCE_DIR: test-results/critical-evidence
+        run: pnpm certify:onboarding-live
+      - name: Critical login, workspace, knowledge and access-denial gate
+        env:
+          AUDIT_IDENTITY_SCOPE: critical
+          AUDIT_PHASE: critical
+          AUDIT_VIEWPORT: desktop-1440
+          AUDIT_MUTATIONS: "false"
+          POLICY_ALLOW_TEST_MUTATIONS: "false"
+          SUPABASE_SERVICE_ROLE_KEY: ""
+          AUDIT_OUTPUT_PATH: test-results/critical-routes.json
+          AUDIT_EVIDENCE_DIR: test-results/critical-evidence
+        run: pnpm test:intra-live
+      - name: Upload critical gate evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: uat-critical-${{ github.run_number }}
+          path: |
+            test-results/critical-onboarding.json
+            test-results/critical-routes.json
+            test-results/critical-evidence
+          if-no-files-found: error
+          retention-days: 30
       - name: Upload deployment readiness evidence
         if: always()
         uses: actions/upload-artifact@v6
@@ -164,13 +201,13 @@ jobs:
     name: Route and visual audit (${{ matrix.viewport }})
     needs: prepare
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 55
     environment: uat
     strategy:
       fail-fast: false
-      # UAT test identities enforce a single active session. Running viewport
-      # shards concurrently invalidates another shard's browser session.
-      max-parallel: 1
+      # Each viewport owns isolated CI identities; never share a browser login.
+      # Bound read concurrency while transaction/cleanup shards remain serial.
+      max-parallel: 3
       matrix:
         include:
           - viewport: desktop-1440
@@ -190,6 +227,7 @@ jobs:
       AUDIT_BASE_URL: https://mwell-intra-uat.vercel.app
       AUDIT_PHASE: routes
       AUDIT_VIEWPORT: ${{ matrix.viewport }}
+      AUDIT_IDENTITY_SCOPE: ${{ matrix.viewport }}
       AUDIT_MUTATIONS: "false"
       AUDIT_OUTPUT_PATH: test-results/routes-${{ matrix.viewport }}.json
       NEXT_PUBLIC_SUPABASE_URL: https://kkoitlvydytdhlpxhuah.supabase.co
@@ -213,6 +251,20 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Install Chromium
         run: pnpm --filter @intra/shell exec playwright install --with-deps chromium
+      - name: Reconcile only this viewport's isolated identities
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.UAT_SUPABASE_SERVICE_ROLE_KEY }}
+          POLICY_ALLOW_TEST_MUTATIONS: "true"
+        run: pnpm provision:test:uat
+      - name: Complete actual onboarding for isolated viewport identities
+        env:
+          AUDIT_VIEWPORT: desktop-1440
+          AUDIT_ORIENTATION_MUTATIONS: "true"
+          AUDIT_MUTATIONS: "true"
+          POLICY_ALLOW_TEST_MUTATIONS: "true"
+          AUDIT_OUTPUT_PATH: test-results/route-onboarding-${{ matrix.viewport }}.json
+          AUDIT_EVIDENCE_DIR: test-results/route-onboarding-evidence/${{ matrix.viewport }}
+        run: pnpm certify:onboarding-live
       - name: Run guarded route and visual audit
         shell: bash
         run: |
@@ -228,13 +280,15 @@ jobs:
           name: uat-routes-${{ matrix.viewport }}-${{ github.run_number }}
           path: |
             test-results/routes-${{ matrix.viewport }}.json
+            test-results/route-onboarding-${{ matrix.viewport }}.json
+            test-results/route-onboarding-evidence
             test-results/evidence
           if-no-files-found: error
           retention-days: 30
 
   transactions:
     name: Governed transactions (${{ matrix.viewport }})
-    if: ${{ always() && needs.prepare.result == 'success' }}
+    if: ${{ !cancelled() && needs.prepare.result == 'success' }}
     needs: [prepare, routes]
     runs-on: ubuntu-latest
     timeout-minutes: 90

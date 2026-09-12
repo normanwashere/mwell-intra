@@ -2,6 +2,12 @@
 
 ## September 12 Layout Handover
 
+**Certification isolation:** Route/visual jobs use separate `intra.ci.<viewport>.*` UAT accounts with the same eleven persona assignments and department/vendor scope. They complete the real automated onboarding flow, not fabricated training completions. Reconciliation is restricted to each allowlisted namespace and leaves testers and other shards alone. Up to three read-only viewport jobs run together. A separate critical identity set checks login, workspace, knowledge and access denial before the full matrix. Transactions and independent cleanup remain sequential; smoke success is not full certification. First-run account/onboarding setup adds time. These tests do not replace a real-user pilot or certify maximum capacity.
+
+**External evidence handling:** Legacy HTTPS references are explicit external links, not automatic image requests. Storage paths, inline images and bundled app photos retain preview. No saved evidence or inspection decision is changed. Verify a mixed photo/link record on desktop and mobile and retain the original link in the audit trail.
+
+**Cancellation and data coverage:** Cancellation must not start another transaction shard; independent cleanup still runs for the known run scope. Fresh CI users may have empty personal queues. Canonical transaction actors retain ownership-specific write/readback and cross-user handoff coverage; the route smoke gate is not a replacement for those scenarios.
+
 **Task loading and CI:** Tasks reuse the RLS-protected inspection-summary view. Load after warehouse bootstrap; provider callback changes alone must not restart failed reads. Verify explicit retry and task source links. CI runs one workspace test task at a time with at most two Vitest workers, retaining existing timeouts and assertions to avoid nested worker contention.
 
 **Quality evidence follow-up:** Apply the read-only inspection-summary migration before deploying its client. Keep the original inspection table and photos; no evidence backfill or deletion is needed. Demonstrate Completed photos appearing on scroll, exact-photo preview and **Retry photos**. Test failed reads and user switches without repeating a business action. Confirm the deployed KB function uses Tokyo and retain authenticated desktop/mobile before-and-after timings. Rollback can restore the prior app while leaving the additive view in place. Keep the standalone handbook self-contained; do not direct its readers to an external in-app article to finish an operating procedure.

@@ -92,8 +92,24 @@ describe('EvidenceGallery', () => {
     expect(screen.queryByRole('img', { name: 'Evidence' })).not.toBeInTheDocument();
   });
 
-  it('shows a visible failure when safe external evidence cannot load', async () => {
-    render(<EvidenceGallery urls={['https://evidence.example/missing.jpg']} size="thumb" />);
+  it.each(['thumb', 'grid'] as const)('keeps external %s evidence as an explicit link without loading third-party images', async size => {
+    render(<EvidenceGallery urls={['https://deliverylink.com', 'https://deliverylink.com/OTG-L.png']} size={size} />);
+    const links = await screen.findAllByRole('link', { name: /open external evidence/i });
+    expect(links[0]).toHaveAttribute('href', 'https://deliverylink.com');
+    expect(links[0]).toHaveAttribute('target', '_blank');
+    expect(links[0]).toHaveAttribute('rel', 'noopener noreferrer');
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /view.*evidence photo/i })).not.toBeInTheDocument();
+  });
+
+  it('keeps photos accessible in a mixed external-link gallery', async () => {
+    render(<EvidenceGallery urls={['https://deliverylink.com', 'data:image/png;base64,eA==']} />);
+    expect(await screen.findByRole('link', { name: /open external evidence/i })).toBeVisible();
+    expect(await screen.findByRole('img', { name: 'Evidence' })).toHaveAttribute('src', 'data:image/png;base64,eA==');
+  });
+
+  it('shows a visible failure when an app evidence image cannot load', async () => {
+    render(<EvidenceGallery urls={['/uat-evidence/missing.jpg']} size="thumb" />);
 
     const image = await screen.findByRole('img', { name: 'Evidence' });
     fireEvent.error(image);

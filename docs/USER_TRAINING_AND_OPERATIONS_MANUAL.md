@@ -2,6 +2,8 @@
 
 ## September 12 Interface Training
 
+**External evidence:** Demonstrate an uploaded photo and a saved website link. Photos use the preview; **External evidence** opens the original website in a new tab without downloading it during queue loading. An external link is not proof that a photo was uploaded or verified. Report an incorrect link with the receipt reference; do not repeat the stock transaction.
+
 **Task queue recovery:** Demonstrate a failed Tasks read and **Retry task queue**. A background provider update must not replace an error with **No due tasks**. Task labels no longer download photo payloads; open the linked Quality source when evidence review is required.
 
 **Inspection photos:** The complete Quality queue loads first. Completed-inspection photos load when visible; click the thumbnail to see the original evidence. Use **Retry photos** for a failed image read. Do not submit another inspection or upload a duplicate to get past a loading error. Queue retry and photo retry are separate, read-only recovery actions.

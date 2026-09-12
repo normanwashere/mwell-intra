@@ -231,7 +231,27 @@ test("prepare runs only reviewed Sep05 SQL suites before persona provisioning", 
   ]);
   assert.ok(prepare.indexOf(stepName) > prepare.indexOf("Install locked dependencies"));
   assert.ok(prepare.indexOf(stepName) < prepare.indexOf("Reconcile guarded UAT personas"));
-  assert.match(prepare, /timeout-minutes: 40\b/);
+  assert.match(prepare, /timeout-minutes: 60\b/);
+});
+
+test('route concurrency is isolated and the full strict audit follows the critical gate', async () => {
+  const workflow = await readFile(new URL('../../.github/workflows/uat-live-certification.yml', import.meta.url), 'utf8');
+  const routes = workflow.split('\n  routes:')[1].split('\n  transactions:')[0];
+  assert.match(routes, /needs: prepare/);
+  assert.match(routes, /max-parallel: 3/);
+  assert.match(routes, /AUDIT_IDENTITY_SCOPE: \$\{\{ matrix.viewport \}\}/);
+  assert.match(routes, /AUDIT_PHASE: routes/);
+  assert.match(routes, /Reconcile only this viewport's isolated identities/);
+  assert.match(routes, /Complete actual onboarding for isolated viewport identities/);
+  assert.doesNotMatch(routes.split('    steps:')[0], /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(workflow.split('\n  transactions:')[1].split('\n  cleanup:')[0], /max-parallel: 1/);
+  assert.match(workflow.split('\n  transactions:')[1].split('\n  cleanup:')[0], /if: \$\{\{ !cancelled\(\) && needs.prepare.result == 'success' \}\}/);
+  assert.match(workflow.split('\n  cleanup:')[1].split('\n  bundle:')[0], /if: \$\{\{ always\(\) && needs.prepare.result == 'success' \}\}/);
+  const prepare = workflow.split('\n  prepare:')[1].split('\n  routes:')[0];
+  assert.match(prepare, /AUDIT_PHASE: critical/);
+  assert.match(prepare, /SUPABASE_SERVICE_ROLE_KEY: ""/);
+  assert.match(prepare, /critical-routes.json/);
+  assert.doesNotMatch(workflow, /continue-on-error/);
 });
 
 test("controlled vendor cleanup uses the same exact run mailbox and refuses a shared account", () => {

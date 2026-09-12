@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { CURRENT_LIVE_ROLES } from "./live-e2e-scenarios.mjs";
+import { auditPersonas } from './uat-audit-identities.mjs';
 import {
   buildPersonaPasswords,
   getPersonaSecurityClass,
@@ -57,17 +58,21 @@ function jsonResponse(body, status = 200) {
 function createProvisioningFetch({
   wrongFinalRoles = false,
   includeObsolete = false,
+  personas = focusedPersonas,
+  unrelatedEmails = [],
+  identityScope = '',
 } = {}) {
   const calls = [];
   const synced = new Set();
   const passwords = new Map();
   const metadata = new Map();
   const users = new Map(
-    focusedPersonas.map((persona, index) => [
+    personas.map((persona, index) => [
       `user-${index + 1}`,
       { id: `user-${index + 1}`, email: persona.email },
     ]),
   );
+  unrelatedEmails.forEach((email, index) => users.set(`unrelated-${index}`, { id: `unrelated-${index}`, email }));
   if (includeObsolete) {
     users.set("obsolete-user", {
       id: "obsolete-user",
@@ -77,7 +82,7 @@ function createProvisioningFetch({
   const personaById = new Map(
     [...users.entries()].map(([id, user]) => [
       id,
-      focusedPersonas.find((persona) => persona.email === user.email),
+      personas.find((persona) => persona.email === user.email),
     ]),
   );
   const userIdByEmail = new Map(
@@ -224,7 +229,7 @@ function createProvisioningFetch({
         {
           id,
           email: persona.email,
-          full_name: `UAT ${persona.role
+          full_name: `${identityScope ? `CI ${identityScope}` : 'UAT'} ${persona.role
             .split("_")
             .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
             .join(" ")}`,
@@ -251,6 +256,37 @@ function createProvisioningFetch({
 
   return { fetchImpl, calls, passwords };
 }
+
+test('canonical reconciliation never changes CI accounts from any viewport', async () => {
+  const mock = createProvisioningFetch({ includeObsolete: true, unrelatedEmails: auditPersonas('desktop-1440').map(p => p.email) });
+  const result = await provisionUatIntraUsers({ ...valid, personas: focusedPersonas, fetchImpl: mock.fetchImpl, log: () => {} });
+  assert.deepEqual(result.retired, ['intra.test.obsolete@mwell.com.ph']);
+  assert.equal(mock.calls.some(call => call.method !== 'GET' && call.endpoint.includes('unrelated-')), false);
+});
+
+test('viewport reconciliation never changes canonical testers or another viewport', async () => {
+  const identityScope = 'desktop-1440';
+  const personas = auditPersonas(identityScope).filter(p => p.role === 'platform_administrator');
+  const mock = createProvisioningFetch({ personas, identityScope, unrelatedEmails: [
+    ...CURRENT_LIVE_ROLES.map(p => p.email), ...auditPersonas('mobile-390').map(p => p.email),
+  ] });
+  const result = await provisionUatIntraUsers({ ...valid, personas, identityScope, fetchImpl: mock.fetchImpl, log: () => {} });
+  assert.equal(result.provisioned.length, 1);
+  assert.deepEqual(result.retired, []);
+  assert.equal(mock.calls.some(call => call.method !== 'GET' && call.endpoint.includes('unrelated-')), false);
+});
+
+test('mismatched or escalated isolated personas fail before any network call', async () => {
+  const fetchImpl = () => { throw new Error('Network must not be called'); };
+  const persona = auditPersonas('mobile-390')[0];
+  for (const bad of [
+    { ...persona, email: CURRENT_LIVE_ROLES[0].email },
+    { ...persona, departmentCode: 'finance' },
+    { ...persona, assignments: { core: ['staff'] } },
+  ]) {
+    await assert.rejects(provisionUatIntraUsers({ ...valid, identityScope: 'mobile-390', personas: [bad], fetchImpl }), /outside|exactly/);
+  }
+});
 
 test("covers the implemented workflow role families with eleven lean personas", () => {
   assert.equal(CURRENT_LIVE_ROLES.length, 11);

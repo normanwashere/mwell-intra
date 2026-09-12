@@ -2,6 +2,8 @@
 
 ## September 12 Workspace Layout
 
+**External evidence links:** Older receipts may contain a delivery website link instead of an uploaded photo. Choose **External evidence** to open that address in a new tab. The app does not verify that an external website is available or that its content is a valid inspection photo. Uploaded photos still open in the photo viewer. If the external link is wrong or unavailable, give the Warehouse lead the receipt reference and ask for the correct supporting document; do not repeat receiving or alter a Quality decision to fix the link.
+
 **Task queue recovery:** A failed Warehouse Tasks read is not an empty queue. Choose **Retry task queue** after checking your connection. Task labels load without downloading inspection photos; use the task's source link to review the evidence in Quality Control. No task completion, inspection or stock step changes.
 
 Quality Control keeps the complete inspection queue available without downloading every photo at startup. On **Completed**, photos load as their rows come into view. Select a thumbnail to review the original evidence. **Retry photos** retries an image read, not an inspection or stock decision. A photo loading error does not mean the inspection has no evidence. All inspection, hold and independent-review steps remain unchanged.

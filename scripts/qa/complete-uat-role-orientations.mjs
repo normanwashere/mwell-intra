@@ -6,8 +6,11 @@ import {
   installScopedProtectionBypass,
   verifyDeployedTargetIdentity,
 } from "../lib/target-environment.mjs";
-import { CURRENT_LIVE_ROLES } from "./live-e2e-scenarios.mjs";
+import { auditPersonas, assertAuditIdentityScope } from './uat-audit-identities.mjs';
 import { resolveSharedUatPassword } from "./provision-uat-intra-test-users.mjs";
+
+const identityScope = process.env.AUDIT_IDENTITY_SCOPE ?? '';
+assertAuditIdentityScope(identityScope, process.env.APP_ENV, 'onboarding');
 
 const require = createRequire(path.resolve("apps/shell/package.json"));
 const { chromium } = require("@playwright/test");
@@ -416,7 +419,7 @@ await mkdir(evidenceDir, { recursive: true });
 const browser = await chromium.launch({ headless: true });
 const results = [];
 try {
-  for (const persona of CURRENT_LIVE_ROLES.filter(
+  for (const persona of auditPersonas(identityScope).filter(
     (item) => !roleFilter || item.role === roleFilter,
   )) {
     const context = await browser.newContext({
@@ -477,6 +480,7 @@ await writeFile(
       generatedAt: new Date().toISOString(),
       baseUrl,
       viewport: viewportName,
+      identityScope: identityScope || 'shared-testers',
       mutations: mutate,
       results,
     },

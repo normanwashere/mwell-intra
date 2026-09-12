@@ -430,7 +430,8 @@ test("supports bounded route and transaction certification phases", async () => 
   );
   assert.match(source, /AUDIT_PHASE/);
   assert.match(source, /runRouteAudit = auditPhase !== "transactions"/);
-  assert.match(source, /runTransactionAudit = auditPhase !== "routes"/);
+  assert.match(source, /runTransactionAudit = \['all', 'transactions'\]\.includes\(auditPhase\)/);
+  assert.match(source, /assertAuditIdentityScope\(identityScope, process.env.APP_ENV, auditPhase\)/);
   assert.match(source, /mutatingPhase = allowMutations && runTransactionAudit/);
   assert.match(source, /AUDIT_OUTPUT_PATH/);
   assert.match(source, /phase: auditPhase/);
@@ -449,12 +450,14 @@ test("shards UAT certification into bounded least-privilege jobs", async () => {
   assert.match(workflow, /AUDIT_PHASE: routes/);
   assert.match(workflow, /AUDIT_PHASE: transactions/);
   assert.match(workflow, /AUDIT_OUTPUT_PATH/);
-  assert.match(workflow, /routes:[\s\S]*?strategy:[\s\S]*?max-parallel: 1/);
+  const routeJob = workflow.split('\n  routes:')[1].split('\n  transactions:')[0];
+  assert.match(routeJob, /max-parallel: 3/);
+  assert.match(routeJob, /AUDIT_IDENTITY_SCOPE: \$\{\{ matrix.viewport \}\}/);
   assert.match(
     workflow,
     /transactions:[\s\S]*?strategy:[\s\S]*?max-parallel: 1/,
   );
-  assert.doesNotMatch(workflow, /max-parallel:\s*[2-9]/);
+  assert.doesNotMatch(workflow.split('\n  transactions:')[1], /max-parallel:\s*[2-9]/);
   assert.match(workflow, /pnpm provision:test:uat/);
   assert.match(workflow, /secrets\.UAT_SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(
@@ -546,7 +549,8 @@ test("certifies mandatory first-login onboarding before module route and transac
   assert.match(workflow, /AUDIT_ORIENTATION_MUTATIONS: "true"/);
   assert.match(workflow, /AUDIT_ORIENTATION_MUTATIONS: "false"/);
   assert.match(workflow, /pnpm certify:onboarding-live/g);
-  assert.match(source, /CURRENT_LIVE_ROLES/);
+  assert.match(source, /auditPersonas\(identityScope\)\.filter/);
+  assert.match(source, /assertAuditIdentityScope/);
   assert.match(source, /visibleEnabledOrientationLauncher/);
   assert.match(source, /Start \.\+ orientation/);
   assert.match(source, /Finish review/);
@@ -624,8 +628,9 @@ test("route crawl enforces an exact role-to-route authorization matrix", async (
   );
   assert.match(
     source,
-    /const routeQueue = routesFor\(user, discoveredRoutes\)/,
+    /const fullRoutes = routesFor\(user, discoveredRoutes\)/,
   );
+  assert.match(source, /const routeQueue = auditPhase === 'critical' \? criticalRoutes\(fullRoutes\) : fullRoutes/);
   assert.match(source, /while \(routeQueue\.length\)/);
   assert.match(
     source,

@@ -8,6 +8,7 @@ import {
   projectRefFromSupabaseUrl,
 } from "../lib/target-environment.mjs";
 import { CURRENT_LIVE_ROLES } from "./live-e2e-scenarios.mjs";
+import { auditIdentityPrefix, auditPersonas, assertAuditIdentityScope } from './uat-audit-identities.mjs';
 
 const REQUIRED_PASSWORD_PATTERN =
   /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{16,}$/;
@@ -413,6 +414,7 @@ export async function provisionUatIntraUsers({
   password,
   personaPasswords,
   personas = CURRENT_LIVE_ROLES,
+  identityScope = '',
   appEnv,
   expectedProjectRef,
   productionProjectRef,
@@ -421,6 +423,22 @@ export async function provisionUatIntraUsers({
   fetchImpl = fetch,
   log = console.log,
 }) {
+  assertAuditIdentityScope(identityScope, appEnv, 'provision');
+  const identityPrefix = auditIdentityPrefix(identityScope);
+  const approved = auditPersonas(identityScope);
+  for (const persona of personas) {
+    if (!persona.email.startsWith(identityPrefix) || !persona.email.endsWith('@mwell.com.ph')) {
+      throw new Error(`Refusing to provision identity outside ${identityPrefix}.`);
+    }
+    if (identityScope) {
+      const expected = approved.find(candidate => candidate.role === persona.role);
+      if (!expected || expected.email !== persona.email ||
+          expected.kind !== persona.kind || expected.departmentCode !== persona.departmentCode ||
+          JSON.stringify(normalizeAssignments(expected.assignments)) !== JSON.stringify(normalizeAssignments(persona.assignments))) {
+        throw new Error('Isolated identity must match the approved persona authority exactly.');
+      }
+    }
+  }
   validateProvisioningInputs({
     url,
     serviceKey,
@@ -491,7 +509,7 @@ export async function provisionUatIntraUsers({
   );
 
   for (const persona of personas) {
-    if (!persona.email.startsWith("intra.test.")) {
+    if (!persona.email.startsWith(identityPrefix)) {
       throw new Error(
         `Refusing to provision non-test identity ${persona.email}.`,
       );
@@ -550,7 +568,7 @@ export async function provisionUatIntraUsers({
   for (const persona of personas) {
     const email = persona.email.toLowerCase();
     const personaPassword = resolvedPasswords.get(email);
-    const fullName = `UAT ${titleCase(persona.role)}`;
+    const fullName = `${identityScope ? `CI ${identityScope}` : 'UAT'} ${titleCase(persona.role)}`;
     const appMetadata = {
       kind: persona.kind,
       roles: persona.assignments,
@@ -624,7 +642,7 @@ export async function provisionUatIntraUsers({
   );
   const obsoleteTestUsers = listedUsers.filter((user) => {
     const email = user.email?.toLowerCase() ?? "";
-    return email.startsWith("intra.test.") && !desiredEmails.has(email);
+    return email.startsWith(identityPrefix) && email.endsWith('@mwell.com.ph') && !desiredEmails.has(email);
   });
   for (const user of obsoleteTestUsers) {
     await retireObsoleteTestPersona({ request, schemaHeaders, user, log });
@@ -632,7 +650,7 @@ export async function provisionUatIntraUsers({
 
   const finalTestEmails = (await listAllAuthUsers(request))
     .map((user) => user.email?.toLowerCase() ?? "")
-    .filter((email) => email.startsWith("intra.test."));
+    .filter((email) => email.startsWith(identityPrefix) && email.endsWith('@mwell.com.ph'));
   if (
     finalTestEmails.length !== desiredEmails.size ||
     finalTestEmails.some((email) => !desiredEmails.has(email))
@@ -659,6 +677,8 @@ async function main() {
     ? JSON.parse(process.env.MWELL_UAT_PERSONA_PASSWORDS_JSON)
     : undefined;
   const result = await provisionUatIntraUsers({
+    identityScope: process.env.AUDIT_IDENTITY_SCOPE ?? '',
+    personas: auditPersonas(process.env.AUDIT_IDENTITY_SCOPE ?? ''),
     url,
     serviceKey,
     password,

@@ -89,7 +89,7 @@ describe("September 9 fulfillment evidence and linkage", () => {
     const dialog = await details(
       order({
         proofOfDeliveryReference: "POD-SEP9",
-        proofOfDeliveryEvidenceUrl: "https://evidence.example/pod.jpg",
+        proofOfDeliveryEvidenceUrl: "data:image/png;base64,eA==",
       }),
     );
     const pod = within(dialog).getByRole("region", {
@@ -98,7 +98,7 @@ describe("September 9 fulfillment evidence and linkage", () => {
     expect(within(pod).getByText("POD-SEP9")).toBeVisible();
     expect(
       await within(pod).findByRole("img", { name: "Evidence" }),
-    ).toHaveAttribute("src", "https://evidence.example/pod.jpg");
+    ).toHaveAttribute("src", "data:image/png;base64,eA==");
     fireEvent.click(
       within(pod).getByRole("button", { name: "View evidence photo" }),
     );
@@ -107,9 +107,17 @@ describe("September 9 fulfillment evidence and linkage", () => {
     });
     expect(
       within(preview).getByRole("img", { name: "Evidence" }),
-    ).toHaveAttribute("src", "https://evidence.example/pod.jpg");
+    ).toHaveAttribute("src", "data:image/png;base64,eA==");
     fireEvent.click(within(preview).getByRole("button", { name: "Close" }));
     expect(dialog).toBeVisible();
+  });
+
+  it('retains an external POD link without treating it as an uploaded photo', async () => {
+    const dialog = await details(order({ proofOfDeliveryReference: 'EXTERNAL-POD', proofOfDeliveryEvidenceUrl: 'https://evidence.example/pod.jpg' }));
+    const pod = within(dialog).getByRole('region', { name: 'Proof of delivery' });
+    expect(within(pod).getByText('EXTERNAL-POD')).toBeVisible();
+    expect(within(pod).getByRole('link', { name: /open external evidence/i })).toHaveAttribute('href', 'https://evidence.example/pod.jpg');
+    expect(within(pod).queryByRole('img')).not.toBeInTheDocument();
   });
 
   it.each([

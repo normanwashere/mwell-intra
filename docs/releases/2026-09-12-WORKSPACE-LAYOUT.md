@@ -1,5 +1,9 @@
 # September 12 Workspace Layout Release
 
+**Certification follow-up:** CI now runs an early critical route gate and isolates each viewport's automation accounts so up to three route/visual jobs can run together. All six viewports and eleven roles remain covered; actual onboarding, authorization checks, screenshots and console errors remain strict. Transactions and cleanup stay sequential. Initial account setup takes extra time; full runtime improvement must be measured on the new run, not assumed.
+
+**External evidence fix:** Older HTTPS delivery references appear as **External evidence** links rather than broken automatic photo requests. Uploaded photos still preview normally. No receipt, inspection result, evidence value or stock transaction is changed. An external URL does not imply that its contents have been verified.
+
 ## What Changed
 
 **Task queue and CI follow-up:** Tasks now use inspection metadata without photos and keep failed reads visible for explicit retry, avoiding provider callback refresh loops. Task source links and business steps remain unchanged. CI bounds nested test concurrency without increasing deadlines or skipping assertions; the Events and Finance tests that timed out on the runner pass in isolated verification. Final CI status is recorded separately from live performance evidence.

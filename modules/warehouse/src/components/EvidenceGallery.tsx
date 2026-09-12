@@ -1,11 +1,12 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useSession } from '@intra/auth';
 import { Modal } from '@intra/ui';
+import { normalizeSafeHttpsUrl } from '@intra/data-kit';
 import { resolveEvidenceUrl } from '@/data/supabase/evidence';
 import { Icon } from './Icon';
 
 interface EvidenceGalleryProps {
-  /** Persisted evidence values: storage paths or base64 data URLs. */
+  /** Persisted photo paths/data URLs or legacy external evidence links. */
   urls?: string[];
   /** Compact grid (default) or a single thumbnail. */
   size?: 'grid' | 'thumb';
@@ -37,6 +38,8 @@ export function EvidenceGallery({
     (async () => {
       const entries: [string, string | null][] = [];
       for (const u of list) {
+        // External evidence may be a webpage, not a photo. Never auto-fetch it.
+        if (normalizeSafeHttpsUrl(u)) continue;
         entries.push([u, await resolveEvidenceUrl(u, profile ? supabaseClient : null)]);
       }
       if (active && entries.length > 0) {
@@ -52,6 +55,8 @@ export function EvidenceGallery({
 
   if (size === 'thumb' && list.length > 0) {
     const first = list[0]!;
+    const externalUrl = normalizeSafeHttpsUrl(first);
+    if (externalUrl) return <ExternalEvidence href={externalUrl} count={list.length} className={className} />;
     const src = resolved[first];
     if (src === null) {
       return <UnavailableEvidence className={className} />;
@@ -95,10 +100,13 @@ export function EvidenceGallery({
     <div className={className}>
       <ul className="grid grid-cols-4 gap-2" aria-label="Evidence photos">
         {list.map((u, index) => {
+          const externalUrl = normalizeSafeHttpsUrl(u);
           const src = resolved[u] ?? undefined;
           return (
             <li key={`${u}-${index}`}>
-              {resolved[u] === null ? (
+              {externalUrl ? (
+                <ExternalEvidence href={externalUrl} />
+              ) : resolved[u] === null ? (
                 <UnavailableEvidence />
               ) : (
                 <button
@@ -131,6 +139,24 @@ export function EvidenceGallery({
       </ul>
       {lightbox && <Lightbox src={lightbox} onClose={() => setLightbox(null)} />}
     </div>
+  );
+}
+
+function ExternalEvidence({ href, count = 1, className }: { href: string; count?: number; className?: string }) {
+  const host = new URL(href).hostname;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={`Open external evidence on ${host} (new tab)`}
+      title={`Open external evidence on ${host} (new tab)`}
+      className={`flex min-h-12 min-w-0 flex-col justify-center rounded-lg border border-line bg-inset px-2 py-2 text-xs text-link ${className ?? ''}`}
+    >
+      <span className="font-semibold">External evidence</span>
+      <span className="break-all">{host}</span>
+      {count > 1 && <span className="text-muted">{count} attachments</span>}
+    </a>
   );
 }
 

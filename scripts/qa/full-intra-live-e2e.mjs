@@ -9,7 +9,6 @@ import {
   verifyDeployedTargetIdentity,
 } from "../lib/target-environment.mjs";
 import {
-  CURRENT_LIVE_ROLES,
   CURRENT_LIVE_SCENARIOS,
   assertAuditRunId,
   evaluateScenarioCoverage,
@@ -25,6 +24,7 @@ import { createPaymentAuditEvidence, evidencePdf } from "./payment-audit-evidenc
 import { cleanupCertificationRequestEvidence, cleanupExcessCustodyStorage, gateCertificationRequestCleanup } from "./cleanup-uat-live-run.mjs";
 import { resolveSharedUatPassword } from "./provision-uat-intra-test-users.mjs";
 import { certifyPoLineIdentity, certifyControlledExceptionDenial } from "./receipt-quality-probes.mjs";
+import { auditPersonas, assertAuditIdentityScope, criticalRoutes } from './uat-audit-identities.mjs';
 
 const require = createRequire(path.resolve("apps/shell/package.json"));
 const { chromium } = require("@playwright/test");
@@ -95,11 +95,13 @@ const roleFilter =
     ? undefined
     : process.env.AUDIT_ROLE?.trim();
 const auditPhase = process.env.AUDIT_PHASE ?? "all";
-if (!["all", "routes", "transactions"].includes(auditPhase)) {
-  throw new Error("AUDIT_PHASE must be all, routes, or transactions.");
+if (!["all", "routes", "transactions", "critical"].includes(auditPhase)) {
+  throw new Error("AUDIT_PHASE must be all, routes, transactions, or critical.");
 }
+const identityScope = process.env.AUDIT_IDENTITY_SCOPE ?? '';
+assertAuditIdentityScope(identityScope, process.env.APP_ENV, auditPhase);
 const runRouteAudit = auditPhase !== "transactions";
-const runTransactionAudit = auditPhase !== "routes";
+const runTransactionAudit = ['all', 'transactions'].includes(auditPhase);
 const mutatingPhase = allowMutations && runTransactionAudit;
 const requireVendorDelivery =
   process.env.AUDIT_REQUIRE_VENDOR_DELIVERY === "true";
@@ -162,7 +164,7 @@ await verifyDeployedTargetIdentity({
   protectionBypass,
 });
 
-const users = CURRENT_LIVE_ROLES;
+const users = auditPersonas(identityScope);
 
 const EXECUTABLE_CROSS_MODULE_SCENARIOS = new Set(
   CURRENT_LIVE_SCENARIOS.map((scenario) => scenario.id),
@@ -8496,9 +8498,10 @@ if (runRouteAudit) {
           if (loginResult.status === "signed-in") {
             const discoveredRoutes =
               await discoverVisibleNavigationRoutes(page);
-            const routeQueue = routesFor(user, discoveredRoutes);
+            const fullRoutes = routesFor(user, discoveredRoutes);
+            const routeQueue = auditPhase === 'critical' ? criticalRoutes(fullRoutes) : fullRoutes;
             const queuedPaths = new Set(routeQueue.map((route) => route.path));
-            const recursiveRouteLimit = 32;
+            const recursiveRouteLimit = auditPhase === 'critical' ? 0 : 32;
             let recursivelyDiscovered = 0;
             while (routeQueue.length) {
               const route = routeQueue.shift();
@@ -9522,6 +9525,7 @@ await writeFile(
         workflow.workflow?.startsWith("Task 3"),
       ),
       phase: auditPhase,
+      identityScope: identityScope || 'shared-testers',
       aggregate,
       scenarioCoverage,
       workflows,
