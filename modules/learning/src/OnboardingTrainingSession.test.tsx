@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { OnboardingTrainingSession } from "./OnboardingTrainingSession";
+import { LEARNING_CATALOG } from "./catalog";
 
 function anchor() {
   const element = document.createElement("section");
@@ -19,6 +20,84 @@ function anchor() {
 }
 
 describe("OnboardingTrainingSession", () => {
+  it.each([2, 4])(
+    "a fresh Operations Lead session ends after its %i assigned checkpoints",
+    async (count) => {
+      const target = anchor();
+      const simulation = LEARNING_CATALOG.simulations.find(
+        (item) => item.id === "operations-exception-review-v1",
+      )!;
+      const steps = simulation.embeddedSteps!.slice(0, count);
+      const onEvaluateChoice = vi.fn().mockResolvedValue({ accepted: true });
+      const onCheckpoint = vi.fn();
+      render(
+        <OnboardingTrainingSession
+          requirementTitle="Operations practice"
+          requiredCheckpointIds={steps.map((step) => step.checkpointId)}
+          assignmentRequirementId={`assignment-ops-${count}`}
+          attemptId={`fresh-ops-${count}`}
+          scenarioId={simulation.id}
+          launcherRef={createRef<HTMLElement>()}
+          onCheckpoint={onCheckpoint}
+          onEvaluateChoice={onEvaluateChoice}
+          onClose={vi.fn()}
+        />,
+      );
+      for (const step of steps) {
+        expect(
+          await screen.findByRole("heading", { name: step.title }),
+        ).toBeInTheDocument();
+        fireEvent.click(
+          screen.getByRole("button", { name: step.choices![0]!.label }),
+        );
+      }
+      expect(
+        await screen.findByRole("heading", {
+          name: "Guided practice complete",
+        }),
+      ).toBeInTheDocument();
+      expect(
+        onEvaluateChoice.mock.calls.map(([input]) => input.checkpointId),
+      ).toEqual(steps.map((step) => step.checkpointId));
+      expect(onCheckpoint).not.toHaveBeenCalled();
+      target.remove();
+    },
+  );
+
+  it.each([
+    undefined,
+    [],
+    ["missing-checkpoint"],
+    ["review-custody-evidence", "review-custody-evidence"],
+  ])(
+    "does not guess missing or unsupported assigned steps: %j",
+    (requiredCheckpointIds) => {
+      const onEvaluateChoice = vi.fn();
+      const onCheckpoint = vi.fn();
+      render(
+        <OnboardingTrainingSession
+          requirementTitle="Operations practice"
+          requiredCheckpointIds={requiredCheckpointIds}
+          assignmentRequirementId="assignment-invalid"
+          attemptId="fresh-invalid"
+          scenarioId="operations-exception-review-v1"
+          launcherRef={createRef<HTMLElement>()}
+          onCheckpoint={onCheckpoint}
+          onEvaluateChoice={onEvaluateChoice}
+          onClose={vi.fn()}
+        />,
+      );
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        /contact your administrator/i,
+      );
+      expect(
+        screen.queryByRole("heading", { name: "Review custody evidence" }),
+      ).not.toBeInTheDocument();
+      expect(onEvaluateChoice).not.toHaveBeenCalled();
+      expect(onCheckpoint).not.toHaveBeenCalled();
+    },
+  );
+
   it("keeps a learner on the decision until the server accepts the choice", async () => {
     const target = anchor();
     const onCheckpoint = vi.fn().mockResolvedValue(undefined);
@@ -37,6 +116,10 @@ describe("OnboardingTrainingSession", () => {
         assignmentRequirementId="assignment-general-employee"
         attemptId="attempt-general-employee"
         scenarioId="employee-request-handoff-v1"
+        requiredCheckpointIds={[
+          "draft-source-request",
+          "confirm-accountable-handoff",
+        ]}
         launcherRef={createRef<HTMLElement>()}
         onCheckpoint={onCheckpoint}
         onEvaluateChoice={onEvaluateChoice}

@@ -7,6 +7,7 @@ import { TrainingModeProvider, useTraining } from "./TrainingModeProvider";
 import type { TrainingAdapter, TrainingScenario } from "./training/types";
 import { createIdempotencyKey } from "./training/idempotency";
 import { LEARNING_CATALOG } from "./catalog";
+import { assignedSimulationSteps } from "./assignedSimulationSteps";
 import type {
   SimulationChoiceEvaluation,
   SimulationChoiceSubmission,
@@ -131,6 +132,7 @@ function Runtime({
 
 export function OnboardingTrainingSession({
   requirementTitle,
+  requiredCheckpointIds,
   assignmentRequirementId,
   attemptId,
   scenarioId,
@@ -140,6 +142,7 @@ export function OnboardingTrainingSession({
   onClose,
 }: {
   requirementTitle: string;
+  requiredCheckpointIds?: readonly string[];
   assignmentRequirementId: string;
   attemptId: string;
   scenarioId: string;
@@ -153,8 +156,20 @@ export function OnboardingTrainingSession({
   const publishedSimulation = LEARNING_CATALOG.simulations.find(
     (simulation) => simulation.id === scenarioId,
   );
+  const assigned = useMemo(() => {
+    try {
+      return {
+        steps: publishedSimulation?.embeddedSteps?.length
+          ? assignedSimulationSteps(publishedSimulation, requiredCheckpointIds)
+          : undefined,
+        error: null,
+      };
+    } catch (error) {
+      return { steps: undefined, error: (error as Error).message };
+    }
+  }, [publishedSimulation, requiredCheckpointIds]);
   const scenario = useMemo<TrainingScenario>(() => {
-    const embeddedSteps = publishedSimulation?.embeddedSteps;
+    const embeddedSteps = assigned.steps;
     if (embeddedSteps?.length) {
       return {
         id: scenarioId,
@@ -215,7 +230,7 @@ export function OnboardingTrainingSession({
         },
       ],
     };
-  }, [publishedSimulation, requirementTitle, scenarioId]);
+  }, [assigned.steps, requirementTitle, scenarioId]);
   const adapter = useMemo<TrainingAdapter<PreparationState>>(
     () => ({
       id: `preparation:${scenarioId}`,
@@ -223,7 +238,7 @@ export function OnboardingTrainingSession({
       scenarioIds: [scenario.id],
       initialState: () => ({ stepIndex: 0 }),
       dispatch(state, command) {
-        const embeddedSteps = publishedSimulation?.embeddedSteps;
+        const embeddedSteps = assigned.steps;
         if (embeddedSteps?.length) {
           const step = embeddedSteps[state.stepIndex];
           if (!step || command.type !== `confirm:${step.checkpointId}`) {
@@ -260,8 +275,22 @@ export function OnboardingTrainingSession({
         );
       },
     }),
-    [publishedSimulation, scenario.id, scenarioId],
+    [assigned.steps, scenario.id, scenarioId],
   );
+
+  if (assigned.error) {
+    return (
+      <div
+        role="alert"
+        className="border border-red-300 bg-red-50 p-4 text-red-900"
+      >
+        <p>{assigned.error}</p>
+        <button type="button" className="mt-3 underline" onClick={onClose}>
+          Close practice
+        </button>
+      </div>
+    );
+  }
 
   return (
     <TrainingModeProvider

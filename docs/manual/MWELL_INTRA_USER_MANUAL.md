@@ -2,6 +2,8 @@
 
 ## September 12 Workspace Layout
 
+**Training and receiving follow-up:** Guided practice follows the checkpoints in your assigned training version. When it shows Complete, you do not need to answer extra steps from a newer version. If the assigned steps cannot load, close the practice, refresh once, and contact your administrator if it persists. New short, excess, damaged and unidentified receipts require the actual delivery date and retain it in receipt history. Their Quality hold and independent review still apply. Historical dates are not filled in automatically.
+
 Mixed photo/link galleries use two columns on small screens so website addresses stay readable; photo-only galleries retain their existing layout. Opening a link or a photo remains read-only.
 
 **External evidence links:** Older receipts may contain a delivery website link instead of an uploaded photo. Choose **External evidence** to open that address in a new tab. The app does not verify that an external website is available or that its content is a valid inspection photo. Uploaded photos still open in the photo viewer. If the external link is wrong or unavailable, give the Warehouse lead the receipt reference and ask for the correct supporting document; do not repeat receiving or alter a Quality decision to fix the link.

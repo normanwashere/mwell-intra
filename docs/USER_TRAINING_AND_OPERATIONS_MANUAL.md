@@ -2,6 +2,8 @@
 
 ## September 12 Interface Training
 
+**Training-version and receiving retest:** Use a newly assigned learner to check that practice ends after the assigned checkpoints, then reload to verify completion. Older two-checkpoint Operations Lead training must not show two additional unpublished steps. For short, excess, damaged and unidentified deliveries, enter the actual delivery date and check receipt history; the receipt still waits for independent review. Do not invent dates for older receipts or repeat receipt posting to repair their history.
+
 On a narrow screen, mixed evidence attachments appear in two columns. Confirm the website address before opening an external link. Photo preview and Close/Escape behavior are unchanged.
 
 **External evidence:** Demonstrate an uploaded photo and a saved website link. Photos use the preview; **External evidence** opens the original website in a new tab without downloading it during queue loading. An external link is not proof that a photo was uploaded or verified. Report an incorrect link with the receipt reference; do not repeat the stock transaction.

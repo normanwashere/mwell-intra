@@ -70,7 +70,12 @@ function previewSnapshotForRoles(
   const requirementById = new Map(
     LEARNING_CATALOG.requirements.map((requirement) => [
       requirement.id,
-      requirement,
+      {
+        ...requirement,
+        requiredCheckpointIds: LEARNING_CATALOG.simulations.find(
+          (simulation) => simulation.id === requirement.simulationId,
+        )?.checkpointIds,
+      },
     ]),
   );
   const selectedRequirements = new Map(
@@ -156,6 +161,7 @@ export interface ActiveTrainingRequirement {
   attemptId: string;
   mode: LearningAttemptMode;
   simulationId: string;
+  requiredCheckpointIds?: readonly string[];
 }
 
 export interface ActiveLearningActivity {
@@ -458,6 +464,7 @@ export function LearningProvider({
           attemptId: result.attempt.id,
           mode: result.attempt.mode,
           simulationId: requirement.simulationId!,
+          requiredCheckpointIds: requirement.requiredCheckpointIds,
         });
         setActiveActivity(null);
         setTrainingPrincipal(requestPrincipal);

@@ -186,6 +186,17 @@ function parseRequirement(value: unknown): RequirementDefinition {
       parseCapability,
     ),
     simulationId: optionalString(value, "simulationId"),
+    requiredCheckpointIds:
+      value.requiredCheckpointIds == null
+        ? undefined
+        : requiredArray(value, "requiredCheckpointIds").map((item) => {
+            if (typeof item !== "string" || !item.trim()) {
+              throw new Error(
+                "Learning service returned an invalid checkpoint ID.",
+              );
+            }
+            return item;
+          }),
     passingScore:
       value.passingScore == null
         ? undefined
@@ -344,9 +355,7 @@ function parseSnapshot(value: unknown): LearningSnapshot {
   };
 }
 
-function needsCertificationReconciliation(
-  snapshot: LearningSnapshot,
-): boolean {
+function needsCertificationReconciliation(snapshot: LearningSnapshot): boolean {
   return snapshot.lockedCapabilities.some(
     (lock) =>
       lock.reason === "missing_certification" &&

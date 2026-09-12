@@ -96,6 +96,8 @@ jobs:
         run: node --test scripts/verify-quality-queue-evidence.pglite.test.mjs
       - name: Verify governed receiving delivery-date and quantity contracts
         run: node --test scripts/verify-governed-po-receipt-breakdown.pglite.test.mjs
+      - name: Verify assigned training version checkpoint projection
+        run: node --test scripts/verify-assigned-training-checkpoints.pglite.test.mjs
       - name: Build all workspaces
         run: pnpm build
       - name: Analyze source with CodeQL
@@ -146,11 +148,11 @@ jobs:
         run: pnpm certify:onboarding-live
       - name: Reconcile isolated critical-check identities
         env:
-          AUDIT_IDENTITY_SCOPE: critical
+          AUDIT_IDENTITY_SCOPE: checkpoint-v1
         run: pnpm provision:test:uat
       - name: Complete isolated critical-check orientations
         env:
-          AUDIT_IDENTITY_SCOPE: critical
+          AUDIT_IDENTITY_SCOPE: checkpoint-v1
           AUDIT_VIEWPORT: desktop-1440
           AUDIT_ORIENTATION_MUTATIONS: "true"
           AUDIT_MUTATIONS: "true"
@@ -159,7 +161,7 @@ jobs:
         run: pnpm certify:onboarding-live
       - name: Critical login, workspace, knowledge and access-denial gate
         env:
-          AUDIT_IDENTITY_SCOPE: critical
+          AUDIT_IDENTITY_SCOPE: checkpoint-v1
           AUDIT_PHASE: critical
           AUDIT_VIEWPORT: desktop-1440
           AUDIT_MUTATIONS: "false"

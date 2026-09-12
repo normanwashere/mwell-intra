@@ -18,6 +18,7 @@ export interface RequirementDefinition {
   prerequisiteIds: readonly string[];
   capabilityOutcomes: readonly LearningCapability[];
   simulationId?: string;
+  requiredCheckpointIds?: readonly string[];
   passingScore?: number;
   maxAttempts?: number;
 }

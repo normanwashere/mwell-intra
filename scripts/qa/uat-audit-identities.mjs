@@ -3,6 +3,7 @@ import { CURRENT_LIVE_ROLES } from './live-e2e-scenarios.mjs';
 export const AUDIT_IDENTITY_SCOPES = Object.freeze([
   'critical', 'desktop-1440', 'desktop-1280', 'tablet-768',
   'mobile-390', 'mobile-360', 'mobile-320',
+  'checkpoint-v1',
 ]);
 
 export function auditIdentityPrefix(scope = '') {

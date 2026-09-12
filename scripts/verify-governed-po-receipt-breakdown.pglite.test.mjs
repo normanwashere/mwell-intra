@@ -491,6 +491,71 @@ async function installDeliveryDate(db) {
   ), "utf8"));
 }
 
+async function installExceptionPoster(db) {
+  const source = await readFile(receiptAuthorityUrl, "utf8");
+  const signature = "private.warehouse_receive_procurement_po_exception(payload jsonb)";
+  await db.exec(functionDefinition(source.slice(source.lastIndexOf(`create or replace function ${signature}`)), signature));
+  await installDeliveryDate(db);
+}
+
+async function installExceptionDate(db) {
+  await db.exec(await readFile(new URL("../supabase/migrations/20260912045338_persist_exception_receipt_delivery_date.sql", import.meta.url), "utf8"));
+}
+
+function exceptionPayload(type = "short") {
+  return {
+    idempotency_key: `exception-date-${type}`, po_id: "po-0001", location_id: "loc-wh",
+    exception_type: type, reason: "Observed delivery mismatch", evidence_urls: ["https://example.test/evidence"],
+    actual_delivery_date: "2026-07-01",
+    lines: [{ line_id: "line-0001", product_id: "smart-watch", actual_quantity: type === "excess" ? 101 : 1,
+      expected_quantity: 100, raw_description: "Observed watch", bin_id: "bin-receiving" }],
+  };
+}
+
+for (const type of ["short", "excess", "damaged", "unidentified"]) {
+  test(`exception ${type} persists delivery date and exact replay without accepting stock`, async () => {
+    const db = await createDatabase();
+    try {
+      await installExceptionPoster(db);
+      await installExceptionDate(db);
+      const input = exceptionPayload(type);
+      const receive = () => db.query("select private.warehouse_receive_procurement_po_exception($1::jsonb) response", [JSON.stringify(input)]);
+      const first = await receive();
+      assert.equal(first.rows[0].response.receipt.actual_delivery_date, input.actual_delivery_date);
+      assert.deepEqual(await receive(), first);
+      assert.equal((await db.query("select actual_delivery_date::text value from warehouse.receipts")).rows[0].value, input.actual_delivery_date);
+      assert.equal((await db.query("select received_quantity from procurement.purchase_order_lines where id='line-0001'")).rows[0].received_quantity, 0);
+      assert.equal((await db.query("select count(*)::int n from warehouse.inventory_units")).rows[0].n, 0);
+      input.actual_delivery_date = "2026-07-02";
+      await assert.rejects(receive, /different payload/i);
+    } finally { await db.close(); }
+  });
+}
+
+test("exception delivery date rejects invalid dates atomically and preserves historical replay", async () => {
+  const db = await createDatabase();
+  try {
+    await installExceptionPoster(db);
+    const historical = exceptionPayload();
+    delete historical.actual_delivery_date;
+    const old = await db.query("select private.warehouse_receive_procurement_po_exception($1::jsonb) response", [JSON.stringify(historical)]);
+    await installExceptionDate(db);
+    assert.deepEqual(await db.query("select private.warehouse_receive_procurement_po_exception($1::jsonb) response", [JSON.stringify(historical)]), old);
+    for (const date of [undefined, null, "", "2026-02-29", "2999-01-01"]) {
+      const input = exceptionPayload();
+      input.idempotency_key = "invalid-date";
+      input.lines[0].line_id = "line-0002";
+      input.lines[0].expected_quantity = 1;
+      input.exception_type = "damaged";
+      input.actual_delivery_date = date;
+      await assert.rejects(db.query("select private.warehouse_receive_procurement_po_exception($1::jsonb)", [JSON.stringify(input)]), /Actual delivery date/);
+      assert.equal((await db.query("select count(*)::int n from warehouse.receipts")).rows[0].n, 1);
+      assert.equal((await db.query("select count(*)::int n from warehouse.command_log")).rows[0].n, 1);
+      assert.equal((await db.query("select count(*)::int n from warehouse.procurement_receipt_exception_lines where po_line_id='line-0002'")).rows[0].n, 0);
+    }
+  } finally { await db.close(); }
+});
+
 test("actual delivery date migration persists date, preserves exact replay and rejects changed-date replay", async () => {
   const db = await createDatabase();
   try {

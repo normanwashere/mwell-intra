@@ -663,6 +663,7 @@ export function OnboardingCenter({
       {activeTraining &&
         !getTrainingAdapter(activeTraining.simulationId)?.route && (
           <OnboardingTrainingSession
+            requiredCheckpointIds={activeTraining.requiredCheckpointIds}
             requirementTitle={
               view.requirements.find(
                 (item) => item.id === activeTraining.requirementId,

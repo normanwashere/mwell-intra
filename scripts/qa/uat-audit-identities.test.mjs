@@ -15,7 +15,8 @@ test('all viewport and critical accounts are disjoint and preserve exact persona
       assert.deepEqual({ ...persona, email: CURRENT_LIVE_ROLES[index].email }, CURRENT_LIVE_ROLES[index]);
     });
   }
-  assert.equal(emails.size, 88);
+  assert.equal(AUDIT_IDENTITY_SCOPES.length, 8);
+  assert.equal(emails.size, 99);
   assert.deepEqual(auditPersonas(), CURRENT_LIVE_ROLES);
 });
 

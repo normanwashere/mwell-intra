@@ -187,6 +187,22 @@ const snapshotWithSimulationPassed = (): LearningSnapshot => {
 };
 
 describe("SupabaseLearningRepository", () => {
+  it("preserves the assigned version checkpoint list returned by the server", async () => {
+    const data = snapshot();
+    const ids = ["review-custody-evidence", "record-independent-disposition"];
+    data.curricula[0]!.requirements = data.curricula[0]!.requirements.map(
+      (item) => ({ ...item, requiredCheckpointIds: ids }),
+    );
+    const rpc = vi.fn(async () => ({ data, error: null }));
+    const repository = new SupabaseLearningRepository({
+      schema: vi.fn(() => ({ rpc })),
+    });
+    expect(
+      (await repository.snapshot()).curricula[0]!.requirements[0]!
+        .requiredCheckpointIds,
+    ).toEqual(ids);
+  });
+
   it("exports both repository implementations from the package API", () => {
     expect(publicApi.SupabaseLearningRepository).toBe(
       SupabaseLearningRepository,

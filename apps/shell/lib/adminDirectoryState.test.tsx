@@ -10,6 +10,16 @@ document.body.append(container);
 let root: ReturnType<typeof createRoot>;
 let state: ReturnType<typeof useDirectoryState>;
 function Harness({ guard = () => true }: { guard?: () => boolean }) { state = useDirectoryState(guard); return <p>{JSON.stringify(state)}</p>; }
+
+async function traverseHistory(direction: 'back' | 'forward') {
+  await React.act(async () => {
+    const changed = new Promise<void>(resolve => {
+      window.addEventListener('popstate', () => resolve(), { once: true });
+    });
+    window.history[direction]();
+    await changed;
+  });
+}
 afterEach(async () => { await React.act(() => root?.unmount()); });
 it('validates filters, bounds pages and keeps user selectors separate from drafts', () => {
   expect(parseDirectoryState('?kind=bad&status=bad&page=-1')).toMatchObject({ kind: 'all', status: 'active', page: 1 });
@@ -23,9 +33,9 @@ it('hydrates copied URLs and restores selection, query, filters and page on hist
   expect(state!).toMatchObject({ query: 'ops', status: 'all', kind: 'employee', page: 2, user: 'abc', ready: true });
   await React.act(() => state.update({ user: null }));
   expect(state!.user).toBeNull();
-  await React.act(async () => { window.history.back(); await new Promise(resolve => setTimeout(resolve, 30)); });
+  await traverseHistory('back');
   expect(state!).toMatchObject({ page: 2, user: 'abc', query: 'ops' });
-  await React.act(async () => { window.history.forward(); await new Promise(resolve => setTimeout(resolve, 30)); });
+  await traverseHistory('forward');
   expect(state!.user).toBeNull();
 });
 it('a canceled discard retains the draft context and does not update the URL', async () => {
