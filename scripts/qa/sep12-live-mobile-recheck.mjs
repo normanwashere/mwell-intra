@@ -39,7 +39,7 @@ try {
   report.health = await health();
   browser = await chromium.launch();
   for (const persona of auditPersonas('checkpoint-v1')) {
-    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block', reducedMotion: 'reduce' });
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, serviceWorkers: 'block', reducedMotion: 'reduce' });
     const page = await context.newPage();
     page.setDefaultTimeout(25000);
     try {
