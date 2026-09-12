@@ -55,7 +55,7 @@ try {
       const screenshot = `${persona.key ?? persona.email.split('@')[0]}-390-home.png`;
       await page.screenshot({ path: path.join(output, screenshot), fullPage: true });
       report.checks.push({ role: persona.label ?? persona.email, route: '/', width: 390, visual, hotspots, screenshot });
-      assert.equal(visual.overflow, false, `${persona.email}: overflow`);
+      assert.equal(visual.horizontalOverflow, false, `${persona.email}: overflow`);
       assert.equal(hotspots.interceptedTargets.length, 0, `${persona.email}: unreachable controls`);
       assert.equal(hotspots.undersizedTargets.length, 0, `${persona.email}: undersized targets`);
       if (persona.kind === 'vendor') {
@@ -69,7 +69,7 @@ try {
         const vendorVisual = await helpers.pageAudit(page);
         await page.screenshot({ path: path.join(output, 'vendor-320-case.png'), fullPage: true });
         report.checks.push({ role: 'vendor', route: new URL(page.url()).pathname, width: 320, visual: vendorVisual, screenshot: 'vendor-320-case.png' });
-        assert.equal(vendorVisual.overflow, false, 'Vendor case status still overflows at 320px');
+        assert.equal(vendorVisual.horizontalOverflow, false, 'Vendor case status still overflows at 320px');
       }
     } finally { await context.close(); }
   }
