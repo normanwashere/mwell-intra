@@ -11,6 +11,7 @@
 // vendor receives.
 
 import { useMemo, useRef, useState } from "react";
+import { vendorInviteDeliveryGuidance } from '../vendorInviteDelivery';
 import { Link, useNavigate } from "react-router-dom";
 import {
   Badge,
@@ -153,7 +154,7 @@ export function InviteVendorPage() {
           );
       if (inv.deliveryStatus === "delivery_failed") {
         toast(
-          `Case opened, but the invitation email was not delivered. Verify the address before resending.`,
+          vendorInviteDeliveryGuidance(inv.deliveryError),
           "info",
         );
       } else if (inv.deliveryStatus === "pending_delivery") {

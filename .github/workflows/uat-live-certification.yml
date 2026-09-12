@@ -115,7 +115,9 @@ jobs:
       - name: Verify CI resilience contracts
         run: node --test scripts/qa/uat-ci-resilience.test.mjs
       - name: Verify UAT persona provisioner contract
-        run: pnpm test:provision:uat
+        run: |
+          pnpm test:provision:uat
+          node --test scripts/qa/uat-vendor-prerequisite.test.mjs
       - name: Verify isolated audit identity contracts
         run: node --test scripts/qa/uat-audit-identities.test.mjs
       - name: Reconcile guarded UAT personas
@@ -127,7 +129,7 @@ jobs:
       - name: Install Chromium for first-login certification
         run: pnpm --filter @intra/shell exec playwright install --with-deps chromium
       - name: Verify browser audit visibility and readiness contracts
-        run: node --test scripts/qa/audit-disclosure.browser.test.mjs scripts/qa/quality-validation-workflow.browser.test.mjs scripts/qa/route-evidence.browser.test.mjs scripts/qa/evidence-upload.browser.test.mjs scripts/qa/receipt-quality-probes.test.mjs scripts/qa/excess-save-outcome.browser.test.mjs
+        run: node --test scripts/qa/audit-disclosure.browser.test.mjs scripts/qa/quality-validation-workflow.browser.test.mjs scripts/qa/route-evidence.browser.test.mjs scripts/qa/evidence-upload.browser.test.mjs scripts/qa/receipt-quality-probes.test.mjs scripts/qa/excess-save-outcome.browser.test.mjs scripts/qa/receiving-audit-evidence.test.mjs
       - name: Verify fresh-account onboarding driver regressions
         run: node --test scripts/qa/orientation-driver.browser.test.mjs
       - name: Complete first-login role orientations on desktop

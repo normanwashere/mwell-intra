@@ -9,6 +9,7 @@ import {
 } from "../lib/target-environment.mjs";
 import { CURRENT_LIVE_ROLES } from "./live-e2e-scenarios.mjs";
 import { auditIdentityPrefix, auditPersonas, assertAuditIdentityScope } from './uat-audit-identities.mjs';
+import { reconcileCiVendorPrerequisite } from './uat-vendor-prerequisite.mjs';
 
 const REQUIRED_PASSWORD_PATTERN =
   /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{16,}$/;
@@ -371,6 +372,14 @@ async function verifyPersonaPostconditions({
     persona,
     "password sign-in did not return the expected user",
   );
+  if (persona.kind === 'vendor') {
+    const currentVendor = await authRequest('/rest/v1/rpc/current_vendor_id', {
+      method: 'POST',
+      headers: { ...schemaHeaders('core'), Authorization: `Bearer ${signIn.access_token}` },
+      body: '{}',
+    });
+    assertPostcondition(currentVendor === vendorId, persona, 'accepted vendor invitation authority is missing');
+  }
   assertPostcondition(
     profile?.email?.toLowerCase() === persona.email.toLowerCase(),
     persona,
@@ -621,6 +630,10 @@ export async function provisionUatIntraUsers({
       headers: schemaHeaders("core"),
       body: JSON.stringify({ target_user_id: user.id }),
     });
+    if (identityScope && persona.kind === 'vendor') {
+      await reconcileCiVendorPrerequisite({ appEnv, identityScope, persona, userId: user.id, vendorId, request });
+      log(`Prepared synthetic post-invitation route prerequisite for ${email}; email delivery is not certified by this fixture.`);
+    }
     await verifyPersonaPostconditions({
       request,
       authRequest,

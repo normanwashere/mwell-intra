@@ -2,6 +2,8 @@
 
 ## September 12 Interface Training
 
+**Invitation delivery:** Show the difference between a saved accreditation case, pending email, failed email, and confirmed sending. For a sending-limit message, contact the administrator before retrying the existing invitation; do not create another case. Once delivery is resolved, test the current invitation link and vendor acceptance. A CI account's synthetic accepted-invitation prerequisite does not prove this journey.
+
 **Multi-role and updated assignments:** Demonstrate an older completed assignment beside pending training, including two assignments of the same version. Start or Resume the pending item and verify the correct attempt opens. Retrying an assessment must keep that selected assignment. Older completion evidence remains unchanged.
 
 **Training-version and receiving retest:** Use a newly assigned learner to check that practice ends after the assigned checkpoints, then reload to verify completion. Older two-checkpoint Operations Lead training must not show two additional unpublished steps. For short, excess, damaged and unidentified deliveries, enter the actual delivery date and check receipt history; the receipt still waits for independent review. Do not invent dates for older receipts or repeat receipt posting to repair their history.

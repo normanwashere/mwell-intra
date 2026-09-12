@@ -32,6 +32,7 @@ import {
   type RefObject,
 } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
+import { vendorInviteDeliveryGuidance } from '../vendorInviteDelivery';
 import {
   Badge,
   Button,
@@ -405,8 +406,10 @@ export function CaseDetailPage() {
       const result = await retryInvite(failedInvite.id);
       if (result.deliveryStatus === 'delivery_failed') {
         error(
-          'Invitation email still could not be delivered. Verify the vendor address and try again.',
+          vendorInviteDeliveryGuidance(result.deliveryError),
         );
+      } else if (result.deliveryStatus === 'pending_delivery') {
+        error('The invitation is still being sent. Wait for delivery confirmation before retrying.');
       } else {
         success(`Invitation email sent to ${result.email}`);
       }
@@ -515,8 +518,7 @@ export function CaseDetailPage() {
             <div className="min-w-0">
               <p className="font-semibold text-ink">Invitation email was not delivered</p>
               <p className="mt-1 text-sm text-muted">
-                The accreditation case is intact, but the vendor cannot use the invitation yet.
-                Verify {failedInvite.email}, then retry delivery.
+                {vendorInviteDeliveryGuidance(failedInvite.deliveryError)}
               </p>
             </div>
             <Button

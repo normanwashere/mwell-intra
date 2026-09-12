@@ -269,3 +269,73 @@ for (const options of [{ storageFailure: true }, { discoveryFailure: true }]) {
     assert.equal(h.tables.get('procurement.request_attachments').length, 2);
   });
 }
+
+test('independent cleanup discovers receiving crash orphans without seeds or receipt rows', async () => {
+  const h = fixture();
+  for (const key of h.tables.keys()) h.tables.set(key, []);
+  h.blobs.clear();
+  const folder = `audit/${marker}/receiving`;
+  const orphans = Array.from({ length: 205 }, (_, i) => `${folder}/orphan-${i}.png`);
+  const neighbors = [`${folder}-ordinary/photo.png`, `audit/${marker}/other.png`,
+    `audit/${runId}-mobile-390/receiving/photo.png`];
+  [...orphans, ...neighbors].forEach(path => h.blobs.add(path));
+  const report = await cleanupAndVerifyRun({ runId, viewport, env, client: h.client });
+  const storage = report.results.find(result => result.entity === 'storage.evidence:receiving');
+  assert.ok(storage, 'Receiving storage must appear in the independent cleanup report');
+  assert.equal(storage.removed, orphans.length);
+  assert.equal(storage.remaining, 0);
+  assert.equal(report.complete, true);
+  assert.deepEqual([...h.blobs], neighbors);
+  const removes = h.calls.filter(call => call.type === 'storage-remove' && call.paths.some(path => path.startsWith(`${folder}/`)));
+  assert.deepEqual(removes.map(call => call.paths.length), [100, 100, 5]);
+  assert.ok(h.calls.indexOf(removes.at(-1)) < h.calls.findIndex(call => call.type === 'delete' || call.type === 'rpc'));
+  const repeat = await cleanupAndVerifyRun({ runId, viewport, env, client: h.client });
+  assert.equal(repeat.complete, true);
+  assert.equal(repeat.results.find(result => result.entity === 'storage.evidence:receiving').removed, 0);
+});
+
+for (const failure of ['list error', 'missing list', 'remove error', 'remove throw', 'verification error', 'missing verification', 'residue', 'unsafe entry']) {
+  test(`independent receiving cleanup retains rows and reports unknown residue on ${failure}`, async () => {
+    const h = fixture();
+    const folder = `audit/${marker}/receiving`;
+    const orphan = `${folder}/crash-orphan.png`;
+    h.blobs.add(orphan);
+    const originalFrom = h.client.storage.from;
+    let lists = 0;
+    h.client.storage.from = bucket => {
+      const storage = originalFrom(bucket);
+      return { ...storage,
+        async list(prefix, options) {
+          if (bucket !== 'evidence' || prefix !== folder) return storage.list(prefix, options);
+          lists++;
+          if (failure === 'list error' || (failure === 'verification error' && lists > 1)) return { error: { message: 'list denied' } };
+          if (failure === 'missing list' || (failure === 'missing verification' && lists > 1)) return { data: null, error: null };
+          if (failure === 'unsafe entry') return { data: [{ id: 'outside', name: '../outside.png' }], error: null };
+          return storage.list(prefix, options);
+        },
+        async remove(paths) {
+          if (bucket === 'evidence' && paths.includes(orphan)) {
+            if (failure === 'remove error') return { error: { message: 'remove denied' } };
+            if (failure === 'remove throw') throw new Error('connection lost');
+            if (failure === 'residue') return { error: null };
+          }
+          return storage.remove(paths);
+        },
+      };
+    };
+    const report = await cleanupAndVerifyRun({ runId, viewport, env, client: h.client });
+    assert.equal(report.complete, false);
+    const storage = report.results.find(result => result.entity === 'storage.evidence:receiving');
+    assert.equal(storage.remaining, null);
+    assert.ok(storage.error);
+    assert.throws(() => cleanupTools.assertZeroResidue(report), /cleanup certification failed/);
+    assert.ok(!h.calls.some(call => call.type === 'delete' || call.type === 'rpc'));
+    assert.equal(h.tables.get('warehouse.receipts').length, 1);
+    assert.equal(h.tables.get('warehouse.procurement_receipt_excess_custody').length, 1);
+    assert.equal(h.tables.get('procurement.request_attachments').length, 2);
+    h.client.storage.from = originalFrom;
+    const retry = await cleanupAndVerifyRun({ runId, viewport, env, client: h.client });
+    assert.equal(retry.complete, true);
+    assert.equal(h.blobs.has(orphan), false);
+  });
+}

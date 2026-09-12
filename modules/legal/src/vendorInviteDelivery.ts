@@ -12,6 +12,13 @@ export interface VendorInviteDeliveryEnvelope extends DeliveryRow {
   delivery_error?: string;
 }
 
+export function vendorInviteDeliveryGuidance(diagnostic?: string) {
+  if (/rate.?limit|sending limit|email quota/i.test(diagnostic ?? '')) {
+    return 'The case is saved, but the email service has reached its sending limit. Ask your administrator to check the email service before retrying this invitation. Do not create another case.';
+  }
+  return 'The case is saved, but the invitation email was not sent. Check the vendor email address and ask your administrator to check email delivery before retrying this invitation. Do not create another case.';
+}
+
 export function resolveVendorInviteDelivery(payload: VendorInviteDeliveryEnvelope) {
   const inviteRow = payload.invite ?? payload;
   if (typeof inviteRow.id !== 'string') throw new Error('Vendor invitation service returned no valid invite record.');
@@ -33,7 +40,9 @@ export function resolveVendorInviteDelivery(payload: VendorInviteDeliveryEnvelop
     inviteRow,
     caseId,
     vendorId,
-    deliveryStatus: payload.delivery_status ?? 'sent',
-    deliveryError: payload.delivery_error,
+    deliveryStatus: payload.delivery_status ??
+      (inviteRow.status === 'sent' || inviteRow.status === 'accepted' ? 'sent' :
+        inviteRow.status === 'delivery_failed' ? 'delivery_failed' : 'pending_delivery'),
+    deliveryError: typeof inviteRow.delivery_error === 'string' ? inviteRow.delivery_error : payload.delivery_error,
   } as const;
 }

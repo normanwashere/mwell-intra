@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveVendorInviteDelivery } from './vendorInviteDelivery';
+import { resolveVendorInviteDelivery, vendorInviteDeliveryGuidance } from './vendorInviteDelivery';
 
 const envelope = {
   invite: {
@@ -16,6 +16,16 @@ const envelope = {
 };
 
 describe('resolveVendorInviteDelivery', () => {
+  it('explains a mail quota without blaming the vendor address or promising a retry', () => {
+    expect(vendorInviteDeliveryGuidance('email rate limit exceeded')).toContain('sending limit');
+    expect(vendorInviteDeliveryGuidance('email rate limit exceeded')).toContain('administrator');
+    expect(vendorInviteDeliveryGuidance('email rate limit exceeded')).not.toContain('Verify the address');
+  });
+
+  it('does not expose provider diagnostics or treat unknown status as sent', () => {
+    expect(vendorInviteDeliveryGuidance('SMTP error secret-token-123')).not.toContain('secret-token');
+    expect(resolveVendorInviteDelivery({ invite: { id: 'unknown' } }).deliveryStatus).toBe('pending_delivery');
+  });
   it('maps a delivered invite envelope', () => {
     expect(resolveVendorInviteDelivery({ ...envelope, delivery_status: 'sent' })).toMatchObject({
       inviteRow: envelope.invite,

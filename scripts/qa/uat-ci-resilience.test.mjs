@@ -278,7 +278,10 @@ test("UAT runs explicit browser and receipt-quality helper contracts after Chrom
     "scripts/qa/evidence-upload.browser.test.mjs",
     "scripts/qa/receipt-quality-probes.test.mjs",
     "scripts/qa/excess-save-outcome.browser.test.mjs",
+    "scripts/qa/receiving-audit-evidence.test.mjs",
   ]);
+  assert.equal(workflow.split("scripts/qa/receiving-audit-evidence.test.mjs").length, 2,
+    "Receiving evidence must not also run before Chromium installation");
 });
 
 test("production certification is read-only and covers every supported viewport", async () => {

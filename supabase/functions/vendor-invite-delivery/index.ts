@@ -432,7 +432,9 @@ Deno.serve(async (request) => {
         ...(failedInvite ? { invite: failedInvite } : {}),
         delivery_status: "delivery_failed",
         delivery_error:
-          "The case was opened, but the invitation email was not delivered. Verify the address and retry delivery.",
+          /rate.?limit|email quota/i.test(message)
+            ? "The case is saved, but the email service has reached its sending limit. Ask your administrator to check the email service before retrying this invitation. Do not create another case."
+            : "The case is saved, but the invitation email was not sent. Check the vendor email address and ask your administrator to check email delivery before retrying this invitation. Do not create another case.",
       },
       202,
     );

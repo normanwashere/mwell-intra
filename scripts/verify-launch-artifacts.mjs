@@ -403,7 +403,6 @@ function transactionReportFailures(report, viewport, evidenceBasenames) {
     localCoverage.length === 0 ||
     localCoverage.some(
       (scenario) =>
-        !scenario.complete ||
         scenario.requiredViewports?.length !== 1 ||
         scenario.requiredViewports[0] !== viewport,
     )
@@ -411,6 +410,13 @@ function transactionReportFailures(report, viewport, evidenceBasenames) {
     failures.push(
       `transactions-${viewport}.json does not certify only its selected viewport`,
     );
+  }
+  for (const scenario of localCoverage) {
+    if (scenario.complete !== true) {
+      failures.push(
+        `transactions-${viewport}.json scenario ${scenario.id ?? "unknown"} reports incomplete coverage for ${viewport}`,
+      );
+    }
   }
 
   for (const workflowName of productWorkflowNames) {

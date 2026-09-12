@@ -5,6 +5,7 @@ import test from "node:test";
 import { PGlite } from "@electric-sql/pglite";
 import { functionDefinition, installActualQualityChain } from "../quality-inspection-verifier-fixture.mjs";
 import { certifyPoLineIdentity, certifyControlledExceptionDenial } from "./receipt-quality-probes.mjs";
+import { createReceivingAuditEvidence } from "./receiving-audit-evidence.mjs";
 
 const require = createRequire(new URL("../../apps/shell/package.json", import.meta.url));
 const ts = require("typescript");
@@ -23,7 +24,7 @@ function rpcPayload(variable, fixture) {
   assert.ok(declaration && ts.isAwaitExpression(declaration.initializer));
   const call = declaration.initializer.expression;
   assert.equal(call.expression.getText(ast), "callRpcAsBrowserUser");
-  return new Function("fixture", `return (${call.arguments[3].getText(ast)})`)(fixture);
+  return new Function("fixture", `return (async () => (${call.arguments[3].getText(ast)}))()`)(fixture);
 }
 const sql = async name => readFile(new URL(`../../supabase/migrations/${name}`, import.meta.url), "utf8");
 const legacy = await sql("20260710160000_warehouse_w1_quality_and_approval_rpcs.sql");
@@ -151,12 +152,29 @@ async function database() {
   return db;
 }
 async function seed(db, marker, serial = fixtureSerial(marker)) {
+  // Isolated storage transport for this SQL suite; the production seeder still
+  // uploads and reads the actual bytes before the extracted payload can use them.
+  const photos = new Map();
+  const receivingEvidence = createReceivingAuditEvidence({ storage: { from(bucket) {
+    assert.equal(bucket, "evidence");
+    return {
+      async upload(path, bytes) {
+        assert.ok(!photos.has(path));
+        photos.set(path, Buffer.from(bytes));
+        return { data: { path }, error: null };
+      },
+      async download(path) {
+        assert.ok(photos.has(path), "Evidence must exist before readback");
+        return { data: new Blob([photos.get(path)], { type: "image/png" }), error: null };
+      },
+    };
+  } } }, "QA-20260912-000000AE-desktop-1440");
   const fixture = { marker, locationId: "warehouse", ids: {
     serializedIssueSerial: serial, serializedIssueUnit: "unit", serializedIssueProduct: "product",
     serializedIssueReceipt: "receipt", vendor: "vendor",
-  } };
-  const receive = rpcPayload("serializedIssueReceipt", fixture);
-  const hold = rpcPayload("serializedHoldResult", fixture);
+  }, receivingEvidence };
+  const receive = await rpcPayload("serializedIssueReceipt", fixture);
+  const hold = await rpcPayload("serializedHoldResult", fixture);
   await db.exec(`truncate warehouse.inventory_units,warehouse.receipts,warehouse.quality_inspections,warehouse.inventory_holds,warehouse.exceptions,core.activity_log,warehouse.movements;
     select set_config('request.jwt.claim.sub','${receiver}',false);
     select set_config('test.authorized','true',false);`);

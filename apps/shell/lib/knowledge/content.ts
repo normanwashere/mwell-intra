@@ -462,7 +462,7 @@ const procedureArticles: KnowledgeArticle[] = [
       ],
       [
         "Create invitation",
-        "Record category, jurisdiction, entity, risk, contract, and data handling facts.",
+        "Record category, jurisdiction, entity, risk, contract, and data handling facts. Case creation is not email delivery. If sending fails, keep the existing case. A sending-limit message needs your administrator to check the email service before you retry; do not create another case. Pending delivery is not a sent invitation.",
       ],
       [
         "Vendor activates account",

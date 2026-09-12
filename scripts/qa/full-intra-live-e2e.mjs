@@ -20,6 +20,7 @@ import {
   verifyCheckpoint,
 } from "./live-e2e-db-verify.mjs";
 import { cleanupRun } from "./live-e2e-cleanup.mjs";
+import { createReceivingAuditEvidence } from "./receiving-audit-evidence.mjs";
 import { createPaymentAuditEvidence, evidencePdf } from "./payment-audit-evidence.mjs";
 import { cleanupCertificationRequestEvidence, cleanupExcessCustodyStorage, gateCertificationRequestCleanup } from "./cleanup-uat-live-run.mjs";
 import { resolveSharedUatPassword } from "./provision-uat-intra-test-users.mjs";
@@ -2676,6 +2677,7 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
     cleanupDecisionIds: [],
     cleanupStockRequestIds: [],
     cleanupHoldIds: [],
+    receivingEvidence: createReceivingAuditEvidence(client, marker),
     receiptExceptionScenarios: [],
   };
   registerTask3Cleanup(fixture);
@@ -3187,13 +3189,13 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
 }
 
 async function task3OperatorReceiptTransactions(page, fixture) {
-  const receive = (poId, lineId, quantity, suffix, actualDeliveryDate = fixture.actualDeliveryDate) =>
+  const receive = async (poId, lineId, quantity, suffix, actualDeliveryDate = fixture.actualDeliveryDate) =>
     callRpcAsBrowserUser(page, "warehouse", "receive_procurement_po", {
       idempotency_key: `${fixture.marker}-${suffix}`,
       actual_delivery_date: actualDeliveryDate,
       po_id: poId,
       location_id: fixture.locationId,
-      evidence_urls: [`audit/${fixture.marker}/${suffix}.jpg`],
+      evidence_urls: [await fixture.receivingEvidence.seed(`${suffix}.png`)],
       lines: [
         {
           line_id: lineId,
@@ -3338,6 +3340,8 @@ async function task3OperatorReceiptTransactions(page, fixture) {
   );
   const inventoryBefore = (await inventoryLedger()).inventory;
   const ledgerBefore = (await inventoryLedger()).ledger;
+  await fixture.receivingEvidence.seed("concurrent-a.png");
+  await fixture.receivingEvidence.seed("concurrent-b.png");
   const concurrent = await Promise.all([
     receive(
       fixture.ids.partialPo,
@@ -3440,7 +3444,7 @@ async function task3OperatorReceiptTransactions(page, fixture) {
         location_id: fixture.locationId,
         exception_type: scenario.exceptionClass,
         reason: `${fixture.marker} receipt exception ${scenario.exceptionClass}`,
-        evidence_urls: [`audit/${fixture.marker}/${scenario.key}.jpg`],
+        evidence_urls: [await fixture.receivingEvidence.seed(`${scenario.key}.png`)],
         lines: [
           {
             line_id: scenario.lineId,
@@ -3534,7 +3538,7 @@ async function task3OperatorReceiptTransactions(page, fixture) {
       location_id: fixture.locationId,
       exception_type: "damaged",
       reason: `${fixture.marker} valid public quality inspection`,
-      evidence_urls: [`audit/${fixture.marker}/public-quality-probe.jpg`],
+      evidence_urls: [await fixture.receivingEvidence.seed("public-quality-probe.png")],
       lines: [
         {
           line_id: fixture.ids.qualityProbeLine,
@@ -3570,7 +3574,7 @@ async function task3OperatorReceiptTransactions(page, fixture) {
         supplier_id: `proc-${fixture.ids.vendor}`,
         location_id: fixture.locationId,
         lines: [{ productId: fixture.ids.product, quantity: 1 }],
-        evidence_urls: [`audit/${fixture.marker}/routine-quality-receipt.jpg`],
+        evidence_urls: [await fixture.receivingEvidence.seed("routine-quality-receipt.png")],
         actor: "browser-role Warehouse Operator",
       },
     },
@@ -3594,7 +3598,7 @@ async function task3OperatorReceiptTransactions(page, fixture) {
         supplier_id: `proc-${fixture.ids.vendor}`,
         location_id: fixture.locationId,
         lines: [{ productId: fixture.ids.product, quantity: 1 }],
-        evidence_urls: [`audit/${fixture.marker}/quality-race-receipt.jpg`],
+        evidence_urls: [await fixture.receivingEvidence.seed("quality-race-receipt.png")],
         actor: "browser-role Warehouse Operator",
       },
     },
@@ -3626,7 +3630,7 @@ async function task3OperatorReceiptTransactions(page, fixture) {
           quantity: 1,
           to_location_id: fixture.locationId,
           reference: fixture.ids.serializedIssueReceipt,
-          evidence_urls: [`audit/${fixture.marker}/serialized-receipt.jpg`],
+          evidence_urls: [await fixture.receivingEvidence.seed("serialized-receipt.png")],
           actor: "browser-role Warehouse Operator",
           created_at: new Date().toISOString(),
         },
@@ -3642,7 +3646,7 @@ async function task3OperatorReceiptTransactions(page, fixture) {
             serialNumbers: [fixture.ids.serializedIssueSerial],
           },
         ],
-        evidence_urls: [`audit/${fixture.marker}/serialized-receipt.jpg`],
+        evidence_urls: [await fixture.receivingEvidence.seed("serialized-receipt.png")],
         actor: "browser-role Warehouse Operator",
       },
     },
@@ -3652,14 +3656,14 @@ async function task3OperatorReceiptTransactions(page, fixture) {
       `Serialized issue receipt failed: ${serializedIssueReceipt.body}`,
     );
 
-  const collisionPayload = (suffix) => ({
+  const collisionPayload = async (suffix) => ({
     idempotency_key: `${fixture.marker}-same-line-${suffix}`,
     actual_delivery_date: fixture.actualDeliveryDate,
     po_id: fixture.ids.collisionPo,
     location_id: fixture.locationId,
     exception_type: "damaged",
     reason: `${fixture.marker} same-line receipt decision collision`,
-    evidence_urls: [`audit/${fixture.marker}/same-line-${suffix}.jpg`],
+    evidence_urls: [await fixture.receivingEvidence.seed(`same-line-${suffix}.png`)],
     lines: [
       {
         line_id: fixture.ids.collisionLine,
@@ -3675,7 +3679,7 @@ async function task3OperatorReceiptTransactions(page, fixture) {
       "warehouse",
       "receive_procurement_po_exception",
       {
-        ...collisionPayload("expected-drift"),
+        ...await collisionPayload("expected-drift"),
         lines: [
           {
             line_id: fixture.ids.collisionLine,
@@ -3690,18 +3694,20 @@ async function task3OperatorReceiptTransactions(page, fixture) {
     "expected quantity drift",
   );
   const collisionBefore = await inventoryLedger();
+  const collisionA = await collisionPayload("a");
+  const collisionB = await collisionPayload("b");
   const collisionResults = await Promise.all([
     callRpcAsBrowserUser(
       page,
       "warehouse",
       "receive_procurement_po_exception",
-      collisionPayload("a"),
+      collisionA,
     ),
     callRpcAsBrowserUser(
       page,
       "warehouse",
       "receive_procurement_po_exception",
-      collisionPayload("b"),
+      collisionB,
     ),
   ]);
   if (collisionResults.filter((result) => result.ok).length !== 1)
@@ -3755,7 +3761,7 @@ async function task3OperatorReceiptTransactions(page, fixture) {
         decision_id: fixture.ids.quarantineDecision,
         decision: "quarantine",
         reason: "Operator cannot decide their own exception",
-        evidence_urls: [`audit/${fixture.marker}/operator-self-denial.jpg`],
+        evidence_urls: [await fixture.receivingEvidence.seed("operator-self-denial.png")],
       },
     ),
     /not authorized|cannot approve their own exception|permission/i,
@@ -3786,7 +3792,7 @@ async function task3OperatorReceiptTransactions(page, fixture) {
       idempotency_key: `${fixture.marker}-cycle-submit`,
       cycle_count_id: fixture.ids.cycleCount,
       reason: `${fixture.marker} material variance`,
-      evidence_urls: [`audit/${fixture.marker}/count.jpg`],
+      evidence_urls: [await fixture.receivingEvidence.seed("count.png")],
     },
   );
   if (!cycleSubmit.ok)
@@ -3823,7 +3829,7 @@ async function task3OperatorReceiptTransactions(page, fixture) {
         location_id: fixture.locationId,
         quantity_delta: quantityDelta,
         reason: `${fixture.marker} governed ${name} stock request`,
-        evidence_urls: [`audit/${fixture.marker}/manual-${name}.jpg`],
+        evidence_urls: [await fixture.receivingEvidence.seed(`manual-${name}.png`)],
       },
     );
     if (!requested.ok)
@@ -3889,7 +3895,7 @@ async function task3RequestExcessAmendment(page, fixture) {
       po_line_id: fixture.ids.excessLine,
       amended_quantity: 2,
       reason: `${fixture.marker} approved amendment quantity growth request`,
-      evidence_urls: [`audit/${fixture.marker}/excess-amendment-request.pdf`],
+      evidence_urls: [await fixture.receivingEvidence.seed("excess-amendment-request.png")],
     },
   );
   if (!requested.ok)
@@ -4059,7 +4065,7 @@ async function task3SupervisorTransactions(page, fixture) {
       procurement_po_line_id: lineId,
       quantity: 1,
       disposition: "accepted",
-      evidence_urls: [`audit/${fixture.marker}/${suffix}-independent-qc.jpg`],
+      evidence_urls: [await fixture.receivingEvidence.seed(`${suffix}-independent-qc.png`)],
     };
     const call = payload => callRpcAsBrowserUser(page, "warehouse", "inspect_quality", payload);
     const accepted = suffix === "clean"
@@ -4100,7 +4106,7 @@ async function task3SupervisorTransactions(page, fixture) {
       procurement_po_line_id: fixture.ids.concurrentLine,
       quantity: 2,
       disposition: "accepted",
-      evidence_urls: [`audit/${fixture.marker}/concurrent-independent-qc.jpg`],
+      evidence_urls: [await fixture.receivingEvidence.seed("concurrent-independent-qc.png")],
     },
   );
   if (!concurrentAccepted.ok)
@@ -4137,7 +4143,7 @@ async function task3SupervisorTransactions(page, fixture) {
       quantity: 1,
       disposition: "hold",
       reason: `${fixture.marker} held serialized unit issue denial`,
-      evidence_urls: [`audit/${fixture.marker}/held-serial.jpg`],
+      evidence_urls: [await fixture.receivingEvidence.seed("held-serial.png")],
     },
   );
   if (!serializedHoldResult.ok)
@@ -4223,7 +4229,7 @@ async function task3SupervisorTransactions(page, fixture) {
       quantity: 1,
       disposition: "hold",
       reason: "private quality inspection direct denial",
-      evidence_urls: [`audit/${fixture.marker}/private-denial.jpg`],
+      evidence_urls: [await fixture.receivingEvidence.seed("private-denial.png")],
     }),
     /permission|denied|schema|not found|could not find/i,
     "private quality inspection direct denial",
@@ -4237,7 +4243,7 @@ async function task3SupervisorTransactions(page, fixture) {
       procurement_po_line_id: fixture.ids.qualityProbeLine,
       quantity: 1,
       disposition: "accepted",
-      evidence_urls: [`audit/${fixture.marker}/active-exception-qc-denial.jpg`],
+      evidence_urls: [await fixture.receivingEvidence.seed("active-exception-qc-denial.png")],
     },
     readState: () => readQualityState(fixture.ids.qualityProbeReceipt, fixture.ids.qualityProbeException),
     call: payload => callRpcAsBrowserUser(page, "warehouse", "inspect_quality", payload),
@@ -4273,7 +4279,7 @@ async function task3SupervisorTransactions(page, fixture) {
         quantity: 1,
         disposition: "hold",
         reason: `${fixture.marker} hold creation versus reservation`,
-        evidence_urls: [`audit/${fixture.marker}/hold-create-race.jpg`],
+        evidence_urls: [await fixture.receivingEvidence.seed("hold-create-race.png")],
       }),
       callRpcAsBrowserUser(page, "warehouse", "reserve", {
         product_id: fixture.ids.product,
@@ -4385,7 +4391,7 @@ async function task3SupervisorTransactions(page, fixture) {
         quantity: 1,
         disposition: "accepted",
         evidence_urls: [
-          `audit/${fixture.marker}/post-race-quality-acceptance.jpg`,
+          await fixture.receivingEvidence.seed("post-race-quality-acceptance.png"),
         ],
       },
     );
@@ -4404,7 +4410,7 @@ async function task3SupervisorTransactions(page, fixture) {
         hold_id: raceHolds[0].id,
         target_disposition: "accepted",
         reason: `${fixture.marker} race hold released after readback`,
-        evidence_urls: [`audit/${fixture.marker}/hold-create-race-release.jpg`],
+        evidence_urls: [await fixture.receivingEvidence.seed("hold-create-race-release.png")],
       },
     );
     if (!released.ok)
@@ -4421,7 +4427,7 @@ async function task3SupervisorTransactions(page, fixture) {
       product_id: fixture.ids.product,
       quantity: 1,
       disposition: "accepted",
-      evidence_urls: [`audit/${fixture.marker}/valid-public-quality.jpg`],
+      evidence_urls: [await fixture.receivingEvidence.seed("valid-public-quality.png")],
     },
   );
   if (!validPublicQuality.ok)
@@ -4462,7 +4468,7 @@ async function task3SupervisorTransactions(page, fixture) {
       decision: scenario.outcome,
       reason: `${fixture.marker} exception outcome ${scenario.outcome} ${scenario.key ?? scenario.decisionId}`,
       evidence_urls: [
-        `audit/${fixture.marker}/outcome-${scenario.outcome}.jpg`,
+        await fixture.receivingEvidence.seed(`outcome-${scenario.outcome}.png`),
       ],
       ...(scenario.exceptionClass === "unidentified" &&
       ["accept", "quarantine"].includes(scenario.outcome)
@@ -4618,7 +4624,7 @@ async function task3SupervisorTransactions(page, fixture) {
         .fill(`${fixture.marker} browser escalation final disposition`);
       await decisionDialog
         .getByLabel("Decision evidence")
-        .fill(`audit/${fixture.marker}/escalated-final.jpg`);
+        .fill(await fixture.receivingEvidence.seed("escalated-final.png"));
       await decisionDialog
         .getByRole("button", { name: "Reject receipt" })
         .click();
@@ -4669,7 +4675,7 @@ async function task3SupervisorTransactions(page, fixture) {
             location_id: fixture.locationId,
             exception_type: "damaged",
             reason: `${fixture.marker} quarantine line claim collision`,
-            evidence_urls: [`audit/${fixture.marker}/quarantine-collision.jpg`],
+            evidence_urls: [await fixture.receivingEvidence.seed("quarantine-collision.png")],
             lines: [
               {
                 line_id: scenario.lineId,
@@ -4867,7 +4873,7 @@ async function task3SupervisorTransactions(page, fixture) {
           .fill(`${fixture.marker} atomic hold rejection vendor return`);
         await page
           .getByLabel("Vendor return evidence URL")
-          .fill(`audit/${fixture.marker}/atomic-hold-return.jpg`);
+          .fill(await fixture.receivingEvidence.seed("atomic-hold-return.png"));
         await page
           .getByRole("button", { name: "Reject and create vendor return" })
           .click();
@@ -4943,7 +4949,7 @@ async function task3SupervisorTransactions(page, fixture) {
         hold_id: holdRows[0].id,
         target_disposition: "accepted",
         reason: `${fixture.marker} controlled hold release`,
-        evidence_urls: [`audit/${fixture.marker}/hold-release.jpg`],
+        evidence_urls: [await fixture.receivingEvidence.seed("hold-release.png")],
       };
       const firstAllocationId = `${fixture.marker}-hold-race-${scenario.decisionId}`;
       const retryAllocationId = `${fixture.marker}-hold-race-retry-${scenario.decisionId}`;
@@ -5098,7 +5104,7 @@ async function task3SupervisorTransactions(page, fixture) {
               custody_id: fixture.ids.excessCustody,
               outcome: "accepted_amendment",
               reason: `${fixture.marker} missing amendment denial`,
-              evidence_urls: [`audit/${fixture.marker}/missing-amendment.jpg`],
+              evidence_urls: [await fixture.receivingEvidence.seed("missing-amendment.png")],
             },
           ),
           /approved PO amendment|ordered quantity growth/i,
@@ -5224,7 +5230,7 @@ async function task3SupervisorTransactions(page, fixture) {
       idempotency_key: `${fixture.marker}-self-submit`,
       cycle_count_id: fixture.ids.selfCycleCount,
       reason: `${fixture.marker} delegated self approval probe`,
-      evidence_urls: [`audit/${fixture.marker}/self.jpg`],
+      evidence_urls: [await fixture.receivingEvidence.seed("self.png")],
     },
   );
   if (!selfSubmit.ok)
@@ -6445,6 +6451,7 @@ async function cleanupTask3ReceiptFixture(fixture) {
     throw new Error(
       `Approval-group role cleanup failed: ${restoreGroupError.message}`,
     );
+  await fixture.receivingEvidence.cleanup();
   const { data: receiptRows, error: receiptError } = await client
     .schema("warehouse")
     .from("receipts")

@@ -163,6 +163,100 @@ test("certification verifier rejects a shard claiming the union", async () => {
   }
 });
 
+test("CI174 vendor failure blocks certification without a false viewport-scope error", async () => {
+  const root = await makeCertificationBundle();
+  try {
+    const name = "transactions-desktop-1440.json";
+    const report = JSON.parse(await readFile(path.join(root, name), "utf8"));
+    const invite = report.workflows.find(
+      (workflow) => workflow.workflow === "legal vendor invite",
+    );
+    invite.ok = false;
+    report.scenarioCoverage = evaluateScenarioCoverage(report.workflows, [
+      "desktop-1440",
+    ]);
+    assert.equal(
+      report.scenarioCoverage.find((item) => item.id === "vendor-accreditation")
+        .complete,
+      false,
+    );
+    await writeJson(root, name, report);
+
+    const failures = await verifyCertificationBundle(root);
+    assert.ok(failures.includes(`${name} workflow legal vendor invite failed`));
+    assert.ok(
+      failures.includes(
+        `${name} scenario vendor-accreditation reports incomplete coverage for desktop-1440`,
+      ),
+    );
+    assert.ok(
+      failures.some((failure) =>
+        failure.startsWith(
+          "cross-shard coverage: scenario vendor-accreditation/desktop-1440 incomplete:",
+        ),
+      ),
+    );
+    assert.ok(
+      failures.every(
+        (failure) => !failure.includes("does not certify only its selected viewport"),
+      ),
+    );
+    assert.ok(failures.every((failure) => !failure.includes("mobile-390")));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+for (const complete of [false, undefined]) {
+  test(`certification verifier rejects ${complete} completion metadata independently of scope`, async () => {
+    const root = await makeCertificationBundle();
+    try {
+      const name = "transactions-desktop-1440.json";
+      const report = JSON.parse(await readFile(path.join(root, name), "utf8"));
+      const scenario = report.scenarioCoverage[0];
+      scenario.complete = complete;
+      await writeJson(root, name, report);
+      assert.deepEqual(await verifyCertificationBundle(root), [
+        `${name} scenario ${scenario.id} reports incomplete coverage for desktop-1440`,
+      ]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+}
+
+for (const requiredViewports of [undefined, [], ["mobile-390"]]) {
+  test(`certification verifier rejects invalid viewport metadata ${JSON.stringify(requiredViewports)}`, async () => {
+    const root = await makeCertificationBundle();
+    try {
+      const name = "transactions-desktop-1440.json";
+      const report = JSON.parse(await readFile(path.join(root, name), "utf8"));
+      report.scenarioCoverage[0].requiredViewports = requiredViewports;
+      await writeJson(root, name, report);
+      assert.deepEqual(await verifyCertificationBundle(root), [
+        `${name} does not certify only its selected viewport`,
+      ]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+}
+
+test("certification verifier rejects missing local scenario coverage", async () => {
+  const root = await makeCertificationBundle();
+  try {
+    const name = "transactions-desktop-1440.json";
+    const report = JSON.parse(await readFile(path.join(root, name), "utf8"));
+    delete report.scenarioCoverage;
+    await writeJson(root, name, report);
+    assert.deepEqual(await verifyCertificationBundle(root), [
+      `${name} does not certify only its selected viewport`,
+    ]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("static launch verifier no longer relies on quote-sensitive source includes", async () => {
   const source = await readFile(
     new URL("./verify-launch-artifacts.mjs", import.meta.url),

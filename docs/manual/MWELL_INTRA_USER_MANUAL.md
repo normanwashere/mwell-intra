@@ -2,6 +2,8 @@
 
 ## September 12 Workspace Layout
 
+**Vendor invitation recovery:** A saved case does not mean the invitation email was sent. If the service reaches its sending limit, ask your administrator to check email delivery before using **Retry invitation email** on the existing case. Do not create a duplicate case. Pending delivery is not confirmed delivery. Vendor access still requires acceptance of the current invitation.
+
 **Starting updated training:** Start, Resume and assessment retries open the assignment selected on the page. An older completed version does not replace the newer training you still need to finish. Previous completion records are kept.
 
 **Training and receiving follow-up:** Guided practice follows the checkpoints in your assigned training version. When it shows Complete, you do not need to answer extra steps from a newer version. If the assigned steps cannot load, close the practice, refresh once, and contact your administrator if it persists. New short, excess, damaged and unidentified receipts require the actual delivery date and retain it in receipt history. Their Quality hold and independent review still apply. Historical dates are not filled in automatically.

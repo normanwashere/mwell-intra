@@ -61,11 +61,13 @@ function createProvisioningFetch({
   personas = focusedPersonas,
   unrelatedEmails = [],
   identityScope = '',
+  missingVendorAuthority = false,
 } = {}) {
   const calls = [];
   const synced = new Set();
   const passwords = new Map();
   const metadata = new Map();
+  const invites = new Map();
   const users = new Map(
     personas.map((persona, index) => [
       `user-${index + 1}`,
@@ -99,6 +101,11 @@ function createProvisioningFetch({
     const method = options.method ?? "GET";
     const body = options.body ? JSON.parse(options.body) : null;
     calls.push({ endpoint, method, body });
+    if (endpoint.startsWith('/rest/v1/vendor_invites?')) {
+      if (method === 'POST') { invites.set(body.id, body); return jsonResponse(null, 204); }
+      const row = invites.get(url.searchParams.get('id')?.replace('eq.', ''));
+      return jsonResponse(row ? [row] : []);
+    }
 
     if (endpoint === "/auth/v1/admin/users?page=1&per_page=1000") {
       return jsonResponse({
@@ -250,6 +257,10 @@ function createProvisioningFetch({
         access_token: "test-token",
       });
     }
+    if (method === 'POST' && endpoint === '/rest/v1/rpc/current_vendor_id') {
+      assert.equal(options.headers.Authorization, 'Bearer test-token');
+      return jsonResponse(missingVendorAuthority ? null : 'vendor-uat');
+    }
 
     return jsonResponse({ message: `Unhandled ${method} ${endpoint}` }, 500);
   };
@@ -262,6 +273,23 @@ test('canonical reconciliation never changes CI accounts from any viewport', asy
   const result = await provisionUatIntraUsers({ ...valid, personas: focusedPersonas, fetchImpl: mock.fetchImpl, log: () => {} });
   assert.deepEqual(result.retired, ['intra.test.obsolete@mwell.com.ph']);
   assert.equal(mock.calls.some(call => call.method !== 'GET' && call.endpoint.includes('unrelated-')), false);
+});
+
+test('isolated vendor route reconciliation persists a labeled prerequisite before authority readback', async () => {
+  const identityScope = 'desktop-1440';
+  const personas = auditPersonas(identityScope).filter(p => p.kind === 'vendor');
+  const h = createProvisioningFetch({ personas, identityScope });
+  await provisionUatIntraUsers({ ...valid, personas, identityScope, fetchImpl: h.fetchImpl, log: () => {} });
+  const seed = h.calls.findIndex(c => c.method === 'POST' && c.endpoint.startsWith('/rest/v1/vendor_invites?'));
+  const read = h.calls.findIndex(c => c.endpoint === '/rest/v1/rpc/current_vendor_id');
+  assert(seed >= 0 && read > seed);
+  assert.equal(h.calls[seed].body.profile.email_delivery_certified, false);
+});
+
+test('canonical vendor missing accepted authority fails without manufacturing acceptance', async () => {
+  const h = createProvisioningFetch({ missingVendorAuthority: true });
+  await assert.rejects(provisionUatIntraUsers({ ...valid, personas: focusedPersonas, fetchImpl: h.fetchImpl, log: () => {} }), /accepted vendor invitation authority is missing/);
+  assert.equal(h.calls.some(c => c.method === 'POST' && c.endpoint.startsWith('/rest/v1/vendor_invites?')), false);
 });
 
 test('viewport reconciliation never changes canonical testers or another viewport', async () => {

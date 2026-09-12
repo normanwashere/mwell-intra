@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 import { assertApprovedMutationTarget } from "../lib/target-environment.mjs";
 import { createAuditDatabaseClient } from "./live-e2e-db-verify.mjs";
 import { assertDeterministicAuditRunId } from "./uat-ci-run-id.mjs";
+import { createReceivingAuditEvidence } from "./receiving-audit-evidence.mjs";
 
 const TRANSACTION_VIEWPORTS = new Set(["desktop-1440", "mobile-390"]);
 
@@ -462,6 +463,17 @@ export async function cleanupAndVerifyRun({
   const paymentPackIds = unique(paymentRows.map(row => row.id));
   // Fail closed before removing discoverability rows, including on a failed lookup.
   if (results.some(item => item.error)) throw new Error("Cleanup discovery failed; evidence and parent rows retained");
+  try {
+    // A fresh helper discovers crash orphans from the exact run folder without
+    // requiring surviving receipt rows or the original process's seed registry.
+    const receivingEvidence = createReceivingAuditEvidence(database, scope.marker);
+    results.push({ ...await receivingEvidence.cleanup(), entity: "storage.evidence:receiving" });
+  } catch (error) {
+    results.push({ entity: "storage.evidence:receiving", marker: scope.marker,
+      removed: null, remaining: null, error: error instanceof Error ? error.message : String(error) });
+    return { runId, viewport, marker: scope.marker, completedAt: new Date().toISOString(),
+      complete: false, results };
+  }
   results.push(await cleanupExcessCustodyStorage(database, custodyRows.map(row => row.id)));
   const requestEvidence = await cleanupCertificationRequestEvidence(database, scope.marker);
   results.push(requestEvidence);
