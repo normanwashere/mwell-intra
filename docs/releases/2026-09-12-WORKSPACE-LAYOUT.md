@@ -1,5 +1,7 @@
 # September 12 Workspace Layout Release
 
+**Evidence layout follow-up:** Mixed photo/link attachments get wider mobile columns and wrapping addresses. An isolated browser fixture using the real gallery and shared CSS verifies 1440px, 390px and 320px, zero external requests at load, and photo preview dismissal. Full live certification remains a separate pending gate.
+
 **Certification follow-up:** CI now runs an early critical route gate and isolates each viewport's automation accounts so up to three route/visual jobs can run together. All six viewports and eleven roles remain covered; actual onboarding, authorization checks, screenshots and console errors remain strict. Transactions and cleanup stay sequential. Initial account setup takes extra time; full runtime improvement must be measured on the new run, not assumed.
 
 **External evidence fix:** Older HTTPS delivery references appear as **External evidence** links rather than broken automatic photo requests. Uploaded photos still preview normally. No receipt, inspection result, evidence value or stock transaction is changed. An external URL does not imply that its contents have been verified.

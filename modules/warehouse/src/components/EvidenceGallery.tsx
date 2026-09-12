@@ -98,7 +98,7 @@ export function EvidenceGallery({
 
   return (
     <div className={className}>
-      <ul className="grid grid-cols-4 gap-2" aria-label="Evidence photos">
+      <ul className={`grid gap-2 ${list.some(u => normalizeSafeHttpsUrl(u)) ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-4'}`} aria-label="Evidence photos">
         {list.map((u, index) => {
           const externalUrl = normalizeSafeHttpsUrl(u);
           const src = resolved[u] ?? undefined;
@@ -151,7 +151,7 @@ function ExternalEvidence({ href, count = 1, className }: { href: string; count?
       rel="noopener noreferrer"
       aria-label={`Open external evidence on ${host} (new tab)`}
       title={`Open external evidence on ${host} (new tab)`}
-      className={`flex min-h-12 min-w-0 flex-col justify-center rounded-lg border border-line bg-inset px-2 py-2 text-xs text-link ${className ?? ''}`}
+      className={`flex min-h-12 min-w-0 flex-col justify-center rounded-lg border border-line bg-inset px-2 py-2 text-xs text-link [overflow-wrap:anywhere] ${className ?? ''}`}
     >
       <span className="font-semibold">External evidence</span>
       <span className="break-all">{host}</span>

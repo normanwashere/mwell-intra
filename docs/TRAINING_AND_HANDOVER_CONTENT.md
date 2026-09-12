@@ -2,6 +2,8 @@
 
 ## September 12 Layout Handover
 
+Verify mixed photo/link galleries at 320px, 390px and desktop width: links wrap inside their controls, no third-party request starts on page load, and uploaded-photo previews open and dismiss normally. The isolated component/CSS fixture is not a substitute for the full deployed role audit.
+
 **Certification isolation:** Route/visual jobs use separate `intra.ci.<viewport>.*` UAT accounts with the same eleven persona assignments and department/vendor scope. They complete the real automated onboarding flow, not fabricated training completions. Reconciliation is restricted to each allowlisted namespace and leaves testers and other shards alone. Up to three read-only viewport jobs run together. A separate critical identity set checks login, workspace, knowledge and access denial before the full matrix. Transactions and independent cleanup remain sequential; smoke success is not full certification. First-run account/onboarding setup adds time. These tests do not replace a real-user pilot or certify maximum capacity.
 
 **External evidence handling:** Legacy HTTPS references are explicit external links, not automatic image requests. Storage paths, inline images and bundled app photos retain preview. No saved evidence or inspection decision is changed. Verify a mixed photo/link record on desktop and mobile and retain the original link in the audit trail.

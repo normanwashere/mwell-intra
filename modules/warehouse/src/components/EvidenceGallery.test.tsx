@@ -66,6 +66,7 @@ describe('EvidenceGallery', () => {
     expect(await screen.findByRole('button', { name: /view evidence photo/i })).toBeInTheDocument();
     const img = document.querySelector('img');
     expect(img?.getAttribute('src')).toBe(dataUrl);
+    expect(screen.getByRole('list', { name: 'Evidence photos' })).toHaveClass('grid-cols-4');
   });
 
   it('renders a count badge in thumb mode when multiple photos', async () => {
@@ -106,6 +107,7 @@ describe('EvidenceGallery', () => {
     render(<EvidenceGallery urls={['https://deliverylink.com', 'data:image/png;base64,eA==']} />);
     expect(await screen.findByRole('link', { name: /open external evidence/i })).toBeVisible();
     expect(await screen.findByRole('img', { name: 'Evidence' })).toHaveAttribute('src', 'data:image/png;base64,eA==');
+    expect(screen.getByRole('list', { name: 'Evidence photos' })).toHaveClass('grid-cols-2', 'sm:grid-cols-4');
   });
 
   it('shows a visible failure when an app evidence image cannot load', async () => {

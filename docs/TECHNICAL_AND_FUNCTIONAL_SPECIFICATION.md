@@ -2,6 +2,8 @@
 
 ## September 12 Shared Workspace Layout
 
+Mixed EvidenceGallery collections use two mobile columns and four desktop columns, with anywhere-wrapping external addresses. Photo-only collections keep four columns. This presentation-only adjustment does not modify storage resolution, role access, saved evidence, or transaction commands.
+
 **Parallel route certification:** The allowlisted `AUDIT_IDENTITY_SCOPE` selects one of six viewport namespaces or `critical`, using the same eleven persona role, department and vendor bindings. Provisioning checks scope and exact authority before any request, and retires only identities inside that namespace. CI route shards run with maximum concurrency three after genuine automated orientation, without a service key in their read-only audit step. Transaction and cleanup shards remain serial on their established control actors. A distinct `critical` audit phase checks workspace/KB/access-denial readiness before the full six-viewport matrix; it cannot satisfy the full certification artifact gate. No single-session policy is relaxed.
 
 **Legacy evidence URLs:** EvidenceGallery renders persisted safe HTTPS URLs as external links with `noopener noreferrer`, not automatic image sources. Uploaded storage paths are still signed and previewed under caller authorization; supported inline and bundled images retain preview. This avoids third-party image requests during route loading without rewriting original evidence, filtering console failures, or changing inspection controls. External link availability and content remain the source owner's responsibility.
