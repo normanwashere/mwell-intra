@@ -2,6 +2,8 @@
 
 ## September 12 Interface Training
 
+**Multi-role and updated assignments:** Demonstrate an older completed assignment beside pending training, including two assignments of the same version. Start or Resume the pending item and verify the correct attempt opens. Retrying an assessment must keep that selected assignment. Older completion evidence remains unchanged.
+
 **Training-version and receiving retest:** Use a newly assigned learner to check that practice ends after the assigned checkpoints, then reload to verify completion. Older two-checkpoint Operations Lead training must not show two additional unpublished steps. For short, excess, damaged and unidentified deliveries, enter the actual delivery date and check receipt history; the receipt still waits for independent review. Do not invent dates for older receipts or repeat receipt posting to repair their history.
 
 On a narrow screen, mixed evidence attachments appear in two columns. Confirm the website address before opening an external link. Photo preview and Close/Escape behavior are unchanged.

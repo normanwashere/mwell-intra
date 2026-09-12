@@ -2,6 +2,8 @@
 
 ## September 12 Layout Handover
 
+**Assignment-selection regression:** Independent review identified an older ID-only Resume lookup that could open completed work instead of a pending assignment. Onboarding launchers and assessment retries now retain the exact selected assignment and version. Verify same-version multi-role assignments, updated versions, retry binding, and rejection of an assignment outside the selected requirement. No old completion is erased.
+
 **September 12 certification repair:** Explain that training follows the learner's assigned published version, not every checkpoint bundled in the latest app. Verify both two-step and four-step versions; unsupported steps must show a recovery message without granting completion. Retest actual delivery dates for all four exception types, exact retries and invalid-date rejection. New exception receipts remain on hold, and previous receipts remain unchanged. Run #173 failed all route shards at Operations Lead onboarding and both transaction shards; both independent cleanups passed. Vendor invitation email hit its provider rate limit and still requires SMTP capacity/configuration review before delivery can be certified.
 
 Verify mixed photo/link galleries at 320px, 390px and desktop width: links wrap inside their controls, no third-party request starts on page load, and uploaded-photo previews open and dismiss normally. The isolated component/CSS fixture is not a substitute for the full deployed role audit.

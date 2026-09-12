@@ -544,7 +544,14 @@ describe("OnboardingCenter", () => {
     const resume = vi.fn();
     renderCenter({
       resume,
-      snapshot: { ...snapshot, curricula, progress: [] },
+      snapshot: { ...snapshot, curricula, progress: curricula.map((item) => ({
+        ...snapshot.progress[0]!,
+        assignmentRequirementId: `ar-${item.curriculum.personaId}`,
+        requirementId: item.requirements[0]!.id,
+        state: "not_started",
+        attemptCount: 0,
+        completedAt: undefined,
+      })) },
     });
     const nextSection = screen.getByText("Next required action").parentElement!;
     expect(
@@ -562,7 +569,7 @@ describe("OnboardingCenter", () => {
       name: "Start Role orientation",
     });
     buttons[0]!.click();
-    expect(resume).toHaveBeenCalledWith("general_employee-orientation");
+    expect(resume).toHaveBeenCalledWith("general_employee-orientation", "ar-general_employee");
   });
 
   it("blocks unmet prerequisites and labels retryable work accurately", () => {

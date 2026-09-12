@@ -168,6 +168,6 @@ describe("AssessmentRunner", () => {
     expect(await screen.findByText("Review and try again")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Start another attempt" }));
     expect(closeActivity).toHaveBeenCalledOnce();
-    expect(resume).toHaveBeenCalledWith("receiving-check");
+    expect(resume).toHaveBeenCalledWith("receiving-check", "ar-assessment");
   });
 });

@@ -354,6 +354,81 @@ describe("LearningProvider", () => {
     expect(screen.getByTestId("training-error")).toHaveTextContent("none");
   });
 
+  it.each([1, 2])(
+    "resumes the pending assignment and its version %i instead of older completed work",
+    async (version) => {
+      const assigned = assignedOrientation();
+      const original = assigned.curricula[0]!.requirements[0]!;
+      const next = {
+        ...original,
+        version,
+        requiredCheckpointIds: ["assigned-checkpoint"],
+      };
+      assigned.curricula[0]!.requirements =
+        version === 1 ? [next] : [original, next];
+      const pending = {
+        ...assigned.progress[0]!,
+        assignmentRequirementId: "assignment-pending",
+        requirementVersion: version,
+      };
+      assigned.progress = [
+        {
+          ...assigned.progress[0]!,
+          state: "passed",
+          completedAt: "2026-08-13T00:00:00Z",
+        },
+        pending,
+      ];
+      const learningRepository = repository(assigned);
+      const attempt = {
+        id: "attempt-pending",
+        attemptNumber: 1,
+        mode: "scenario" as const,
+        startedAt: "2026-08-13T01:00:00Z",
+      };
+      vi.mocked(learningRepository.startRequirement).mockResolvedValue({
+        progress: { ...pending, state: "in_progress", activeAttempt: attempt },
+        attempt,
+      });
+      render(
+        <LearningProvider repository={learningRepository}>
+          <Probe />
+        </LearningProvider>,
+      );
+      await waitFor(() => expect(observedLearning?.loading).toBe(false));
+      await act(async () =>
+        observedLearning!.resume("receiving-scenario", "assignment-pending"),
+      );
+      expect(learningRepository.startRequirement).toHaveBeenCalledWith(
+        expect.objectContaining({
+          assignmentRequirementId: "assignment-pending",
+        }),
+      );
+      expect(observedLearning!.activeTraining).toMatchObject({
+        requirementVersion: version,
+        requiredCheckpointIds: ["assigned-checkpoint"],
+        assignmentRequirementId: "assignment-pending",
+      });
+    },
+  );
+
+  it("does not start an assignment ID outside the selected requirement", async () => {
+    const learningRepository = repository(assignedOrientation());
+    render(
+      <LearningProvider repository={learningRepository}>
+        <Probe />
+      </LearningProvider>,
+    );
+    await waitFor(() => expect(observedLearning?.loading).toBe(false));
+    await act(async () =>
+      observedLearning!.resume("receiving-scenario", "unassigned-id"),
+    );
+    expect(learningRepository.startRequirement).not.toHaveBeenCalled();
+    expect(screen.getByTestId("training-error")).toHaveTextContent(
+      "not assigned",
+    );
+  });
+
   it.each(["assessment", "policy"] as const)(
     "opens an assigned %s as a reachable governed activity",
     async (kind) => {
@@ -686,10 +761,9 @@ describe("LearningProvider", () => {
         ),
       )
       .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({ accepted: true, recorded: false }),
-          { status: 200 },
-        ),
+        new Response(JSON.stringify({ accepted: true, recorded: false }), {
+          status: 200,
+        }),
       );
     vi.stubGlobal("fetch", fetcher);
 

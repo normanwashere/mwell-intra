@@ -141,7 +141,10 @@ export interface LearningContextValue {
   activeActivity: ActiveLearningActivity | null;
   refresh(): Promise<void>;
   refreshAccess(): Promise<boolean>;
-  resume(requirementId: string): Promise<void>;
+  resume(
+    requirementId: string,
+    assignmentRequirementId?: string,
+  ): Promise<void>;
   closeTraining(): void;
   closeActivity(): void;
   recordCheckpoint(event: TrainingCheckpoint): Promise<void>;
@@ -157,6 +160,7 @@ export interface LearningContextValue {
 
 export interface ActiveTrainingRequirement {
   requirementId: string;
+  requirementVersion?: number;
   assignmentRequirementId: string;
   attemptId: string;
   mode: LearningAttemptMode;
@@ -362,20 +366,37 @@ export function LearningProvider({
   );
 
   const resume = useCallback(
-    async (requirementId: string) => {
+    async (requirementId: string, assignmentRequirementId?: string) => {
       if (startInFlight.current) return;
       setResumeRequirementId(requirementId);
       setTrainingError(null);
-      const progress = snapshotRef.current?.progress.find(
-        (item) => item.requirementId === requirementId,
-      );
+      const requirements =
+        snapshotRef.current?.curricula.flatMap((item) => item.requirements) ??
+        [];
+      const candidates =
+        snapshotRef.current?.progress.filter(
+          (item) =>
+            item.requirementId === requirementId &&
+            (!assignmentRequirementId ||
+              item.assignmentRequirementId === assignmentRequirementId) &&
+            requirements.some(
+              (requirement) =>
+                requirement.id === item.requirementId &&
+                requirement.version === item.requirementVersion,
+            ),
+        ) ?? [];
+      const progress =
+        candidates.find((item) => !["passed", "waived"].includes(item.state)) ??
+        candidates[0];
       if (!progress) {
         setTrainingError("This learning step is not assigned to your account.");
         return;
       }
-      const requirement = snapshotRef.current?.curricula
-        .flatMap((item) => item.requirements)
-        .find((item) => item.id === requirementId);
+      const requirement = requirements.find(
+        (item) =>
+          item.id === requirementId &&
+          item.version === progress.requirementVersion,
+      );
       const isActivity =
         requirement?.kind === "assessment" || requirement?.kind === "policy";
       if (!requirement || (!isActivity && !requirement.simulationId)) {
@@ -460,6 +481,7 @@ export function LearningProvider({
         }
         setActiveTraining({
           requirementId,
+          requirementVersion: requirement.version,
           assignmentRequirementId: progress.assignmentRequirementId,
           attemptId: result.attempt.id,
           mode: result.attempt.mode,

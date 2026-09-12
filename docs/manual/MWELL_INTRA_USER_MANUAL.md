@@ -2,6 +2,8 @@
 
 ## September 12 Workspace Layout
 
+**Starting updated training:** Start, Resume and assessment retries open the assignment selected on the page. An older completed version does not replace the newer training you still need to finish. Previous completion records are kept.
+
 **Training and receiving follow-up:** Guided practice follows the checkpoints in your assigned training version. When it shows Complete, you do not need to answer extra steps from a newer version. If the assigned steps cannot load, close the practice, refresh once, and contact your administrator if it persists. New short, excess, damaged and unidentified receipts require the actual delivery date and retain it in receipt history. Their Quality hold and independent review still apply. Historical dates are not filled in automatically.
 
 Mixed photo/link galleries use two columns on small screens so website addresses stay readable; photo-only galleries retain their existing layout. Opening a link or a photo remains read-only.

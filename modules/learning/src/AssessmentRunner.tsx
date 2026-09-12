@@ -122,7 +122,7 @@ export function AssessmentRunner({
           <Button
             onClick={() => {
               closeActivity();
-              void resume(requirement.id);
+              void resume(requirement.id, progress.assignmentRequirementId);
             }}
           >
             Start another attempt

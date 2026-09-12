@@ -2,6 +2,8 @@
 
 ## September 12 Shared Workspace Layout
 
+**Assignment identity:** Onboarding launchers and assessment retries pass the selected assignment requirement ID. Resume validates it against the requested requirement and a currently visible matching version before starting the server attempt. Legacy ID-only callers prefer unfinished matching assignments over completed ones. Training checkpoints and activity views bind to that version; prior completion records are neither reset nor overwritten.
+
 **Assigned training and exception dates:** `my_learning_snapshot_base` projects each assigned requirement version's `pass_rules.required_checkpoints` as `requiredCheckpointIds`. The client captures that list when starting the attempt and renders those embedded steps in order, failing closed for absent, duplicate or unsupported IDs. It does not alter published pass rules or server choice evaluation. The exception receipt poster now invokes the existing actual-date validator at insertion, after exact replay handling. Existing authorization, line reservations, holds, quantity posting and independent dispositions are unchanged; no historical dates are inferred. CI uses the new allowlisted `checkpoint-v1` identity namespace for a genuinely fresh first run across eleven roles; subsequent runs on that namespace are repeat-account checks, not pristine onboarding.
 
 Mixed EvidenceGallery collections use two mobile columns and four desktop columns, with anywhere-wrapping external addresses. Photo-only collections keep four columns. This presentation-only adjustment does not modify storage resolution, role access, saved evidence, or transaction commands.

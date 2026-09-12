@@ -610,14 +610,21 @@ export function OnboardingCenter({
         item.expiresAt && new Date(item.expiresAt).getTime() <= Date.now(),
       ),
   );
-  const activityRequirement = activeActivity
-    ? view.requirements.find((item) => item.id === activeActivity.requirementId)
-    : undefined;
   const activityProgress = activeActivity
-    ? activityRequirement
-      ? view.progress.get(sharedCompletionKey(activityRequirement))
-      : undefined
+    ? snapshot?.progress.find(
+        (item) =>
+          item.assignmentRequirementId ===
+          activeActivity.assignmentRequirementId,
+      )
     : undefined;
+  const activityRequirement =
+    activeActivity && activityProgress
+      ? view.requirements.find(
+          (item) =>
+            item.id === activeActivity.requirementId &&
+            item.version === activityProgress.requirementVersion,
+        )
+      : undefined;
   const assessmentQuestions =
     activeActivity?.kind === "assessment"
       ? assessmentQuestionsFor(activeActivity.requirementId)
@@ -666,7 +673,10 @@ export function OnboardingCenter({
             requiredCheckpointIds={activeTraining.requiredCheckpointIds}
             requirementTitle={
               view.requirements.find(
-                (item) => item.id === activeTraining.requirementId,
+                (item) =>
+                  item.id === activeTraining.requirementId &&
+                  (activeTraining.requirementVersion === undefined ||
+                    item.version === activeTraining.requirementVersion),
               )?.title ?? "Role training"
             }
             assignmentRequirementId={activeTraining.assignmentRequirementId}
@@ -795,7 +805,11 @@ export function OnboardingCenter({
                 }
                 onResume={(launcher) => {
                   launcherRef.current = launcher;
-                  void resume(requirement.id);
+                  void resume(
+                    requirement.id,
+                    view.progress.get(sharedCompletionKey(requirement))
+                      ?.assignmentRequirementId,
+                  );
                 }}
               />
             </div>
@@ -869,7 +883,11 @@ export function OnboardingCenter({
               }
               onResume={(launcher) => {
                 launcherRef.current = launcher;
-                void resume(next.id);
+                void resume(
+                  next.id,
+                  view.progress.get(sharedCompletionKey(next))
+                    ?.assignmentRequirementId,
+                );
               }}
             />
           </div>
@@ -970,7 +988,10 @@ export function OnboardingCenter({
                         unavailableReason={unavailableReasonFor(requirement)}
                         onResume={(launcher) => {
                           launcherRef.current = launcher;
-                          void resume(requirement.id);
+                          void resume(
+                            requirement.id,
+                            progress?.assignmentRequirementId,
+                          );
                         }}
                       />
                     )}
