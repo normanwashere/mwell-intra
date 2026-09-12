@@ -1,5 +1,11 @@
 # September 12 Workspace Layout Release
 
+**Transaction test input correction:** The live receipt harness now supplies the required actual delivery date for clean, exception and collision scenarios, checks the stored date, and verifies that a missing date leaves received quantity unchanged. The app requirement is not relaxed. The old run's receipt failure caused dependent Quality/Finance scenarios to fail; those require a fresh successful run. Vendor email delivery also reported a provider rate limit and remains a separate unverified external dependency.
+
+**Focused deployed checks:** On `42c76c1`, Operations Associate and Operations Lead receiving screens passed external-link checks at 1440px, 390px and 320px: the original link remains available, no deliverylink.com image request fires, and the link control does not overflow. This is not full-page or full-role screenshot certification; the narrow header and long receipt metadata still need broader visual review.
+
+**Quality live follow-up:** All six focused checks passed on the same build: complete metadata without Pending photo downloads, Completed-only evidence reads, persisted-photo decoding, recovery after an injected read failure, mobile record links, and loading offscreen photos on scroll. These checks do not establish maximum capacity or a real-user pilot.
+
 **Evidence layout follow-up:** Mixed photo/link attachments get wider mobile columns and wrapping addresses. An isolated browser fixture using the real gallery and shared CSS verifies 1440px, 390px and 320px, zero external requests at load, and photo preview dismissal. Full live certification remains a separate pending gate.
 
 **Certification follow-up:** CI now runs an early critical route gate and isolates each viewport's automation accounts so up to three route/visual jobs can run together. All six viewports and eleven roles remain covered; actual onboarding, authorization checks, screenshots and console errors remain strict. Transactions and cleanup stay sequential. Initial account setup takes extra time; full runtime improvement must be measured on the new run, not assumed.

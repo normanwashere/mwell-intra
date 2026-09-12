@@ -2650,6 +2650,7 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
     );
   const fixture = {
     marker,
+    actualDeliveryDate: new Date().toISOString().slice(0, 10),
     client,
     ids,
     locationId: locations[0].id,
@@ -3186,9 +3187,10 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
 }
 
 async function task3OperatorReceiptTransactions(page, fixture) {
-  const receive = (poId, lineId, quantity, suffix) =>
+  const receive = (poId, lineId, quantity, suffix, actualDeliveryDate = fixture.actualDeliveryDate) =>
     callRpcAsBrowserUser(page, "warehouse", "receive_procurement_po", {
       idempotency_key: `${fixture.marker}-${suffix}`,
+      actual_delivery_date: actualDeliveryDate,
       po_id: poId,
       location_id: fixture.locationId,
       evidence_urls: [`audit/${fixture.marker}/${suffix}.jpg`],
@@ -3201,6 +3203,16 @@ async function task3OperatorReceiptTransactions(page, fixture) {
         },
       ],
     });
+  requireRpcFailure(
+    await receive(fixture.ids.cleanPo, fixture.ids.cleanLine, 1, 'missing-delivery-date', null),
+    /Actual delivery date is required/i,
+    'missing actual delivery date',
+  );
+  await verifyCheckpoint({
+    schema: 'procurement', table: 'purchase_order_lines',
+    filters: { id: fixture.ids.cleanLine }, expected: { received_quantity: 0 },
+    select: 'id,received_quantity',
+  }, fixture.client);
   const clean = await receive(
     fixture.ids.cleanPo,
     fixture.ids.cleanLine,
@@ -3270,8 +3282,8 @@ async function task3OperatorReceiptTransactions(page, fixture) {
         schema: "warehouse",
         table: "receipts",
         filters: { id: receiptId },
-        expected: { quality_status: "pending" },
-        select: "id,quality_status,procurement_po_id",
+        expected: { quality_status: "pending", actual_delivery_date: fixture.actualDeliveryDate },
+        select: "id,quality_status,procurement_po_id,actual_delivery_date",
       },
       fixture.client,
     );
@@ -3423,6 +3435,7 @@ async function task3OperatorReceiptTransactions(page, fixture) {
       "receive_procurement_po_exception",
       {
         idempotency_key: `${fixture.marker}-receipt-exception-${scenario.key}`,
+        actual_delivery_date: fixture.actualDeliveryDate,
         po_id: scenario.poId,
         location_id: fixture.locationId,
         exception_type: scenario.exceptionClass,
@@ -3448,6 +3461,11 @@ async function task3OperatorReceiptTransactions(page, fixture) {
         `Operator ${scenario.exceptionClass} receipt failed: ${exceptionReceipt.body}`,
       );
     const result = JSON.parse(exceptionReceipt.body);
+    await verifyCheckpoint({
+      schema: 'warehouse', table: 'receipts', filters: { id: result.receipt.id },
+      expected: { actual_delivery_date: fixture.actualDeliveryDate },
+      select: 'id,actual_delivery_date',
+    }, fixture.client);
     const tracked = {
       ...scenario,
       receiptId: result.receipt.id,
@@ -3511,6 +3529,7 @@ async function task3OperatorReceiptTransactions(page, fixture) {
     "receive_procurement_po_exception",
     {
       idempotency_key: `${fixture.marker}-public-quality-probe-intake`,
+      actual_delivery_date: fixture.actualDeliveryDate,
       po_id: fixture.ids.qualityProbePo,
       location_id: fixture.locationId,
       exception_type: "damaged",
@@ -3635,6 +3654,7 @@ async function task3OperatorReceiptTransactions(page, fixture) {
 
   const collisionPayload = (suffix) => ({
     idempotency_key: `${fixture.marker}-same-line-${suffix}`,
+    actual_delivery_date: fixture.actualDeliveryDate,
     po_id: fixture.ids.collisionPo,
     location_id: fixture.locationId,
     exception_type: "damaged",
@@ -4644,6 +4664,7 @@ async function task3SupervisorTransactions(page, fixture) {
           "receive_procurement_po_exception",
           {
             idempotency_key: `${fixture.marker}-quarantine-line-claim-collision-${scenario.decisionId}`,
+            actual_delivery_date: fixture.actualDeliveryDate,
             po_id: scenario.poId,
             location_id: fixture.locationId,
             exception_type: "damaged",
@@ -7031,6 +7052,7 @@ async function procurementReceiptAuthorityWorkflow(page) {
 
   const probe = {
     idempotency_key: `procurement-denial-${Date.now()}`,
+    actual_delivery_date: new Date().toISOString().slice(0, 10),
     po_id: "00000000-0000-0000-0000-000000000000",
     location_id: "not-used",
     lines: [{ line_id: "00000000-0000-0000-0000-000000000000", quantity: 1 }],

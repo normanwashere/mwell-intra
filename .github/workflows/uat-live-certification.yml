@@ -94,6 +94,8 @@ jobs:
         run: node --test --test-concurrency=1 scripts/verify-department-request-names.pglite.test.mjs scripts/verify-replacement-delivery.pglite.test.mjs scripts/verify-authority-plan-performance.pglite.test.mjs
       - name: Verify quality summary evidence and caller authorization
         run: node --test scripts/verify-quality-queue-evidence.pglite.test.mjs
+      - name: Verify governed receiving delivery-date and quantity contracts
+        run: node --test scripts/verify-governed-po-receipt-breakdown.pglite.test.mjs
       - name: Build all workspaces
         run: pnpm build
       - name: Analyze source with CodeQL

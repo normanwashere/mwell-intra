@@ -438,6 +438,20 @@ test("supports bounded route and transaction certification phases", async () => 
   assert.match(source, /if \(mutatingPhase\)[\s\S]*cleanupRun/);
 });
 
+test('governed receipt fixtures supply and verify delivery dates without weakening the missing-date rejection', async () => {
+  const source = await readFile(new URL('./full-intra-live-e2e.mjs', import.meta.url), 'utf8');
+  assert.match(source, /actualDeliveryDate: new Date\(\)\.toISOString\(\)\.slice\(0, 10\)/);
+  assert.match(source, /'missing-delivery-date', null/);
+  assert.match(source, /\/Actual delivery date is required\/i/);
+  assert.match(source, /expected: \{ received_quantity: 0 \}/);
+  assert.match(source, /quality_status: "pending", actual_delivery_date: fixture.actualDeliveryDate/);
+  for (const marker of ['receipt-exception-${scenario.key}', 'public-quality-probe-intake', 'same-line-${suffix}', 'quarantine-line-claim-collision-${scenario.decisionId}']) {
+    const start = source.indexOf(marker);
+    assert.ok(start > 0);
+    assert.match(source.slice(start, start + 170), /actual_delivery_date: fixture.actualDeliveryDate/);
+  }
+});
+
 test("shards UAT certification into bounded least-privilege jobs", async () => {
   const workflow = await readFile(
     new URL(
