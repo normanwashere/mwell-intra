@@ -20,6 +20,6 @@ Please leave records marked **WMS-ECOM** or **WMS-INBOUND** to the development t
 
 The temporary **WMS signoff** records from this department test have now been cleaned up. We archived the four receipt photos first, then removed the exact synthetic records and verified the scoped cleanup. Your existing testing data was outside the deletion scope.
 
-The standalone handbook and KB source now describe these controls without the old pending-release wording. The KB wording change will accompany the documentation release; the deployed controls are already available. SMTP remains outside this warehouse testing scope.
+The updated KB is live in **b3a4d68**, and the standalone handbook has been rebuilt to match. The live return guide explains the optional order/case links and the separate Quality handoff. SMTP remains outside this warehouse testing scope.
 
 Technical evidence and remaining limits: [return and visibility release](2026-09-13-WMS-RETURN-VISIBILITY-RELEASE.md).

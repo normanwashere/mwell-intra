@@ -2,7 +2,9 @@
 
 ## Deployed
 
-UAT serves application commit `0079161354f38ac93ffc5f679dd1353760461513` from deployment `dpl_AM4bUuTuwB53x25c7CbTi1oguRrk`. The alias health check at `2026-09-13T10:19:18.131Z` confirmed `appEnv=uat`, database project `kkoitlvydytdhlpxhuah`, reachable database and CSS assets. Production was not targeted.
+The application changes first shipped as `0079161354f38ac93ffc5f679dd1353760461513` from deployment `dpl_AM4bUuTuwB53x25c7CbTi1oguRrk`. The documentation follow-up `b3a4d68cbcd706e178509ac85b5da8c130bc9685` is now live from deployment `dpl_FyrDmxiDcEyPh2yE88qu59tN1em9`; it does not change application workflow components. The fresh alias health check at `2026-09-13T14:02:55.766Z` confirmed that exact commit, `appEnv=uat`, database project `kkoitlvydytdhlpxhuah`, and reachable database and CSS assets. Production was not targeted.
+
+The parent signed in as the existing Operations Lead and directly inspected the live `feature-warehouse-returns` KB article. Its task guide now describes optional Original order and Customer return case links, opening an unsent intake, preserving unfinished drafts, quarantine intake and separate Quality authority. No pending-release wording appeared in those controls. Historical screen-guide images remain explicitly labeled as an earlier build; they do not certify the new controls. The live UI crawl below remains attributed to `0079161`, not relabeled as a `b3a4d68` run.
 
 The database migration `20260913071110_customer_return_intake_lineage` was applied before the app. Nullable original-order and customer-case links and their indexes are present. Public intake authorization, table read policy and the certified wrapper definition remain unchanged. The private validator and retained implementation remain owner-only with an empty search path. The security-advisor comparison found no new notices; the same 13 informational no-policy notices remain.
 
