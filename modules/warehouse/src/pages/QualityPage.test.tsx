@@ -82,9 +82,12 @@ describe("QualityPage", () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Holds' }));
     const holds = await screen.findByRole('list', { name: 'Active holds' });
     expect(within(holds).getAllByRole('listitem')).toHaveLength(101);
+    expect(screen.getByText('101 active holds')).toBeInTheDocument();
+    expect(screen.queryByText('1 pending inspections')).not.toBeInTheDocument();
     expect(within(holds).getByText('Boundary hold 0')).toBeInTheDocument();
     await userEvent.type(screen.getByRole('searchbox'), 'Boundary hold 0');
     expect(within(holds).getAllByRole('listitem')).toHaveLength(1);
+    expect(screen.getByText('1 of 101 active holds')).toBeInTheDocument();
   });
 
   it('retains group search and current versus total counts after inspecting and switching tabs', async () => {
@@ -109,6 +112,8 @@ describe("QualityPage", () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
     expect(search).toHaveValue('group-receipt-4');
     await userEvent.click(screen.getByRole('tab', { name: 'Completed' }));
+    expect(screen.getByText('0 of 0 completed inspections')).toBeInTheDocument();
+    expect(screen.queryByText('12 pending inspections')).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('tab', { name: 'Pending' }));
     expect(search).toHaveValue('group-receipt-4');
     expect(screen.getByText('2 of 12 pending inspections')).toBeInTheDocument();

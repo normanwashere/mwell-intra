@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canReleaseFulfillmentOrder, nextFulfillmentStatus, type CustomerReturnCase, type DepartmentStockRequest, type FulfillmentOrder, type InventoryUnit } from '@intra/data-kit';
+import { canReleaseFulfillmentOrder, nextFulfillmentStatus, type CustomerReturnCase, type DepartmentStockRequest, type FulfillmentOrder, type InventoryUnit, type ReturnRecord } from '@intra/data-kit';
 import { orderWorkflowSummary, requestWorkflowSummary, returnWorkflowSummary } from './workflowSummary';
 
 const order: FulfillmentOrder = {
@@ -15,7 +15,7 @@ const request: DepartmentStockRequest = {
   requestedBy: 'requester', requestedAt: '2026-09-11', fulfillmentOrderId: order.id,
 };
 const returnCase: CustomerReturnCase = {
-  id: 'return-1', productId: 'smart-watch', defectDescription: 'Defect', requestingDepartment: 'customer_service',
+  id: 'return-1', sourceOrderId: 'order-1', productId: 'smart-watch', defectDescription: 'Defect', requestingDepartment: 'customer_service',
   status: 'submitted', resolution: 'pending', createdBy: 'customer-service', createdAt: '2026-09-11',
 };
 
@@ -142,9 +142,66 @@ describe('department request matrix', () => {
 });
 
 describe('return case matrix', () => {
+  const intake: ReturnRecord = {
+    id: 'intake-1', source: 'customer', sourceOrderId: 'order-1', returnCaseId: 'return-1',
+    actor: 'receiver', createdAt: '2026-09-11', evidenceUrls: ['return/intake-1/0/photo.png'],
+    lines: [{ productId: 'smart-watch', quantity: 1, reason: 'Defect', locationId: 'warehouse', binId: 'quarantine', disposition: 'hold' }],
+  };
+
+  it('separates a submitted case from its recorded physical intake without claiming current Quality or custody', () => {
+    const before = structuredClone({ returnCase, intake });
+    const summary = returnWorkflowSummary(returnCase, { returns: [intake] });
+    expect(summary.status).toBe('Customer case submitted / awaiting resolution');
+    expect(summary.blocker).toBe('Linked physical intake is recorded. Current Quality hold or release status is not available in this view.');
+    expect(summary.nextStep).toContain('Review the linked physical intake and Quality records');
+    expect(summary.tone).not.toBe('success');
+    expect({ returnCase, intake }).toEqual(before);
+  });
+
+  it.each(['hold', 'restock'] as const)('does not infer current held or accepted Quality from intake disposition %s', disposition => {
+    const linked = { ...intake, lines: [{ ...intake.lines[0]!, disposition }] };
+    const summary = returnWorkflowSummary(returnCase, { returns: [linked] });
+    expect(summary.blocker).toContain('Current Quality hold or release status is not available');
+    expect(summary.status).not.toMatch(/held|accepted|released|intake/i);
+  });
+
+  it.each(['resolved', 'closed'] as const)('preserves %s customer handoff regardless of linked physical records', status => {
+    const record = { ...returnCase, status, resolution: 'replacement' as const };
+    expect(returnWorkflowSummary(record, { returns: [intake] })).toEqual(returnWorkflowSummary(record));
+    expect(returnWorkflowSummary(record, { returns: [{ ...intake, returnCaseId: 'foreign' }] })).toEqual(returnWorkflowSummary(record));
+  });
+
+  it('requires the exact serial when the customer case identifies one', () => {
+    const record = { ...returnCase, serialNumber: 'SERIAL-1' };
+    expect(returnWorkflowSummary(record, { returns: [intake] }).blocker).toContain('not verified');
+    const serialized = { ...intake, lines: [{ ...intake.lines[0]!, serialNumber: record.serialNumber }] };
+    expect(returnWorkflowSummary(record, { returns: [serialized] }).blocker).toContain('intake is recorded');
+  });
+
+  it('requires exact lineage and complete recorded intake before positive wording', () => {
+    const variants: ReturnRecord[] = [
+      { ...intake, source: 'event' }, { ...intake, sourceOrderId: 'other-order' },
+      { ...intake, returnCaseId: 'other-case' }, { ...intake, sourceOrderId: undefined },
+      { ...intake, lines: [{ ...intake.lines[0]!, productId: 'other-product' }] },
+      { ...intake, lines: [{ ...intake.lines[0]!, serialNumber: 'foreign-serial' }] },
+      { ...intake, lines: [{ ...intake.lines[0]!, quantity: 0 }] },
+      { ...intake, lines: [{ ...intake.lines[0]!, binId: undefined }] },
+      { ...intake, lines: [{ ...intake.lines[0]!, locationId: undefined }] },
+      { ...intake, evidenceUrls: [] }, { ...intake, evidenceUrls: [' '] },
+      { ...intake, actor: '' }, { ...intake, createdAt: 'invalid' },
+    ];
+    for (const returns of [undefined, [], ...variants.map(row => [row]), [intake, intake]]) {
+      const summary = returnWorkflowSummary({ ...returnCase, quarantineBinId: 'selected-bin' }, { returns });
+      expect(summary.blocker).toBe('Linked physical intake and current Quality status are not verified in this view.');
+      expect(summary.status).not.toContain('Awaiting physical intake');
+      expect(summary.blocker).not.toContain('quarantine bin is required');
+    }
+    expect(returnWorkflowSummary({ ...returnCase, sourceOrderId: undefined }, { returns: [intake] }).blocker).not.toContain('intake is recorded');
+  });
+
   it.each([
-    ['submitted', 'Awaiting physical intake'], ['received', 'Awaiting inspection'],
-    ['inspecting', 'Inspection in progress'], ['decision_required', 'Awaiting resolution decision'],
+    ['submitted', 'Customer case submitted / awaiting resolution'], ['received', 'Customer case received / awaiting resolution'],
+    ['inspecting', 'Customer case under review / awaiting resolution'], ['decision_required', 'Awaiting resolution decision'],
     ['resolved', 'Resolution recorded / awaiting customer closure'], ['closed', 'Customer case closed'],
   ] as const)('distinguishes %s from customer closure and quality release', (status, label) => {
     const summary = returnWorkflowSummary({ ...returnCase, status, resolution: 'replacement' });
@@ -159,8 +216,8 @@ describe('return case matrix', () => {
     expect(summary.nextStep).toContain('closure evidence');
     expect(summary.tone).not.toBe('success');
   });
-  it('requires quarantine, identifies Finance refunds, and preserves unknown outcomes', () => {
-    expect(returnWorkflowSummary(returnCase).blocker).toContain('quarantine bin is required');
+  it('keeps physical status unverified, identifies Finance refunds, and preserves unknown outcomes', () => {
+    expect(returnWorkflowSummary(returnCase).blocker).toContain('not verified in this view');
     expect(returnWorkflowSummary({ ...returnCase, status: 'decision_required', resolution: 'refund' }).owner).toBe('Finance');
     expect(returnWorkflowSummary({ ...returnCase, status: 'resolved' }).blocker).toContain('still pending');
     expect(returnWorkflowSummary({ ...returnCase, status: 'future' as CustomerReturnCase['status'] }).status).toBe('Return state unknown');

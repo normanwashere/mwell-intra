@@ -1,4 +1,4 @@
-import { canReleaseFulfillmentOrder, type CustomerReturnCase, type DepartmentStockRequest, type FulfillmentOrder, type InventoryUnit } from '@intra/data-kit';
+import { canReleaseFulfillmentOrder, type CustomerReturnCase, type DepartmentStockRequest, type FulfillmentOrder, type InventoryUnit, type ReturnRecord } from '@intra/data-kit';
 
 export interface RecordWorkflowSummary {
   status: string;
@@ -115,7 +115,9 @@ export function requestWorkflowSummary(request: DepartmentStockRequest, order?: 
   }
 }
 
-export function returnWorkflowSummary(record: CustomerReturnCase): RecordWorkflowSummary {
+export function returnWorkflowSummary(record: CustomerReturnCase, context: {
+  returns?: readonly ReturnRecord[];
+} = {}): RecordWorkflowSummary {
   if (record.status === 'closed') return {
     status: 'Customer case closed', owner: 'No further customer-case handoff', tone: 'success',
     nextStep: 'Customer closure is recorded. This does not establish that quarantined stock was released by Quality Control.',
@@ -126,11 +128,23 @@ export function returnWorkflowSummary(record: CustomerReturnCase): RecordWorkflo
     ...(record.resolution === 'pending' ? { blocker: 'The recorded resolution is still pending. Verify the case before confirming customer closure.', tone: 'warning' as const } : {}),
   };
   if (!['submitted', 'received', 'inspecting', 'decision_required'].includes(record.status)) return review('Return state unknown', 'The return status is unrecognized. Resolution and customer closure cannot be confirmed.');
+  // Case state and intake disposition do not establish current Quality or custody.
+  const linked = context.returns?.filter(intake => intake.returnCaseId === record.id) ?? [];
+  const intake = linked.length === 1 ? linked[0] : undefined;
+  const hasText = (value?: string) => typeof value === 'string' && value.trim().length > 0;
+  const intakeRecorded = intake && hasText(record.sourceOrderId) && intake.sourceOrderId === record.sourceOrderId
+    && intake.source === 'customer' && hasText(intake.id) && hasText(intake.actor) && Number.isFinite(Date.parse(intake.createdAt))
+    && !!intake.evidenceUrls?.length && intake.evidenceUrls.every(hasText)
+    && intake.lines.length > 0 && intake.lines.every(line => line.productId === record.productId
+      && (line.serialNumber ?? null) === (record.serialNumber ?? null)
+      && Number.isFinite(line.quantity) && line.quantity > 0 && hasText(line.locationId) && hasText(line.binId));
   return {
-    status: { submitted: 'Awaiting physical intake', received: 'Awaiting inspection', inspecting: 'Inspection in progress', decision_required: 'Awaiting resolution decision' }[record.status],
+    status: { submitted: 'Customer case submitted / awaiting resolution', received: 'Customer case received / awaiting resolution', inspecting: 'Customer case under review / awaiting resolution', decision_required: 'Awaiting resolution decision' }[record.status],
     owner: record.status === 'decision_required' && record.resolution === 'refund' ? 'Finance' : 'Warehouse returns team',
-    nextStep: record.status === 'submitted' ? 'Confirm physical intake and quarantine before resolution; Finance records refunds, then Customer Service confirms closure.' : 'Confirm inspection and quarantine; record the resolution with required evidence, then hand off to Customer Service. Refunds belong to Finance.',
-    blocker: record.quarantineBinId ? 'A quarantine bin is recorded; current quality hold or release status is not established by this case.' : 'A quarantine bin is required before any return resolution.',
+    nextStep: 'Review the linked physical intake and Quality records; record the resolution with required evidence, then hand off to Customer Service. Refunds belong to Finance.',
+    blocker: intakeRecorded
+      ? 'Linked physical intake is recorded. Current Quality hold or release status is not available in this view.'
+      : 'Linked physical intake and current Quality status are not verified in this view.',
     tone: 'warning',
   };
 }

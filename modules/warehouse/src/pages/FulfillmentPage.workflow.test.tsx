@@ -135,8 +135,8 @@ describe('workflow summaries preserve the existing detail and action surface', (
   });
 
   it.each([
-    ['logistics_supervisor', 'submitted', 'Record resolution', 'Awaiting physical intake', 'Save resolution'],
-    ['finance', 'submitted', 'Record refund', 'Awaiting physical intake', 'Save resolution'],
+    ['logistics_supervisor', 'submitted', 'Record resolution', 'Customer case submitted / awaiting resolution', 'Save resolution'],
+    ['finance', 'submitted', 'Record refund', 'Customer case submitted / awaiting resolution', 'Save resolution'],
     ['operations', 'resolved', 'Close with customer', 'awaiting customer closure', 'Confirm customer closure'],
   ] as const)('adds only a read-only summary to the existing %s return panel', async (role, status, action, label, save) => {
     const data = fixture();
@@ -154,5 +154,36 @@ describe('workflow summaries preserve the existing detail and action surface', (
     expect(within(dialog).getAllByRole('button', { name: save })).toHaveLength(1);
     expect(resolve).not.toHaveBeenCalled();
     expect(close).not.toHaveBeenCalled();
+  });
+
+  it.each([true, false])('keeps submitted case wording honest with exact linked intake %s without changing resolution controls', async linked => {
+    const data = fixture();
+    data.returns = [{
+      id: 'physical-intake', source: 'customer', sourceOrderId: 'summary-order', returnCaseId: linked ? 'summary-return' : 'foreign-case',
+      actor: 'receiver', createdAt: '2026-09-11', evidenceUrls: ['return/physical-intake/0/photo.png'],
+      lines: [{ productId: 'smart-watch', quantity: 1, reason: 'Defect', locationId: 'loc-wh', binId: 'quarantine', disposition: 'hold' }],
+    }];
+    const repo = makeRepo(data);
+    const before = await repo.getData();
+    const resolve = vi.spyOn(repo, 'resolveCustomerReturnCase');
+    const close = vi.spyOn(repo, 'closeCustomerReturnCase');
+    const user = userEvent.setup();
+    renderWithProviders(<FulfillmentPage />, { repo, role: 'logistics_supervisor', route: '/fulfillment?tab=returns' });
+    await user.click(await screen.findByRole('button', { name: 'Record resolution' }));
+    const dialog = await screen.findByRole('dialog');
+    const summary = within(dialog).getByRole('region', { name: 'Workflow status' });
+    expect(summary).toHaveTextContent('Customer case submitted / awaiting resolution');
+    expect(summary).toHaveTextContent(linked ? 'Linked physical intake is recorded.' : 'Linked physical intake and current Quality status are not verified');
+    expect(summary).not.toHaveTextContent('Awaiting physical intake');
+    expect(summary).not.toHaveTextContent('A quarantine bin is required');
+    expect(within(dialog).getByRole('button', { name: 'Save resolution' })).toBeInTheDocument();
+    const bin = within(dialog).getByLabelText('Quarantine bin');
+    const option = within(bin).getAllByRole('option').find(row => (row as HTMLOptionElement).value);
+    expect(option).toBeDefined();
+    await user.selectOptions(bin, (option as HTMLOptionElement).value);
+    expect(summary).toHaveTextContent(linked ? 'Current Quality hold or release status is not available' : 'current Quality status are not verified');
+    expect(resolve).not.toHaveBeenCalled();
+    expect(close).not.toHaveBeenCalled();
+    expect(await repo.getData()).toEqual(before);
   });
 });

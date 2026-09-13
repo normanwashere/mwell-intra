@@ -3994,7 +3994,7 @@ function ResolveReturnSheet({
         mode === "finance" ? "Record finance refund" : "Resolve return case"
       }
       size="wide"
-      description="Quarantine the item first. Replacement creates a linked fulfillment order automatically."
+      description="Review physical intake and Quality records before resolution. Replacement creates a linked fulfillment order automatically."
       footer={
         <button
           type="submit"
@@ -4011,7 +4011,7 @@ function ResolveReturnSheet({
         className="space-y-4"
         onSubmit={(event) => void submit(event)}
       >
-        <WorkflowSummary {...returnWorkflowSummary(record)} />
+        <WorkflowSummary {...returnWorkflowSummary(record, { returns: data?.returns })} />
         <section aria-label="Return case context" className="border-y border-line py-4 text-sm [overflow-wrap:anywhere]">
           <dl className="grid gap-3 sm:grid-cols-2">
             <div><dt className="text-xs text-muted">Original order</dt><dd className="font-semibold">{originalOrder?.externalReference ?? (record.sourceOrderId ? `${record.sourceOrderId} (reference unavailable)` : 'Not linked to an order')}</dd></div>

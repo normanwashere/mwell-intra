@@ -121,11 +121,16 @@ export function QualityPage() {
     const key = `${item.sourceType}:${item.sourceId}:${item.productId}`;
     groups.set(key, [...(groups.get(key) ?? []), item]);
   }
-  const activeHolds = holds.filter((hold) =>
-    hold.status === 'active' && hold.reason !== 'Awaiting independent quality inspection'
-    && matches(hold.id, hold.inspectionId, hold.serialNumber, hold.reason, productName(hold.productId)));
-  const completed = inspections.filter((inspection) => inspection.disposition !== 'pending'
-    && matches(inspection.id, inspection.sourceId, inspection.serialNumber, productName(inspection.productId)));
+  const allActiveHolds = holds.filter((hold) =>
+    hold.status === 'active' && hold.reason !== 'Awaiting independent quality inspection');
+  const activeHolds = allActiveHolds.filter((hold) =>
+    matches(hold.id, hold.inspectionId, hold.serialNumber, hold.reason, productName(hold.productId)));
+  const allCompleted = inspections.filter((inspection) => inspection.disposition !== 'pending');
+  const completed = allCompleted.filter((inspection) =>
+    matches(inspection.id, inspection.sourceId, inspection.serialNumber, productName(inspection.productId)));
+  const count = tab === 'pending' ? { shown: shownPending.length, total: pending.length, label: 'pending inspections' }
+    : tab === 'holds' ? { shown: activeHolds.length, total: allActiveHolds.length, label: 'active holds' }
+    : { shown: completed.length, total: allCompleted.length, label: 'completed inspections' };
   const receiptRoute = data.operationRoutes?.find((route) => route.active && route.operationTypeId.includes('receipt'));
   const requiresEvidence = receiptRoute?.requiresEvidence ?? true;
   const mayInspect = can(WAREHOUSE_MUTATION_CAPABILITIES.inspectQuality);
@@ -208,7 +213,7 @@ export function QualityPage() {
         <label className="min-w-0 flex-1 text-sm font-medium">Find receipt, product or serial
           <input type="search" className="input mt-1 w-full" value={search} onChange={e => setSearch(e.target.value)} />
         </label>
-        {!queueBlocked && <p className="text-sm text-muted sm:py-3">{tab === 'pending' && search ? `${shownPending.length} of ${pending.length} pending inspections` : `${pending.length} pending inspections`}</p>}
+        {!queueBlocked && <p className="text-sm text-muted sm:py-3">{search.trim() ? `${count.shown} of ${count.total} ${count.label}` : `${count.total} ${count.label}`}</p>}
       </div>
       {selectedSource && <div className="space-y-1 rounded-lg border border-line p-3 text-sm">
         <p className="break-all">Selected source: {selectedSource}</p>
