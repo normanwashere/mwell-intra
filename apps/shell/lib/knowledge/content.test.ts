@@ -26,6 +26,13 @@ import {
 } from "./validate";
 
 describe("Knowledge Base content", () => {
+  it("distinguishes assigned training from a newly available permission", () => {
+    const guidance = JSON.stringify(TROUBLESHOOTING_GUIDES.find(item => item.id === "trouble-access-denied"));
+    expect(guidance).toContain("A new permission is not proof that you completed training for it");
+    expect(guidance).toContain("check the published assignment");
+    expect(guidance).toContain("do not repeat unrelated practice");
+  });
+
   it("keeps the client export-entry copy independent of the full feature metadata", () => {
     const imports = (relativePath: string) => {
       const filename = path.resolve(process.cwd(), relativePath);

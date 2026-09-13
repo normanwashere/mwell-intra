@@ -2,6 +2,8 @@
 
 ## September 13 Return And Quality Display Handover
 
+Use the learner's actual published assignment for each drill, not the source role list as a training-completion checklist. The September 14 source correction prevents a permission update from silently rewriting an older training version. New coverage is listed separately for versioned review; it is not automatically published or completed. Existing learner progress and database-published outcomes are not changed by this correction. Do not describe an available action as evidence that its user has passed a new exercise.
+
 Explain the export guide in two parts: permission to open the workspace, and permission to prepare a governed file. Dashboard viewing is independent of analytics/Finance viewing. Data & Reports and Inventory Reports retain their respective route checks; the Operations Associate export entry does not grant those routes. Older general capability lists must not be read as requiring every listed capability at once.
 
 For export and replenishment training, show each role the records it may read and only its permitted actions. Operations recommendations and Procurement decisions are separate tasks. A viewing permission is not a command permission, and an open dialog does not preserve access after it is removed.

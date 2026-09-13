@@ -11,6 +11,7 @@ import {
 import {
   LEARNING_CATALOG,
   MUTATING_CAPABILITIES,
+  PENDING_ROLE_TRAINING_COVERAGE,
   CAPABILITY_COVERAGE_CURRICULA,
   ROLE_CURRICULA,
   capabilityKey,
@@ -131,12 +132,15 @@ const requirementCapabilityKeys = (requirementIds: readonly string[]) =>
   );
 
 describe("learning catalog", () => {
-  it("maps every mutating capability to at least one required curriculum", () => {
+  it("accounts for every mutation as declared v1 metadata or explicit pending training review", () => {
     for (const capability of MUTATING_CAPABILITIES) {
       expect(
-        requiredCurriculaFor(capability),
+        requiredCurriculaFor(capability).length > 0 ||
+          PENDING_ROLE_TRAINING_COVERAGE.some(
+            (pending) => capabilityKey(pending) === capabilityKey(capability),
+          ),
         capabilityKey(capability),
-      ).not.toHaveLength(0);
+      ).toBe(true);
     }
   });
 
@@ -298,7 +302,7 @@ describe("learning catalog", () => {
     );
   });
 
-  it("derives certification paths for every mutating active-role grant", () => {
+  it("reports all and only the explicit pending role grants missing reviewed v1 outcomes", () => {
     const classificationByKey = new Map(
       CAPABILITY_CLASSIFICATIONS.map((item) => [
         capabilityKey(item),
@@ -306,17 +310,25 @@ describe("learning catalog", () => {
       ]),
     );
 
+    const missing: string[] = [];
     for (const grant of roleCapabilities) {
       const key = `${grant.module}:${grant.cap}`;
       if (classificationByKey.get(key) !== "mutation") continue;
 
       const curriculum = roleCurriculumFor(grant.module, grant.role);
-      expect(curriculum, `${grant.module}:${grant.role}`).toBeDefined();
-      expect(
-        requirementCapabilityKeys(curriculum?.requirementIds ?? []),
-        `${grant.module}:${grant.role} -> ${grant.cap}`,
-      ).toContain(key);
+      if (
+        !requirementCapabilityKeys(curriculum?.requirementIds ?? []).includes(
+          key,
+        )
+      ) {
+        missing.push(`${grant.module}:${grant.role}:${grant.cap}`);
+      }
     }
+    const pending = PENDING_ROLE_TRAINING_COVERAGE.map(
+      (item) => `${item.module}:${item.role}:${item.capability}`,
+    );
+    expect(new Set(pending).size).toBe(pending.length);
+    expect(missing.sort()).toEqual(pending.sort());
   });
 
   it("keeps known RBAC grants on their authoritative role curriculum", () => {

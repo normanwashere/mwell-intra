@@ -66,6 +66,7 @@ export const TROUBLESHOOTING_GUIDES: TroubleshootingGuide[] = [
       "Confirm the denied route and the specific responsibility required for that action",
       "Guided practice follows your assigned training version. When it shows Complete, no extra practice steps are required for that version. If your assigned steps cannot load, close practice and refresh once. Contact your administrator if the message returns; do not bypass training",
       "Start, Resume and assessment retries use the assignment selected on the page. Older completed training does not replace a pending assignment or a newer version you still need to finish",
+      "Follow the training assigned to you in Onboarding. A new permission is not proof that you completed training for it. If the required task training is missing or unclear, ask your administrator to check the published assignment; do not repeat unrelated practice to try to unlock it",
       "For return resolution, check that the required training is current before retrying. The same check applies when reopening a completed return; it does not repeat the stock movement",
       "Requester names on your own stock requests remain available. Reviewing names on someone else's request requires current issuing or request-approval authority; a missing name does not mean the person or request was deleted",
       "Sign out and back in after an approved role change",

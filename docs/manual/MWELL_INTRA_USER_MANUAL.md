@@ -2,6 +2,8 @@
 
 ## September 13 Return And Quality Display Update
 
+**Assigned training:** Follow the requirements shown in Onboarding. A new permission is not proof of completed training. If a task's required training is missing or unclear, ask your administrator to check the published assignment; repeating unrelated practice will not resolve it. The September 14 training-version correction does not reset progress or mark new exercises complete.
+
 For exports, distinguish **opening the page** from **preparing a file**. Warehouse dashboard access does not require analytics or Finance viewing permission. Data & Reports needs analytics access; Inventory Reports follows its analytics/Finance and Insights access checks. An export still needs the separate current export-preparation permission. The Operations Associate dashboard entry does not unlock those reporting pages.
 
 Being able to view a report or recommendation does not mean you can act on it. Export preparation and replenishment actions depend on your current command permissions. Operations submits the recommendation; Procurement handles its decision and handoff. Read-only records remain available to the roles allowed to see them.

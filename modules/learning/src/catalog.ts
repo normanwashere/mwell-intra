@@ -1,4 +1,10 @@
-import { CAPABILITY_CLASSIFICATIONS, roleCapabilities } from "@intra/rbac";
+import { CAPABILITY_CLASSIFICATIONS } from "@intra/rbac";
+
+import {
+  REVIEWED_V1_ROLE_PRACTICES,
+  REVIEWED_V1_UNASSIGNED_CAPABILITIES,
+} from "./reviewedV1Training";
+export { PENDING_ROLE_TRAINING_COVERAGE } from "./reviewedV1Training";
 
 import { OPERATING_PERSONA_IDS } from "./personas";
 import { SCOPED_READINESS_CANDIDATES } from "./scopedReadinessCandidates";
@@ -132,10 +138,6 @@ const warehouseReceivingRequirements: readonly RequirementDefinition[] = [
     maxAttempts: 3,
   },
 ];
-
-const capabilityClassificationByKey = new Map(
-  CAPABILITY_CLASSIFICATIONS.map((item) => [capabilityKey(item), item]),
-);
 
 const titleCaseIdentifier = (value: string): string =>
   value
@@ -743,47 +745,22 @@ const rolePracticeTitle = (module: string, role: string): string => {
   return `${moduleLabel} ${titleCaseIdentifier(role)} guided practice`;
 };
 
-const roleDefinitions = Object.values(
-  roleCapabilities.reduce<
-    Record<
-      string,
-      { module: LearningCapability["module"]; role: string; personaId: string }
-    >
-  >((roles, grant) => {
-    const key = `${grant.module}:${grant.role}`;
-    const personaId = ROLE_PERSONAS[key];
-    if (!personaId) {
-      throw new Error(
-        `Missing canonical persona mapping for RBAC role ${key}.`,
-      );
-    }
-    roles[key] ??= { module: grant.module, role: grant.role, personaId };
-    return roles;
-  }, {}),
-);
+const roleDefinitions = REVIEWED_V1_ROLE_PRACTICES.map((practice) => {
+  const key = `${practice.module}:${practice.role}`;
+  const personaId = ROLE_PERSONAS[key];
+  if (!personaId) {
+    throw new Error(
+      `Missing canonical persona mapping for reviewed training role ${key}.`,
+    );
+  }
+  return { ...practice, personaId };
+});
 
 const capabilityRequirements = roleDefinitions.flatMap((roleDefinition) => {
-  const capabilities = roleCapabilities
-    .filter(
-      (grant) =>
-        grant.module === roleDefinition.module &&
-        grant.role === roleDefinition.role,
-    )
-    .filter(
-      (grant) =>
-        capabilityClassificationByKey.get(`${grant.module}:${grant.cap}`)
-          ?.access === "mutation",
-    )
-    // Reservation has its own scored check; old event practice cannot certify it.
-    .filter(
-      (grant) =>
-        !(
-          grant.module === "warehouse" &&
-          grant.role === "marketing" &&
-          grant.cap === "reserve_allocate"
-        ),
-    )
-    .map((grant) => ({ module: grant.module, capability: grant.cap }));
+  const capabilities = roleDefinition.capabilities.map((capability) => ({
+    module: roleDefinition.module,
+    capability,
+  }));
   if (capabilities.length === 0) return [];
 
   const audience = audienceForPersona(roleDefinition.personaId);
@@ -838,31 +815,20 @@ const personaPracticeRequirements: readonly RequirementDefinition[] =
     } satisfies RequirementDefinition;
   });
 
-const grantedMutationKeys = new Set(
-  roleCapabilities
-    .filter(
-      (grant) =>
-        capabilityClassificationByKey.get(`${grant.module}:${grant.cap}`)
-          ?.access === "mutation",
-    )
-    .map((grant) => `${grant.module}:${grant.cap}`),
-);
-
-const unassignedCapabilityRequirements = MUTATING_CAPABILITIES.filter(
-  (capability) => !grantedMutationKeys.has(capabilityKey(capability)),
-).map((capability) => {
-  const id = `internal.unassigned.${capability.module}.${capability.capability}.capability-practice.v1`;
-  return {
-    id,
-    version: 1,
-    audience: "internal",
-    kind: "scenario",
-    title: `${titleCaseIdentifier(capability.module)} ${titleCaseIdentifier(capability.capability)} capability coverage`,
-    mandatory: true,
-    prerequisiteIds: [],
-    capabilityOutcomes: [capability],
-  } satisfies RequirementDefinition;
-});
+const unassignedCapabilityRequirements =
+  REVIEWED_V1_UNASSIGNED_CAPABILITIES.map((capability) => {
+    const id = `internal.unassigned.${capability.module}.${capability.capability}.capability-practice.v1`;
+    return {
+      id,
+      version: 1,
+      audience: "internal",
+      kind: "scenario",
+      title: `${titleCaseIdentifier(capability.module)} ${titleCaseIdentifier(capability.capability)} capability coverage`,
+      mandatory: true,
+      prerequisiteIds: [],
+      capabilityOutcomes: [capability],
+    } satisfies RequirementDefinition;
+  });
 
 const requirements: readonly RequirementDefinition[] = [
   ...baselineRequirements,
@@ -878,14 +844,10 @@ const requirements: readonly RequirementDefinition[] = [
     prerequisiteIds: [
       "internal.role.warehouse.marketing.capability-practice.v1",
     ],
-    capabilityOutcomes: roleCapabilities
-      .filter(
-        (grant) =>
-          grant.module === "warehouse" &&
-          grant.role === "marketing" &&
-          grant.cap === "reserve_allocate",
-      )
-      .map((grant) => ({ module: grant.module, capability: grant.cap })),
+    // Reservation's reviewed scored assessment, not generic event practice.
+    capabilityOutcomes: [
+      { module: "warehouse", capability: "reserve_allocate" },
+    ],
     passingScore: MARKETING_RESERVATION_ASSESSMENT.passingScore,
     maxAttempts: MARKETING_RESERVATION_ASSESSMENT.maxAttempts,
   },

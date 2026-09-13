@@ -2,6 +2,8 @@
 
 ## September 13 Return And Quality Display Drill
 
+Follow the training assigned to you in Onboarding. A new permission does not mean you have completed training for it. If the task's required training is missing or unclear, ask your administrator to check your published assignment rather than repeating unrelated practice. The September 14 training-version correction does not reset your progress or mark new exercises complete.
+
 Verify page access and export authority separately in the drill. A warehouse dashboard viewer need not be an analytics or Finance viewer. Data & Reports and Inventory Reports keep their own page-access checks, while export preparation requires its separate effective permission. Do not ask a tester to obtain wider reporting access just to use their permitted dashboard export.
 
 In the role drill, distinguish viewing information from carrying out a command. Export preparation and replenishment actions follow current command permissions. Operations recommends; Procurement decides and hands off. Also check that a permission change prevents a command from an already-open dialog.
