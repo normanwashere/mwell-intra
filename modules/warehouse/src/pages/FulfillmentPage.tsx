@@ -45,6 +45,7 @@ import { fulfillmentOrdersToCsv } from "@/domain/orderIntakeOptions";
 import { useSession } from "@/auth/session";
 import { actorName } from "@/domain/format";
 import { orderWorkflowSummary, requestWorkflowSummary, returnWorkflowSummary } from "@/domain/workflowSummary";
+import './FulfillmentPage.css';
 
 // Warehouse mutations confirm success as a boolean, not a returned order record.
 export function fulfillmentAdvanceSuccessMessage(
@@ -607,6 +608,7 @@ function OrdersWorkspace({
   const [cancelOrder, setCancelOrder] = useState<FulfillmentOrder>();
   const [acknowledgeOrder, setAcknowledgeOrder] = useState<FulfillmentOrder>();
   const [trackingOrder, setTrackingOrder] = useState<FulfillmentOrder>();
+  const [floorNotice, setFloorNotice] = useState<{ orderId: string; reference: string; message: string }>();
   const orderSelector = orderSearchParams.get("order");
   const detailOrder = scopedRecord(orders, orderSelector);
   const setDetailOrder = (order?: FulfillmentOrder) => updateNavigation({ order: order?.id, request: undefined }, !order);
@@ -646,13 +648,15 @@ function OrdersWorkspace({
     order: FulfillmentOrder,
     action: FulfillmentAction,
   ) => {
+    setFloorNotice(undefined);
     setWorkingId(order.id);
     const ok = await advanceFulfillmentOrder({ orderId: order.id, action });
     setWorkingId(undefined);
-    if (ok)
-      toast.success(
-        fulfillmentAdvanceSuccessMessage(order, action),
-      );
+    if (ok) {
+      if (action === "allocate" || action === "start_picking") {
+        setFloorNotice({ orderId: order.id, reference: order.externalReference, message: action === "allocate" ? "Allocation recorded." : "Picking started." });
+      } else toast.success(fulfillmentAdvanceSuccessMessage(order, action));
+    }
   };
 
   return (
@@ -797,6 +801,11 @@ function OrdersWorkspace({
         </Field>
       </div>
 
+      {floorNotice && !filteredOrders.some((order) => order.id === floorNotice.orderId) && (
+        <p role="status" className="text-sm font-medium text-emerald-700 [overflow-wrap:anywhere] dark:text-emerald-300">
+          {floorNotice.reference}: {floorNotice.message}
+        </p>
+      )}
       {filteredOrders.length === 0 ? (
         <EmptyState
           icon="cart"
@@ -896,6 +905,11 @@ function OrdersWorkspace({
                 View order details
                 <Icon name="chevron" className="h-4 w-4" />
               </button>
+              {floorNotice?.orderId === order.id && (
+                <p role="status" className="mt-3 text-sm font-medium text-emerald-700 dark:text-emerald-300">
+                  {floorNotice.message}
+                </p>
+              )}
               {canExecute &&
                 !["released", "completed", "cancelled"].includes(
                   order.status,
@@ -927,7 +941,7 @@ function OrdersWorkspace({
                       </ActionButton>
                     )}
                     {order.status === "picking" && (
-                      <ActionButton onClick={() => setPickOrder(order)}>
+                      <ActionButton onClick={() => { setFloorNotice(undefined); setPickOrder(order); }}>
                         Confirm scanned pick
                       </ActionButton>
                     )}
@@ -2517,7 +2531,9 @@ function AcknowledgeReceiptSheet({
   const { advanceFulfillmentOrder } = warehouse;
   const { profile } = useSession();
   const toast = useToast();
+  const [searchParams] = useSearchParams();
   const [reference, setReference] = useState("");
+  const [showOrderReference, setShowOrderReference] = useState(false);
   const [evidenceUrls, setEvidenceUrls] = useState<string[]>([]);
   const evidence = useEvidencePending();
   const inFlight = useRef(false);
@@ -2527,6 +2543,10 @@ function AcknowledgeReceiptSheet({
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   if (!order) return null;
+  const orderParams = new URLSearchParams(searchParams);
+  orderParams.set('tab', 'orders');
+  orderParams.set('order', order.id);
+  orderParams.delete('request');
   const currentOrder = warehouse.data?.fulfillmentOrders.find(
     (candidate) => candidate.id === order.id,
   );
@@ -2605,6 +2625,13 @@ function AcknowledgeReceiptSheet({
         className="space-y-4"
         onSubmit={(event) => void submit(event)}
       >
+        <details className="min-w-0 text-sm" onToggle={(event) => setShowOrderReference(event.currentTarget.open)}>
+          <summary className="min-h-11 cursor-pointer py-3 font-medium text-ink">Order reference</summary>
+          <p className="select-text [overflow-wrap:anywhere] text-muted">{order.externalReference}</p>
+          {showOrderReference && (
+            <RecordCopyActions reference={order.externalReference} href={`/warehouse/fulfillment?${orderParams}`} />
+          )}
+        </details>
         <p className="break-words text-sm text-ink">
           Recipient: {order.handoverRecipientName ?? "Not recorded"}
           {order.handoverRecipientDepartment
@@ -2829,6 +2856,38 @@ function RequestsWorkspace({
   const detailId = params.get("request");
   const setDetailId = (id?: string) => updateNavigation({ request: id, order: undefined }, !id);
   const [acknowledgeOrder, setAcknowledgeOrder] = useState<FulfillmentOrder>();
+  const acknowledgmentRequestId = useRef<string | null>(null);
+  const acknowledgmentTrigger = useRef<HTMLButtonElement | null>(null);
+  const requestReceiptButton = useRef<HTMLButtonElement | null>(null);
+  const requestBody = useRef<HTMLDivElement | null>(null);
+  const requestQueue = useRef<HTMLElement | null>(null);
+  const focusRequestTrigger = (id: string | null) => {
+    const trigger = Array.from(requestQueue.current?.querySelectorAll<HTMLButtonElement>('[data-view-request]') ?? [])
+      .find(button => button.dataset.viewRequest === id);
+    trigger?.focus();
+  };
+  const closeRequest = () => {
+    setDetailId(undefined);
+    requestAnimationFrame(() => focusRequestTrigger(detailId));
+  };
+  const closeAcknowledgment = () => {
+    const fromRequest = acknowledgmentRequestId.current;
+    acknowledgmentRequestId.current = null;
+    setAcknowledgeOrder(undefined);
+    requestAnimationFrame(() => {
+      if (fromRequest) (requestReceiptButton.current ?? requestBody.current)?.focus();
+      else if (acknowledgmentTrigger.current?.isConnected) acknowledgmentTrigger.current.focus();
+    });
+  };
+  useEffect(() => {
+    // Browser history must not leave a receipt form attached to a departed request.
+    const fromRequest = acknowledgmentRequestId.current;
+    if (fromRequest && fromRequest !== detailId) {
+      acknowledgmentRequestId.current = null;
+      setAcknowledgeOrder(undefined);
+      requestAnimationFrame(() => focusRequestTrigger(fromRequest));
+    }
+  }, [detailId]);
   const requestedStatus = params.get("requestStatus") ?? "all";
   const statusFilter = REQUEST_STATUSES.includes(requestedStatus) ? requestedStatus : "all";
   const setStatusFilter = (value: string) => updateNavigation({ requestStatus: value });
@@ -2841,7 +2900,7 @@ function RequestsWorkspace({
   const filteredRequests = requests.filter(
     (request) => statusFilter === "all" || request.status === statusFilter,
   );
-  const receiptAction = (request: DepartmentStockRequest) => {
+  const receiptAction = (request: DepartmentStockRequest, fromDetails = false) => {
     const order = warehouse.data?.fulfillmentOrders.find(candidate => candidate.id === request.fulfillmentOrderId);
     if (request.status !== 'issued' && order?.status !== 'released' && !order?.acknowledgedAt) return null;
     if (order?.acknowledgedAt) return (
@@ -2859,7 +2918,13 @@ function RequestsWorkspace({
       <div className="mt-3 min-w-0 space-y-2 border-t border-line pt-3 text-sm">
         {order && <p className="text-muted [overflow-wrap:anywhere]">Order: {order.externalReference}</p>}
         {unavailable ? <p className="text-muted">{unavailable}</p> : (
-          <button type="button" className="btn-primary min-h-11 w-full sm:w-auto" onClick={() => setAcknowledgeOrder(order)}>
+          <button type="button" className="btn-primary min-h-11 w-full sm:w-auto"
+            ref={fromDetails ? requestReceiptButton : undefined}
+            onClick={(event) => {
+              acknowledgmentTrigger.current = event.currentTarget;
+              acknowledgmentRequestId.current = fromDetails ? request.id : null;
+              setAcknowledgeOrder(order);
+            }}>
             Acknowledge receipt
           </button>
         )}
@@ -2887,7 +2952,7 @@ function RequestsWorkspace({
     }
   };
   return (
-    <section className="space-y-4" aria-labelledby="requests-title">
+    <section ref={requestQueue} className="space-y-4" aria-labelledby="requests-title">
       <QueueCounters
         label="Request counters"
         counters={[
@@ -2985,6 +3050,7 @@ function RequestsWorkspace({
               <button
                 type="button"
                 className="btn-ghost mt-3 w-full justify-between sm:w-auto"
+                data-view-request={request.id}
                 onClick={() => setDetailId(request.id)}
               >
                 View request <Icon name="chevron" className="h-4 w-4" />
@@ -2994,11 +3060,11 @@ function RequestsWorkspace({
           ))}
         </ul>
       )}
-      {detailRequest && (
+      {detailRequest && !acknowledgeOrder && (
         <Sheet
           open
           onOpenChange={(nextOpen) => {
-            if (!nextOpen && !workingId) setDetailId(undefined);
+            if (!nextOpen && !workingId) closeRequest();
           }}
           title="Review request"
           footer={
@@ -3021,9 +3087,10 @@ function RequestsWorkspace({
                   Approve
                 </button>
               </div>
-            ) : receiptAction(detailRequest)
+            ) : receiptAction(detailRequest, true)
           }
         >
+          <div ref={requestBody} tabIndex={-1}>
           <WorkflowSummary {...requestWorkflowSummary(detailRequest, linkedOrder, { actorIds: [actor, identityId, profile?.id], units: warehouse.data?.units })}>
             {linkedOrder && <Link className="inline-flex min-h-11 items-center text-sm underline" to={`?${linkedOrderParams.toString()}`}>Open fulfillment order</Link>}
           </WorkflowSummary>
@@ -3129,13 +3196,14 @@ function RequestsWorkspace({
               ))}
             </dl>
           </details>
+          </div>
         </Sheet>
       )}
-      {detailId !== null && !detailRequest && <UnavailableRecordSheet kind="Request" onClose={() => setDetailId(undefined)} />}
+      {detailId !== null && !detailRequest && !acknowledgeOrder && <UnavailableRecordSheet kind="Request" onClose={closeRequest} />}
       <AcknowledgeReceiptSheet
         key={acknowledgeOrder?.id}
         order={acknowledgeOrder}
-        onClose={() => setAcknowledgeOrder(undefined)}
+        onClose={closeAcknowledgment}
       />
       <CreateRequestSheet
         open={open}

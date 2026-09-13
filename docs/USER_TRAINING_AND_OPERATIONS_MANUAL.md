@@ -1,5 +1,13 @@
 # User Training And Operations Manual
 
+## September 13 Warehouse Receipt Follow-up
+
+The requester evidence-upload correction is applied to UAT. For an issued department request, use **Acknowledge receipt**, enter the acceptance reference and attach the actual recipient evidence. This does not give the requester warehouse execution access. The person who released the stock still cannot confirm its receipt, and shipment orders still use delivery tracking.
+
+The accompanying layout candidate keeps allocation and start-picking confirmation on the order row, leaving the scan form clear. Request review closes temporarily while receipt capture is open; Cancel returns to the request. Expand **Order reference** to read or copy the complete reference. These layout changes have passed local tests but require deployment and live retesting before trainers demonstrate them as released behavior.
+
+The automated department journey completed 30 live checks on the recorded pre-layout UAT build. Its three synthetic batches were separately cleaned and verified; this is not evidence of a complete warehouse pilot or every ecommerce/return branch. SMTP is outside this WMS signoff.
+
 ## September 12 Interface Training
 
 **Vendor practice:** Use an accepted vendor account with completed assigned training, without adding an internal department role. Review an awarded PO, enter a reference, acknowledge the displayed revision, and refresh to check the saved result. Confirm that an empty reference, an unread document, or changed document cannot be acknowledged. Invitation-form completion is not application submission or Legal handoff; record those as separate training steps.

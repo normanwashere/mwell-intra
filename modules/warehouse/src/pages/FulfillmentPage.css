@@ -1,0 +1,6 @@
+/* Keep the full accessible title; the complete reference is expandable in the form. */
+[role="dialog"]:has(#acknowledge-order-form) .intra-sheet-header h2 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -1,0 +1,122 @@
+{
+  "runId": "6b7e1a7c-8dee-4d43-a7ec-d3f7abaaeaa3",
+  "project": "kkoitlvydytdhlpxhuah",
+  "rows": {
+    "warehouse.products": [
+      {
+        "id": "wms-6b7e1a7c-desktop-1440",
+        "sku": "WMS-6B7E1A7C-DESKTOP-1440",
+        "attributes": {
+          "signoffRun": "6b7e1a7c-8dee-4d43-a7ec-d3f7abaaeaa3",
+          "synthetic": true
+        }
+      },
+      {
+        "id": "wms-6b7e1a7c-mobile-390",
+        "sku": "WMS-6B7E1A7C-MOBILE-390",
+        "attributes": {
+          "signoffRun": "6b7e1a7c-8dee-4d43-a7ec-d3f7abaaeaa3",
+          "synthetic": true
+        }
+      }
+    ],
+    "warehouse.department_stock_requests": [
+      {
+        "id": "48c8f4b9-7d3b-4e93-8fff-49faf832d10f",
+        "purpose": "Synthetic WMS signoff 6b7e1a7c-8dee-4d43-a7ec-d3f7abaaeaa3",
+        "lines": [
+          {
+            "productId": "wms-6b7e1a7c-desktop-1440",
+            "quantity": 2
+          }
+        ],
+        "event_id": null,
+        "fulfillment_order_id": "89561515-0b63-4cc9-901e-a282fa640db9",
+        "requested_by": "be0e8dcd-aba1-4a59-a1d8-b9d9c5fee47e"
+      },
+      {
+        "id": "9ae80161-8a4c-4c38-aa94-4f597275c571",
+        "purpose": "Synthetic WMS signoff 6b7e1a7c-8dee-4d43-a7ec-d3f7abaaeaa3",
+        "lines": [
+          {
+            "productId": "wms-6b7e1a7c-mobile-390",
+            "quantity": 2
+          }
+        ],
+        "event_id": null,
+        "fulfillment_order_id": "1dd8d9d6-9484-4340-9da9-79470735ce92",
+        "requested_by": "be0e8dcd-aba1-4a59-a1d8-b9d9c5fee47e"
+      }
+    ],
+    "warehouse.fulfillment_orders": [
+      {
+        "id": "1dd8d9d6-9484-4340-9da9-79470735ce92",
+        "source": "department_request",
+        "external_reference": "REQ-9ae80161-8a4c-4c38-aa94-4f597275c571",
+        "lines": [
+          {
+            "productId": "wms-6b7e1a7c-mobile-390",
+            "quantity": 2
+          }
+        ],
+        "packaging": [],
+        "parent_order_id": null,
+        "event_id": null,
+        "third_party_location_id": null,
+        "source_location_id": null,
+        "source_bin_id": null,
+        "status": "completed",
+        "delivery_method": "internal_handover",
+        "acknowledged_by": "be0e8dcd-aba1-4a59-a1d8-b9d9c5fee47e",
+        "released_by": "93a08670-c110-4244-97ec-477afcec759c",
+        "acknowledgement_reference": "SYNTHETIC-6b7e1a7c-8dee-4d43-a7ec-d3f7abaaeaa3"
+      },
+      {
+        "id": "89561515-0b63-4cc9-901e-a282fa640db9",
+        "source": "department_request",
+        "external_reference": "REQ-48c8f4b9-7d3b-4e93-8fff-49faf832d10f",
+        "lines": [
+          {
+            "productId": "wms-6b7e1a7c-desktop-1440",
+            "quantity": 2
+          }
+        ],
+        "packaging": [],
+        "parent_order_id": null,
+        "event_id": null,
+        "third_party_location_id": null,
+        "source_location_id": null,
+        "source_bin_id": null,
+        "status": "completed",
+        "delivery_method": "internal_handover",
+        "acknowledged_by": "be0e8dcd-aba1-4a59-a1d8-b9d9c5fee47e",
+        "released_by": "93a08670-c110-4244-97ec-477afcec759c",
+        "acknowledgement_reference": "SYNTHETIC-6b7e1a7c-8dee-4d43-a7ec-d3f7abaaeaa3"
+      }
+    ]
+  },
+  "evidence": [
+    {
+      "kind": "storage",
+      "value": "acknowledgment-1dd8d9d6-9484-4340-9da9-79470735ce92/0/ac555553-e327-45c5-aecb-dafdc200ce6e.png",
+      "entity": "order:1dd8d9d6-9484-4340-9da9-79470735ce92"
+    },
+    {
+      "kind": "storage",
+      "value": "acknowledgment-89561515-0b63-4cc9-901e-a282fa640db9/0/c39a8004-1165-45c1-874b-3f27e5c3ad08.png",
+      "entity": "order:89561515-0b63-4cc9-901e-a282fa640db9"
+    }
+  ],
+  "storageObjects": [
+    {
+      "id": "9f89580c-0983-478c-959e-2c1b4926dfc6",
+      "path": "acknowledgment-1dd8d9d6-9484-4340-9da9-79470735ce92/0/ac555553-e327-45c5-aecb-dafdc200ce6e.png",
+      "bucket": "evidence"
+    },
+    {
+      "id": "d3116360-917d-430f-8be8-cdddcb6989c9",
+      "path": "acknowledgment-89561515-0b63-4cc9-901e-a282fa640db9/0/c39a8004-1165-45c1-874b-3f27e5c3ad08.png",
+      "bucket": "evidence"
+    }
+  ]
+}

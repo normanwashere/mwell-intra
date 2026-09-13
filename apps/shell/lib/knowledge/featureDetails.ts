@@ -1195,8 +1195,8 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         control(
           "Acknowledge receipt",
-          "Records proof that an internal, event, or third-party recipient accepted released stock. In Department requests, eligible requesters can use Acknowledge receipt directly on the issued request or inside View request, without switching to Orders and events. Enter the receiving party's reference and upload its acceptance photo; this is not the dispatch confirmation.",
-          "An acknowledgment reference and evidence are required, and the acknowledger cannot be the releasing operator. In the September 11 UAT release, Awaiting receipt confirmation names Recipient / another authorized staff member as the next responsibility. This role-level description does not assign a person or grant permission; the person who released the items cannot confirm receipt.",
+          "Records proof that an internal, event, or third-party recipient accepted released stock. In Department requests, eligible requesters can use Acknowledge receipt directly on the issued request or inside View request, without switching to Orders and events. Receipt capture opens on its own; closing it returns to the request. Expand Order reference to read or copy the full reference. Enter the receiving party's reference and upload its acceptance photo; this is not the dispatch confirmation.",
+          "An acknowledgment reference and evidence are required, and the acknowledger cannot be the releasing operator. Eligible requesters can upload acceptance evidence for their released handover without warehouse execution permissions; this does not grant access to unrelated orders or other warehouse uploads. Awaiting receipt confirmation names Recipient / another authorized staff member as the next responsibility. This description does not assign a person or grant permission; the person who released the items cannot confirm receipt.",
           "The order and its linked department request become Completed and Closed.",
         ),
         control(

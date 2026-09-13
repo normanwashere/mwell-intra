@@ -339,8 +339,10 @@ describe("September 9 recipient acknowledgment", () => {
     const review = await screen.findByRole('dialog', { name: 'Review request' });
     fireEvent.click(within(review).getByRole('button', { name: 'Acknowledge receipt' }));
     const receipt = await screen.findByRole('dialog', { name: 'Acknowledge receipt / SEPT9-ORDER' });
+    expect(review).not.toBeInTheDocument();
+    expect(screen.getAllByRole('dialog', { hidden: true })).toHaveLength(1);
     fireEvent.click(within(receipt).getByRole('button', { name: 'Close' }));
-    expect(review).toBeVisible();
+    expect(await screen.findByRole('dialog', { name: 'Review request' })).toBeVisible();
     expect(advance).not.toHaveBeenCalled();
   });
 

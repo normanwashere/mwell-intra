@@ -1,0 +1,34 @@
+{
+  "runId": "6b7e1a7c-8dee-4d43-a7ec-d3f7abaaeaa3",
+  "origin": "https://mwell-intra-uat.vercel.app",
+  "project": "kkoitlvydytdhlpxhuah",
+  "commit": "bd309a8b9dce9530111233cc9442f052f0d4ab7e",
+  "cases": [
+    {
+      "viewport": "desktop-1440",
+      "productId": "wms-6b7e1a7c-desktop-1440",
+      "productName": "WMS signoff desktop-1440",
+      "locationId": "wms-6b7e1a7c-desktop-1440-loc",
+      "binId": "wms-6b7e1a7c-desktop-1440-bin",
+      "binCode": "WMS-6b7e1a7c-desktop-1440",
+      "sku": "WMS-6B7E1A7C-DESKTOP-1440",
+      "requestId": "48c8f4b9-7d3b-4e93-8fff-49faf832d10f",
+      "orderId": "89561515-0b63-4cc9-901e-a282fa640db9",
+      "openingQuantity": 10,
+      "requestedQuantity": 2
+    },
+    {
+      "viewport": "mobile-390",
+      "productId": "wms-6b7e1a7c-mobile-390",
+      "productName": "WMS signoff mobile-390",
+      "locationId": "wms-6b7e1a7c-mobile-390-loc",
+      "binId": "wms-6b7e1a7c-mobile-390-bin",
+      "binCode": "WMS-6b7e1a7c-mobile-390",
+      "sku": "WMS-6B7E1A7C-MOBILE-390",
+      "requestId": "9ae80161-8a4c-4c38-aa94-4f597275c571",
+      "orderId": "1dd8d9d6-9484-4340-9da9-79470735ce92",
+      "openingQuantity": 10,
+      "requestedQuantity": 2
+    }
+  ]
+}
