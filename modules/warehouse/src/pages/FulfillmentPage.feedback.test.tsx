@@ -517,9 +517,16 @@ describe("September 9 recipient acknowledgment", () => {
       ).toBeEnabled(),
     );
     fireEvent.submit(dialog.querySelector("form")!);
-    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
-      /receipt was not confirmed/i,
-    );
+    const rejection = await within(dialog).findByText(/receipt was not confirmed/i);
+    expect(rejection).toHaveAttribute("role", "alert");
+    expect(rejection).toHaveTextContent(/your evidence is retained/i);
+    expect(within(dialog).getByText("Evidence unavailable")).toBeVisible();
+    expect(advance).toHaveBeenCalledTimes(1);
+    expect(advance).toHaveBeenCalledWith(expect.objectContaining({
+      action: "acknowledge_receipt",
+      acknowledgementReference: "ACK",
+      acknowledgementEvidenceUrl: "acknowledgment/retained.jpg",
+    }));
     expect(
       within(dialog).getByLabelText("Acknowledgment reference"),
     ).toHaveValue("ACK");

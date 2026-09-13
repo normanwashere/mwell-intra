@@ -1,6 +1,8 @@
 # Receiving To Putaway - September 13
 
-Status: **Limited live journey and supplemental visual review completed. Two visual fixes and scoped cleanup remain open. Not a full WMS signoff.**
+Status: **Limited live journey completed. Visual fixes deployed in 0079161; long bin identity verified live. Pre-submit photo-preview transaction verification and scoped cleanup remain open. Not a full WMS signoff.**
+
+The earlier candidate findings below are retained as history. A later [release review](2026-09-13-WMS-RETURN-VISIBILITY-RELEASE.md) records the applied migration, deployed build and twelve reviewed live desktop/mobile viewport captures. The original transactions remain tied to build `63a52fc`; they are not relabeled as transactions on the new build.
 
 ## What Passed
 

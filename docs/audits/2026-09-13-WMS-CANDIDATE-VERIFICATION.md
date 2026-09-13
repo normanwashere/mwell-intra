@@ -1,6 +1,6 @@
 # Warehouse Candidate Verification - September 13
 
-Status: local candidate reviewed and built; not deployed or fully certified.
+Status: candidate checks below are retained as history. The application is now deployed in `0079161`; see the [release review](2026-09-13-WMS-RETURN-VISIBILITY-RELEASE.md) for live evidence and remaining limits. Not fully certified.
 
 ## Confirmed Cleanup
 

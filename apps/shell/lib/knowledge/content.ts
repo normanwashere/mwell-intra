@@ -596,7 +596,7 @@ const procedureArticles: KnowledgeArticle[] = [
       ],
       [
         "Preview an attached photo",
-        "Local update, release pending: in Receiving or Quality, select an attached photo to view it full size. Close the preview to return to the unsent form. Previewing does not submit the receipt or inspection.",
+        "In Receiving or Quality, select an attached photo to view it full size. Close the preview to return to the unsent form. Previewing does not submit the receipt or inspection.",
       ],
       ["Put away", "Move accepted stock to a valid bin."],
       [
@@ -696,7 +696,7 @@ const procedureArticles: KnowledgeArticle[] = [
       ],
       [
         "Link a received return to its original order",
-        "Local candidate, not yet live: select Receive physical return from the customer case or original order. Check Original order, Customer return case, product and any serial before recording physical intake. The customer fields are optional; unlinked intake remains available. Keep and resume an existing draft if a new link has different details. If the result is uncertain, select Recover original result rather than creating another intake. After saving, use View saved return to check the linked history. Recording a customer resolution does not receive the goods or release stock from Quality.",
+        "Select Receive physical return from the customer case or original order. Check Original order, Customer return case, product and any serial before recording physical intake. The customer fields are optional; unlinked intake remains available. Keep and resume an existing draft if a new link has different details. If the result is uncertain, select Recover original result rather than creating another intake. After saving, use View saved return to check the linked history. Recording a customer resolution does not receive the goods or release stock from Quality.",
       ],
     ],
   ),

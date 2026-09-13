@@ -1483,7 +1483,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
       controls: [
         control(
           "Receive physical return",
-          "Local candidate, not yet live: opens customer intake from the original order or customer case without submitting it.",
+          "Opens customer intake from the original order or customer case without submitting it.",
           "Existing manage_returns authority is required. Original order and Customer return case are optional; legacy unlinked intake remains supported.",
           "Valid context prefills the draft; mismatched or inaccessible links are blocked, and an existing draft is not overwritten.",
         ),
@@ -1513,9 +1513,9 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
       ],
       fields: [
-        field("Original order", "Local candidate: optional customer source shown in return history.", false,
+        field("Original order", "Optional customer source shown in return history.", false,
           "Choose the original order containing the returned product and any serial. Check the order reference before continuing."),
-        field("Customer return case", "Local candidate: optional link to the customer-resolution record, separate from physical custody.", false,
+        field("Customer return case", "Optional link to the customer-resolution record, separate from physical custody.", false,
           "Choose the matching case. An untouched blank product line is filled from the case; existing entries remain for you to check. Correct any order, product or serial mismatch before recording the return."),
         field(
           "Return source",
