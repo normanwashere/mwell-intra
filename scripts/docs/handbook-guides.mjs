@@ -352,7 +352,7 @@ const TASK_DEFINITIONS = [
     steps: ["Match the original release", "Receive and inspect the return", "Choose the governed resolution branch", "Post and confirm the final disposition"],
     decisions: ["Does the return match an original release?", "Is stock reusable, held, written off, refunded, replaced, or sent by RMA?"],
     denial: ["Linked intake rejects inaccessible or mismatched order, case, product or serial; links do not approve disposition", "Refund or write-off authority cannot be bypassed"],
-    recovery: "Physical intake remains separate from the Quality decision and customer resolution. Check the original order, customer case, product and serial before recording intake. Keep and resume an existing draft when a link opens different details. If the result is uncertain, select Recover original result; do not create a second intake. Use View saved return to check its history and source links.",
+    recovery: "Read customer case progress separately from physical intake. A verified intake link does not confirm Quality clearance; check current holds and inspections in Quality before deciding. Its count follows the selected tab and search; clear search to review the full list. Check the original order, customer case, product and serial before recording intake. Keep and resume an existing draft when a link opens different details. If the result is uncertain, select Recover original result; do not create a second intake. Use View saved return to check its history and source links.",
     handoff: "Warehouse retains physical custody while the accountable commercial owner completes the selected resolution.",
     completion: ["Original and reverse movements reconcile", "Disposition is terminal", "Commercial evidence is retained"],
     evidence: ["Return identifier", "Original release link", "Inspection", "Disposition and financial evidence"],
@@ -1066,6 +1066,7 @@ function roleGuide(definition) {
 }
 
 const SOURCE_ROOT_HEADINGS = {
+  "sept13-return-quality-display": "Return And Quality Display Update",
   "sept12-workspace-layout": "September 12 Workspace Layout Release",
   "sept11-ux-remediation-candidate": "September 11 UX Release and Verification",
   "sept9-wms-feedback": "September 9 WMS Feedback: Fixes And Tester Instructions",
@@ -1408,6 +1409,7 @@ function markdownHeadings(source) {
 }
 
 const LEGACY_TARGET_BY_SOURCE_ID = {
+  "sept13-return-quality-display": ["system", "source-references", "source-sept13-return-quality-display"],
   "sept12-workspace-layout": ["system", "source-references", "source-sept12-workspace-layout"],
   "sept11-ux-remediation-candidate": ["system", "source-references", "source-sept11-ux-remediation-candidate"],
   "sept9-wms-feedback": ["system", "source-references", "source-sept9-wms-feedback"],

@@ -1,5 +1,13 @@
 # Mwell Intra Standalone Operating Handbook
 
+## September 13 Return And Quality Display Update
+
+In **Resolve return case**, the status describes the customer case, not the location or condition of the returned item. **Customer case submitted / awaiting resolution** means a decision is still needed. Read the separate intake message: a verified link confirms a recorded physical intake, but does not confirm that Quality has cleared the stock. When the summary says intake is not verified in this view, check the original order and saved return before proceeding; do not create a duplicate just to remove the message.
+
+Open **Quality Control** to check the current inspection and holds. **Pending**, **Holds** and **Completed** each show their own count. Search narrows that count: **1 of 3** means one match from three records in the selected tab. Clear search to see the full list. A loading error is not an empty queue.
+
+The workflow is unchanged. Keep the required quarantine bin, evidence, independent Quality review and permitted resolution. Viewing the summary or changing a filter does not move stock or approve a return. These instructions describe the September 13 display candidate; the dated release record confirms deployment and verification separately.
+
 ## September 12 Workspace Layout
 
 **Vendor training and PO acknowledgment:** Accept your current invitation and complete the assigned vendor training. No internal department membership is needed. Open **Purchase order acknowledgements**, choose **Read purchase order**, review the document, enter an acknowledgment reference, and select **Acknowledge revision**. The saved status remains after refresh. If the document changes, review the updated revision before retrying. On narrow screens, long case-status labels wrap so the full message remains readable.

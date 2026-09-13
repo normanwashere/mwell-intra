@@ -19,6 +19,13 @@ const {
 
 const root = path.resolve(fileURLToPath(new URL("../../", import.meta.url)));
 
+test('return recovery distinguishes case progress from current Quality clearance', () => {
+  const text = JSON.stringify(HANDBOOK_GUIDES.find(item => item.id === 'returns-replacements-refunds-rma'));
+  assert.match(text, /customer case.*physical intake/i);
+  assert.match(text, /does not confirm Quality clearance/);
+  assert.match(text, /selected tab and search/);
+});
+
 test('return guide distinguishes optional lineage, physical custody, and customer resolution', () => {
   const guide = HANDBOOK_GUIDES.find(item => item.id === 'returns-replacements-refunds-rma');
   const text = JSON.stringify(guide);

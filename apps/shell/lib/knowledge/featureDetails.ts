@@ -1122,6 +1122,12 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
     "warehouse-fulfillment": {
       controls: [
         control(
+          "Save resolution",
+          "In Resolve return case, review customer case progress separately from physical intake. A submitted customer case is awaiting resolution; it does not mean the returned item has arrived.",
+          "Read the linked-intake message and check current Quality holds before deciding. A verified intake link does not confirm Quality clearance. If intake is not verified in this view, check the source records rather than assuming it is missing or cleared.",
+          "Only saving a permitted resolution records the decision. Reading the summary changes no stock, permissions or case state. Keep the existing quarantine, evidence and independent-review steps.",
+        ),
+        control(
           "Queue filters",
           "In the September 11 UAT release, order search, status and channel are retained in the address. Department requests retain their selected status and readable request. Copy a detail address or use reload and browser Back/Forward to revisit that context.",
           "Links are checked against current readable records. Unsaved action forms are not stored in the address. Combined floor/request users see Department requests only with stock-request capability.",
@@ -2001,6 +2007,12 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
     },
     "warehouse-quality": {
       controls: [
+        control(
+          "Pending, Holds and Completed",
+          "Choose the work list you need. The count follows the selected tab and search, rather than always showing pending inspections.",
+          "Clear search to see the full current list. A filtered count such as 1 of 3 means one matching record from three in that tab. An unavailable list is not zero work.",
+          "Switching tabs or searching only changes the displayed list. It does not accept stock, release a hold or submit an inspection.",
+        ),
         control(
           "Retry quality queue",
           "Reloads inspection, hold and vendor-return records after a failed or stalled read.",

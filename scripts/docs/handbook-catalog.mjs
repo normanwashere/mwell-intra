@@ -14,6 +14,20 @@ export const HANDBOOK_TABS = Object.freeze([
 
 const CATALOG = [
   {
+    source: "docs/releases/2026-09-13-RETURN-QUALITY-DISPLAY.md",
+    id: "sept13-return-quality-display",
+    title: "September 13 Return and Quality Display",
+    primaryTab: "release",
+    relatedTabs: ["workflows", "roles"],
+    contentType: "release-note",
+    audience: ["operator", "trainer", "release-reviewer"],
+    summary: "Separate customer-case progress, physical intake and Quality clearance; understand tab-specific filtered counts and verification limits.",
+    keywords: ["return", "intake", "Quality", "hold", "count", "search"],
+    sortOrder: 1,
+    collapse: "reference",
+    relatedSources: ["docs/manual/MWELL_INTRA_USER_MANUAL.md"],
+  },
+  {
     source: "docs/releases/2026-09-12-WORKSPACE-LAYOUT.md",
     id: "sept12-workspace-layout",
     title: "September 12 Workspace Layout",

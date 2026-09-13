@@ -1,5 +1,13 @@
 # User Training And Operations Manual
 
+## September 13 Return And Quality Display Drill
+
+Use a designated synthetic customer case. Open **Resolve return case** and explain the difference between customer-case progress and physical intake. A verified intake link is not Quality clearance. Check the linked return and the current inspection/hold records before making a permitted decision; do not create a duplicate intake when the summary cannot verify a link.
+
+In **Quality Control**, select **Holds**, search for the test product, then clear the search. The count must follow that tab and filter, for example **1 of 3**. Repeat on **Completed**. Reading, filtering and closing without saving must leave case state and stock unchanged. Existing evidence, quarantine and independent-review requirements still apply.
+
+This drill accompanies the display candidate. Local tests and simulated browser captures are not real-user acceptance or a replacement for the release's live verification record. Older dated results below remain tied to their stated builds.
+
 ## September 13 Warehouse Receipt Follow-up
 
 **Release status:** The latest layout and KB update is live on UAT in build `63a52fc`. Six new post-deployment checks passed across Marketing, Operations and Admin at 1440px and 390px. Fresh desktop and mobile ecommerce journeys then completed all 32 recorded checkpoints without interruption. Both reached delivered/completed with private proof images and exactly one stock deduction. Live screenshots confirm that packing guidance is unobstructed and wrong-bin errors remain visible. Other warehouse branches and the real-user pilot remain open.

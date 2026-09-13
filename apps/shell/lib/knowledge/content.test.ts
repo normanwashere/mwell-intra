@@ -25,6 +25,15 @@ import {
 } from "./validate";
 
 describe("Knowledge Base content", () => {
+  it("separates return-case progress from stock clearance and explains filtered Quality counts", () => {
+    const returns = JSON.stringify(EXPLICIT_FEATURE_DETAILS["warehouse-fulfillment"]);
+    expect(returns).toMatch(/customer case.*physical intake/i);
+    expect(returns).toMatch(/does not confirm Quality clearance/);
+    const quality = JSON.stringify(EXPLICIT_FEATURE_DETAILS["warehouse-quality"]);
+    expect(quality).toMatch(/selected tab and search/);
+    expect(quality).toMatch(/1 of 3/);
+    expect(quality).toMatch(/unavailable.*not zero/i);
+  });
   it('keeps released return linking and photo preview guidance user-facing', () => {
     const text = JSON.stringify(KNOWLEDGE_CONTENT);
     expect(text).toMatch(/Link a received return to its original order/);
