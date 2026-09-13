@@ -4,7 +4,8 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, URL } from 'node:url';
+import console from 'node:console';
 import path from 'node:path';
 
 const root = fileURLToPath(new URL('../../../../', import.meta.url));

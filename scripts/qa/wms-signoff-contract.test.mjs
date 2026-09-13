@@ -54,6 +54,35 @@ function evaluate(evidence = fixture(), humanGates = []) {
   return evaluateWmsSignoff({ scope, evidence, humanGates });
 }
 
+test('replenishment requires the actual recommendation, Procurement acceptance and linked draft handoff', () => {
+  const stages = ['recommend', 'accept', 'handoff'];
+  for (const action of stages) {
+    const stage = WMS_CHECKPOINTS.find(item => item.id === `replenishment.${action}`);
+    assert.ok(stage, `Missing replenishment ${action} checkpoint`);
+    assert.equal(stage.journey, 'replenishment');
+    assert.deepEqual(stage.operation, { rpc: 'procurement.manage_replenishment_recommendation', action });
+    assert.deepEqual([...stage.views], ['desktop1440', 'mobile390']);
+  }
+  const recommendation = WMS_CHECKPOINTS.find(item => item.id === 'replenishment.recommend');
+  assert.ok(recommendation.checks.includes('effective-recommendation-authority-without-procurement-view-grant'));
+  assert.ok(recommendation.checks.includes('accepted-and-handed-off-snapshots-not-overwritten'));
+  const handoff = WMS_CHECKPOINTS.find(item => item.id === 'replenishment.handoff');
+  assert.ok(handoff.checks.includes('linked-draft-request-quantity-rationale-and-actor'));
+  assert.ok(handoff.checks.includes('no-stock-movement-or-purchase-order-implied'));
+});
+
+test('replenishment rejects missing, unrelated or substituted handoff evidence', () => {
+  const evidence = fixture();
+  const handoff = evidence.find(row => row.checkpoint === 'replenishment.handoff' && row.view === 'desktop1440');
+  assert.ok(handoff, 'A handoff must be explicitly required');
+  handoff.journeyId = 'unrelated-recommendation';
+  assert.match(evaluate(evidence).failures.join('\n'), /replenishment:desktop1440: continuous journey/);
+  const substituted = fixture();
+  substituted.find(row => row.checkpoint === 'replenishment.handoff').operation.action = 'recommend';
+  assert.equal(evaluate(substituted).automatedPassed, false);
+  assert.equal(evaluate(fixture().filter(row => !row.checkpoint.startsWith('replenishment.'))).automatedPassed, false);
+});
+
 test('complete automated evidence still leaves both human gates pending', () => {
   const result = evaluate();
   assert.deepEqual(result.failures, []);

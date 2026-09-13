@@ -2,7 +2,7 @@
 
 ## Status
 
-Application fixes passed the local release checks and independent review and were deployed to UAT as `10cb74545c0bbdf67bf2dd082ca4661d1b2d78d0`. Post-deployment checks are recorded below. The further KB control-reference wording correction has passed local checks and independent review; deployment is recorded separately when confirmed. This report does not award WMS signoff, isolated-role journey completion, screenshot certification or human acceptance. SMTP remains excluded.
+Application fixes passed the local release checks and independent review and were deployed to UAT as `10cb74545c0bbdf67bf2dd082ca4661d1b2d78d0`. Post-deployment checks are recorded below. The further KB control-reference wording correction is live as `9c712baeb4c9ecb4e7bb84049fa8e9f977e81306`; deployment `dpl_2Hhb2RShFQKPuEAywHWQ38cvQxTH` and exact UAT health were verified at `2026-09-13T17:37:26.906Z`. Final full-shell tests passed 746 with one skip, and the signed-in desktop/mobile guide was visually reviewed. The local receipt is `outputs/wms-signoff/sep14-role-authority/KB-DEPLOYMENT-RECEIPT.md`. This report does not award WMS signoff, isolated-role journey completion, screenshot certification or human acceptance. SMTP remains excluded.
 
 ## What Failed
 

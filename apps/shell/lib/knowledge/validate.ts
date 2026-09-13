@@ -321,10 +321,25 @@ export function validateKnowledgeContent(content: KnowledgeContent): string[] {
         errors.push(`feature ${feature.id} references unknown flow ${flowId}`);
     if (!feature.controls.length)
       errors.push(`feature ${feature.id} has no controls`);
-    for (const control of feature.controls)
+    for (const control of feature.controls) {
       for (const [name, value] of Object.entries(control))
-        if (!hasText(value))
+        if (name !== "ownerRoleIds" && (typeof value !== "string" || !hasText(value)))
           errors.push(`feature ${feature.id} control has no ${name}`);
+      if (control.ownerRoleIds !== undefined) {
+        const owners = control.ownerRoleIds;
+        const context = `feature ${feature.id} control ${control.name}`;
+        if (!Array.isArray(owners) || !owners.length ||
+            owners.some(owner => typeof owner !== "string" || !hasText(owner)) ||
+            new Set(owners).size !== owners.length) {
+          errors.push(`${context} has invalid owner roles`);
+        } else {
+          for (const owner of owners) {
+            if (!roleIds.has(owner)) errors.push(`${context} references unknown owner ${owner}`);
+            else if (!feature.roleIds.includes(owner)) errors.push(`${context} owner ${owner} is not a feature reader`);
+          }
+        }
+      }
+    }
     if (
       feature.availability === "coming_soon" &&
       feature.routes.some((route) => liveRoutes.has(route))

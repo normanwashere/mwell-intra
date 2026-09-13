@@ -41,6 +41,12 @@ export const WMS_CHECKPOINTS = Object.freeze([
   checkpoint('inventory.reconcile', ['on-hand-reserved-held-available', 'serial-lot-location-traceability', 'ledger-export-audit-parity']),
   checkpoint('inventory.count-adjust-transfer', ['cycle-count-and-independent-approval', 'adjustment-and-transfer-ledger', 'unauthorized-adjustments-denied']),
   checkpoint('inventory.master-data', ['authorized-import-and-validation', 'duplicate-import-recovery', 'location-product-routing-and-pricing-boundaries']),
+  checkpoint('replenishment.recommend', ['effective-recommendation-authority-without-procurement-view-grant', 'saved-product-quantity-rationale-and-actor', 'accepted-and-handed-off-snapshots-not-overwritten', 'read-failure-and-revoked-permission-denied'],
+    { journey: 'replenishment', operation: Object.freeze({ rpc: 'procurement.manage_replenishment_recommendation', action: 'recommend' }) }),
+  checkpoint('replenishment.accept', ['procurement-management-authority-required', 'recommendation-to-accepted-transition-and-audit', 'unauthorized-and-invalid-state-decisions-denied', 'dismissal-branch-on-separate-fixture'],
+    { journey: 'replenishment', operation: Object.freeze({ rpc: 'procurement.manage_replenishment_recommendation', action: 'accept' }) }),
+  checkpoint('replenishment.handoff', ['procurement-management-authority-required', 'linked-draft-request-quantity-rationale-and-actor', 'duplicate-handoff-does-not-create-second-request', 'no-stock-movement-or-purchase-order-implied'],
+    { journey: 'replenishment', operation: Object.freeze({ rpc: 'procurement.manage_replenishment_recommendation', action: 'handoff' }) }),
   ...warehouseRoles.map(role => checkpoint(`roles.single.${role}`,
     ['allowed-capabilities-and-persisted-grants', 'forbidden-direct-api-mutations-denied', 'cross-department-and-record-isolation'],
     { roles: [role], isolatedRole: true })),
@@ -157,7 +163,7 @@ export function evaluateWmsSignoff(input = {}) {
 
   // Link steps per viewport; screenshots from unrelated orders cannot form a chain.
   for (const view of views) {
-    for (const journey of ['inbound', 'ecommerce', 'department', 'returns', 'physical-return']) {
+    for (const journey of ['inbound', 'ecommerce', 'department', 'returns', 'physical-return', 'replenishment']) {
       const keys = WMS_CHECKPOINTS.filter(item => item.journey === journey).map(item => `${item.id}:${view}`);
       const ids = keys.map(key => byKey.get(key)?.[0]?.journeyId);
       if (ids.some(id => !nonempty(id)) || new Set(ids).size !== 1) {

@@ -35,6 +35,7 @@ import { PriceEditorSheet } from '@/components/PriceEditorSheet';
 import { ProductEditorSheet } from '@/components/ProductEditorSheet';
 import { RelocationSheet } from '@/components/relocation/RelocationSheet';
 import { WarehouseScanFlow } from '@/components/camera/WarehouseScanFlow';
+import { InventoryRecommendationAction } from '@/components/InventoryRecommendationAction';
 
 const UNIT_TONE: Record<UnitStatus, Tone> = {
   in_stock: 'emerald',
@@ -49,7 +50,7 @@ const UNIT_TONE: Record<UnitStatus, Tone> = {
 export function ProductDetailPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
-  const { data, can, transfer, requestStockChange } = useWarehouse();
+  const { data, can, transfer, requestStockChange, source, loading, error } = useWarehouse();
   const toast = useToast();
 
   const [relocateOpen, setRelocateOpen] = useState(false);
@@ -294,6 +295,8 @@ export function ProductDetailPage() {
             Price {product.price != null ? money(product.price) : '—'}
           </span>
           <div className="flex w-full flex-col gap-2 sm:ml-auto sm:w-auto sm:flex-row sm:items-center">
+            <InventoryRecommendationAction key={product.id} product={product} available={available}
+              source={source} stockReady={!loading && !error} />
             {canManageProducts && (
               <button
                 type="button"

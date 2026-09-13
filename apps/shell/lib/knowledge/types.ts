@@ -66,6 +66,7 @@ export interface KnowledgeFeatureControl {
   behavior: string;
   validation: string;
   result: string;
+  ownerRoleIds?: string[];
 }
 
 export interface KnowledgeFeatureField {

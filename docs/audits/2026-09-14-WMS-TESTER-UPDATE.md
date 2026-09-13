@@ -7,10 +7,11 @@ A few more fixes are live on UAT:
 - **Forms:** the title, Close button and Save area now stay in place when you scroll to a lower field. We checked the return form on desktop and at 390px and 320px widths.
 - **Exports:** Operations Associates with export permission can now open Export data from their warehouse home screen. We checked the dialog on desktop and mobile.
 - **Action buttons:** export and replenishment buttons now follow the permission needed for that action, not just permission to view the page.
+- **Guides:** the export instructions now explain page access and export permission separately. We checked the updated wording on desktop and mobile.
 
 The process and database permissions have not changed. We corrected the app's role list and made the role guides and handbook clearer about who requests, who handles stock and who approves.
 
-The latest app changes passed 1,053 warehouse tests and 737 shell tests. Live checks covered 341 permission decisions across 11 test accounts, with no mismatches. Some audit visibility is intentionally restricted, so this is not full WMS certification.
+The warehouse app changes passed 1,053 tests. The latest guide update passed 746 shell tests, with one skip. Live checks on the preceding application release covered 341 permission decisions across 11 test accounts, with no mismatches. Some audit visibility is intentionally restricted, so this is not full WMS certification.
 
 Required fields and permissions still apply. Empty replacement delivery details still prevent saving. The live form checks were closed without changing the test record.
 

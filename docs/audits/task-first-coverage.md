@@ -1,14 +1,16 @@
 # Task-first Coverage Inventory
 
-Date: 2026-09-06; inventory updated September 14 for the return resolution, physical intake, and Quality queue instructions, retaining the September 12 shared workspace controls. Scope: current knowledge inventory, including candidate instructions on existing feature routes. A feature's existing live classification does not certify its new candidate controls as deployed. NOT a release sign-off or completed Task11 pilot. Local screenshots do not establish live exact-control certification.
+Date: 2026-09-06; inventory updated September 14 for candidate product-detail replenishment controls, retaining the return resolution, physical intake, Quality queue instructions and September 12 shared workspace controls. Scope: current knowledge inventory, including candidate instructions on existing feature routes. A feature's existing live classification does not certify its new candidate controls as deployed. NOT a release sign-off or completed Task11 pilot. Local screenshots do not establish live exact-control certification.
 
 ## Exact Baseline
 
-68 features: 59 live, 0 limited, 9 coming soon. 297 documented controls: 288 on live-classified features and 9 non-executable roadmap controls. 26 flows, 58 decision nodes, 14 distinct policy-reference strings, 53 existing evidence records. Zero unresolved mapped flow/role targets and zero graph-validator errors in the current inventory.
+68 features: 59 live, 0 limited, 9 coming soon. 300 documented controls: 291 on live-classified features and 9 non-executable roadmap controls. 26 flows, 58 decision nodes, 14 distinct policy-reference strings, 53 existing evidence records. Zero unresolved mapped flow/role targets and zero graph-validator errors in the current inventory.
 
-All 288 controls on live-classified features have written behavior/validation/result and an owned feature reference. **Zero exact control-name/hotspot evidence matches.** This does not mean 53 images are absent: their recorded scope does not establish every control. All 297 inventory rows remain unverified for release evidence. The validator reports 293 missing action-evidence bindings, including 5 existing flow-node bindings. No new screenshots, capture dates or acceptance states were fabricated.
+All 291 controls on live-classified features have written behavior/validation/result and an owned feature reference. **Zero exact control-name/hotspot evidence matches.** This does not mean 53 images are absent: their recorded scope does not establish every control. All 300 inventory rows remain unverified for release evidence. The validator reports 296 missing action-evidence bindings, including 5 existing flow-node bindings. No new screenshots, capture dates or acceptance states were fabricated.
 
-The current refresh adds Fulfillment "Save resolution", Returns "Receive physical return" and "Review in Quality", and Quality "Pending, Holds and Completed"; it removes the superseded Returns "Set disposition" inventory entry. These are four additions and one removal, not three newly certified controls. All four added entries have empty evidence bindings and remain unverified.
+The earlier September 14 refresh added Fulfillment "Save resolution", Returns "Receive physical return" and "Review in Quality", and Quality "Pending, Holds and Completed"; it removed the superseded Returns "Set disposition" inventory entry. Those were four additions and one removal, not three newly certified controls. All four added entries have empty evidence bindings and remain unverified.
+
+The current candidate adds product-detail "Recommend replenishment", "Save recommendation" and "Cancel". Open/save have explicit canonical recommendation owners, distinct from the unchanged feature readership; other controls retain their existing reader fallback. These three additions have empty evidence bindings and remain unverified. Their documentation does not certify deployment, a successful live recommendation, Procurement acceptance/handoff, or stock movement.
 
 The snapshot below is intentionally exact. Changes require reviewing this inventory and its test, not reducing expected counts or treating a new control as implicitly verified. The inventory is current content, not a second task catalog.
 
@@ -53,7 +55,7 @@ StepWorkspace retains exact branch callback identity and permission behavior. Ti
 | feature-warehouse-scan | live | 3 | /warehouse/scan | Warehouse | receive-to-putaway, event-fulfillment, returns-reconciliation, cycle-count-adjustment |
 | feature-warehouse-tasks | live | 3 | /warehouse/tasks | Warehouse | receive-to-putaway, quality-disposition, event-fulfillment, returns-reconciliation, cycle-count-adjustment, exception-and-recovery |
 | feature-warehouse-inventory | live | 5 | /warehouse/inventory | Warehouse | receive-to-putaway, quality-disposition, event-fulfillment, returns-reconciliation, cycle-count-adjustment |
-| feature-warehouse-product-detail | live | 8 | /warehouse/inventory/:id | Warehouse | receive-to-putaway, quality-disposition, returns-reconciliation, cycle-count-adjustment, pricing-and-costing |
+| feature-warehouse-product-detail | live | 11 | /warehouse/inventory/:id | Warehouse | receive-to-putaway, quality-disposition, returns-reconciliation, cycle-count-adjustment, pricing-and-costing |
 | feature-warehouse-receiving | live | 5 | /warehouse/receiving | Warehouse | receive-to-putaway, quality-disposition |
 | feature-warehouse-allocations | live | 5 | /warehouse/allocations | Warehouse | event-fulfillment, returns-reconciliation, allocation-event-return |
 | feature-warehouse-fulfillment | live | 18 | /warehouse/fulfillment | Warehouse | outbound-fulfillment, event-fulfillment, receive-to-putaway, returns-reconciliation, procure-to-pay, pricing-and-costing |
@@ -127,7 +129,7 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
 {
   "counts": {
     "features": 68,
-    "controls": 297,
+    "controls": 300,
     "liveFeatures": 59,
     "limitedFeatures": 0,
     "comingSoonFeatures": 9,
@@ -1149,6 +1151,48 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
     },
     {
       "key": "warehouse-product-detail:Back to inventory",
+      "referenceId": "feature-warehouse-product-detail",
+      "availability": "live",
+      "flowIds": [
+        "receive-to-putaway",
+        "quality-disposition",
+        "returns-reconciliation",
+        "cycle-count-adjustment",
+        "pricing-and-costing"
+      ],
+      "evidenceIds": [],
+      "unverified": true
+    },
+    {
+      "key": "warehouse-product-detail:Recommend replenishment",
+      "referenceId": "feature-warehouse-product-detail",
+      "availability": "live",
+      "flowIds": [
+        "receive-to-putaway",
+        "quality-disposition",
+        "returns-reconciliation",
+        "cycle-count-adjustment",
+        "pricing-and-costing"
+      ],
+      "evidenceIds": [],
+      "unverified": true
+    },
+    {
+      "key": "warehouse-product-detail:Save recommendation",
+      "referenceId": "feature-warehouse-product-detail",
+      "availability": "live",
+      "flowIds": [
+        "receive-to-putaway",
+        "quality-disposition",
+        "returns-reconciliation",
+        "cycle-count-adjustment",
+        "pricing-and-costing"
+      ],
+      "evidenceIds": [],
+      "unverified": true
+    },
+    {
+      "key": "warehouse-product-detail:Cancel",
       "referenceId": "feature-warehouse-product-detail",
       "availability": "live",
       "flowIds": [

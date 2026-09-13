@@ -9,6 +9,36 @@ import { validateKnowledgeContent, validateKnowledgeEvidenceArtifacts, validateK
 
 const APP_COMMIT = "11e1fec866c6537ed340111550b9a1ce341a0a58";
 
+describe("explicit feature control owners", () => {
+  it("accepts a nonempty known owner subset without changing feature readers", () => {
+    const content = valid();
+    content.roles.push({ ...content.roles[0]!, id: "reader" });
+    content.features[0]!.roleIds.push("reader");
+    Object.assign(content.features[0]!.controls[0]!, { ownerRoleIds: ["owner"] });
+    expect(validateKnowledgeContent(content)).toEqual([]);
+    expect(content.features[0]!.roleIds).toEqual(["owner", "reader"]);
+  });
+
+  it.each([[], null, "owner", ["owner", "owner"], [7], [""]].map(owners => ({ owners })))("rejects invalid explicit owners $owners", ({ owners }) => {
+    const content = valid();
+    Object.assign(content.features[0]!.controls[0]!, { ownerRoleIds: owners });
+    expect(validateKnowledgeContent(content)).toContain("feature flow-management control Governed branch has invalid owner roles");
+  });
+
+  it("rejects unknown control owners", () => {
+    const content = valid();
+    Object.assign(content.features[0]!.controls[0]!, { ownerRoleIds: ["unknown"] });
+    expect(validateKnowledgeContent(content)).toContain("feature flow-management control Governed branch references unknown owner unknown");
+  });
+
+  it("rejects a known control owner outside the existing feature audience", () => {
+    const content = valid();
+    content.roles.push({ ...content.roles[0]!, id: "outside" });
+    Object.assign(content.features[0]!.controls[0]!, { ownerRoleIds: ["outside"] });
+    expect(validateKnowledgeContent(content)).toContain("feature flow-management control Governed branch owner outside is not a feature reader");
+  });
+});
+
 function sha256(file: string): string {
   return createHash("sha256").update(readFileSync(file)).digest("hex");
 }

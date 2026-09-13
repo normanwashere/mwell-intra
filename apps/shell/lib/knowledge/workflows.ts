@@ -904,7 +904,7 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
         "start",
         "Open the supplier delivery",
         ["warehouse_procurement", "warehouse_logistics_supervisor"],
-        "Identify the supplier, delivery reference, site, and candidate source PO.",
+        "Identify the supplier, delivery reference, site, and candidate source PO. Procurement and Operations may coordinate the delivery; reading or coordinating this flow does not authorize posting the receipt or moving stock.",
       ),
       decision(
         "receive-po-eligible",
@@ -917,7 +917,7 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       decision(
         "receive-traceability",
         "Is required traceability complete?",
-        ["warehouse_logistics_supervisor"],
+        ["warehouse_operator", "warehouse_supervisor", "warehouse_logistics_supervisor", "warehouse_admin"],
         "Capture counted quantity, serials only for serialized items, lot or batch details where required, and delivery evidence. For nonserialized merchandise use one product barcode per variant: 1000 tumblers is quantity 1000, not 1000 serials. Synthetic tester references only: PO0005 / Company D has Jacket S, M and L at 100 each; PO0006 / Company E has Tumbler 300. Do not treat the 1000-unit example as that PO's balance or consume a shared fixture without the run owner's approval.",
         "warehouse_logistics_supervisor",
         "Warehouse traceability control: product, quantity, serial or lot identity, source, and evidence must be attributable before posting.",
@@ -926,8 +926,8 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
         "receive-record",
         "action",
         "Post the governed pending-inspection receipt",
-        ["warehouse_logistics_supervisor"],
-        "Expand the selected item lines in Receive approved procurement PO. Reconcile quantities, identities, and evidence; use the footer requirements to reach an incomplete field. Save progress stores a draft without moving stock. Confirm governed receipt records only delivered eligible quantities and keeps the stock unavailable for Quality.",
+        ["warehouse_logistics_supervisor", "warehouse_operator", "warehouse_supervisor", "warehouse_admin"],
+        "Use your current receiving permission and complete any required training. Expand the selected item lines in Receive approved procurement PO. Reconcile quantities, identities, and evidence; use the footer requirements to reach an incomplete field. Save progress stores a draft without moving stock. Confirm governed receipt records only delivered eligible quantities and keeps the stock unavailable for Quality. Arrange inspection by an authorized person other than the recorded receiver.",
         {
           databaseEffect:
             "Receipt lines, units or lots, and the inventory ledger are posted from the PO in pending-inspection custody.",
@@ -936,8 +936,8 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       decision(
         "receive-bin-ready",
         "Are Quality acceptance and a valid bin confirmed?",
-        ["warehouse_logistics_supervisor", "warehouse_admin"],
-        "Complete the receipt's Quality inspection with an authorized inspector and confirm that its hold is released. Check eligible stock in the general area and an active destination bin at the same warehouse. Held or pending stock must not enter the ordinary putaway path.",
+        ["warehouse_operator", "warehouse_supervisor", "warehouse_logistics_supervisor", "warehouse_admin"],
+        "Have the receipt's Quality inspection completed by an authorized inspector different from the recorded receiver and confirm that its hold is released. Accepted receipt inspection releases its provisional hold in the same transaction; a continuing hold requires a separate authorized hold review. Check eligible stock in the general area and an active destination bin at the same warehouse. Held or pending stock must not enter the ordinary putaway path.",
         "warehouse_logistics_supervisor",
         "Warehouse storage and route control: putaway requires an active compatible bin and permitted source-to-destination route.",
         {
@@ -950,8 +950,8 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
         "receive-putaway",
         "action",
         "Put away accepted stock",
-        ["warehouse_logistics_supervisor", "warehouse_operations"],
-        "Scan the nonserialized product once, enter the counted quantity and scan the active destination bin. Ordinary entry defaults to 1; explicitly enter 1000 for a 1000-unit move and verify the eligible balance before confirmation. Use the bin-to-bin path for stock already assigned to a bin.",
+        ["warehouse_logistics_supervisor", "warehouse_operator", "warehouse_supervisor", "warehouse_admin"],
+        "Use your current stock-transfer permission and complete any required training; Operations coordination alone is not permission to put away stock. Scan the nonserialized product once, enter the counted quantity and scan the active destination bin. Ordinary entry defaults to 1; explicitly enter 1000 for a 1000-unit move and verify the eligible balance before confirmation. Use the bin-to-bin path for stock already assigned to a bin.",
         {
           databaseEffect:
             "Accepted, unheld stock moves from the general area to the chosen bin; the movement preserves its product and quantity without creating new stock.",
@@ -960,7 +960,7 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       terminal(
         "receive-complete",
         "Accepted receipt put away",
-        ["warehouse_logistics_supervisor", "warehouse_operations"],
+        ["warehouse_operator", "warehouse_supervisor", "warehouse_logistics_supervisor", "warehouse_admin"],
         "The accepted receipt is stored in its confirmed bin. Allocation, picking, packing and release remain separate governed actions; putaway is not permission to issue stock.",
         "complete",
       ),
@@ -974,7 +974,7 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       terminal(
         "receive-revision",
         "Receipt held for traceability correction",
-        ["warehouse_logistics_supervisor"],
+        ["warehouse_operator", "warehouse_supervisor", "warehouse_logistics_supervisor", "warehouse_admin"],
         "Correct the missing serial, lot, quantity, or delivery evidence before posting.",
         "revision",
       ),
@@ -1047,39 +1047,40 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
       "warehouse_operations",
       "warehouse_procurement",
       "warehouse_finance",
+      "warehouse_admin",
     ],
     [
       process(
         "quality-start",
         "start",
         "Open stock pending inspection",
-        ["warehouse_logistics_supervisor", "warehouse_operations"],
+        ["warehouse_logistics_supervisor", "warehouse_operator", "warehouse_supervisor", "warehouse_admin"],
         "Open the exact task or search Quality Control by receipt, product, or serial. Expand its receipt group and match the source, quantity, serial or lot, and evidence before selecting Inspect. Repeated products on different PO lines are separate inspection obligations. If the linked source is missing or completed, review its status; never substitute another item. A queue loading error does not mean there is no work.",
       ),
       decision(
         "quality-inspection",
         "What is the inspection disposition?",
-        ["warehouse_logistics_supervisor", "warehouse_operations"],
-        "Record accepted, hold, damaged, unavailable, or return-to-vendor with a reason and supporting evidence.",
-        "warehouse_logistics_supervisor",
+        ["warehouse_operator", "warehouse_supervisor", "warehouse_logistics_supervisor", "warehouse_admin"],
+        "Use your current inspection permission and any required training; any listed authorized inspector may act, not only a supervisor. The receipt inspector must be a different person from the recorded receiver. Combined roles do not waive this separation. This receipt rule does not establish the same receiver/inspector rule for every return; follow the source-specific return controls. Record accepted, hold, damaged, unavailable, or return-to-vendor with the required reason and supporting evidence. Accepted procurement receipt inspection releases provisional custody in the same transaction; non-accepted stock stays held for its governed disposition.",
+        "warehouse_operator",
         "Warehouse quality control: inspected stock receives an evidence-backed disposition before it becomes available or leaves custody.",
       ),
       process(
         "quality-release",
         "action",
-        "Release accepted stock",
-        ["warehouse_logistics_supervisor"],
-        "Make only accepted units available and retain the inspection reference.",
+        "Verify accepted stock availability",
+        ["warehouse_logistics_supervisor", "warehouse_operator", "warehouse_supervisor", "warehouse_admin"],
+        "For an accepted procurement receipt, verify the completed inspection and released provisional hold recorded in the same transaction. This is not a second approval or a separate release command. After a continuing hold review, verify the authorized release result instead. Retain the inspection and hold references and confirm eligible stock before putaway; a completed inspection alone does not prove every hold is released.",
         {
           databaseEffect:
-            "The inspection is completed and accepted stock becomes available.",
+            "Reading the result changes no stock. The preceding accepted receipt inspection or authorized continuing-hold release records the disposition and releases the relevant hold.",
         },
       ),
       decision(
         "quality-hold-review",
         "Can held stock be released?",
-        ["warehouse_logistics_supervisor", "warehouse_procurement"],
-        "Review corrective evidence and decide release, continued hold, or return to vendor without bypassing the active hold.",
+        ["warehouse_supervisor", "warehouse_logistics_supervisor", "warehouse_admin"],
+        "Use current hold-release permission and any required training to review a continuing hold. The hold creator cannot release their own hold; check who created the hold and do not infer that identity from the latest inspector. Release to accepted requires a release reason and evidence. Pending inspection cannot be bypassed with direct hold release. Keep unresolved stock held or use the governed vendor-return disposition, which has its own permissions and actor checks. Procurement may coordinate corrective evidence but cannot release stock on that role alone.",
         "warehouse_logistics_supervisor",
         "Inventory hold control: only an authorized hold review may release stock to an accepted disposition or direct vendor return.",
       ),
@@ -1088,13 +1089,13 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
         "handoff",
         "Create the vendor return disposition",
         ["warehouse_procurement", "warehouse_logistics_supervisor"],
-        "Record supplier, PO or receipt, quantity, serial or lot, reason, and outbound custody evidence.",
+        "Coordinate supplier, PO or receipt, quantity, serial or lot, reason, and outbound custody evidence with the authorized vendor-return actor. Procurement coordination alone does not authorize executing the return; source-specific custody controls still apply.",
       ),
       terminal(
         "quality-complete",
         "Stock accepted and released",
-        ["warehouse_operations", "warehouse_logistics_supervisor"],
-        "Accepted stock is available with a complete inspection trail.",
+        ["warehouse_operator", "warehouse_supervisor", "warehouse_logistics_supervisor", "warehouse_admin"],
+        "Verify accepted stock is unheld and available with its inspection and any hold-release trail. Reading this result does not post another transaction.",
         "complete",
       ),
       terminal(

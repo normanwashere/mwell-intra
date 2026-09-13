@@ -949,7 +949,7 @@ const definitions: FeatureDefinition[] = [
     module: "warehouse",
     route: "/warehouse/inventory",
     purpose:
-      "Finds stock-keeping units and compares available, reserved, held, and location-level balances.",
+      "Finds stock-keeping units and compares available, reserved, held, and location-level balances. Open a product to use its recommendation-only replenishment action when authorized.",
     reads:
       "Products, units, lots, serials, stock levels, reservations, holds, and locations.",
     writes:
@@ -967,15 +967,15 @@ const definitions: FeatureDefinition[] = [
     module: "warehouse",
     route: "/warehouse/inventory/:id",
     purpose:
-      "Explains one product's master data, stock positions, traceability records, and recent movement history.",
+      "Explains one product's master data, stock positions, traceability records, and recent movement history, with a recommendation-only replenishment sheet for authorized accounts.",
     reads:
-      "Product master, warehouse balances, bins, lots, serials, valuation context, and movement history.",
+      "Product master, warehouse balances, bins, lots, serials, valuation context, and movement history. The recommendation sheet reads only the selected product's active recommendation identity and status, not supplier or Procurement workflow details.",
     writes:
-      "Updates product master data and invokes governed transfer, relocation, count-adjustment, and price-revision repository methods; quantity changes remain ledger-controlled.",
+      "Updates product master data and invokes governed transfer, relocation, count-adjustment, and price-revision repository methods; quantity changes remain ledger-controlled. Separately, saving a recommendation records a replenishment recommendation; it does not create a purchase request or purchase order and does not move stock.",
     statuses:
-      "Active, inactive, tracked by lot, tracked by serial, available, held, or not found.",
+      "Active, inactive, tracked by lot, tracked by serial, available, held, or not found. The recommendation sheet separately shows checking, no active recommendation, recommended, accepted, handed_off, saved or unverified status.",
     exception:
-      "Return to inventory if the product was removed or access changed; escalate conflicting identifiers.",
+      "Return to inventory if the product was removed or access changed; escalate conflicting identifiers. Recommendation access is separate from inventory viewing and is not available in demo mode. The sheet has no Procurement links or acceptance/handoff controls. An unverified status is not proof that no recommendation exists. If saving cannot be confirmed, Close and reopen to verify its status before retrying; do not assume the request failed or repeat it blindly.",
     completionEvidence:
       "The saved master-data values and current traceable balances are visible on the same product record.",
   },
@@ -1115,11 +1115,11 @@ const definitions: FeatureDefinition[] = [
     reads:
       "Stock, reorder settings, open demand, open POs, suppliers, lead times, and consumption trends.",
     writes:
-      "Saves a reorder recommendation, records Operations acceptance, creates a linked draft Procurement request at handoff, and follows the issued Procurement PO and expected arrival; Warehouse does not author supplier commitments.",
+      "Saves a reorder recommendation under Warehouse recommendation permission. Separately authorized Procurement acceptance and handoff create a linked draft Procurement request; the panel follows the later issued PO and expected arrival but does not author supplier commitments or move stock.",
     statuses:
       "Healthy, monitor, recommended, accepted, handed to Procurement, ordered, inbound, stockout risk, dismissed, or data incomplete.",
     exception:
-      "Validate unusual demand, missing lead time, duplicate active recommendations, or stale inbound status before raising procurement action.",
+      "Validate unusual demand, missing lead time or stale inbound status before raising procurement action. Planning page access does not grant recommendation or acceptance authority; each action requires its current permission and any required training. An existing recommended record may be updated through the governed recommendation entry, but accepted or handed_off records cannot be overwritten by a recommendation save.",
     completionEvidence:
       "The recommendation can be traced to current stock, reorder point, stockout risk, lead time, the linked Procurement request, issued PO, and expected arrival.",
   },

@@ -189,7 +189,7 @@ const featureArticles: KnowledgeArticle[] = KNOWLEDGE_FEATURES.map(
         body: "Use only the controls available to the current role and record. Disabled or denied controls do not authorize an offline workaround.",
         steps: feature.controls.map((control) => ({
           title: control.name,
-          ownerRoleIds: feature.roleIds,
+          ownerRoleIds: control.ownerRoleIds ?? feature.roleIds,
           instruction: control.behavior,
           expectedOutcome: control.result,
           exception: control.validation,

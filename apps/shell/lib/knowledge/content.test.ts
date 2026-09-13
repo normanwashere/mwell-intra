@@ -604,7 +604,7 @@ describe("Knowledge Base content", () => {
     (_surface, query, type, title) => {
       const result = searchKnowledge(KNOWLEDGE_CONTENT, query)[0];
 
-      expect(result).toMatchObject({
+      expect(result, JSON.stringify({ query, result })).toMatchObject({
         type,
         availability: "live",
       });
@@ -664,7 +664,7 @@ describe("Knowledge Base content", () => {
     [
       "warehouse",
       "What is the inspection disposition?",
-      "Warehouse operations",
+      "Warehouse Operator",
     ],
     [
       "core",

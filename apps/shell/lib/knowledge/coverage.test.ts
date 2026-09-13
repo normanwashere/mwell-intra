@@ -17,14 +17,14 @@ describe("task coverage evidence boundary", () => {
   it("counts the exact inventory without claiming screenshots are accepted", () => {
     const result = validateTaskCoverage(KNOWLEDGE_CONTENT);
     expect(result.counts).toEqual({
-      features: 68, controls: 297, liveFeatures: 59, limitedFeatures: 0,
+      features: 68, controls: 300, liveFeatures: 59, limitedFeatures: 0,
       comingSoonFeatures: 9, flows: 26, decisions: 58, policyReferences: 14,
       evidenceRecords: 53, controlEvidenceMatches: 0,
     });
     expect(result.unmappedLiveControls).toEqual([]);
     expect(result.unresolvedTargets).toEqual([]);
     expect(result.invalidDecisionBranches).toEqual([]);
-    expect(result.missingActionEvidence).toHaveLength(293);
+    expect(result.missingActionEvidence).toHaveLength(296);
     expect(result.missingActionEvidence.filter(key => key.startsWith("vendor-application-submission:"))).toEqual([
       "vendor-application-submission:vendor-self-case",
       "vendor-application-submission:vendor-self-prepare",

@@ -34,9 +34,9 @@ async function trust() {
       [file, hash(await readFile(new URL(`../../${file}`, import.meta.url)))]))) };
 }
 
-test('registry preserves all 45 checkpoints, 88 views and every named invariant without granting partial credit', () => {
-  assert.equal(WMS_EVIDENCE_REGISTRY.length, 45);
-  assert.equal(requiredWmsEvidence().length, 88);
+test('registry preserves all 48 checkpoints, 94 views and every named invariant without granting partial credit', () => {
+  assert.equal(WMS_EVIDENCE_REGISTRY.length, 48);
+  assert.equal(requiredWmsEvidence().length, 94);
   for (const [i, row] of WMS_EVIDENCE_REGISTRY.entries()) {
     assert.equal(row.checkpoint, WMS_CHECKPOINTS[i].id);
     assert.deepEqual(row.checks, WMS_CHECKPOINTS[i].checks);
@@ -54,6 +54,12 @@ test('registry preserves all 45 checkpoints, 88 views and every named invariant 
     assert.match(row.blockers[0], /full evidence adapter missing/); assert.match(row.blockers[0], /No live outcome credited/);
   }
   assert.match(WMS_EVIDENCE_REGISTRY.find(r => r.checkpoint === 'returns.disposition').blockers[0], /independent release as accepted and relocation.*nonaccepted/);
+  for (const action of ['recommend', 'accept', 'handoff']) {
+    const row = WMS_EVIDENCE_REGISTRY.find(r => r.checkpoint === `replenishment.${action}`);
+    assert.equal(row.sourceCoverage, 'missing');
+    assert.equal(row.artifactAdapter, null);
+    assert.equal(row.contractReady, false);
+  }
 });
 
 test('artifact reader requires real matching bytes and rejects missing/truncated files', async t => {
@@ -91,10 +97,10 @@ test('saved record pins bind real bytes to a separately selected purpose', async
 test('empty/offline bundle never becomes green and cannot self-approve human gates', async t => {
   const result = await verifyWmsEvidence({ root: await directory(t), trust: await trust(),
     index: { version: 1, kind: 'wms-signoff-evidence-index', scope, entries: [], humanGates: [] } });
-  assert.equal(result.requiredCount, 88); assert.equal(result.acceptedCount, 0);
+  assert.equal(result.requiredCount, 94); assert.equal(result.acceptedCount, 0);
   assert.equal(result.automatedPassed, false); assert.equal(result.productionReady, false);
   assert.deepEqual(result.pendingHumanGates, ['hardware', 'pilot']);
-  assert.equal(result.unsupported.length, 88);
+  assert.equal(result.unsupported.length, 94);
 });
 
 const at = minute => `2026-09-13T00:${String(minute).padStart(2, '0')}:00.000Z`;
@@ -415,7 +421,7 @@ test('CLI requires independently pinned coordinator bytes and cannot print a gre
   const wrong = run('0'.repeat(64)); assert.equal(wrong.status, 1); assert.match(wrong.stderr, /trust-file hash mismatch/);
   const good = run(policy.sha256); assert.equal(good.status, 1); assert.equal(good.stderr, '');
   const output = JSON.parse(good.stdout); assert.equal(output.verifiedArtifacts.length, 1); assert.equal(output.automatedPassed, false);
-  assert.equal(output.requiredCount, 88); assert.deepEqual(output.pendingHumanGates, ['hardware', 'pilot']);
+  assert.equal(output.requiredCount, 94); assert.deepEqual(output.pendingHumanGates, ['hardware', 'pilot']);
 });
 
 test('CLI index cannot escape through a directory junction', async t => {

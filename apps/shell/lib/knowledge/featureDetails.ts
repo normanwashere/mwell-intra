@@ -790,7 +790,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Open product",
           "Navigates to the selected product detail route.",
           "The row must contain a valid product identifier.",
-          "Product balances, history, and authorized actions appear.",
+          "Product balances, history, and authorized actions appear. Recommend replenishment is available on this detail page for accounts currently allowed to make recommendations; opening a product does not grant that permission.",
         ),
         control(
           "Create product",
@@ -846,6 +846,30 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Navigation uses the fixed inventory route.",
           "The inventory browser opens with no data write.",
         ),
+        {
+          ...control(
+            "Recommend replenishment",
+            "Opens a recommendation-only sheet for the selected inventory product and checks its current recommendation status.",
+            "Viewing inventory alone does not allow recommendations. Sign in and wait for permission and inventory loading to finish. You need current recommendation permission and any required training, alongside access to this inventory page. Multiple assigned roles may supply that permission; a job title alone is not authorization.",
+            "Available inventory, Minimum stock and verified status appear. Planning inputs and Save appear only with no active recommendation or recommended status. Accepted or handed_off shows status and current inventory context, not an approved planning snapshot. No recommendation is saved by opening the sheet.",
+          ),
+          ownerRoleIds: ["warehouse_operations"],
+        },
+        {
+          ...control(
+            "Save recommendation",
+            "Submits the selected product's quantity, rationale and planning assumption through the existing governed recommendation command. The current available inventory and minimum stock provide the planning context.",
+            "Viewing inventory alone does not allow recommendations. You need current recommendation permission and any required training. Valid inputs, available inventory and a fresh status check are required; only no active recommendation or recommended status allows saving. For accepted or handed_off status, inputs and Save are hidden; this sheet does not display approved planning details. Saving is disabled during a request and after a confirmed save.",
+            "Recommendation saved confirms a recommended result for this product. This does not accept or hand off the recommendation, create purchasing documents, or change stock.",
+          ),
+          ownerRoleIds: ["warehouse_operations"],
+        },
+        control(
+          "Cancel",
+          "Closes the recommendation sheet without submitting the current unsent edits; the sheet Close control also dismisses it.",
+          "Closing is not a rollback or cancellation of a request already sent. Unsaved input is not a durable draft.",
+          "The product detail remains open. Closing does not undo an already submitted recommendation; verify current status before another attempt.",
+        ),
         control(
           "Edit product",
           "Opens master-data editing for the current product.",
@@ -895,6 +919,42 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Resolves the detail route to one product record.",
           true,
           "The route identifier must match an existing product.",
+        ),
+        field(
+          "Recommended quantity",
+          "Sets the proposed purchase quantity in the recommendation sheet. Review the suggested starting value before saving.",
+          true,
+          "Enter a positive whole number no greater than 2147483647; this is a recommendation, not a receipt or stock adjustment.",
+        ),
+        field(
+          "Planning assumption (days)",
+          "An editable planning input that starts at 14 when the sheet opens; it is not a demand forecast or a confirmed supplier lead time.",
+          true,
+          "Enter zero or a positive whole number no greater than 2147483647 and review the assumption for this recommendation.",
+        ),
+        field(
+          "Rationale",
+          "Explains why the selected product needs replenishment. Review any suggested below-minimum explanation before saving.",
+          true,
+          "A non-blank explanation is required; leading and trailing whitespace are removed.",
+        ),
+        field(
+          "Available inventory",
+          "Shows the current available balance used for recommendation context, not physical on-hand stock or a forecast.",
+          false,
+          "This is read-only. Missing, loading or invalid inventory context prevents saving; do not substitute a guessed balance.",
+        ),
+        field(
+          "Minimum stock",
+          "Shows the product's existing minimum stock level used as recommendation context.",
+          false,
+          "This is read-only in the recommendation sheet; recommendations do not edit product policy.",
+        ),
+        field(
+          "Recommendation status",
+          "Shows Checking recommendation status..., No active recommendation, Current status: recommended, accepted or handed_off, or Recommendation saved for the selected product.",
+          false,
+          "The current status must be verified before saving; accepted or handed_off is read-only in this sheet. Planning inputs and Save are hidden for these advanced statuses; approved recommendation details are not fetched or displayed. A failed status check is not an empty result.",
         ),
         field(
           "SKU",
@@ -1812,15 +1872,15 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         control(
           "Save recommendation",
-          "Records the suggested replenishment quantity after Operations checks current on-hand stock, minimum level, lead time, and stockout risk.",
-          "The recommendation must refer to a current product candidate and cannot duplicate an active recommendation for the same product.",
-          "The recommendation enters the controlled Operations review and Procurement handoff sequence.",
+          "Save +quantity records the planning panel's suggested replenishment quantity and source context. An account with Operations recommendation permission reviews the stock balance, minimum level, lead-time assumption, risk and rationale before saving.",
+          "The planning page and current Warehouse recommendation permission are separately required, with any required training. This panel hides new candidates that already have an active recommendation. The shared command can update an existing recommended record, but cannot overwrite accepted or handed_off records; the Inventory recommendation sheet provides the editable recommended-state entry.",
+          "A recommended record is saved for review by an authorized Procurement decision maker. Saving does not accept the recommendation, create a purchase request or move stock.",
         ),
         control(
           "Hand to Procurement",
-          "Creates a linked draft purchase request after Operations accepts the recommendation.",
-          "An accepted recommendation and current source data are required; Warehouse cannot select the supplier or issue a purchase order here.",
-          "The linked Procurement request becomes the authoritative sourcing and commitment record.",
+          "A Procurement Officer or Procurement Administrator with access to this page uses Accept on a recommended record, then Hand off to Procurement on an accepted record to create a linked draft purchase request.",
+          "Acceptance, handoff and Dismiss require current Procurement replenishment-management permission and any required training, alongside page access. Operations recommendation permission alone is not enough. Handoff requires accepted status; it does not select a supplier or issue a purchase order.",
+          "The linked draft purchase request enters the normal Procurement process. It is not an issued purchase order, sourcing approval or stock movement.",
         ),
         control(
           "Review inbound supply",
