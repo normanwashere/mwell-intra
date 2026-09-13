@@ -127,6 +127,14 @@ export function SessionProvider({
   const [userCapabilities, setUserCapabilities] = useState<UserCapabilities>(
     {},
   );
+  const [capabilityStatus, setCapabilityStatusState] = useState<
+    "pending" | "ready" | "error"
+  >(mode === "supabase" ? "pending" : "ready");
+  const capabilityStatusRef = useRef(capabilityStatus);
+  const setCapabilityStatus = useCallback((status: "pending" | "ready" | "error") => {
+    capabilityStatusRef.current = status;
+    setCapabilityStatusState(status);
+  }, []);
   // Always start `loading=true` so first server render matches first client
   // render — hydration-safe. We flip to false after we've consulted
   // sessionStorage (memory) or the supabase session (live).
@@ -134,6 +142,7 @@ export function SessionProvider({
   const [signingIn, setSigningIn] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const liveGeneration = useRef(0);
+  const blockingRefresh = useRef<number | null>(null);
   const activeUserId = useRef<string | null>(null);
 
   // MEMORY-mode session persistence (fixes: hard-nav / F5 / deep-link losing
@@ -185,14 +194,16 @@ export function SessionProvider({
         setRoleCapabilities(rawCapabilities);
         setUserCapabilities(capabilities);
       } else {
+        blockingRefresh.current = null;
         activeUserId.current = null;
         setProfile(null);
         setUserRoles({});
         setRoleCapabilities({});
         setUserCapabilities({});
+        setCapabilityStatus("ready");
       }
     },
-    [],
+    [setCapabilityStatus],
   );
 
   const loadLiveCapabilities = useCallback(async (): Promise<{
@@ -228,8 +239,10 @@ export function SessionProvider({
   ) => {
     const generation = ++liveGeneration.current;
     if (!preserveCapabilities) {
+      blockingRefresh.current = generation;
       setRoleCapabilities({});
       setUserCapabilities({});
+      setCapabilityStatus("pending");
     }
     if (
       session === null ||
@@ -240,7 +253,33 @@ export function SessionProvider({
       setUserRoles({});
     }
     return generation;
-  }, []);
+  }, [setCapabilityStatus]);
+
+  // One deadline/generation covers session, identity and capability verification.
+  // A late response cannot restore authority after a timeout or newer refresh.
+  const finishLiveRefresh = useCallback(async (
+    work: () => Promise<boolean>,
+    generation: number,
+  ): Promise<boolean> => {
+    try {
+      return await withTimeout(work(), INITIAL_SESSION_TIMEOUT_MS);
+    } catch {
+      if (generation === liveGeneration.current) {
+        liveGeneration.current += 1;
+        blockingRefresh.current = null;
+        setRoleCapabilities({});
+        setUserCapabilities({});
+        setCapabilityStatus("error");
+        setLoading(false);
+      }
+      return false;
+    } finally {
+      if (generation === liveGeneration.current) {
+        blockingRefresh.current = null;
+        setLoading(false);
+      }
+    }
+  }, [setCapabilityStatus]);
 
   const verifyAndApplyLiveUser = useCallback(
     async (
@@ -271,12 +310,18 @@ export function SessionProvider({
         const canKeepVerifiedIdentity =
           preserveCapabilities &&
           activeUserId.current === session.user.id;
-        if (generation === liveGeneration.current && !canKeepVerifiedIdentity)
+        if (generation === liveGeneration.current && !canKeepVerifiedIdentity) {
           applyUser(null);
+          setCapabilityStatus("error");
+        }
         return false;
       }
 
-      if (!preserveCapabilities) applyUser(user, {});
+      if (!preserveCapabilities || activeUserId.current !== user.id) {
+        blockingRefresh.current = generation;
+        setCapabilityStatus("pending");
+        applyUser(user, {});
+      }
       try {
         const capabilities = await loadLiveCapabilities();
         if (
@@ -289,19 +334,23 @@ export function SessionProvider({
           capabilities.userCapabilities,
           capabilities.roleCapabilities,
         );
+        setCapabilityStatus("ready");
       } catch {
         if (
           generation === liveGeneration.current &&
           activeUserId.current === user.id
-        )
+        ) {
           applyUser(user, {});
+          setCapabilityStatus("error");
+        }
+        return false;
       }
       return (
         generation === liveGeneration.current &&
         activeUserId.current === user.id
       );
     },
-    [client, applyUser, loadLiveCapabilities],
+    [client, applyUser, loadLiveCapabilities, setCapabilityStatus],
   );
 
   useEffect(() => {
@@ -310,26 +359,14 @@ export function SessionProvider({
 
     const initialGeneration = beginLiveRefresh(null);
 
-    withTimeout(
-      client.auth.getSession().then(({ data }) => {
+    void finishLiveRefresh(
+      () => client.auth.getSession().then(({ data, error }) => {
         if (!active || initialGeneration !== liveGeneration.current) return false;
+        if (error) throw error;
         return verifyAndApplyLiveUser(data.session ?? null, initialGeneration);
       }),
-      INITIAL_SESSION_TIMEOUT_MS,
-    )
-      .catch(() => {
-        // Couldn't confirm a live session — treat as signed out (least privilege).
-        if (!active || initialGeneration !== liveGeneration.current) return;
-        // Invalidate the unresolved work so a late response cannot overwrite
-        // the bounded fail-closed state.
-        liveGeneration.current += 1;
-        applyUser(null);
-        setLoading(false);
-      })
-      .finally(() => {
-        if (!active || initialGeneration !== liveGeneration.current) return;
-        setLoading(false);
-      });
+      initialGeneration,
+    );
 
     const { data: sub } = client.auth.onAuthStateChange((_event, session) => {
       if (!active) return;
@@ -339,33 +376,32 @@ export function SessionProvider({
       // until the callback has returned and released the auth lock.
       window.setTimeout(() => {
         if (!active || generation !== liveGeneration.current) return;
-        void verifyAndApplyLiveUser(session, generation).finally(() => {
-          if (active && generation === liveGeneration.current)
-            setLoading(false);
-        });
+        void finishLiveRefresh(
+          () => verifyAndApplyLiveUser(session, generation),
+          generation,
+        );
       }, 0);
     });
 
     const refreshOnFocus = () => {
-      if (!active) return;
+      if (!active || blockingRefresh.current !== null) return;
       const generation = beginLiveRefresh(undefined, true);
-      void client.auth
-        .getSession()
-        .then(({ data }) => {
+      void finishLiveRefresh(
+        () => client.auth.getSession().then(({ data, error }) => {
           if (!active || generation !== liveGeneration.current) return false;
+          if (error) throw error;
           return verifyAndApplyLiveUser(
             data.session ?? null,
             generation,
             true,
           );
-        })
-        .catch(() => {
-          // A focus refresh is opportunistic. A transient network or Supabase
-          // failure must not erase an identity that was already verified.
-          // Confirmed missing sessions still clear through
-          // verifyAndApplyLiveUser(null), and SIGNED_OUT remains authoritative.
-        })
-        .finally(() => undefined);
+        }).catch(() => {
+          // Preserve the existing opportunistic focus behavior for a transient
+          // session read failure. Capability snapshot failures clear separately.
+          return false;
+        }),
+        generation,
+      );
     };
     window.addEventListener("focus", refreshOnFocus);
 
@@ -375,7 +411,7 @@ export function SessionProvider({
       window.removeEventListener("focus", refreshOnFocus);
       sub.subscription.unsubscribe();
     };
-  }, [client, applyUser, beginLiveRefresh, verifyAndApplyLiveUser]);
+  }, [client, beginLiveRefresh, finishLiveRefresh, verifyAndApplyLiveUser]);
 
   const signInWithPassword = useCallback(
     async (email: string, password: string) => {
@@ -425,7 +461,10 @@ export function SessionProvider({
           throw new Error("Sign-in succeeded, but no session was restored.");
         }
         const generation = beginLiveRefresh(session);
-        const verified = await verifyAndApplyLiveUser(session, generation);
+        const verified = await finishLiveRefresh(
+          () => verifyAndApplyLiveUser(session, generation),
+          generation,
+        );
         if (!verified)
           throw new Error("Sign-in session could not be verified.");
         return verified;
@@ -438,7 +477,7 @@ export function SessionProvider({
         setSigningIn(false);
       }
     },
-    [client, memoryProfiles, beginLiveRefresh, verifyAndApplyLiveUser],
+    [client, memoryProfiles, beginLiveRefresh, finishLiveRefresh, verifyAndApplyLiveUser],
   );
 
   const signOut = useCallback(async () => {
@@ -501,20 +540,22 @@ export function SessionProvider({
     if (!client) return true;
     const expectedUserId = activeUserId.current;
     if (!expectedUserId) return false;
-    try {
+    const generation = beginLiveRefresh(
+      undefined,
+      capabilityStatusRef.current === "ready" && blockingRefresh.current === null,
+    );
+    return finishLiveRefresh(async () => {
       const capabilities = await loadLiveCapabilities();
-      if (activeUserId.current !== expectedUserId) return false;
+      if (
+        generation !== liveGeneration.current ||
+        activeUserId.current !== expectedUserId
+      ) return false;
       setRoleCapabilities(capabilities.roleCapabilities);
       setUserCapabilities(capabilities.userCapabilities);
+      setCapabilityStatus("ready");
       return true;
-    } catch {
-      if (activeUserId.current === expectedUserId) {
-        setRoleCapabilities({});
-        setUserCapabilities({});
-      }
-      return false;
-    }
-  }, [client, loadLiveCapabilities]);
+    }, generation);
+  }, [client, beginLiveRefresh, finishLiveRefresh, loadLiveCapabilities, setCapabilityStatus]);
 
   const value = useMemo<SessionValue>(
     () => ({
@@ -522,6 +563,7 @@ export function SessionProvider({
       userRoles,
       roleCapabilities,
       userCapabilities,
+      capabilityStatus,
       mode,
       supabaseClient: client,
       loading,
@@ -539,6 +581,7 @@ export function SessionProvider({
       userRoles,
       roleCapabilities,
       userCapabilities,
+      capabilityStatus,
       mode,
       loading,
       signingIn,

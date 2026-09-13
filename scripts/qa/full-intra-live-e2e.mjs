@@ -884,78 +884,83 @@ async function pageAudit(page) {
     for (let i = 0; i < visibleControls.length; i += 1) {
       const el = visibleControls[i];
       const rect = el.getBoundingClientRect();
-      const x = rect.left + rect.width / 2;
-      const y = rect.top + rect.height / 2;
-      if (x < 0 || x > window.innerWidth || y < 0 || y > window.innerHeight)
-        continue;
-      if (!centerIsInsideVisibleClip(el, x, y)) continue;
-      const blocker = document.elementFromPoint(x, y);
-      if (!blocker || blocker === el || el.contains(blocker)) continue;
-      if (
-        blocker.tagName.toLowerCase() === "nextjs-portal" ||
-        blocker.closest("nextjs-portal")
-      ) {
-        continue;
-      }
-      const blockerControl = blocker.closest(controlSelector);
-      if (
-        !blockerControl ||
-        blockerControl === el ||
-        el.contains(blockerControl)
-      )
-        continue;
-      function fixedAncestor(node) {
-        let current = node;
-        while (current && current !== document.documentElement) {
-          if (["fixed", "sticky"].includes(getComputedStyle(current).position))
-            return current;
-          current = current.parentElement;
+      // An inline control's union center can land between its wrapped fragments.
+      for (const fragment of el.getClientRects()) {
+        if (fragment.width <= 0 || fragment.height <= 0) continue;
+        const x = fragment.left + fragment.width / 2;
+        const y = fragment.top + fragment.height / 2;
+        if (x < 0 || x > window.innerWidth || y < 0 || y > window.innerHeight)
+          continue;
+        if (!centerIsInsideVisibleClip(el, x, y)) continue;
+        const blocker = document.elementFromPoint(x, y);
+        if (!blocker || blocker === el || el.contains(blocker)) continue;
+        if (
+          blocker.tagName.toLowerCase() === "nextjs-portal" ||
+          blocker.closest("nextjs-portal")
+        ) {
+          continue;
         }
-        return null;
-      }
-      const fixedBlocker = fixedAncestor(blockerControl);
-      const fixedTarget = fixedAncestor(el);
-      const blockerRect = (
-        fixedBlocker ?? blockerControl
-      ).getBoundingClientRect();
-      if (
-        fixedBlocker &&
-        !fixedTarget &&
-        blockerRect.top > window.innerHeight / 2
-      ) {
-        const targetScrollY =
-          window.scrollY + Math.max(0, rect.bottom - (blockerRect.top - 16));
-        const maxScrollY = Math.max(
-          0,
-          document.documentElement.scrollHeight - window.innerHeight,
-        );
-        if (targetScrollY >= 0 && targetScrollY <= maxScrollY + 1) continue;
-      }
-      overlapExamples.push({
-        a: controls[i]?.text || controls[i]?.tag || "control",
-        b:
-          blockerControl.innerText?.trim().replace(/\s+/g, " ").slice(0, 80) ||
-          blockerControl.getAttribute("aria-label") ||
-          blockerControl.tagName.toLowerCase(),
-        target: {
-          top: Math.round(rect.top),
-          bottom: Math.round(rect.bottom),
-          height: Math.round(rect.height),
-        },
-        blocker: {
-          top: Math.round(blockerRect.top),
-          bottom: Math.round(blockerRect.bottom),
-        },
-        scroll: {
-          y: Math.round(window.scrollY),
-          max: Math.round(
-            Math.max(
-              0,
-              document.documentElement.scrollHeight - window.innerHeight,
+        const blockerControl = blocker.closest(controlSelector);
+        if (
+          !blockerControl ||
+          blockerControl === el ||
+          el.contains(blockerControl)
+        )
+          continue;
+        function fixedAncestor(node) {
+          let current = node;
+          while (current && current !== document.documentElement) {
+            if (["fixed", "sticky"].includes(getComputedStyle(current).position))
+              return current;
+            current = current.parentElement;
+          }
+          return null;
+        }
+        const fixedBlocker = fixedAncestor(blockerControl);
+        const fixedTarget = fixedAncestor(el);
+        const blockerRect = (
+          fixedBlocker ?? blockerControl
+        ).getBoundingClientRect();
+        if (
+          fixedBlocker &&
+          !fixedTarget &&
+          blockerRect.top > window.innerHeight / 2
+        ) {
+          const targetScrollY =
+            window.scrollY + Math.max(0, rect.bottom - (blockerRect.top - 16));
+          const maxScrollY = Math.max(
+            0,
+            document.documentElement.scrollHeight - window.innerHeight,
+          );
+          if (targetScrollY >= 0 && targetScrollY <= maxScrollY + 1) continue;
+        }
+        overlapExamples.push({
+          a: controls[i]?.text || controls[i]?.tag || "control",
+          b:
+            blockerControl.innerText?.trim().replace(/\s+/g, " ").slice(0, 80) ||
+            blockerControl.getAttribute("aria-label") ||
+            blockerControl.tagName.toLowerCase(),
+          target: {
+            top: Math.round(rect.top),
+            bottom: Math.round(rect.bottom),
+            height: Math.round(rect.height),
+          },
+          blocker: {
+            top: Math.round(blockerRect.top),
+            bottom: Math.round(blockerRect.bottom),
+          },
+          scroll: {
+            y: Math.round(window.scrollY),
+            max: Math.round(
+              Math.max(
+                0,
+                document.documentElement.scrollHeight - window.innerHeight,
+              ),
             ),
-          ),
-        },
-      });
+          },
+        });
+        break;
+      }
     }
 
     const layoutWidth = Math.floor(

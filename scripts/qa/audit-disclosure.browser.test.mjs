@@ -59,6 +59,26 @@ test("event handoff opens the review dialog before approval and verifies the car
 });
 
 for (const width of [1440, 390]) {
+  test(`wrapped inline link whitespace is not an overlapping control (${width})`, async () => {
+    await fixture(`<style>main{min-height:700px}p{width:320px;font:14px/24px Arial;overflow-wrap:break-word}</style><p>Original order: <a id="wrapped" href="#order">WMS-ECOM-177f0c97-a6de-4ee4-82b1-37a09f4f5e37-mobile390</a></p>`, async page => {
+      const geometry = await page.locator("#wrapped").evaluate(link => {
+        document.querySelector("main").tabIndex = 0;
+        const rect = link.getBoundingClientRect();
+        const fragments = [...link.getClientRects()];
+        return {
+          fragments: fragments.length,
+          unionHit: document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)?.tagName,
+          fragmentHits: fragments.map(fragment => document.elementFromPoint(fragment.left + fragment.width / 2, fragment.top + fragment.height / 2) === link),
+        };
+      });
+      assert.equal(geometry.fragments, 2, "the reference naturally wraps across two lines");
+      assert.notEqual(geometry.unionHit, "A", "union center is whitespace, not clickable link content");
+      assert.ok(geometry.fragmentHits.every(Boolean), "both real fragments are unobstructed");
+      const result = await helpers.pageAudit(page);
+      assert.deepEqual(result.overlaps, [], "a containing focusable main is not covering either fragment");
+    }, width);
+  });
+
   test(`closed disclosures exclude Inspect but audit visible summaries, then expand and inspect (${width})`, async () => {
     await fixture(`<details id="outer"><summary><span>Receipt group</span></summary><button id="outer-inspect">Inspect receipt</button><details id="inner"><summary>Serial group</summary><button id="inspect">Inspect serial</button></details></details>`, async page => {
       await page.locator("#inspect").evaluate(element => element.addEventListener("click", () => element.dataset.inspected = "yes"));
@@ -76,6 +96,41 @@ for (const width of [1440, 390]) {
       assert.deepEqual(expanded.interceptedTargets, []);
       await page.getByRole("button", { name: "Inspect serial", exact: true }).click();
       assert.equal(await page.locator("#inspect").getAttribute("data-inspected"), "yes");
+    }, width);
+  });
+}
+
+for (const width of [1440, 390]) {
+  for (const coveredFragment of [0, 1]) {
+    test(`a real overlay on wrapped fragment ${coveredFragment + 1} remains an overlap (${width})`, async () => {
+      await fixture(`<style>p{width:320px;font:14px/24px Arial;overflow-wrap:break-word}</style><p>Original order: <a id="wrapped" href="#order">WMS-ECOM-177f0c97-a6de-4ee4-82b1-37a09f4f5e37-mobile390</a></p>`, async page => {
+        await page.locator("#wrapped").evaluate((link, index) => {
+          const rect = link.getClientRects()[index];
+          const overlay = document.createElement("div");
+          overlay.tabIndex = 0;
+          overlay.setAttribute("aria-label", "Blocking overlay");
+          Object.assign(overlay.style, { position: "fixed", left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px`, zIndex: "100", background: "white" });
+          document.body.append(overlay);
+        }, coveredFragment);
+        const result = await helpers.pageAudit(page);
+        assert.equal(result.overlaps.length, 1, "one blocked fragment must not be excused by the other reachable fragment");
+        assert.equal(result.overlaps[0].b, "Blocking overlay");
+        assert.match(result.overlaps[0].a, /^WMS-ECOM-/);
+      }, width);
+    });
+  }
+
+  test(`modal and sticky occlusion still block ordinary controls (${width})`, async () => {
+    await fixture(`<style>body{margin:0}main{height:1800px}header{position:sticky;top:0;height:120px;background:white;z-index:10}#target{display:block;margin-top:20px;width:200px;height:48px}</style><header tabindex="0" aria-label="Sticky header"></header><a id="target" href="#order">Open order</a><dialog tabindex="0" aria-label="Blocking modal" style="position:fixed;inset:0;margin:0;width:100vw;height:100vh;max-width:none;max-height:none">Review</dialog>`, async page => {
+      await page.evaluate(() => window.scrollTo(0, 160));
+      const sticky = await helpers.pageAudit(page);
+      assert.ok(sticky.overlaps.some(item => item.a === "Open order" && item.b === "Sticky header"));
+      await page.evaluate(() => {
+        window.scrollTo(0, 0);
+        document.querySelector("dialog").showModal();
+      });
+      const modal = await helpers.pageAudit(page);
+      assert.ok(modal.overlaps.some(item => item.a === "Open order" && item.b === "Review"));
     }, width);
   });
 }

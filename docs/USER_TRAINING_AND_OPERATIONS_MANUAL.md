@@ -1,5 +1,13 @@
 # User Training And Operations Manual
 
+## Warehouse Access Recovery Drill
+
+With an authorized test account, open an unsaved warehouse form and switch browser tabs. A successful background access check should leave the form in place. Do not save during this navigation exercise.
+
+Distinguish three states: **Checking warehouse access** pauses warehouse actions while verification runs; **Could not verify warehouse access** means verification failed; **No warehouse access** means a completed check did not grant access. For the retryable error, check the connection and choose **Retry access**. Retry checks permissions only: it does not save, approve or repeat a transaction. Contact the administrator if a completed check unexpectedly denies access. Do not assume unsaved fields survive a failed check, sign-out or reload.
+
+Use controlled read-failure injection only in the automated UAT drill; do not ask testers to revoke roles or repeatedly submit stock commands. Confirm recovery on both desktop and mobile and inspect the recorded outcome before retrying any uncertain business action. Local test results and a prepared drill are not participant acceptance or live certification.
+
 ## September 13 Return And Quality Display Drill
 
 Follow the training assigned to you in Onboarding. A new permission does not mean you have completed training for it. If the task's required training is missing or unclear, ask your administrator to check your published assignment rather than repeating unrelated practice. The September 14 training-version correction does not reset your progress or mark new exercises complete.

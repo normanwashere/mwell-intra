@@ -63,6 +63,8 @@ export const TROUBLESHOOTING_GUIDES: TroubleshootingGuide[] = [
     ],
     safeRecovery: [
       "Open the account menu and confirm the job title, department, responsibility, and scoped authority shown for the active identity",
+      "If Warehouse says Could not verify warehouse access, check your connection and choose Retry access. This checks your permissions again; it does not submit or replay a transaction. No warehouse access means a completed check did not grant access. Contact your administrator if that result is unexpected",
+      "Returning to a browser tab should keep your open Warehouse form during a successful access refresh. A failed check or confirmed permission change can close the workspace. Check the saved record before repeating a submission; unsaved entries are not guaranteed to survive a failed check or a page reload",
       "Confirm the denied route and the specific responsibility required for that action",
       "Guided practice follows your assigned training version. When it shows Complete, no extra practice steps are required for that version. If your assigned steps cannot load, close practice and refresh once. Contact your administrator if the message returns; do not bypass training",
       "Start, Resume and assessment retries use the assignment selected on the page. Older completed training does not replace a pending assignment or a newer version you still need to finish",

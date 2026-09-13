@@ -96,6 +96,8 @@ export function WarehouseApp({ basename = '/warehouse' }: WarehouseAppProps) {
     mode,
     supabaseClient,
     loading,
+    capabilityStatus,
+    refreshCapabilities,
   } = useSession();
   const claimedRoleCodes = (userRoles.warehouse ?? []) as readonly string[];
   const warehouseRoles = claimedRoleCodes.filter(isWarehouseRole);
@@ -140,6 +142,31 @@ export function WarehouseApp({ basename = '/warehouse' }: WarehouseAppProps) {
     );
   }
 
+  if (mode === 'supabase' && (capabilityStatus === 'pending' || capabilityStatus === 'error')) {
+    const pending = capabilityStatus === 'pending';
+    return (
+      <main role={pending ? 'status' : 'alert'} aria-busy={pending}
+        className="grid min-h-[60vh] place-items-center bg-app p-6 text-center">
+        <div className="max-w-sm space-y-3">
+          <h1 className="text-lg font-bold text-ink">
+            {pending ? 'Checking warehouse access' : 'Could not verify warehouse access'}
+          </h1>
+          <p className="text-sm text-muted">
+            {pending
+              ? 'Warehouse actions are paused while your access is checked.'
+              : 'Your access check did not complete. Retry to check your current permissions.'}
+          </p>
+          {!pending && (
+            <button type="button" className="btn-primary min-h-11" onClick={() => void refreshCapabilities()}>
+              Retry access
+            </button>
+          )}
+          <a href="/" className="flex min-h-11 min-w-11 items-center justify-center text-sm text-brand-700 underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">Back to dashboard</a>
+        </div>
+      </main>
+    );
+  }
+
   // No warehouse role on the session → the module isn't part of this user's
   // access. Render a friendly notice rather than a blank screen.
   if (!initialRole || (mode === 'supabase' && !hasLiveAccess)) {
@@ -151,8 +178,8 @@ export function WarehouseApp({ basename = '/warehouse' }: WarehouseAppProps) {
         <div className="max-w-sm space-y-3">
           <h1 className="text-lg font-bold text-ink">No warehouse access</h1>
           <p className="text-sm text-muted">
-            Your account doesn&apos;t include a warehouse role. If you think
-            this is a mistake, contact your administrator.
+            Your current permissions do not include warehouse access. If you
+            think this is a mistake, contact your administrator.
           </p>
           <a
             href="/"

@@ -20,11 +20,17 @@ Required fields and permissions still apply. Empty replacement delivery details 
 
 The four old test receipt photos have been archived and cleaned up. Your regular test data was outside that cleanup. Please leave the marked WMS audit records to us.
 
-The new replenishment form passed local tests and a live open/edit/cancel check. Its two-user acceptance-to-draft exercise is still open.
+We tested replenishment with separate Operations and Procurement accounts on desktop and mobile. Both recommendations were saved, accepted and linked to draft purchase requests. All 14 permission, sequencing and duplicate-action checks passed, with no purchase orders or stock movements created.
 
-We also fixed the source of the training CI failure: permission updates were silently expanding older training definitions. The correction passed all 298 Learning tests and independent review, with the original checks kept intact. It does not reset anyone's progress, publish new training or mark a user trained. The release and a fresh CI run still need verification.
+There is still a real handoff issue: those new drafts are missing a requirement classification, so Procurement cannot continue routing them. The saved reason also does not appear in the right field. We caught both while reviewing the screenshots. We are fixing the handoff so Procurement can supply the required details through the existing request form. Please do not create duplicate requests to get around it. A separate read-only check now confirms the correct item and quantity on both desktop and mobile, but the full journey is not passed yet.
 
-Still open: the remaining isolated-role journeys, new training coverage, older guides outside receiving/Quality, and the actual user/device pilot. SMTP is not included.
+We also checked switching tabs on desktop and mobile: the draft stayed in place. One real issue remains: a failed access check says **No warehouse access**, which is misleading. A clearer message and **Retry access** are being tested locally; they are not live yet. Retry will only check access, not repeat your transaction.
+
+The latest visual tests found two separate issues. The test mistook the gap between wrapped links for an obstruction on desktop; that correction has passed independent review. Some return links on mobile really are too small to tap, and we are enlarging them without changing their destinations. These corrections still need a fresh live check after release.
+
+We also fixed the source of the training CI failure: permission updates were silently expanding older training definitions. This is now live on UAT as `4b2a8e1`. The correction passed all 298 Learning tests and independent review, with the original checks kept intact. It does not reset anyone's progress, publish new training or mark a user trained. Fresh CI is still required before we can call the release certified.
+
+Still open: the remaining isolated-role journeys, new training coverage, older guides outside receiving/Quality, and the actual user/device pilot. We also saw an existing session briefly report no warehouse access; reloading recovered it, and we are checking the cause. An older SQL-verifier gap remains separate from this fix. SMTP is not included.
 
 [Detailed verification and limits](2026-09-14-WMS-DISPLAY-LIVE-REVIEW.md)
 

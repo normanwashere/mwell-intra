@@ -463,10 +463,10 @@ function ReturnsIntake({ scope }: { scope: string }) {
                 .map((r) => (
                   <li key={r.id} id={`return-${r.id}`} tabIndex={-1} className="scroll-mt-24 rounded-xl bg-inset p-3">
                     {r.sourceOrderId && <p className="break-words text-sm">Original order: {data.fulfillmentOrders.some(order => order.id === r.sourceOrderId)
-                      ? <Link className="underline" to={`/fulfillment?tab=orders&order=${encodeURIComponent(r.sourceOrderId)}`}>{data.fulfillmentOrders.find(order => order.id === r.sourceOrderId)!.externalReference}</Link>
+                      ? <Link className="block min-h-11 min-w-11 w-fit max-w-full py-3 underline" to={`/fulfillment?tab=orders&order=${encodeURIComponent(r.sourceOrderId)}`}>{data.fulfillmentOrders.find(order => order.id === r.sourceOrderId)!.externalReference}</Link>
                       : 'Reference unavailable'}</p>}
                     {r.returnCaseId && <p className="break-all text-sm">Customer case: {data.customerReturnCases.some(record => record.id === r.returnCaseId)
-                      ? <Link className="underline" to={`/fulfillment?tab=returns#return-case-${encodeURIComponent(r.returnCaseId)}`}>{r.returnCaseId}</Link>
+                      ? <Link className="block min-h-11 min-w-11 w-fit max-w-full py-3 underline" to={`/fulfillment?tab=returns#return-case-${encodeURIComponent(r.returnCaseId)}`}>{r.returnCaseId}</Link>
                       : 'Reference unavailable'}</p>}
                     <div className="flex items-center justify-between">
                       <Badge tone={r.source === "vendor" ? "brand" : "cyan"}>

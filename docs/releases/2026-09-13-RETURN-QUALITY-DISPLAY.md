@@ -2,6 +2,8 @@
 
 ## For Testers
 
+**September 14 follow-up being verified:** Return-reference links have larger tap areas without changing their destinations. A failed Warehouse access check will offer **Retry access** instead of saying that your role is missing. Retry only checks permissions; it does not repeat your transaction. Release and live-recovery results are recorded below when available. The separate replenishment draft-classification issue is still open; do not create duplicate requests to work around it.
+
 The return summary now separates the customer case from physical intake. A case awaiting a decision no longer implies the item is still waiting to arrive. The intake message also makes clear that a recorded return is not proof of Quality clearance. Check the current inspection and holds before proceeding.
 
 Quality counts now match the tab and search you are viewing. For example, **1 of 3** means one matching record in a list of three. Clear search to see the full list.
@@ -9,6 +11,8 @@ Quality counts now match the tab and search you are viewing. For example, **1 of
 Your process has not changed. The same permissions, quarantine, evidence and independent-review steps apply.
 
 ## Release Evidence
+
+**Latest local candidate, September 14:** The access state now distinguishes pending verification, a retryable read error and confirmed missing permission. SDK authentication events retain their existing authority-clearing behavior. Four return-reference links and the new recovery dashboard link have minimum 44px targets; destinations, handlers and business checks are unchanged. The audit collector now checks real wrapped-link fragments rather than the empty center of their union rectangle, while retaining failure for a blocked fragment. Independent collector review passed 23 Chromium tests; parent combined audit tests passed 139 with one live-only skip. Parent Auth tests passed 73, and documentation/release tests passed 98. Four new recovery source headings bring the maintained link registry to 463 without inherited screenshot certification. Final UI review, exact release/build and live checks remain pending at this entry. The historical release evidence below is not a result for this candidate.
 
 September 14 training follow-up candidate: the CI fingerprint failure was traced to live-role metadata being used to regenerate existing v1 source outcomes. The correction pins those source definitions, preserves both original golden hashes, and records 12 role/capability gaps as pending versioned review. It does not change published database training, progress, grants or certification checks. The pinned source and published database catalogue are explicitly not assumed equivalent. Parent verification passed all 298 Learning tests and typechecking; independent review passed 61 focused tests. Exact candidate deployment and fresh CI results must still be recorded before claiming release or full certification.
 

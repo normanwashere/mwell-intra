@@ -26,6 +26,15 @@ import {
 } from "./validate";
 
 describe("Knowledge Base content", () => {
+  it("separates a failed warehouse access check from confirmed denial without replaying work", () => {
+    const guide = TROUBLESHOOTING_GUIDES.find(item => item.id === "trouble-access-denied")!;
+    const recovery = guide.safeRecovery.join(" ");
+    expect(recovery).toContain("Could not verify warehouse access");
+    expect(recovery).toContain("Retry access");
+    expect(recovery).toContain("does not submit or replay a transaction");
+    expect(recovery).toContain("No warehouse access means a completed check");
+    expect(recovery).toContain("unsaved entries are not guaranteed");
+  });
   it("distinguishes assigned training from a newly available permission", () => {
     const guidance = JSON.stringify(TROUBLESHOOTING_GUIDES.find(item => item.id === "trouble-access-denied"));
     expect(guidance).toContain("A new permission is not proof that you completed training for it");

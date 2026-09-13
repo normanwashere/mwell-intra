@@ -1,5 +1,11 @@
 # Mwell Intra Standalone Operating Handbook
 
+## Warehouse Access Recovery
+
+Returning to a browser tab should keep the open form while the app successfully rechecks the same user's access. **Checking warehouse access** means verification is still running. **Could not verify warehouse access** means the check did not finish: check your connection, then choose **Retry access**. Retry checks permissions only; it does not submit, approve or replay your work.
+
+**No warehouse access** means a completed check did not grant access. Contact your administrator if this is unexpected. A failed access check or a confirmed permission change can close the workspace. Unsaved edits are not guaranteed to survive that failure, signing out or a page reload. If you had already selected Save, check the record's saved status before submitting again.
+
 ## September 13 Return And Quality Display Update
 
 **Assigned training:** Follow the requirements shown in Onboarding. A new permission is not proof of completed training. If a task's required training is missing or unclear, ask your administrator to check the published assignment; repeating unrelated practice will not resolve it. The September 14 training-version correction does not reset progress or mark new exercises complete.

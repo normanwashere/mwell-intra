@@ -41,6 +41,14 @@ describe("ReturnsPage", () => {
     await screen.findByText('Return logged in inspection staging');
     expect(record.mock.calls[0]![0]).toMatchObject({ sourceOrderId: 'source-order', returnCaseId: 'customer-case' });
     expect(within(screen.getByLabelText('Returns')).getByRole('link', { name: 'SOURCE-RETURN' })).toBeInTheDocument();
+    const history = within(screen.getByLabelText('Returns'));
+    const orderLink = history.getByRole('link', { name: 'SOURCE-RETURN' });
+    const caseLink = history.getByRole('link', { name: 'customer-case' });
+    expect(orderLink).toHaveAttribute('href', '/fulfillment?tab=orders&order=source-order');
+    expect(caseLink).toHaveAttribute('href', '/fulfillment?tab=returns#return-case-customer-case');
+    for (const link of [orderLink, caseLink]) {
+      expect(link).toHaveClass('block', 'min-h-11', 'min-w-11', 'max-w-full');
+    }
   });
 
   it('rejects inaccessible contextual sources instead of silently recording an unlinked return', async () => {

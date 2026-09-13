@@ -53,6 +53,10 @@ export interface SessionValue {
   roleCapabilities?: UserCapabilities;
   /** Fresh database projection used for Supabase-mode UX gates. */
   userCapabilities?: UserCapabilities;
+  /** Live capability verification, distinct from a successful empty projection.
+   * Optional for existing injected/memory session fixtures; never grants access.
+   */
+  capabilityStatus?: "pending" | "ready" | "error";
   /** The resolved auth backend. */
   mode: AuthMode;
   /**

@@ -61,7 +61,7 @@ test("accepts operational releases with the complete documentation set", () => {
 });
 
 test("derives the certified legacy-route count and rejects any declared count drift", () => {
-  assert.equal(LEGACY_ROUTES.length, 459);
+  assert.equal(LEGACY_ROUTES.length, 463);
   const documents = Object.fromEntries(
     LEGACY_ROUTE_COUNT_DOCUMENTS.map(({ file }) => [
       file,
@@ -88,6 +88,20 @@ test("retains the eight return and Quality display reference routes without scre
   ];
   for (const [article, heading] of expected) {
     const routes = LEGACY_ROUTES.filter(route => route.legacyArticleId === article && route.legacyHeadingId === heading);
+    assert.equal(routes.length, 1);
+    assert.equal(routes[0].guideId, "source-references");
+  }
+});
+
+test("retains all four Warehouse recovery source links without inherited screenshot credit", () => {
+  const expected = [
+    ["doc-manual-mwell-intra-user-manual-md", "warehouse-access-recovery"],
+    ["doc-technical-and-functional-specification-md", "warehouse-session-recovery-contract"],
+    ["doc-user-training-and-operations-manual-md", "warehouse-access-recovery-drill"],
+    ["doc-training-and-handover-content-md", "warehouse-access-recovery-handover"],
+  ];
+  for (const [article, heading] of expected) {
+    const routes = LEGACY_ROUTES.filter(route => route.legacyArticleId === article && route.legacyHeadingId === `${article}-${heading}`);
     assert.equal(routes.length, 1);
     assert.equal(routes[0].guideId, "source-references");
   }

@@ -1153,7 +1153,7 @@ function OrderDetailsSheet({
         {data?.returns.some(record => record.sourceOrderId === order.id) && <section aria-label="Physical returns" className="space-y-2 text-sm">
           <h3 className="font-semibold">Physical returns</h3>
           {data.returns.filter(record => record.sourceOrderId === order.id).map(record => <p key={record.id} className="break-all">
-            <Link className="underline" to={`/returns#return-${encodeURIComponent(record.id)}`}>{record.id}</Link>
+            <Link className="block min-h-11 min-w-11 w-fit max-w-full py-3 underline" to={`/returns#return-${encodeURIComponent(record.id)}`}>{record.id}</Link>
           </p>)}
         </section>}
         <section aria-label="Operational summary" className="space-y-2 text-sm [overflow-wrap:anywhere]">
@@ -3638,7 +3638,7 @@ function ReturnsWorkspace({
                 </Link>
               )}
               {data?.returns.filter(physical => physical.returnCaseId === record.id).map(physical => <p key={physical.id} className="basis-full break-all text-sm">
-                Physical return: <Link className="underline" to={`/returns#return-${encodeURIComponent(physical.id)}`}>{physical.id}</Link>
+                Physical return: <Link className="block min-h-11 min-w-11 w-fit max-w-full py-3 underline" to={`/returns#return-${encodeURIComponent(physical.id)}`}>{physical.id}</Link>
               </p>)}
               {resolutionMode !== "read_only" &&
                 !["resolved", "closed"].includes(record.status) && (
