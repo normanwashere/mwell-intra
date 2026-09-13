@@ -409,6 +409,8 @@ describe("Knowledge Base content", () => {
     expect(JSON.stringify(loadingRecovery)).toMatch(
       /8 seconds.*Reload page.*Platform Support/i,
     );
+    expect(loadingRecovery.safeRecovery.join(" ")).toContain("Warehouse update and install notices stay behind open forms");
+    expect(loadingRecovery.safeRecovery.join(" ")).toContain("do not reload during submission or assume unsaved edits will survive");
 
     expect(
       HANDBOOK_RELEASE_NOTES.find(

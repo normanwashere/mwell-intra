@@ -411,6 +411,7 @@ export const TROUBLESHOOTING_GUIDES: TroubleshootingGuide[] = [
     safeRecovery: [
       "Note the route and record ID",
       "After 8 seconds, use Reload page from the bounded loading state",
+      "Warehouse update and install notices stay behind open forms. Finish or deliberately close the form before using Reload; do not reload during submission or assume unsaved edits will survive",
       "Refresh once only when the page does not provide Retry",
       "Sign in again if prompted",
       "Reopen the record from its queue",

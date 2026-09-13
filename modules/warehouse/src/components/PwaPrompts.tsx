@@ -116,7 +116,7 @@ export function PwaPrompts() {
   return (
     <>
       {installEvent && (
-        <div className="fixed inset-x-3 bottom-[calc(6.5rem+env(safe-area-inset-bottom))] z-[70] mx-auto max-w-sm rounded-2xl bg-surface p-4 shadow-e3 ring-1 ring-line md:bottom-6">
+        <div className="fixed inset-x-3 bottom-[calc(6.5rem+env(safe-area-inset-bottom))] z-30 mx-auto max-w-sm rounded-2xl bg-surface p-4 shadow-e3 ring-1 ring-line md:bottom-6">
           <div className="flex items-center gap-3">
             <Logo className="h-7 w-auto" />
             <div className="flex-1">
@@ -148,7 +148,7 @@ export function PwaPrompts() {
       )}
 
       {needRefresh && (
-        <div className="fixed inset-x-3 bottom-[calc(6.5rem+env(safe-area-inset-bottom))] z-[70] mx-auto flex max-w-sm items-center gap-3 rounded-2xl bg-brand-700 p-3 text-white shadow-pop md:bottom-6">
+        <div className="fixed inset-x-3 bottom-[calc(6.5rem+env(safe-area-inset-bottom))] z-30 mx-auto flex max-w-sm items-center gap-3 rounded-2xl bg-brand-700 p-3 text-white shadow-pop md:bottom-6">
           <Icon name="info" className="h-5 w-5 shrink-0" />
           <p className="flex-1 text-sm font-medium">
             A new version is available.
