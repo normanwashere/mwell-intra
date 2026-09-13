@@ -4,7 +4,7 @@ import { installWarehouseSession } from '../helpers/warehouseFixtures';
 
 test.skip(({ baseURL }) => !baseURL || !['localhost', '127.0.0.1'].includes(new URL(baseURL).hostname), 'Memory-only layout regression, not live certification.');
 
-const reference = 'REQ-449835d7-8d30-4418-a171-4394382be2c6';
+const reference = 'WMS-ECOM-acd6711b-6480-4bf9-83f0-896c5174974f-mobile390';
 
 async function installData(page: Page, data: ReturnType<typeof buildSeed>) {
   await page.addInitScript(seed => {
@@ -134,6 +134,13 @@ test('rapid allocation and picking do not cover the scan form with success notic
   const bin = pick.getByLabel(/Scanned bin code for/);
   await expect(bin).toBeVisible();
   await capture(page, info, 'rapid-pick-open');
+  expect((await pick.getByRole('heading', { level: 2 }).boundingBox())?.height).toBeLessThanOrEqual(32);
+  await expect(pick).toHaveAccessibleName(`Confirm pick / ${reference}`);
+  await expect(pick.getByRole('button', { name: 'Scan rack or bin', exact: true })).toBeInViewport();
+  await pick.locator('summary').filter({ hasText: 'Order reference' }).click();
+  await expect(pick.getByText(reference, { exact: true })).toBeVisible();
+  await expect(pick.getByRole('button', { name: 'Copy reference', exact: true })).toBeVisible();
+  await pick.locator('summary').filter({ hasText: 'Order reference' }).click();
   const notices = page.getByRole('region', { name: 'Notifications', exact: true }).getByRole('status');
   const count = await notices.count();
   expect(count).toBeLessThanOrEqual(1);
@@ -147,10 +154,54 @@ test('rapid allocation and picking do not cover the scan form with success notic
   await bin.fill('WRONG-BIN');
   await pick.getByRole('button', { name: 'Use bin', exact: true }).click();
   await expect(pick.getByRole('alert')).toContainText(/wrong source bin/i);
+  await expect.poll(async () => {
+    const alert = await pick.getByRole('alert').boundingBox();
+    const header = await pick.locator('.intra-sheet-header').boundingBox();
+    const footer = await pick.locator('.intra-sheet-footer').boundingBox();
+    return !!alert && !!header && !!footer && alert.y >= header.y + header.height && alert.y + alert.height <= footer.y;
+  }).toBe(true);
+  await capture(page, info, 'wrong-bin-visible-error');
   const before = await page.evaluate(() => localStorage.getItem('mwell-intra-warehouse:data:v2'));
   await pick.getByRole('button', { name: 'Confirm pick', exact: true }).click();
   await expect(pick.getByRole('alert')).toContainText(/scan the source rack or bin/i);
   await expect(pick).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem('mwell-intra-warehouse:data:v2'))).toBe(before);
   await capture(page, info, 'wrong-bin-feedback');
+});
+
+test('packing success remains inline with independent release responsibility', async ({ page }, info) => {
+  test.setTimeout(120_000);
+  await installWarehouseSession(page, 'warehouse_operator', info.project.name === 'desktop-1280' ? 'dark' : 'light');
+  const data = buildSeed();
+  data.fulfillmentOrders = [{
+    id: 'local-layout-pack', source: 'ecommerce', externalReference: reference,
+    status: 'packing', deliveryMethod: 'shipment', sourceLocationId: 'loc-wh',
+    createdBy: 'marketing@mwell.demo', createdAt: '2026-09-13T01:00:00Z', updatedAt: '2026-09-13T01:00:00Z',
+    lines: [{ productId: 'shirt-l', quantity: 2, pickedQuantity: 2 }], packaging: [], shipmentEvents: [],
+  }];
+  await installData(page, data);
+  await page.goto('/warehouse/fulfillment?tab=orders&status=packing');
+  const row = page.getByRole('listitem', { name: `Order ${reference}`, exact: true });
+  await expect(row).toBeVisible({ timeout: 60_000 });
+  await row.getByRole('button', { name: 'Pack and add waybill', exact: true }).click();
+  const pack = page.getByRole('dialog', { name: `Pack order / ${reference}`, exact: true });
+  await pack.getByLabel('Courier', { exact: true }).fill('Synthetic courier');
+  await pack.getByLabel('Waybill number', { exact: true }).fill('SYNTHETIC-WAYBILL');
+  await pack.getByLabel('Delivery tracking link', { exact: true }).fill('https://example.invalid/tracking');
+  await pack.getByRole('button', { name: 'Confirm packing', exact: true }).click();
+  await expect(pack).not.toBeVisible();
+  await expect(row).toHaveCount(0);
+  const notice = page.getByRole('status').filter({ hasText: 'Packing confirmed.' });
+  await expect(notice).toHaveCount(1);
+  await expect(notice).toContainText(reference);
+  await expect(page.getByRole('region', { name: 'Notifications', exact: true }).getByRole('status')).toHaveCount(0);
+  await notice.scrollIntoViewIfNeeded();
+  await capture(page, info, 'packing-filtered-confirmation');
+  await page.getByLabel('Status', { exact: true }).selectOption('ready');
+  await expect(row.getByRole('status')).toContainText('Packing confirmed.');
+  const responsibility = row.getByText('Awaiting release by a second warehouse operator.', { exact: true });
+  await expect(responsibility).toBeVisible();
+  await expect(row.getByRole('button', { name: 'Release shipment', exact: true })).toHaveCount(0);
+  await responsibility.scrollIntoViewIfNeeded();
+  await capture(page, info, 'packing-independent-release');
 });

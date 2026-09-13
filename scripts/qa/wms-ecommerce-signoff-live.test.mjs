@@ -10,10 +10,29 @@ import { PGlite } from '@electric-sql/pglite';
 const url = new URL('./wms-ecommerce-signoff-live.mjs', import.meta.url);
 assert.ok(existsSync(url), 'The offline-importable ecommerce runner must exist');
 const api = await import(url.href);
+test('ecommerce intake uses the Operations assignment, preserving independent warehouse release', () => {
+  assert.deepEqual(api.ECOMMERCE_ACTORS, { creator: 'operations_associate', picker: 'operations_associate', releaser: 'operations_lead' });
+  assert(Object.isFrozen(api.ECOMMERCE_ACTORS));
+  assert.notEqual(api.ECOMMERCE_ACTORS.picker, api.ECOMMERCE_ACTORS.releaser);
+  assert.deepEqual(api.requiredLiveCapabilities('operations_associate'), ['request_fulfillment', 'reserve_allocate', 'issue_items']);
+  assert.deepEqual(api.requiredLiveCapabilities('operations_lead'), ['issue_items']);
+  assert.deepEqual(api.requiredLiveCapabilities('marketing_events_lead'), []);
+  assert.deepEqual(api.requiredLiveCapabilities('procurement_lead'), []);
+});
+test('learning snapshot is a read; own-account reconciliation is separately recorded bootstrap', () => {
+  assert.equal(api.isReviewedReadRpc('learning', 'my_learning_snapshot'), true);
+  for (const name of ['resolve_assignments', 'evaluate_certifications']) {
+    assert.equal(api.isReviewedReadRpc('learning', name), false);
+    assert.equal(api.isOwnLearningBootstrap('learning', name, {}), true);
+    for (const body of [null, [], { user_id: 'foreign' }, { payload: {} }]) assert.equal(api.isOwnLearningBootstrap('learning', name, body), false);
+  }
+  for (const name of ['start_requirement', 'record_checkpoint', 'waive_requirement', 'publish_requirement']) assert.equal(api.isOwnLearningBootstrap('learning', name, {}), false);
+  assert.equal(api.isOwnLearningBootstrap('warehouse', 'resolve_assignments', {}), false);
+});
 const options = { runId: 'a1000000-0000-4000-8000-000000000001', commit: 'a'.repeat(40), orderDate: '2026-09-13' };
 const manifest = () => api.createManifest(options);
 const orderId = 'b1000000-0000-4000-8000-000000000001';
-const actors = { creator: 'creator', picker: 'picker', releaser: 'releaser' };
+const actors = { creator: 'creator', picker: 'picker', releaser: 'releaser', releaserLabel: 'synthetic-releaser@example.invalid' };
 const podPath = `delivery-${orderId}/0/c1000000-0000-4000-8000-000000000001.png`;
 const fixtureBytes = Buffer.from('synthetic fixture bytes for offline hash verification');
 const fixture = { ref: 'desktop1440-synthetic-pod.png', sha256: createHash('sha256').update(fixtureBytes).digest('hex'), byteLength: fixtureBytes.length };
@@ -40,13 +59,13 @@ function state(m, status = 'completed') {
       proof_of_delivery_reference: status === 'completed' ? c.podReference : null,
       proof_of_delivery_evidence_url: status === 'completed' ? podPath : null,
       delivered_at: status === 'completed' ? '2026-09-13T01:00:00Z' : null,
-      shipment_events: status === 'completed' ? [{ status: 'delivered', actor: actors.releaser, reference: c.podReference, evidenceUrl: podPath }] : [] },
+      shipment_events: status === 'completed' ? [{ status: 'delivered', actor: actors.releaserLabel, reference: c.podReference, evidenceUrl: podPath }] : [] },
     podFixture: fixture, privateStorageEvidence: status === 'completed' ? privateProof(m) : null,
     products: [{ id: c.productId, sku: c.sku, serialized: false, item_class: 'sellable_sku', attributes: { signoffRun: m.runId, synthetic: true } }],
     stock: [{ id: 'stock', product_id: c.productId, location_id: c.locationId, bin_id: c.binId, lot_id: null, quantity: issued ? 8 : 10 }],
     reservations: status === 'received' ? [] : [{ id: 'reservation', order_id: orderId, product_id: c.productId, location_id: null, bin_id: null, quantity: 2, status: issued ? 'released' : 'active' }],
     movements: issued ? [{ id: 'movement', product_id: c.productId, reference: orderId, type: 'fulfillment_release', quantity: 2,
-      from_location_id: c.locationId, from_bin_id: c.binId, to_location_id: null, to_bin_id: null, lot_id: null, serial_number: null, actor: actors.releaser }] : [],
+      from_location_id: c.locationId, from_bin_id: c.binId, to_location_id: null, to_bin_id: null, lot_id: null, serial_number: null, actor: actors.releaserLabel }] : [],
     holds: [], allocations: [], units: [], activity: status === 'completed'
       ? [{ id: 1, module: 'warehouse', entity_type: 'fulfillment_order', entity_id: orderId, action: 'confirm_delivery', actor: actors.releaser }] : [],
   };
@@ -105,6 +124,46 @@ test('inventory reconciliation rejects incorrect bin, duplicate issue, foreign r
   }
   const allocated = state(m, 'allocated');
   assert.equal(api.reconcile(m, c, allocated, actors).available, 8);
+});
+
+test('ledger labels and UUID audit actors stay distinct and both are enforced', () => {
+  const m = manifest(); const c = m.cases[0];
+  assert.equal(api.reconcile(m, c, state(m), actors).issued, 2);
+  for (const mutate of [s => { s.movements[0].actor = actors.releaser; },
+    s => { s.order.shipment_events[0].actor = actors.releaser; },
+    s => { s.activity[0].actor = actors.releaserLabel; },
+    s => { s.order.released_by = actors.releaserLabel; }]) {
+    const s = state(m); mutate(s);
+    assert.throws(() => api.reconcile(m, c, s, actors));
+  }
+  assert.throws(() => api.reconcile(m, c, state(m), { ...actors, releaserLabel: undefined }), /actor label/);
+});
+
+test('release continuation accepts only the exact terminal boundary and retains original evidence', () => {
+  const m = manifest(); const c = m.cases[0];
+  const binding = { view: c.viewport, orderId, reference: c.reference, productId: c.productId };
+  const source = { runId: m.runId, commit: m.commit, environment: 'uat', complete: false,
+    finishedAt: '2026-09-13T04:00:00.000Z',
+    endHealth: { status: 'ok', commit: m.commit, deployment: { appEnv: 'uat', supabaseProjectRef: m.project } },
+    failures: [{ view: c.viewport, orderId, message: 'Movement actor\nexpected UUID but received server label' }],
+    storageAttempts: [], privateStorageEvidence: [], bindings: [binding],
+    checks: ['ecommerce-intake', 'denied-procurement_lead-allocate', 'allocated', 'picking', 'wrong-bin-denied',
+      'pick-persisted', 'packed-independent-release-required', 'denied-operations_associate-release'].map(checkpoint => ({ view: c.viewport, checkpoint })),
+    commands: [{ name: 'create_fulfillment_order', orderId }, ...['allocate', 'start_picking', 'confirm_pick', 'confirm_pack', 'release']
+      .map(action => ({ name: 'advance_fulfillment_order', action, orderId }))] };
+  const release = { name: 'advance_fulfillment_order', payload: { action: 'release', order_id: orderId, idempotency_key: 'original-ui-release' } };
+  assert.deepEqual(api.validateReleasedContinuation(m, source, release), binding);
+  for (const mutate of [s => { s.runId = orderId; }, s => { s.commit = 'b'.repeat(40); },
+    s => { s.complete = true; }, s => { delete s.finishedAt; }, s => { s.environment = 'production'; },
+    s => { s.endHealth.commit = 'b'.repeat(40); }, s => { s.failures[0].message = 'uncertain shipment write'; },
+    s => { s.failures[0].orderId = m.runId; }, s => { s.failures.push(s.failures[0]); },
+    s => { s.storageAttempts.push({ path: 'unreviewed' }); }, s => { s.bindings[0].reference += '-other'; },
+    s => { s.checks.pop(); }, s => { s.checks[0].view = 'mobile390'; }, s => { s.commands.pop(); },
+    s => { s.commands[5].action = 'confirm_delivery'; }]) {
+    const altered = structuredClone(source); mutate(altered);
+    assert.throws(() => api.validateReleasedContinuation(m, altered, release));
+  }
+  assert.throws(() => api.validateReleasedContinuation(m, source, { ...release, payload: { ...release.payload, order_id: m.runId } }));
 });
 
 test('UI payload ownership blocks foreign writes and accepts only the real shipment RPC for completion', () => {

@@ -946,7 +946,7 @@ function OrdersWorkspace({
                       </ActionButton>
                     )}
                     {order.status === "packing" && (
-                      <ActionButton onClick={() => setPackOrder(order)}>
+                      <ActionButton onClick={() => { setFloorNotice(undefined); setPackOrder(order); }}>
                         {order.deliveryMethod === "shipment"
                           ? "Pack and add waybill"
                           : "Prepare accountable handover"}
@@ -1045,6 +1045,11 @@ function OrdersWorkspace({
         key={packOrder?.id}
         order={packOrder}
         products={products}
+        onPacked={(order) => setFloorNotice({
+          orderId: order.id,
+          reference: order.externalReference,
+          message: `${order.deliveryMethod === 'shipment' ? 'Packing confirmed.' : 'Handover prepared.'} Awaiting release by an operator other than the packer.`,
+        })}
         onClose={() => setPackOrder(undefined)}
       />
       <BackorderSheet
@@ -1572,6 +1577,22 @@ function ActionButton({
   );
 }
 
+function OrderReferenceDetails({ order }: { order: FulfillmentOrder }) {
+  const [searchParams] = useSearchParams();
+  const [expanded, setExpanded] = useState(false);
+  const orderParams = new URLSearchParams(searchParams);
+  orderParams.set('tab', 'orders');
+  orderParams.set('order', order.id);
+  orderParams.delete('request');
+  return (
+    <details className="min-w-0 text-sm" onToggle={(event) => setExpanded(event.currentTarget.open)}>
+      <summary className="min-h-11 cursor-pointer py-3 font-medium text-ink">Order reference</summary>
+      <p className="select-text [overflow-wrap:anywhere] text-muted">{order.externalReference}</p>
+      {expanded && <RecordCopyActions reference={order.externalReference} href={`/warehouse/fulfillment?${orderParams}`} />}
+    </details>
+  );
+}
+
 function PickSheet({
   order,
   products,
@@ -1600,6 +1621,10 @@ function PickSheet({
   );
   const evidence = useEvidencePending();
   const [validationError, setValidationError] = useState("");
+  const validationErrorRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (validationError) validationErrorRef.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [validationError]);
   const [saving, setSaving] = useState(false);
   const submitting = useRef(false);
   const [discardRequested, setDiscardRequested] = useState(false);
@@ -1764,23 +1789,25 @@ function PickSheet({
         className="space-y-4"
         onSubmit={(event) => void submit(event)}
       >
-        <fieldset disabled={saving || queued || unconfirmed} className="min-w-0 space-y-4">
         {validationError && (
           <p
+            ref={validationErrorRef}
             role="alert"
             className="rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-800 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-200"
           >
             {validationError}
           </p>
         )}
-        <div className="border-l-4 border-emerald-500 bg-emerald-500/10 px-4 py-3 text-sm">
-          <p className="font-semibold text-ink">Quality checkpoint</p>
-          <p className="mt-1 text-muted">
+        <OrderReferenceDetails order={order} />
+        <fieldset disabled={saving || queued || unconfirmed} className="min-w-0 space-y-4">
+        <details className="border-l-4 border-emerald-500 bg-emerald-500/10 px-4 text-sm">
+          <summary className="min-h-11 cursor-pointer py-3 font-semibold text-ink">Quality checkpoint</summary>
+          <p className="pb-3 text-muted">
             Only accepted, put-away stock is pickable. If packaging, seals, or a
             device condition looks wrong, stop the pick and route the item to
             Quality Control instead of substituting it informally.
           </p>
-        </div>
+        </details>
         {order.lines.map((line) => {
           const product = products.find((row) => row.id === line.productId);
           const suggestion = recommendedBin(line.productId);
@@ -1979,10 +2006,12 @@ function PickSheet({
 function PackSheet({
   order,
   products,
+  onPacked,
   onClose,
 }: {
   order?: FulfillmentOrder;
   products: Product[];
+  onPacked: (order: FulfillmentOrder) => void;
   onClose: () => void;
 }) {
   const warehouse = useWarehouse();
@@ -2061,11 +2090,7 @@ function PackSheet({
     const ok = await advanceFulfillmentOrder(pendingCommand.current);
     if (ok) {
       pendingCommand.current = null;
-      toast.success(
-        shipment
-          ? "Packing confirmed. Next: A Warehouse operator other than the packer releases the shipment to the courier; delivery confirmation follows."
-          : "Handover prepared. Next: A Warehouse operator other than the packer releases the items; recipient confirmation follows.",
-      );
+      onPacked(order);
       onClose();
     } else { setQueued(warehouse.lastActionStatus === "queued"); setUnconfirmed(true); }
     } catch {
@@ -2531,9 +2556,7 @@ function AcknowledgeReceiptSheet({
   const { advanceFulfillmentOrder } = warehouse;
   const { profile } = useSession();
   const toast = useToast();
-  const [searchParams] = useSearchParams();
   const [reference, setReference] = useState("");
-  const [showOrderReference, setShowOrderReference] = useState(false);
   const [evidenceUrls, setEvidenceUrls] = useState<string[]>([]);
   const evidence = useEvidencePending();
   const inFlight = useRef(false);
@@ -2543,10 +2566,6 @@ function AcknowledgeReceiptSheet({
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   if (!order) return null;
-  const orderParams = new URLSearchParams(searchParams);
-  orderParams.set('tab', 'orders');
-  orderParams.set('order', order.id);
-  orderParams.delete('request');
   const currentOrder = warehouse.data?.fulfillmentOrders.find(
     (candidate) => candidate.id === order.id,
   );
@@ -2625,13 +2644,7 @@ function AcknowledgeReceiptSheet({
         className="space-y-4"
         onSubmit={(event) => void submit(event)}
       >
-        <details className="min-w-0 text-sm" onToggle={(event) => setShowOrderReference(event.currentTarget.open)}>
-          <summary className="min-h-11 cursor-pointer py-3 font-medium text-ink">Order reference</summary>
-          <p className="select-text [overflow-wrap:anywhere] text-muted">{order.externalReference}</p>
-          {showOrderReference && (
-            <RecordCopyActions reference={order.externalReference} href={`/warehouse/fulfillment?${orderParams}`} />
-          )}
-        </details>
+        <OrderReferenceDetails order={order} />
         <p className="break-words text-sm text-ink">
           Recipient: {order.handoverRecipientName ?? "Not recorded"}
           {order.handoverRecipientDepartment

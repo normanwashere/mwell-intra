@@ -2,6 +2,8 @@
 
 ## September 13 Warehouse Receipt Follow-up
 
+**Release status:** The layout and KB update are now live on UAT in build `75e733b`. Six post-deployment checks passed across Marketing, Operations and Admin at 1440px and 390px; the mobile receipt form and desktop Pick & Pack were visually reviewed. Final local coverage was 153 fulfillment tests and 24 browser checks. A limited ecommerce journey has also completed at both widths: desktop resumed its saved release step after a test assertion correction; mobile ran continuously from intake. Both reached delivered/completed with private proof images and exactly one stock deduction. Other warehouse branches and the real-user pilot remain open. The packing-notice and long pick-heading improvements found in that mobile run are not yet deployed.
+
 The requester evidence-upload correction is applied to UAT. For an issued department request, use **Acknowledge receipt**, enter the acceptance reference and attach the actual recipient evidence. This does not give the requester warehouse execution access. The person who released the stock still cannot confirm its receipt, and shipment orders still use delivery tracking.
 
 The accompanying layout candidate keeps allocation and start-picking confirmation on the order row, leaving the scan form clear. Request review closes temporarily while receipt capture is open; Cancel returns to the request. Expand **Order reference** to read or copy the complete reference. These layout changes have passed local tests but require deployment and live retesting before trainers demonstrate them as released behavior.

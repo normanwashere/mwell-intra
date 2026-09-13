@@ -6,6 +6,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const TARGET = Object.freeze({ origin: 'https://mwell-intra-uat.vercel.app', project: 'kkoitlvydytdhlpxhuah' });
+export const ECOMMERCE_ACTORS = Object.freeze({ creator: 'operations_associate', picker: 'operations_associate', releaser: 'operations_lead' });
+export function requiredLiveCapabilities(role) {
+  if (role === 'operations_associate') return ['request_fulfillment', 'reserve_allocate', 'issue_items'];
+  if (role === 'operations_lead') return ['issue_items'];
+  return [];
+}
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const VIEWS = ['desktop1440', 'mobile390'];
 const sqlValue = value => `'${String(value).replaceAll("'", "''")}'`;
@@ -170,9 +176,10 @@ export function reconcile(m, c, s, actors) {
     assert.equal(r.status, issued ? 'released' : 'active');
   }
   assert.equal(s.movements.length, issued ? 1 : 0, 'Exactly one issue, never duplicate inventory consumption');
+  if (issued) assert(typeof actors.releaserLabel === 'string' && actors.releaserLabel.length > 0, 'Server-derived release actor label required');
   for (const movement of s.movements) {
     for (const [key, value] of Object.entries({ product_id: c.productId, reference: o.id, type: 'fulfillment_release', quantity: c.requestedQuantity,
-      from_location_id: c.locationId, from_bin_id: c.binId, to_location_id: null, to_bin_id: null, lot_id: null, serial_number: null, actor: actors.releaser })) assert.equal(movement[key], value, `Movement ${key}`);
+      from_location_id: c.locationId, from_bin_id: c.binId, to_location_id: null, to_bin_id: null, lot_id: null, serial_number: null, actor: actors.releaserLabel })) assert.equal(movement[key], value, `Movement ${key}`);
   }
   if (o && ['packing', 'ready', 'released', 'completed'].includes(o.status)) {
     assert.equal(o.picked_by, actors.picker); assert.equal(o.lines[0].pickBinId, c.binId); assert.equal(o.lines[0].pickedQuantity, c.requestedQuantity);
@@ -188,7 +195,7 @@ export function reconcile(m, c, s, actors) {
     assertPrivateStorageProof(m, c, o, s.privateStorageEvidence, s.podFixture, actors);
     assert.equal(o.shipment_events.filter(e => e.status === 'delivered').length, 1);
     const event = o.shipment_events.find(e => e.status === 'delivered');
-    assert.equal(event.actor, actors.releaser); assert.equal(event.reference, c.podReference); assert.equal(event.evidenceUrl, o.proof_of_delivery_evidence_url);
+    assert.equal(event.actor, actors.releaserLabel); assert.equal(event.reference, c.podReference); assert.equal(event.evidenceUrl, o.proof_of_delivery_evidence_url);
     const deliveryAudit = s.activity.filter(row => row.action === 'confirm_delivery');
     assert.equal(deliveryAudit.length, 1, 'Exactly one persisted delivery audit required');
     for (const [key, value] of Object.entries({ module: 'warehouse', entity_type: 'fulfillment_order', entity_id: o.id, actor: actors.releaser })) {
@@ -276,7 +283,13 @@ export async function verifyPrivateStorageEvidence({ manifest, c, order, upload,
 
 export function isReviewedReadRpc(schema, name) {
   return (schema === 'core' && name === 'my_capability_snapshot')
+    || (schema === 'learning' && name === 'my_learning_snapshot')
     || (schema === 'warehouse' && ['department_request_actor_names', 'list_stock_change_requests'].includes(name));
+}
+
+export function isOwnLearningBootstrap(schema, name, body) {
+  return schema === 'learning' && ['resolve_assignments', 'evaluate_certifications'].includes(name)
+    && body !== null && typeof body === 'object' && !Array.isArray(body) && Object.keys(body).length === 0;
 }
 
 export function assertUiPayload(c, orderId, name, p) {
@@ -343,11 +356,55 @@ async function health(m) {
   const body = await response.json(); assertHealth(body, m); return body;
 }
 
+export function validateReleasedContinuation(m, source, releaseCommand) {
+  validateManifest(m);
+  assert.equal(source.runId, m.runId); assert.equal(source.commit, m.commit);
+  assert.equal(source.environment, 'uat'); assert.equal(source.complete, false);
+  assert(source.finishedAt && Number.isFinite(Date.parse(source.finishedAt)), 'Only a terminal attempt can be continued');
+  assertHealth(source.endHealth, m);
+  assert.equal(source.failures?.length, 1);
+  assert.equal(source.failures[0].view, 'desktop1440');
+  assert.match(source.failures[0].message, /^Movement actor\n/, 'Only the reviewed release-actor assertion failure is resumable');
+  assert.deepEqual(source.storageAttempts, []); assert.deepEqual(source.privateStorageEvidence, []);
+  assert.equal(source.bindings?.length, 1);
+  const binding = source.bindings[0]; const c = m.cases[0];
+  assert.equal(binding.view, c.viewport); assert.equal(binding.productId, c.productId); assert.equal(binding.reference, c.reference);
+  assert(UUID.test(binding.orderId)); assert.equal(source.failures[0].orderId, binding.orderId);
+  assert.deepEqual(source.checks.map(check => [check.view, check.checkpoint]), [
+    'ecommerce-intake', 'denied-procurement_lead-allocate', 'allocated', 'picking', 'wrong-bin-denied',
+    'pick-persisted', 'packed-independent-release-required', 'denied-operations_associate-release',
+  ].map(checkpoint => ['desktop1440', checkpoint]));
+  assert.deepEqual(source.commands.map(command => [command.name, command.action ?? null, command.orderId]), [
+    ['create_fulfillment_order', null], ...['allocate', 'start_picking', 'confirm_pick', 'confirm_pack', 'release'].map(action => ['advance_fulfillment_order', action]),
+  ].map(([name, action]) => [name, action, binding.orderId]));
+  assert.equal(releaseCommand.name, 'advance_fulfillment_order');
+  assert.equal(releaseCommand.payload?.action, 'release');
+  assertUiPayload(c, binding.orderId, releaseCommand.name, releaseCommand.payload);
+  return structuredClone(binding);
+}
+
 // Live dependencies are loaded only after explicit mutation/target/build guards.
 export async function run(folder, env = process.env) {
   folder = path.resolve(folder);
   const m = validateManifest(JSON.parse(await readFile(path.join(folder, 'manifest.json'), 'utf8')));
   assertRunPermission(m, env);
+  let continuation;
+  if (env.WMS_ECOMMERCE_RESUME_ATTEMPT) {
+    const ref = env.WMS_ECOMMERCE_RESUME_ATTEMPT;
+    assert(/^attempt-[0-9TZ-]+-[a-f0-9]{8}$/.test(ref), 'Resume must name a retained attempt in this run folder');
+    const directory = path.join(folder, ref);
+    const sourceBytes = await readFile(path.join(directory, 'results.json'));
+    const source = JSON.parse(sourceBytes);
+    const releaseRef = source.commands?.at(-1)?.ref;
+    assert.equal(releaseRef, 'desktop1440-command-5.json');
+    const releaseBytes = await readFile(path.join(directory, releaseRef));
+    const binding = validateReleasedContinuation(m, source, JSON.parse(releaseBytes));
+    for (const check of source.checks) {
+      assert(/^desktop1440-[0-9]+-[a-z_-]+\.png$/.test(check.screenshot?.ref), 'Invalid retained screenshot reference');
+      assert((await readFile(path.join(directory, check.screenshot.ref))).byteLength > 0);
+    }
+    continuation = { ref, source, binding, resultsSha256: sha256(sourceBytes), releaseCommandSha256: sha256(releaseBytes) };
+  }
   await health(m);
   const lockPath = path.join(folder, 'run.lock');
   const lock = await open(lockPath, 'wx');
@@ -358,7 +415,13 @@ export async function run(folder, env = process.env) {
     smtpIndependent: true, globalWmsSignoff: false, cleanup: { status: 'pending-independent-review', allResidueVerified: false },
     scope: 'Synthetic ecommerce COD shipment only; no physical courier, payment settlement or human acceptance claimed.',
     gaps: ['held-stock denial', 'partial/short/cancel', 'concurrency', 'session/network recovery', 'serialized/lot/bundle goods', 'packaging consumption', 'hardware', 'verified cleanup', 'human screenshot review'],
-    checks: [], failures: [], commands: [], storageAttempts: [], privateStorageEvidence: [], bindings: [] };
+    checks: [], failures: [], commands: [], bootstrapCommands: [], storageAttempts: [], privateStorageEvidence: [], bindings: [] };
+  if (continuation) {
+    report.continuation = { sourceAttempt: continuation.ref, resultsSha256: continuation.resultsSha256,
+      releaseCommandSha256: continuation.releaseCommandSha256, boundary: 'released',
+      previousCheckCount: continuation.source.checks.length, freshEndToEndRun: false };
+    report.bindings.push(continuation.binding);
+  }
   let writes = Promise.resolve();
   const persist = () => {
     const json = JSON.stringify(report, null, 2);
@@ -384,24 +447,37 @@ export async function run(folder, env = process.env) {
       actors[role] = { persona, client };
       const login = await client.auth.signInWithPassword({ email: persona.email, password: env.AUDIT_PASSWORD });
       assert(!login.error, `Login failed: ${role}`); actors[role].id = login.data.user.id;
+      const ownProfile = await client.schema('core').from('profiles').select('id,email').eq('id', login.data.user.id).single();
+      assert(!ownProfile.error && ownProfile.data?.id === login.data.user.id, `Own actor profile lookup failed: ${role}`);
+      const actorLabel = ownProfile.data.email == null || ownProfile.data.email === '' ? login.data.user.id : ownProfile.data.email;
+      assert(typeof actorLabel === 'string' && actorLabel.length > 0);
+      actors[role].authoritativeActor = actorLabel;
       const capabilities = await client.schema('core').rpc('my_capability_snapshot');
       assert(!capabilities.error && capabilities.data, `Capability readback failed: ${role}`);
       const granted = capabilities.data.roleCapabilities?.warehouse ?? [];
       const live = capabilities.data.userCapabilities?.warehouse ?? [];
       assert(Array.isArray(granted) && Array.isArray(live), 'Malformed capability readback');
-      const required = role === 'marketing_events_lead' ? ['request_fulfillment']
-        : role === 'operations_associate' ? ['reserve_allocate', 'issue_items'] : role === 'operations_lead' ? ['issue_items'] : [];
-      for (const capability of required) assert(live.includes(capability), `Missing governed live capability ${role}:${capability}; do not bypass certification`);
-      if (role === 'procurement_lead') assert(!['reserve_allocate', 'issue_items', 'request_fulfillment'].some(cap => granted.includes(cap) || live.includes(cap)), 'Negative persona has warehouse execution authority');
       report.actors ??= [];
-      report.actors.push({ role, id: login.data.user.id, capabilities: capabilities.data, source: 'core.my_capability_snapshot' });
+      report.actors.push({ role, id: login.data.user.id, authoritativeActor: actorLabel, actorSource: 'authenticated-own-core.profiles; authoritative_actor projection', capabilities: capabilities.data, source: 'core.my_capability_snapshot' });
+      const required = requiredLiveCapabilities(role);
+      for (const capability of required) assert(live.includes(capability), `Missing governed live capability ${role}:${capability}; do not bypass certification`);
+      if (role === 'marketing_events_lead') assert(!granted.includes('request_fulfillment') && !live.includes('request_fulfillment'), 'Marketing must not receive ecommerce intake authority');
+      if (role === 'procurement_lead') assert(!['reserve_allocate', 'issue_items', 'request_fulfillment'].some(cap => granted.includes(cap) || live.includes(cap)), 'Negative persona has warehouse execution authority');
     }
-    const identities = { creator: actors.marketing_events_lead.id, picker: actors.operations_associate.id, releaser: actors.operations_lead.id };
+    const identities = Object.fromEntries(Object.entries(ECOMMERCE_ACTORS).map(([step, role]) => [step, actors[role].id]));
+    // Movement and shipment-event labels use the server profile projection;
+    // order actor columns and core audit entries retain authenticated UUIDs.
+    identities.releaserLabel = actors[ECOMMERCE_ACTORS.releaser].authoritativeActor;
     assert.equal(new Set(Object.values(actors).map(a => a.id)).size, 4, 'Independent identities required');
+    if (continuation) for (const [role, actor] of Object.entries(actors)) {
+      assert.equal(continuation.source.actors.find(a => a.role === role)?.id, actor.id, 'Continuation actor changed');
+    }
     browser = await chromium.launch();
     for (const c of m.cases) {
       await health(m);
-      let orderId; let activePage; let activeRole; let guardError;
+      const resumeReleased = continuation?.binding.view === c.viewport;
+      let orderId = resumeReleased ? continuation.binding.orderId : undefined;
+      let activePage; let activeRole; let guardError;
       let podFixture = null; let privateStorageEvidence = null;
       const contexts = []; const pages = {};
       const reads = async (schema, table, column, value) => {
@@ -464,7 +540,14 @@ export async function run(folder, env = process.env) {
               const schema = request.headers()['content-profile'];
               assert(new URL(request.url()).pathname.startsWith('/rest/v1/rpc/'), 'Direct table writes are forbidden');
               if (isReviewedReadRpc(schema, name)) return route.continue();
-              assert.equal(schema, 'warehouse', 'Non-warehouse mutation refused');
+              if (isOwnLearningBootstrap(schema, name, request.postDataJSON())) {
+                // Normal own-account learning reconciliation is a governed write,
+                // not a read or a fabricated training completion.
+                report.bootstrapCommands.push({ schema, name, actorId: actors[role].id, view: c.viewport, parameters: {}, observedAt: new Date().toISOString() });
+                await persist();
+                return route.continue();
+              }
+              assert.equal(schema, 'warehouse', `Non-warehouse mutation refused: ${schema}.${name}`);
               const payload = assertUiPayload(c, orderId, name, request.postDataJSON()?.payload);
               if (name === 'update_shipment_tracking' && payload.action === 'confirm_delivery') {
                 const uploads = report.storageAttempts.filter(u => u.view === c.viewport && u.orderId === orderId && u.path === payload.evidence_url);
@@ -525,14 +608,21 @@ export async function run(folder, env = process.env) {
       };
       try {
         const initial = await read();
-        assert.equal(initial.order, null, 'Existing order: do not replay the UI journey. Review retained attempts and cleanup first.');
+        if (resumeReleased) {
+          assertOwnedOrder(c, initial.order);
+          assert.equal(initial.order.id, orderId); assert.equal(initial.order.status, 'released');
+          assert.equal(initial.order.shipment_status, 'dispatched');
+          assert.equal(initial.order.proof_of_delivery_evidence_url, null); assert.equal(initial.order.delivered_at, null);
+          assert.deepEqual(initial.order.shipment_events.map(event => event.status), ['awaiting_dispatch', 'dispatched']);
+        } else assert.equal(initial.order, null, 'Existing order: do not replay the UI journey. Review retained attempts and cleanup first.');
         reconcile(m, c, initial, identities);
         const locations = await reads('warehouse', 'locations', 'id', c.locationId);
         const bins = await reads('warehouse', 'storage_areas', 'id', c.binId);
         assert.equal(locations.length, 1); assert.equal(locations[0].name, c.productName); assert.equal(locations[0].type, 'warehouse');
         assert.equal(bins.length, 1); assert.equal(bins[0].location_id, c.locationId); assert.equal(bins[0].code, c.binCode);
         assert.equal(bins[0].zone, 'WMS-SIGNOFF'); assert.equal(bins[0].active, true);
-        const creator = await pageFor('marketing_events_lead');
+        if (!resumeReleased) {
+        const creator = await pageFor(ECOMMERCE_ACTORS.creator);
         await creator.goto(`${TARGET.origin}/warehouse/fulfillment?tab=orders`);
         await creator.getByRole('button', { name: 'New order / demand', exact: true }).click();
         const intake = creator.getByRole('dialog', { name: 'Create order or fulfillment demand', exact: true });
@@ -547,7 +637,7 @@ export async function run(folder, env = process.env) {
         await intake.getByLabel('Payment method', { exact: true }).selectOption(c.paymentMethod);
         await uiCommand(creator, 'create_fulfillment_order', () => intake.getByRole('button', { name: 'Create order', exact: true }).click());
         await expect.poll(async () => (await read()).order?.status).toBe('received');
-        await expect(intake).not.toBeVisible(); await capture('ecommerce-intake', 'marketing_events_lead');
+        await expect(intake).not.toBeVisible(); await capture('ecommerce-intake', ECOMMERCE_ACTORS.creator);
         await negative('procurement_lead', 'advance_fulfillment_order', 'allocate', /Not authorized/i);
         const worker = await queue('operations_associate');
         for (const [button, status] of [['Allocate stock', 'allocated'], ['Start picking', 'picking']]) {
@@ -578,8 +668,9 @@ export async function run(folder, env = process.env) {
         await expect(worker.card.getByRole('button', { name: 'Release shipment', exact: true })).toHaveCount(0);
         await capture('packed-independent-release-required', 'operations_associate');
         await negative('operations_associate', 'advance_fulfillment_order', 'release', /second warehouse operator/i);
+        }
         const lead = await queue('operations_lead');
-        await uiCommand(lead.page, 'advance_fulfillment_order', () => lead.card.getByRole('button', { name: 'Release shipment', exact: true }).click());
+        if (!resumeReleased) await uiCommand(lead.page, 'advance_fulfillment_order', () => lead.card.getByRole('button', { name: 'Release shipment', exact: true }).click());
         await expect.poll(async () => (await read()).order.status).toBe('released');
         assert.equal((await read()).order.shipment_status, 'dispatched');
         assert.equal((await read()).order.delivered_at, null); await capture('released-not-delivered', 'operations_lead');

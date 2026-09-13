@@ -2,6 +2,8 @@
 
 ## September 13 WMS Handover
 
+**Release follow-up:** The candidate described below is now deployed to live UAT as `75e733b`. Six desktop/mobile smoke cases passed for Marketing, Operations and Admin, with no recorded page/server errors. Local coverage after independent review is 153 fulfillment tests and 24 browser tests. The limited bulk ecommerce journey also reached delivery with a private photo on desktop and mobile: desktop resumed after a test assertion failure at release; mobile ran continuously. Duplicate delivery did not consume stock again. This does not cover all ecommerce branches or the warehouse pilot. Keep actual participant and hardware gates open, and leave marked WMS-ECOM audit fixtures for the development team's cleanup.
+
 **Training:** The UAT recipient-upload correction lets an eligible department requester attach acceptance evidence without warehouse execution permission. Keep release and receipt independent. The layout candidate leaves picking confirmations on the order, shows one receipt/request dialog at a time, and exposes the full order reference through an expandable control. Demonstrate it only after the deployment receipt and live retest are recorded.
 
 **Development and QA:** Preserve all existing commands, stock effects, current-role checks and self-approval restrictions. Retain the 150 fulfillment component and 18 six-viewport browser results, but do not relabel memory-mode screenshots as live transaction proof. Rerun the affected receipt and picking interactions on the exact deployed build, then continue ecommerce shipment delivery, returns, role boundaries, concurrency and recovery certification.

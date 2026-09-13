@@ -41,6 +41,78 @@ function Harness() {
 
 describe('focused floor feedback and receipt work surface', () => {
   it.each([
+    { deliveryMethod: 'shipment', filter: 'active' },
+    { deliveryMethod: 'shipment', filter: 'packing' },
+    { deliveryMethod: 'internal_handover', filter: 'active' },
+    { deliveryMethod: 'internal_handover', filter: 'packing' },
+  ] as const)('keeps $deliveryMethod packing success inline in the $filter queue', async ({ deliveryMethod, filter }) => {
+    const data = await fixture('packing').getData();
+    Object.assign(data.fulfillmentOrders[0]!, { deliveryMethod, source: deliveryMethod === 'shipment' ? 'ecommerce' : 'department_request' });
+    const repo = makeRepo(data);
+    const user = userEvent.setup();
+    renderWithProviders(<FulfillmentPage />, { repo, role: 'warehouse_operator', route: `/fulfillment?tab=orders&status=${filter}` });
+    await user.click(await screen.findByRole('button', { name: deliveryMethod === 'shipment' ? 'Pack and add waybill' : 'Prepare accountable handover' }));
+    const dialog = await screen.findByRole('dialog', { name: `Pack order / ${reference}` });
+    if (deliveryMethod === 'shipment') {
+      await user.type(within(dialog).getByLabelText('Courier'), 'Synthetic courier');
+      await user.type(within(dialog).getByLabelText('Waybill number'), 'WAYBILL-TEST');
+      await user.type(within(dialog).getByLabelText('Delivery tracking link'), 'https://example.invalid/tracking');
+    } else {
+      await user.type(within(dialog).getByLabelText('Recipient name'), 'Recipient');
+    }
+    await user.click(within(dialog).getByRole('button', { name: 'Confirm packing' }));
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    const message = deliveryMethod === 'shipment' ? 'Packing confirmed.' : 'Handover prepared.';
+    const notice = screen.getByRole('status');
+    expect(notice).toHaveTextContent(message);
+    expect(within(screen.getByRole('region', { name: 'Notifications' })).queryByRole('status')).not.toBeInTheDocument();
+    if (filter === 'packing') {
+      expect(notice).toHaveTextContent(reference);
+      expect(screen.queryByRole('listitem', { name: `Order ${reference}` })).not.toBeInTheDocument();
+      await user.selectOptions(screen.getByLabelText('Status'), 'active');
+    }
+    const row = screen.getByRole('listitem', { name: `Order ${reference}` });
+    expect(within(row).getByRole('status')).toHaveTextContent(message);
+    expect(screen.getAllByRole('status')).toHaveLength(1);
+    expect(within(row).getByText('Awaiting release by a second warehouse operator.')).toBeVisible();
+    expect(within(row).queryByRole('button', { name: /^Release / })).not.toBeInTheDocument();
+    expect((await repo.getData()).fulfillmentOrders[0]?.status).toBe('ready');
+  });
+
+  it('keeps the full pick reference copyable and quality guidance expandable without taking scanner focus', async () => {
+    const data = await fixture('picking').getData();
+    data.storageAreas = [{ id: 'floor-bin', locationId: 'loc-wh', code: 'FLOOR-01', active: true }];
+    data.stockLevels[0]!.binId = 'floor-bin';
+    const repo = makeRepo(data);
+    const user = userEvent.setup();
+    const clipboard = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
+    renderWithProviders(<FulfillmentPage />, { repo, role: 'warehouse_operator', route: '/fulfillment?tab=orders&status=picking' });
+    await user.click(await screen.findByRole('button', { name: 'Confirm scanned pick' }));
+    const dialog = await screen.findByRole('dialog', { name: `Confirm pick / ${reference}` });
+    expect(within(dialog).getByRole('button', { name: 'Scan rack or bin' })).toHaveFocus();
+    const quality = within(dialog).getByText('Quality checkpoint', { selector: 'summary' });
+    expect(quality.closest('details')).not.toHaveAttribute('open');
+    await user.click(quality);
+    expect(within(dialog).getByText(/Only accepted, put-away stock is pickable/)).toBeVisible();
+    await user.click(quality);
+    await user.click(within(dialog).getByText('Order reference', { selector: 'summary' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Copy reference' }));
+    expect(clipboard).toHaveBeenCalledWith(reference);
+    await user.click(within(dialog).getByText('Order reference', { selector: 'summary' }));
+    await user.type(within(dialog).getByLabelText('Scanned bin code for Doctor Token'), 'FLOOR-01');
+    await user.click(within(dialog).getByRole('button', { name: 'Use bin' }));
+    await user.type(within(dialog).getByLabelText('Product barcode for Doctor Token'), data.products.find(product => product.id === 'doctor-token')!.sku);
+    await user.click(within(dialog).getByRole('button', { name: 'Use product' }));
+    await user.type(within(dialog).getByLabelText('Picked quantity for Doctor Token'), '1');
+    const before = await repo.getData();
+    await user.type(within(dialog).getByLabelText('Scanned bin code for Doctor Token'), 'WRONG');
+    await user.click(within(dialog).getByRole('button', { name: 'Use bin' }));
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Wrong source bin');
+    expect(within(dialog).getByLabelText('Picked quantity for Doctor Token')).toHaveValue(1);
+    expect(await repo.getData()).toEqual(before);
+  });
+
+  it.each([
     { status: 'received', action: 'Allocate stock', nextStatus: 'allocated', message: 'Allocation recorded.' },
     { status: 'allocated', action: 'Start picking', nextStatus: 'picking', message: 'Picking started.' },
   ] as const)('retains one queue confirmation when $action leaves the $status filter', async ({ status, action, nextStatus, message }) => {

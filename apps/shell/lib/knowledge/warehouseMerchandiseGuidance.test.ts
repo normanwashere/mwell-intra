@@ -36,6 +36,15 @@ describe("Warehouse merchandise guidance", () => {
     expect(release.result).toContain("verify status and movements");
     expect(release.result).toContain("not an explicit General Area instruction");
   });
+  it("explains compact pick context and persistent packing feedback without changing the handover", () => {
+    const pick = control("warehouse-fulfillment", "Confirm pick");
+    expect(pick.behavior).toContain("Expand Order reference");
+    expect(pick.behavior).toContain("Quality checkpoint");
+    const pack = control("warehouse-fulfillment", "Confirm pack");
+    expect(pack.result).toContain("below the filters");
+    expect(pack.result).toContain("operator other than the packer");
+    expect(pack.result).toContain("packing is not dispatch or delivery");
+  });
   it("requires Quality acceptance before general-area putaway", () => {
     const putaway = control("warehouse-storage", "Put away stock");
     expect(putaway.behavior).toContain("starts quantity at 1");

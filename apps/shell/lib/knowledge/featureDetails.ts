@@ -1177,7 +1177,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         control(
           "Confirm pick",
-          "Verify the source rack/bin first. For 10 nonserialized tumblers, scan one matching product barcode and confirm picked quantity 10. Serialized products still require one eligible serial per unit. Optional line photos support exception traceability.",
+          "Verify the source rack/bin first. Expand Order reference to read or copy the full reference and Quality checkpoint to review the condition reminder. For 10 nonserialized tumblers, scan one matching product barcode and confirm picked quantity 10. Serialized products still require one eligible serial per unit. Optional line photos support exception traceability.",
           "Every line must be complete in the active source bin. Wrong or ambiguous product codes are rejected. Jacket S, M and L are separate variants, not interchangeable stock. Use a positive whole quantity equal to the order line; use Split backorder for a partial pick. Capture stays locked during upload, saving or uncertain-response recovery.",
           "The order advances to Packing with quantity, picked serials when applicable, source bin and line evidence. Product-code verification is a local check, not separately persisted scan proof.",
         ),
@@ -1185,7 +1185,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Confirm pack",
           "Confirms prefilled or newly entered dispatch details, or an accountable internal, event, or third-party handover, plus every fulfillment supply used.",
           "Shipments require courier, waybill, and a valid customer-facing tracking link. Handovers require recipient and receiving department; Intra generates the handover reference and internal audit evidence, while a photo remains optional for exceptions. Each packaging row must identify available fulfillment supply and a positive quantity.",
-          "The order becomes Ready, the packer is attributable, and all packaging rows remain reserved for release.",
+          "The order becomes Ready, the packer is attributable, and all packaging rows remain reserved for release. Packing confirmation stays beside the order, or below the filters if the order leaves the selected queue. An operator other than the packer must still release it; packing is not dispatch or delivery.",
         ),
         control(
           "Release order",

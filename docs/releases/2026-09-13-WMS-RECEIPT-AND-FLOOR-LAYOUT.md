@@ -1,6 +1,8 @@
 # WMS Receipt And Floor Layout - September 13, 2026
 
-Status: UAT receipt-upload migration applied; application layout candidate awaiting deployment and live retest.
+Status: UAT receipt-upload migration applied; application and KB deployed as `75e733b1aefd16aab831ca3a04f4d7adab2a66c9`. Six post-deployment desktop/mobile smoke cases passed. Full warehouse certification remains open.
+
+Follow-up candidate: Packing confirmation now uses row/filter feedback, the pick heading keeps its full reference in an expandable section, the Quality reminder is collapsible, and new validation errors scroll into view without changing focus or scanned data. Independent review found no blockers. This candidate passed 158 fulfillment tests, 30 browser cases across six widths and 96 KB checks. Publication and deployed-screen verification are the next gates; no additional database migration is required.
 
 ## What Changed
 
@@ -18,4 +20,4 @@ The layout changes do not change the workflow, required evidence, approval order
 - KB validation: 81 checks passed. Standalone handbook regenerated from maintained sources.
 - Three synthetic department batches independently cleaned; four receipt photos archived and hash-verified before removal. Existing tester data was outside the cleanup scope.
 
-The application candidate is not yet live-certified. Ecommerce, other warehouse branches, real hardware and actual participant acceptance remain open. SMTP is excluded. See the [live readout](../audits/2026-09-13-WMS-LIVE-READOUT.md) and [pilot pack](../audits/2026-09-13-WMS-PILOT-PACK.md).
+The public UAT health endpoint confirms the exact build and database. Marketing, Operations and Admin passed read-only checks at 1440px and 390px, with zero recorded page/server errors; receipt-form and Pick & Pack captures were visually reviewed. A limited ecommerce shipment journey also completed on that build: a recorded desktop continuation and an uninterrupted mobile run, with correct stock and private POD evidence. This is not full live certification. Other ecommerce branches, receiving/putaway, returns, role coverage, concurrency, real hardware and actual participant acceptance remain open. SMTP is excluded. See the [live readout](../audits/2026-09-13-WMS-LIVE-READOUT.md) and [pilot pack](../audits/2026-09-13-WMS-PILOT-PACK.md).
