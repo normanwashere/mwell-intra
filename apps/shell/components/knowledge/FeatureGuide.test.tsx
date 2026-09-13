@@ -23,6 +23,36 @@ const rolesById = new Map(KNOWLEDGE_CONTENT.roles.map((role) => [role.id, role])
 const feature = KNOWLEDGE_CONTENT.features.find((item) => item.availability === "live" && item.relatedFlowIds.length)!;
 const flows = KNOWLEDGE_CONTENT.flows.filter((flow) => feature.relatedFlowIds.includes(flow.id));
 
+it.each([
+  ["warehouse-dashboard", "/warehouse", "permission to view the Warehouse dashboard", "Analytics and finance viewing permissions are not additional requirements"],
+  ["warehouse-data", "/warehouse/data", "permission to view Warehouse analytics", "Export permission alone does not open this page"],
+  ["warehouse-reports", "/warehouse/reports", "permission to view either Warehouse analytics or Warehouse finance", "together with access to Warehouse reporting in Insights"],
+])("separates page entry from export permission in %s without changing its destination", async (id, route, entry, boundary) => {
+  const exportFeature = KNOWLEDGE_CONTENT.features.find(item => item.id === id)!;
+  const original = JSON.stringify(exportFeature);
+  root = createRoot(container);
+  await React.act(() => root.render(<FeatureGuide feature={exportFeature} rolesById={rolesById} relatedArticles={[]} relatedFlows={[]} onBack={vi.fn()} onOpenArticle={vi.fn()} onOpenFlow={vi.fn()} />));
+  const section = container.querySelector("#feature-entry")!;
+  expect(section.textContent).toContain(entry);
+  expect(section.textContent).toContain(boundary);
+  expect(section.textContent).toContain("Preparing an export is a separate permission");
+  expect(section.textContent).toContain("currently be allowed to prepare Warehouse or Insights exports");
+  expect(section.textContent).toContain("Viewing reports or reviewing exports alone is not enough");
+  expect(section.textContent).toContain("Required training and access to the source records still apply");
+  expect(section.textContent).not.toMatch(/Required capabilities:|userCapabilities|register_exports|prepare_exports/);
+  expect(section.querySelector("a")?.getAttribute("href")).toBe(route);
+  expect(JSON.stringify(exportFeature)).toBe(original);
+  expect(container.querySelector("#feature-screen-guide")?.textContent).toContain("Unverified");
+});
+
+it("retains the existing prerequisite rendering for other feature guides", async () => {
+  const other = KNOWLEDGE_CONTENT.features.find(item => item.id === "warehouse-inventory")!;
+  root = createRoot(container);
+  await React.act(() => root.render(<FeatureGuide feature={other} rolesById={rolesById} relatedArticles={[]} relatedFlows={[]} onBack={vi.fn()} onOpenArticle={vi.fn()} onOpenFlow={vi.fn()} />));
+  expect(container.querySelector("#feature-entry")?.textContent).toContain("Required capabilities:");
+  expect(container.querySelector("#feature-entry")?.textContent).not.toContain("Preparing an export is a separate permission");
+});
+
 it("orders prerequisite, real flow, controls, evidence and recovery without inventing a screenshot", async () => {
   root = createRoot(container);
   const open = vi.fn();

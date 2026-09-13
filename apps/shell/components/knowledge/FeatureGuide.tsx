@@ -12,6 +12,7 @@ import type {
   KnowledgeRole,
 } from "@shell/lib/knowledge/types";
 import { capabilityGuidance } from "@shell/lib/knowledge/capabilities";
+import { WAREHOUSE_EXPORT_ENTRY_GUIDANCE } from "@shell/lib/knowledge/warehouseExportGuidance";
 import { EvidenceViewer } from "./EvidenceViewer";
 import { GuideOutline } from "./GuideOutline";
 import { GlossaryTerms } from "./GlossaryTerms";
@@ -204,16 +205,20 @@ export function FeatureGuide({
             ))}
           </div>
           <p className="mt-3 text-sm text-muted">
-            Required capabilities:{" "}
-            {feature.capabilityIds.length > 0
-              ? feature.capabilityIds
-                  .map(
-                    (capability) =>
-                      capabilityGuidance(capability, feature.module).label,
-                  )
-                  .join(", ")
-              : "authenticated access described by the route"}
-            .
+            {WAREHOUSE_EXPORT_ENTRY_GUIDANCE[feature.id] ?? (
+              <>
+                Required capabilities:{" "}
+                {feature.capabilityIds.length > 0
+                  ? feature.capabilityIds
+                      .map(
+                        (capability) =>
+                          capabilityGuidance(capability, feature.module).label,
+                      )
+                      .join(", ")
+                  : "authenticated access described by the route"}
+                .
+              </>
+            )}
           </p>
         </GuideSection>
 

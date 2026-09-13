@@ -2,6 +2,8 @@
 
 ## September 13 Return And Quality Display Drill
 
+Verify page access and export authority separately in the drill. A warehouse dashboard viewer need not be an analytics or Finance viewer. Data & Reports and Inventory Reports keep their own page-access checks, while export preparation requires its separate effective permission. Do not ask a tester to obtain wider reporting access just to use their permitted dashboard export.
+
 In the role drill, distinguish viewing information from carrying out a command. Export preparation and replenishment actions follow current command permissions. Operations recommends; Procurement decides and hands off. Also check that a permission change prevents a command from an already-open dialog.
 
 **Check your assigned role before the drill:** Operations alone raises demand and customer return cases, recommends replenishment, and prepares governed exports. Receiving, inspection, picking, packing and stock movement need the separate warehouse execution role. An Operations Associate may hold both roles; the job title by itself is not the permission. Business Unit users request stock and acknowledge eligible handovers, but do not reserve or allocate it. Pricing users review rather than change prices. Finance reviews warehouse exports; Procurement Officer/Admin handle replenishment decisions and governed PO cancellation. Required training, evidence and independent approvals still apply.

@@ -1,4 +1,5 @@
 import type { KnowledgeFeatureControl, KnowledgeFeatureField } from "./types";
+import { warehouseExportAuthority } from "./warehouseExportGuidance";
 
 export interface ExplicitFeatureDetails {
   controls: KnowledgeFeatureControl[];
@@ -655,21 +656,21 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         control(
           "Open export menu",
-          "Displays the governed CSV export choices available to analytical roles.",
-          "The role needs view_analytics or view_finance before exports are enabled.",
-          "Available export types appear without starting a download.",
+          "Export data opens the same export sheet from the standard dashboard or an authorized Operations Associate floor header, with inventory, movement, and allocation choices.",
+          warehouseExportAuthority,
+          "The choices appear without creating an export or starting a download. This entry does not grant access to Data or Reports.",
         ),
         control(
           "Export inventory",
           "Generates the current inventory CSV through the governed export helper.",
-          "Export authority and current warehouse data are required.",
-          "A timestamped inventory file downloads and a success toast appears.",
+          `${warehouseExportAuthority} Wait for any in-progress export to finish.`,
+          "A server-authorized inventory artifact downloads and its governed export record is retained; source stock is unchanged.",
         ),
         control(
           "Export movements",
           "Generates movement history CSV through the governed export helper.",
-          "Export authority and loaded movement records are required.",
-          "A timestamped movements file downloads and a success toast appears.",
+          `${warehouseExportAuthority} Wait for any in-progress export to finish.`,
+          "A server-authorized movements artifact downloads and its governed export record is retained; source stock is unchanged.",
         ),
       ],
       fields: [
@@ -2334,37 +2335,37 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         control(
           "Export inventory",
           "Downloads current inventory through the governed CSV helper.",
-          "The role needs view_analytics and loaded inventory data.",
+          `${warehouseExportAuthority} Data page access remains separately required; wait for any in-progress export to finish.`,
           "A timestamped inventory CSV downloads.",
         ),
         control(
           "Export movements",
           "Downloads current movement history through the governed CSV helper.",
-          "The role needs view_analytics and loaded movements.",
+          `${warehouseExportAuthority} Data page access remains separately required; wait for any in-progress export to finish.`,
           "A timestamped movements CSV downloads.",
         ),
         control(
           "Export allocations",
           "Downloads current allocation history through the governed CSV helper.",
-          "The role needs view_analytics and loaded allocations.",
+          `${warehouseExportAuthority} Data page access remains separately required; wait for any in-progress export to finish.`,
           "A timestamped allocations CSV downloads.",
         ),
         control(
           "Export inventory position",
           "Requests the committed inventory-position report export.",
-          "The export endpoint must authorize the selected report.",
+          `${warehouseExportAuthority} The endpoint must authorize inventory-position data; wait for any in-progress export to finish.`,
           "The governed inventory-position artifact downloads.",
         ),
         control(
           "Export quality",
           "Requests the quality-control report export.",
-          "The export endpoint must authorize quality data.",
+          `${warehouseExportAuthority} The endpoint must authorize Quality data; wait for any in-progress export to finish.`,
           "The governed quality artifact downloads.",
         ),
         control(
           "Export cycle counts",
           "Requests the cycle-count report export.",
-          "The export endpoint must authorize count data.",
+          `${warehouseExportAuthority} The endpoint must authorize count data; wait for any in-progress export to finish.`,
           "The governed cycle-count artifact downloads.",
         ),
       ],
@@ -2377,9 +2378,9 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         field(
           "Current data scope",
-          "Describes records loaded for local CSV generation.",
+          "Describes the reporting context; live exports are prepared by the server, while memory mode generates demo CSVs locally.",
           false,
-          "Only authorized loaded records may be exported.",
+          "The server independently authorizes the export dataset. A page preview or loaded row does not grant export authority.",
         ),
         field(
           "Generation state",
@@ -2411,8 +2412,8 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         control(
           "Export CSV",
-          "Downloads the generated report in comma-separated format.",
-          "A current generated report and export authority are required.",
+          "Export report requests the governed inventory-position artifact in comma-separated format.",
+          `${warehouseExportAuthority} Reports page access remains separately required. Wait for report loading and any in-progress export to finish.`,
           "A governed CSV artifact downloads.",
         ),
         control(

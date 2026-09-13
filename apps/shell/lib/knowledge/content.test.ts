@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
+import ts from "typescript";
 import { KNOWLEDGE_CONTENT } from "./content";
 import {
   evidenceRequirements,
@@ -25,6 +26,54 @@ import {
 } from "./validate";
 
 describe("Knowledge Base content", () => {
+  it("keeps the client export-entry copy independent of the full feature metadata", () => {
+    const imports = (relativePath: string) => {
+      const filename = path.resolve(process.cwd(), relativePath);
+      const source = ts.createSourceFile(filename, readFileSync(filename, "utf8"), ts.ScriptTarget.Latest, true);
+      return source.statements.flatMap(statement =>
+        ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)
+          ? [statement.moduleSpecifier.text]
+          : [],
+      );
+    };
+    const guideImports = imports("components/knowledge/FeatureGuide.tsx");
+    expect(guideImports).not.toContain("@shell/lib/knowledge/featureDetails");
+    expect(guideImports).toContain("@shell/lib/knowledge/warehouseExportGuidance");
+    expect(imports("lib/knowledge/warehouseExportGuidance.ts")).toEqual([]);
+    expect(imports("lib/knowledge/featureDetails.ts")).toContain("./warehouseExportGuidance");
+  });
+
+  it.each([
+    ["warehouse-dashboard", ["Open export menu", "Export inventory", "Export movements"]],
+    ["warehouse-data", ["Export inventory", "Export movements", "Export allocations", "Export inventory position", "Export quality", "Export cycle counts"]],
+    ["warehouse-reports", ["Export CSV"]],
+  ] as const)("documents effective export preparation authority on %s without widening page access", (id, names) => {
+    const details = EXPLICIT_FEATURE_DETAILS[id]!;
+    for (const name of names) {
+      const control = details.controls.find(item => item.name === name)!;
+      expect(control.validation).toContain("currently be allowed to prepare Warehouse or Insights exports");
+      expect(control.validation).toContain("Sign in and wait for your permissions to finish loading");
+      expect(control.validation).toContain("Viewing reports or reviewing exports alone is not enough");
+      expect(control.validation).toContain("Required training and access to the source records still apply");
+      expect(control.validation).not.toMatch(/userCapabilities|warehouse\.register_exports|insights\.prepare_exports/);
+      expect(control.validation).not.toMatch(/role needs view_analytics|view_analytics or view_finance/);
+    }
+    const feature = KNOWLEDGE_CONTENT.features.find(item => item.id === id)!;
+    expect(feature.exceptions.join(" ")).toContain("Page access remains separate from export permission");
+    expect(feature.exceptions.join(" ")).toContain("permissions are loading or after permission is revoked");
+    expect(feature.writes.join(" ")).toMatch(/stock.*unchanged|unchanged.*stock/);
+  });
+
+  it("keeps the floor export entry distinct from reporting routes and describes memory exports as demo only", () => {
+    const dashboard = EXPLICIT_FEATURE_DETAILS["warehouse-dashboard"]!;
+    expect(dashboard.controls.find(item => item.name === "Open export menu")!.behavior).toContain("same export sheet");
+    expect(dashboard.controls.find(item => item.name === "Open export menu")!.result).toContain("does not grant access to Data or Reports");
+    for (const id of ["warehouse-dashboard", "warehouse-data", "warehouse-reports"]) {
+      const feature = KNOWLEDGE_CONTENT.features.find(item => item.id === id)!;
+      expect(feature.exceptions.join(" ")).toContain("Demo-mode exports are demo downloads, not live permission or audit evidence");
+    }
+  });
+
   it("keeps WMS role instructions within the existing custody and export boundaries", () => {
     const role = (id: string) => KNOWLEDGE_CONTENT.roles.find(item => item.id === id)!;
     const operations = role("warehouse_operations");

@@ -2,6 +2,8 @@
 
 ## September 13 Return And Quality Display Handover
 
+Explain the export guide in two parts: permission to open the workspace, and permission to prepare a governed file. Dashboard viewing is independent of analytics/Finance viewing. Data & Reports and Inventory Reports retain their respective route checks; the Operations Associate export entry does not grant those routes. Older general capability lists must not be read as requiring every listed capability at once.
+
 For export and replenishment training, show each role the records it may read and only its permitted actions. Operations recommendations and Procurement decisions are separate tasks. A viewing permission is not a command permission, and an open dialog does not preserve access after it is removed.
 
 **Role boundaries:** Teach the assigned roles, not just job titles. Operations alone submits demand/customer cases, recommends replenishment and prepares governed exports; it does not receive, inspect, allocate, pick, pack, issue or transfer stock. An Operations Associate with the separate Warehouse Operator assignment can do that floor work. Business Unit requests stock and acknowledges an eligible handover; allocation belongs to authorized warehouse staff. Pricing is read-only. Finance owns warehouse export review; export preparation by Operations or BI is not that review. Procurement Officer/Admin handle replenishment outcomes and governed PO cancellation. The catalogue and KB now match these existing database controls. Test combined-role handoffs and existing training/independent-review requirements without changing the process.

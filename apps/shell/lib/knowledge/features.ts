@@ -900,11 +900,11 @@ const definitions: FeatureDefinition[] = [
     reads:
       "Stock balances, alerts, tasks, receipts, events, and utilization aggregates.",
     writes:
-      "No operational record changes; selected dashboard filters remain local view state.",
+      "Dashboard filters remain local view state. Preparing a live export creates a governed artifact and export audit record; source stock remains unchanged.",
     statuses:
       "Loading, current, warning, critical, empty, or data unavailable.",
     exception:
-      "Open the source record before acting when an aggregate appears stale or inconsistent.",
+      "Page access remains separate from export permission. Export preparation is unavailable while permissions are loading or after permission is revoked. Demo-mode exports are demo downloads, not live permission or audit evidence. Open the source record before acting when an aggregate appears stale or inconsistent.",
     completionEvidence:
       "Each selected alert opens the governed source queue or record with current status.",
   },
@@ -1267,11 +1267,11 @@ const definitions: FeatureDefinition[] = [
     reads:
       "Inventory, movement, event, receipt, utilization, exception, and metric-definition datasets.",
     writes:
-      "No operational data changes; governed export requests may record actor, scope, and time.",
+      "Preparing a live export creates a governed artifact and export audit record with actor, scope, and time; source stock remains unchanged.",
     statuses:
       "Loading, ready, filtered, empty, export preparing, exported, or failed.",
     exception:
-      "Do not combine or redistribute exports beyond the approved purpose; report undefined metrics to the owner.",
+      "Page access remains separate from export permission. Export preparation is unavailable while permissions are loading or after permission is revoked. Demo-mode exports are demo downloads, not live permission or audit evidence. Do not combine or redistribute exports beyond the approved purpose; report undefined metrics to the owner.",
     completionEvidence:
       "The view or export identifies metric definition, period, scope, generation time, and source context.",
   },
@@ -1285,11 +1285,11 @@ const definitions: FeatureDefinition[] = [
     reads:
       "Committed stock positions, reservations, valuation, receipts, movements, and report definitions.",
     writes:
-      "Creates a governed report artifact and export audit event; source inventory remains unchanged.",
+      "Preparing a live export creates a governed report artifact and export audit event; source stock remains unchanged.",
     statuses:
       "Preparing, ready, empty, exported, expired, or generation failed.",
     exception:
-      "Regenerate rather than editing exported totals and escalate source discrepancies to the owning workflow.",
+      "Page access remains separate from export permission. Export preparation is unavailable while permissions are loading or after permission is revoked. Demo-mode exports are demo downloads, not live permission or audit evidence. Regenerate rather than editing exported totals and escalate source discrepancies to the owning workflow.",
     completionEvidence:
       "Report title, filters, as-of time, row count, actor, and export reference accompany the artifact.",
   },
