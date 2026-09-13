@@ -5,6 +5,31 @@ import { COMING_SOON_ROLES } from "./roles";
 import { ROLE_TASK_GUIDANCE, resolveRoleTasks } from "./taskGuidance";
 
 describe("maintained role task guidance", () => {
+  it("keeps Operations-only tasks as demand and handoff guidance, not physical workflows", () => {
+    const role = KNOWLEDGE_CONTENT.roles.find(item => item.id === "warehouse_operations")!;
+    const tasks = resolveRoleTasks(role, KNOWLEDGE_CONTENT.features, KNOWLEDGE_CONTENT.flows);
+    expect(tasks.every(task => !task.destination)).toBe(true);
+    expect(tasks[0]!.guidance).toMatch(/warehouse operators.*physical custody/i);
+    expect(tasks[1]!.guidance).toMatch(/Procurement.*decides replenishment/i);
+    expect(tasks.every(task => ROLE_TASK_GUIDANCE[role.id]?.[task.task]?.kind === "written")).toBe(true);
+  });
+
+  it("keeps Business Unit requests outside reservation and allocation authority", () => {
+    const role = KNOWLEDGE_CONTENT.roles.find(item => item.id === "warehouse_business_unit")!;
+    const [request] = resolveRoleTasks(role, KNOWLEDGE_CONTENT.features, KNOWLEDGE_CONTENT.flows);
+    expect(request!.destination).toBeUndefined();
+    expect(request!.guidance).toMatch(/warehouse staff.*allocation and issue/i);
+    expect(request!.guidance).toMatch(/does not grant reservation or allocation authority/i);
+  });
+
+  it("keeps Pricing discrepancy follow-up read-only without a price activation link", () => {
+    const role = KNOWLEDGE_CONTENT.roles.find(item => item.id === "warehouse_pricing")!;
+    const [, followUp] = resolveRoleTasks(role, KNOWLEDGE_CONTENT.features, KNOWLEDGE_CONTENT.flows);
+    expect(followUp!.destination).toBeUndefined();
+    expect(followUp!.guidance).toMatch(/authorized Product and Finance owners/);
+    expect(followUp!.guidance).toMatch(/does not authorize proposing, approving, or activating prices/);
+  });
+
   it("rejects unavailable, missing, or wrong-role flows without substituting another guide", () => {
     const role = KNOWLEDGE_CONTENT.roles.find(
       (item) => item.id === "product_owner",

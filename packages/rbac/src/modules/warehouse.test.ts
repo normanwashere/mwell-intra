@@ -20,6 +20,7 @@ describe("warehouse W1 capabilities", () => {
       "manage_inventory",
       "cycle_count",
       "manage_returns",
+      "submit_return_case",
       "reserve_allocate",
       "issue_items",
       "transfer_stock",
@@ -35,6 +36,7 @@ describe("warehouse W1 capabilities", () => {
       "manage_locations",
       "cycle_count",
       "manage_returns",
+      "submit_return_case",
       "reserve_allocate",
       "issue_items",
       "transfer_stock",
@@ -121,12 +123,15 @@ describe("warehouse W1 capabilities", () => {
 
   it("adds the Warehouse Administrator role", () => {
     expect(Object.keys(warehouseModule.roles)).toContain("warehouse_admin");
-    expect(warehouseModule.roles.warehouse_admin.capabilities).toEqual(
-      warehouseModule.capabilities.filter(
-        (capability) =>
-          capability !== "set_pricing" && capability !== "manage_finance_close",
-      ),
-    );
+    expect([...warehouseModule.roles.warehouse_admin.capabilities].sort()).toEqual([
+      "approve_stock_adjustment", "approve_stock_adjustment_finance", "cycle_count",
+      "import_warehouse_data", "inspect_quality", "issue_items", "manage_inventory",
+      "manage_locations", "manage_operation_routes", "manage_products", "manage_returns",
+      "receive_stock", "release_quality_hold", "request_fulfillment", "request_stock",
+      "reserve_allocate", "resolve_exceptions", "submit_return_case", "transfer_stock",
+      "view_analytics", "view_dashboard", "view_exceptions", "view_finance", "view_inventory",
+      "view_pricing", "view_procurement",
+    ]);
     expect(warehouseModule.roles.warehouse_admin.capabilities).not.toContain(
       "set_pricing",
     );

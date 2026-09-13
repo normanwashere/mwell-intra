@@ -10,6 +10,7 @@ import {
 import type { WarehouseExportKind } from '@/domain/export';
 import { downloadText, downloadUrl } from '@/app/download';
 import { prepareWarehouseExport } from '@/app/governedExports';
+import { useCanPrepareWarehouseExport } from '@/auth/useCanPrepareWarehouseExport';
 import { warehouseMetrics } from '@intra/data-kit';
 import {
   Badge,
@@ -31,12 +32,14 @@ const DICTIONARY: { field: string; type: string; meaning: string }[] = [
 
 export function DataPage() {
   const { data, source, canOpenRoute } = useWarehouse();
+  const canExport = useCanPrepareWarehouseExport(source);
   const toast = useToast();
   const [exporting, setExporting] = useState<WarehouseExportKind | null>(null);
   if (!data) return null;
   const state = toStockState(data);
 
   const exportCsv = async (kind: WarehouseExportKind, content: string) => {
+    if (!canExport || exporting !== null) return;
     setExporting(kind);
     try {
       const prepared = await prepareWarehouseExport({ source, kind, demoContent: content });
@@ -73,7 +76,7 @@ export function DataPage() {
           <button
             type="button"
             className="btn-outline justify-between"
-            disabled={exporting !== null}
+            disabled={!canExport || exporting !== null}
             onClick={() => void exportCsv('inventory', inventoryToCsv(state))}
           >
             {exporting === 'inventory' ? 'Preparing...' : 'Inventory'} <Icon name="download" className="h-4 w-4" />
@@ -81,7 +84,7 @@ export function DataPage() {
           <button
             type="button"
             className="btn-outline justify-between"
-            disabled={exporting !== null}
+            disabled={!canExport || exporting !== null}
             onClick={() => void exportCsv('movements', movementsToCsv(data.movements, data.products))}
           >
             {exporting === 'movements' ? 'Preparing...' : 'Movements'} <Icon name="download" className="h-4 w-4" />
@@ -89,7 +92,7 @@ export function DataPage() {
           <button
             type="button"
             className="btn-outline justify-between"
-            disabled={exporting !== null}
+            disabled={!canExport || exporting !== null}
             onClick={() =>
               void exportCsv('allocations', allocationsToCsv(data.allocations, data.products, data.events))
             }
@@ -101,7 +104,7 @@ export function DataPage() {
               <button
                 type="button"
                 className="btn-outline justify-between"
-                disabled={exporting !== null}
+                disabled={!canExport || exporting !== null}
                 onClick={() => void exportCsv('inventory_position', '')}
               >
                 Inventory position <Icon name="download" className="h-4 w-4" />
@@ -109,7 +112,7 @@ export function DataPage() {
               <button
                 type="button"
                 className="btn-outline justify-between"
-                disabled={exporting !== null}
+                disabled={!canExport || exporting !== null}
                 onClick={() => void exportCsv('quality', '')}
               >
                 Quality <Icon name="download" className="h-4 w-4" />
@@ -117,7 +120,7 @@ export function DataPage() {
               <button
                 type="button"
                 className="btn-outline justify-between"
-                disabled={exporting !== null}
+                disabled={!canExport || exporting !== null}
                 onClick={() => void exportCsv('cycle_counts', '')}
               >
                 Cycle counts <Icon name="download" className="h-4 w-4" />

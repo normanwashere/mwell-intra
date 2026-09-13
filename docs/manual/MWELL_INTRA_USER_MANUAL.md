@@ -2,6 +2,10 @@
 
 ## September 13 Return And Quality Display Update
 
+Being able to view a report or recommendation does not mean you can act on it. Export preparation and replenishment actions depend on your current command permissions. Operations submits the recommendation; Procurement handles its decision and handoff. Read-only records remain available to the roles allowed to see them.
+
+**Which role does the work?** Operations alone submits demand and customer cases, recommends replenishment and prepares governed exports. Floor work such as receiving, inspection, picking, packing and stock movement requires the separate Warehouse Operator or other authorized execution role. Operations Associates may hold both roles. Business Unit users request stock and acknowledge eligible handovers; warehouse staff allocate and issue it. Pricing is read-only. Finance reviews warehouse exports; Procurement Officer/Admin handle replenishment decisions and governed PO cancellation. These are existing responsibilities, not new access. If your account has several roles, their permissions combine, but training, evidence and independent-review requirements remain.
+
 In long dialogs, scroll within the form to reach the remaining fields. The title, Close control and footer actions stay in the frame. The September 14 dialog adjustment prevents field focus or scrolling from shifting that outer frame; it does not fill, submit or approve the form for you.
 
 In **Resolve return case**, the status describes the customer case, not the location or condition of the returned item. **Customer case submitted / awaiting resolution** means a decision is still needed. Read the separate intake message: a verified link confirms a recorded physical intake, but does not confirm that Quality has cleared the stock. When the summary says intake is not verified in this view, check the original order and saved return before proceeding; do not create a duplicate just to remove the message.

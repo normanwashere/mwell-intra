@@ -1,12 +1,14 @@
 # Task-first Coverage Inventory
 
-Date: 2026-09-06; inventory updated September 12 for the shared workspace release, including desktop Hide navigation / Show navigation. Scope: current knowledge inventory, including candidate instructions on existing feature routes. A feature's existing live classification does not certify its new candidate controls as deployed. NOT a release sign-off or completed Task11 pilot. Local screenshots do not establish live exact-control certification.
+Date: 2026-09-06; inventory updated September 14 for the return resolution, physical intake, and Quality queue instructions, retaining the September 12 shared workspace controls. Scope: current knowledge inventory, including candidate instructions on existing feature routes. A feature's existing live classification does not certify its new candidate controls as deployed. NOT a release sign-off or completed Task11 pilot. Local screenshots do not establish live exact-control certification.
 
 ## Exact Baseline
 
-68 features: 59 live, 0 limited, 9 coming soon. 294 documented controls: 285 on live-classified features and 9 non-executable roadmap controls. 26 flows, 58 decision nodes, 14 distinct policy-reference strings, 53 existing evidence records. Zero unresolved mapped flow/role targets and zero graph-validator errors in the current inventory.
+68 features: 59 live, 0 limited, 9 coming soon. 297 documented controls: 288 on live-classified features and 9 non-executable roadmap controls. 26 flows, 58 decision nodes, 14 distinct policy-reference strings, 53 existing evidence records. Zero unresolved mapped flow/role targets and zero graph-validator errors in the current inventory.
 
-All 285 controls on live-classified features have written behavior/validation/result and an owned feature reference. **Zero exact control-name/hotspot evidence matches.** This does not mean 53 images are absent: their recorded scope does not establish every control. All 294 inventory rows remain unverified for release evidence. The validator reports 290 missing action-evidence bindings, including 5 existing flow-node bindings. No new screenshots, capture dates or acceptance states were fabricated.
+All 288 controls on live-classified features have written behavior/validation/result and an owned feature reference. **Zero exact control-name/hotspot evidence matches.** This does not mean 53 images are absent: their recorded scope does not establish every control. All 297 inventory rows remain unverified for release evidence. The validator reports 293 missing action-evidence bindings, including 5 existing flow-node bindings. No new screenshots, capture dates or acceptance states were fabricated.
+
+The current refresh adds Fulfillment "Save resolution", Returns "Receive physical return" and "Review in Quality", and Quality "Pending, Holds and Completed"; it removes the superseded Returns "Set disposition" inventory entry. These are four additions and one removal, not three newly certified controls. All four added entries have empty evidence bindings and remain unverified.
 
 The snapshot below is intentionally exact. Changes require reviewing this inventory and its test, not reducing expected counts or treating a new control as implicitly verified. The inventory is current content, not a second task catalog.
 
@@ -54,15 +56,15 @@ StepWorkspace retains exact branch callback identity and permission behavior. Ti
 | feature-warehouse-product-detail | live | 8 | /warehouse/inventory/:id | Warehouse | receive-to-putaway, quality-disposition, returns-reconciliation, cycle-count-adjustment, pricing-and-costing |
 | feature-warehouse-receiving | live | 5 | /warehouse/receiving | Warehouse | receive-to-putaway, quality-disposition |
 | feature-warehouse-allocations | live | 5 | /warehouse/allocations | Warehouse | event-fulfillment, returns-reconciliation, allocation-event-return |
-| feature-warehouse-fulfillment | live | 17 | /warehouse/fulfillment | Warehouse | outbound-fulfillment, event-fulfillment, receive-to-putaway, returns-reconciliation, procure-to-pay, pricing-and-costing |
-| feature-warehouse-returns | live | 4 | /warehouse/returns | Warehouse | returns-reconciliation, allocation-event-return |
+| feature-warehouse-fulfillment | live | 18 | /warehouse/fulfillment | Warehouse | outbound-fulfillment, event-fulfillment, receive-to-putaway, returns-reconciliation, procure-to-pay, pricing-and-costing |
+| feature-warehouse-returns | live | 5 | /warehouse/returns | Warehouse | returns-reconciliation, allocation-event-return |
 | feature-warehouse-storage | live | 5 | /warehouse/storage | Warehouse | warehouse-setup, receive-to-putaway |
 | feature-warehouse-events | live | 4 | /warehouse/events | Warehouse | event-fulfillment, allocation-event-return |
 | feature-warehouse-event-detail | live | 6 | /warehouse/events/:id | Warehouse | event-fulfillment, returns-reconciliation, allocation-event-return |
 | feature-warehouse-procurement-planning | live | 6 | /warehouse/procurement | Warehouse | procure-to-pay, receive-to-putaway |
 | feature-warehouse-purchase-orders | live | 5 | /warehouse/purchase-orders | Warehouse | procure-to-pay, receive-to-putaway |
 | feature-warehouse-cycle-counts | live | 5 | /warehouse/cycle-counts | Warehouse | cycle-count-adjustment |
-| feature-warehouse-quality | live | 7 | /warehouse/quality | Warehouse | quality-disposition, receive-to-putaway, returns-reconciliation |
+| feature-warehouse-quality | live | 8 | /warehouse/quality | Warehouse | quality-disposition, receive-to-putaway, returns-reconciliation |
 | feature-warehouse-approvals | live | 4 | /warehouse/approvals | Warehouse | cycle-count-adjustment, quality-disposition, pricing-and-costing |
 | feature-warehouse-exceptions | live | 5 | /warehouse/exceptions | Warehouse | exception-and-recovery, receive-to-putaway, quality-disposition, returns-reconciliation, cycle-count-adjustment |
 | feature-warehouse-finance | live | 10 | /finance | Finance | receive-to-putaway, returns-reconciliation, cycle-count-adjustment, pricing-and-costing |
@@ -125,7 +127,7 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
 {
   "counts": {
     "features": 68,
-    "controls": 294,
+    "controls": 297,
     "liveFeatures": 59,
     "limitedFeatures": 0,
     "comingSoonFeatures": 9,
@@ -1373,6 +1375,21 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
       "unverified": true
     },
     {
+      "key": "warehouse-fulfillment:Save resolution",
+      "referenceId": "feature-warehouse-fulfillment",
+      "availability": "live",
+      "flowIds": [
+        "outbound-fulfillment",
+        "event-fulfillment",
+        "receive-to-putaway",
+        "returns-reconciliation",
+        "procure-to-pay",
+        "pricing-and-costing"
+      ],
+      "evidenceIds": [],
+      "unverified": true
+    },
+    {
       "key": "warehouse-fulfillment:Queue filters",
       "referenceId": "feature-warehouse-fulfillment",
       "availability": "live",
@@ -1628,6 +1645,17 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
       "unverified": true
     },
     {
+      "key": "warehouse-returns:Receive physical return",
+      "referenceId": "feature-warehouse-returns",
+      "availability": "live",
+      "flowIds": [
+        "returns-reconciliation",
+        "allocation-event-return"
+      ],
+      "evidenceIds": [],
+      "unverified": true
+    },
+    {
       "key": "warehouse-returns:Select return source",
       "referenceId": "feature-warehouse-returns",
       "availability": "live",
@@ -1639,7 +1667,7 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
       "unverified": true
     },
     {
-      "key": "warehouse-returns:Set disposition",
+      "key": "warehouse-returns:Review in Quality",
       "referenceId": "feature-warehouse-returns",
       "availability": "live",
       "flowIds": [
@@ -2009,6 +2037,18 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
       "availability": "live",
       "flowIds": [
         "cycle-count-adjustment"
+      ],
+      "evidenceIds": [],
+      "unverified": true
+    },
+    {
+      "key": "warehouse-quality:Pending, Holds and Completed",
+      "referenceId": "feature-warehouse-quality",
+      "availability": "live",
+      "flowIds": [
+        "quality-disposition",
+        "receive-to-putaway",
+        "returns-reconciliation"
       ],
       "evidenceIds": [],
       "unverified": true

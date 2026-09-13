@@ -35,7 +35,7 @@ describe('warehouse parity vs source roles.ts', () => {
   });
 
   it('has the source capabilities, W1 controls, and request-only handoffs', () => {
-    expect(warehouseModule.capabilities).toHaveLength(28);
+    expect(warehouseModule.capabilities).toHaveLength(31);
     expect([...warehouseModule.capabilities].sort()).toEqual(
       [
         'view_dashboard',
@@ -49,6 +49,9 @@ describe('warehouse parity vs source roles.ts', () => {
         'request_fulfillment',
         'request_stock',
         'submit_return_case',
+        'recommend_replenishment',
+        'register_exports',
+        'review_exports',
         'reserve_allocate',
         'issue_items',
         'transfer_stock',
@@ -70,7 +73,7 @@ describe('warehouse parity vs source roles.ts', () => {
     );
   });
 
-  // Exact capability sets copied from mwell-intra-warehouse src/auth/roles.ts.
+  // Exact capability sets, including the July 21 and August 13 authority migrations.
   const EXPECTED: Record<string, string[]> = {
     warehouse_operator: [
       'view_dashboard',
@@ -79,6 +82,7 @@ describe('warehouse parity vs source roles.ts', () => {
       'manage_inventory',
       'cycle_count',
       'manage_returns',
+      'submit_return_case',
       'reserve_allocate',
       'issue_items',
       'transfer_stock',
@@ -94,6 +98,7 @@ describe('warehouse parity vs source roles.ts', () => {
       'manage_locations',
       'cycle_count',
       'manage_returns',
+      'submit_return_case',
       'reserve_allocate',
       'issue_items',
       'transfer_stock',
@@ -114,6 +119,7 @@ describe('warehouse parity vs source roles.ts', () => {
       'manage_locations',
       'cycle_count',
       'manage_returns',
+      'submit_return_case',
       'reserve_allocate',
       'issue_items',
       'transfer_stock',
@@ -131,6 +137,8 @@ describe('warehouse parity vs source roles.ts', () => {
       'request_fulfillment',
       'request_stock',
       'submit_return_case',
+      'recommend_replenishment',
+      'register_exports',
     ],
     finance: [
       'view_dashboard',
@@ -139,14 +147,18 @@ describe('warehouse parity vs source roles.ts', () => {
       'manage_finance_close',
       'approve_stock_adjustment_finance',
       'view_exceptions',
+      'register_exports',
+      'review_exports',
     ],
-    bi_analyst: ['view_dashboard', 'view_inventory', 'view_analytics', 'view_exceptions'],
+    bi_analyst: ['view_dashboard', 'view_inventory', 'view_analytics', 'view_exceptions', 'register_exports'],
     business_unit: ['view_dashboard', 'view_inventory', 'request_stock'],
     marketing: ['view_dashboard', 'view_inventory', 'request_stock', 'reserve_allocate'],
     procurement: ['view_dashboard', 'view_inventory', 'view_procurement', 'manage_products'],
     pricing: ['view_dashboard', 'view_inventory', 'view_pricing', 'view_finance'],
     warehouse_admin: warehouseModule.capabilities.filter(
-      (capability) => capability !== 'set_pricing' && capability !== 'manage_finance_close',
+      (capability) => capability !== 'set_pricing' && capability !== 'manage_finance_close'
+        && capability !== 'recommend_replenishment' && capability !== 'register_exports'
+        && capability !== 'review_exports',
     ),
   };
 

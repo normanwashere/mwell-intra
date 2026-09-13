@@ -11,6 +11,8 @@ export type ProcurementCapability =
   | 'manage_rfp'
   | 'manage_request_collaborators'
   | 'cancel_request'
+  | 'cancel_purchase_order'
+  | 'manage_replenishment'
   | 'author_po'
   | 'approve_request'
   | 'approve_award'
@@ -31,6 +33,8 @@ const PROCUREMENT_CAPABILITIES = [
   'manage_rfp',
   'manage_request_collaborators',
   'cancel_request',
+  'cancel_purchase_order',
+  'manage_replenishment',
   'author_po',
   'approve_request',
   'approve_award',
@@ -71,6 +75,8 @@ export const procurementModule: ModuleDefinition<
         'manage_rfp',
         'manage_request_collaborators',
         'cancel_request',
+        'cancel_purchase_order',
+        'manage_replenishment',
         'author_po',
         'manage_vendors',
         'approve_request',

@@ -18,6 +18,9 @@ export type WarehouseCapability =
   | "request_fulfillment"
   | "request_stock"
   | "submit_return_case"
+  | "recommend_replenishment"
+  | "register_exports"
+  | "review_exports"
   | "reserve_allocate"
   | "issue_items"
   | "transfer_stock"
@@ -70,6 +73,9 @@ const WAREHOUSE_CAPABILITIES = [
   "request_fulfillment",
   "request_stock",
   "submit_return_case",
+  "recommend_replenishment",
+  "register_exports",
+  "review_exports",
   "reserve_allocate",
   "issue_items",
   "transfer_stock",
@@ -91,7 +97,9 @@ const WAREHOUSE_CAPABILITIES = [
 
 const WAREHOUSE_ADMIN_CAPABILITIES = WAREHOUSE_CAPABILITIES.filter(
   (capability) =>
-    capability !== "set_pricing" && capability !== "manage_finance_close",
+    capability !== "set_pricing" && capability !== "manage_finance_close"
+      && capability !== "recommend_replenishment" && capability !== "register_exports"
+      && capability !== "review_exports",
 );
 
 const WAREHOUSE_OPERATOR_CAPABILITIES = [
@@ -101,6 +109,7 @@ const WAREHOUSE_OPERATOR_CAPABILITIES = [
   "manage_inventory",
   "cycle_count",
   "manage_returns",
+  "submit_return_case",
   "reserve_allocate",
   "issue_items",
   "transfer_stock",
@@ -117,6 +126,7 @@ const WAREHOUSE_SUPERVISOR_CAPABILITIES = [
   "manage_locations",
   "cycle_count",
   "manage_returns",
+  "submit_return_case",
   "reserve_allocate",
   "issue_items",
   "transfer_stock",
@@ -165,6 +175,8 @@ export const warehouseModule: ModuleDefinition<
         "request_fulfillment",
         "request_stock",
         "submit_return_case",
+        "recommend_replenishment",
+        "register_exports",
       ],
     },
     finance: {
@@ -177,12 +189,14 @@ export const warehouseModule: ModuleDefinition<
         "manage_finance_close",
         "approve_stock_adjustment_finance",
         "view_exceptions",
+        "register_exports",
+        "review_exports",
       ],
     },
     bi_analyst: {
       label: "BI Analyst",
       description: "Utilization, fast-moving SKUs & consumption analytics.",
-      capabilities: [...ALL_INVENTORY, "view_analytics", "view_exceptions"],
+      capabilities: [...ALL_INVENTORY, "view_analytics", "view_exceptions", "register_exports"],
     },
     business_unit: {
       label: "Business Unit",

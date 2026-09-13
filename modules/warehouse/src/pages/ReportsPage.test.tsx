@@ -4,8 +4,17 @@ import userEvent from '@testing-library/user-event';
 import { ReportsPage } from './ReportsPage';
 import { renderWithProviders } from '@/test/renderWithProviders';
 
+let liveExportSession = false;
+vi.mock('@/auth/session', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/auth/session')>();
+  return { ...actual, useSession: () => {
+    const session = actual.useSession();
+    return liveExportSession ? { ...session, mode: 'supabase', userCapabilities: { warehouse: ['register_exports'] } } : session;
+  } };
+});
+
 describe('ReportsPage', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); liveExportSession = false; });
 
   it('shows committed inventory-position columns, totals, and filters', async () => {
     const user = userEvent.setup();
@@ -19,6 +28,7 @@ describe('ReportsPage', () => {
   });
 
   it('prepares a governed inventory-position export', async () => {
+    liveExportSession = true;
     const user = userEvent.setup();
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
     const request = vi.fn().mockResolvedValue(new Response(JSON.stringify({

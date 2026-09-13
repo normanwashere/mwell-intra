@@ -61,7 +61,7 @@ test("accepts operational releases with the complete documentation set", () => {
 });
 
 test("derives the certified legacy-route count and rejects any declared count drift", () => {
-  assert.equal(LEGACY_ROUTES.length, 451);
+  assert.equal(LEGACY_ROUTES.length, 459);
   const documents = Object.fromEntries(
     LEGACY_ROUTE_COUNT_DOCUMENTS.map(({ file }) => [
       file,
@@ -72,6 +72,25 @@ test("derives the certified legacy-route count and rejects any declared count dr
   assert.equal(result.expectedCount, LEGACY_ROUTES.length);
   assert.equal(result.ready, true, result.failures.join("\n"));
   assert.deepEqual(result.failures, []);
+});
+
+test("retains the eight return and Quality display reference routes without screenshot credit", () => {
+  const releaseArticle = "doc-releases-2026-09-13-return-quality-display-md";
+  const expected = [
+    [releaseArticle, null],
+    [releaseArticle, `${releaseArticle}-return-and-quality-display-update`],
+    [releaseArticle, `${releaseArticle}-for-testers`],
+    [releaseArticle, `${releaseArticle}-release-evidence`],
+    ["doc-manual-mwell-intra-user-manual-md", "doc-manual-mwell-intra-user-manual-md-september-13-return-and-quality-display-update"],
+    ["doc-technical-and-functional-specification-md", "doc-technical-and-functional-specification-md-september-13-return-and-quality-display-contract"],
+    ["doc-training-and-handover-content-md", "doc-training-and-handover-content-md-september-13-return-and-quality-display-handover"],
+    ["doc-user-training-and-operations-manual-md", "doc-user-training-and-operations-manual-md-september-13-return-and-quality-display-drill"],
+  ];
+  for (const [article, heading] of expected) {
+    const routes = LEGACY_ROUTES.filter(route => route.legacyArticleId === article && route.legacyHeadingId === heading);
+    assert.equal(routes.length, 1);
+    assert.equal(routes[0].guideId, "source-references");
+  }
 });
 
 test("rejects a stale legacy-route declaration even when every document has a count", () => {

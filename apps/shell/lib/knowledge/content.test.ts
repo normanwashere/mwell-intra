@@ -25,6 +25,17 @@ import {
 } from "./validate";
 
 describe("Knowledge Base content", () => {
+  it("keeps WMS role instructions within the existing custody and export boundaries", () => {
+    const role = (id: string) => KNOWLEDGE_CONTENT.roles.find(item => item.id === id)!;
+    const operations = role("warehouse_operations");
+    expect(operations.authority.canDo.join(" ")).toMatch(/replenishment recommendations/);
+    expect(operations.authority.cannotDo.join(" ")).toMatch(/Do not receive, inspect, allocate, pick, pack, issue, or transfer/);
+    expect(role("warehouse_pricing").authority.cannotDo.join(" ")).toMatch(/read-only/);
+    expect(role("warehouse_business_unit").authority.cannotDo.join(" ")).toMatch(/Do not reserve or allocate/);
+    expect(role("warehouse_finance").authority.canDo.join(" ")).toMatch(/review warehouse exports/);
+    expect(role("warehouse_admin").authority.capabilities).not.toContain("review_exports");
+  });
+
   it("separates return-case progress from stock clearance and explains filtered Quality counts", () => {
     const returns = JSON.stringify(EXPLICIT_FEATURE_DETAILS["warehouse-fulfillment"]);
     expect(returns).toMatch(/customer case.*physical intake/i);

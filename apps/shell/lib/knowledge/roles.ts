@@ -138,19 +138,19 @@ const ROLE_OPERATING_DETAILS: Record<string, RoleOperatingDetails> = {
   },
   warehouse_operations: {
     dailyTasks: [
-      "Execute assigned receiving, putaway, allocation, return, and count tasks.",
-      "Capture scans, quantities, traceability, photos, and exception reasons at the point of work.",
+      "Submit ecommerce demand, stock requests, customer return cases, and replenishment recommendations.",
+      "Prepare governed warehouse exports and follow the handoff to warehouse operators and Procurement.",
     ],
     responsibilityStages: [
       stage(
-        "Verify the physical task",
-        "Match the item, source record, quantity, lot or serial, and destination before movement.",
-        "The task is safe to execute against the current record.",
+        "Verify the demand",
+        "Check the source order, item, requested quantity, delivery details, and reason before submission.",
+        "Warehouse receives complete demand without a stock movement.",
       ),
       stage(
-        "Execute and evidence",
-        "Record the physical movement or count once and attach required evidence.",
-        "The next owner sees current stock state and any controlled exception.",
+        "Hand off and follow up",
+        "Send physical work to warehouse operators and replenishment decisions to Procurement; track the linked record.",
+        "The next owner has the context and evidence needed to continue.",
       ),
     ],
   },
@@ -192,7 +192,7 @@ const ROLE_OPERATING_DETAILS: Record<string, RoleOperatingDetails> = {
   },
   warehouse_business_unit: {
     dailyTasks: [
-      "Request and reserve stock for approved business needs.",
+      "Submit stock requests for approved business needs and follow the warehouse allocation decision.",
       "Confirm receipt, consumption, return, or discrepancy for issued items.",
     ],
     responsibilityStages: [
@@ -247,7 +247,7 @@ const ROLE_OPERATING_DETAILS: Record<string, RoleOperatingDetails> = {
   warehouse_pricing: {
     dailyTasks: [
       "Review landed-cost inputs and pending price proposals.",
-      "Record effective price changes with basis, date, and approval evidence.",
+      "Check recorded prices and raise discrepancies with the authorized Product and Finance owners.",
     ],
     responsibilityStages: [
       stage(
@@ -256,9 +256,9 @@ const ROLE_OPERATING_DETAILS: Record<string, RoleOperatingDetails> = {
         "The proposal uses a complete attributable cost basis.",
       ),
       stage(
-        "Propose and activate price",
-        "Record the value, reason, effective date, and required approval.",
-        "The governed price history shows the approved change.",
+        "Review and escalate",
+        "Compare recorded value, reason, effective date, and approval evidence without editing the price.",
+        "The authorized owner receives a traceable pricing question.",
       ),
     ],
   },
@@ -1071,18 +1071,18 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
     label: "Warehouse operations",
     module: "warehouse",
     purpose:
-      "Allocate, issue, transfer, inspect, return, and reconcile inventory for approved operational demand.",
+      "Submit demand, customer return cases, replenishment recommendations, and governed exports; hand physical stock work to warehouse operators.",
     authority: {
       canDo: [
-        "Reserve available stock, issue it to approved events or operations, record transfers, and receive returned stock for inspection.",
-        "Inspect operational stock and surface exceptions for supervised resolution.",
+        "Submit ecommerce orders, stock requests, customer return cases, and replenishment recommendations with their source details.",
+        "Prepare governed warehouse exports and follow linked fulfillment and Procurement records.",
       ],
       cannotDo: [
-        "Do not create inventory, alter warehouse configuration, approve stock adjustments, or release a quality hold.",
-        "Do not issue stock outside the recorded allocation, custody, and return workflow.",
+        "Do not receive, inspect, allocate, pick, pack, issue, or transfer stock with the Operations role alone.",
+        "Do not review warehouse exports, decide Procurement replenishment, approve adjustments, or release a Quality hold without the separate required authority.",
       ],
       decisions: [
-        "Decide whether allocated stock is ready to issue or return for inspection; supervisors decide controlled exceptions.",
+        "Confirm demand and customer-case details; warehouse operators handle custody and Procurement decides replenishment outcomes.",
       ],
       upstreamRoleIds: [
         "warehouse_business_unit",
@@ -1090,8 +1090,10 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
         "warehouse_logistics_supervisor",
       ],
       downstreamRoleIds: [
+        "warehouse_operator",
         "warehouse_logistics_supervisor",
         "warehouse_finance",
+        "procurement_officer",
       ],
       escalation:
         "Escalate unavailable, damaged, excess, or custody-break stock with the allocation or event reference to the logistics supervisor.",
@@ -1110,6 +1112,7 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
       canDo: [
         "Review valuation and inventory evidence, perform count-related control review, and approve supported stock adjustments.",
         "Investigate financial warehouse exceptions and hand the outcome back through the recorded ledger workflow.",
+        "Prepare and review warehouse exports using the current training and evidence requirements.",
       ],
       cannotDo: [
         "Do not receive, issue, transfer, or price inventory merely to clear a financial exception.",
@@ -1140,6 +1143,7 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
       canDo: [
         "Review inventory, analytics, and exception data to identify trends, stock risk, and reporting questions.",
         "Hand evidence-backed findings to the accountable warehouse owner.",
+        "Prepare governed warehouse exports without approving the Finance review outcome.",
       ],
       cannotDo: [
         "Do not alter inventory, allocation, price, count, supplier, or warehouse configuration data.",
@@ -1165,15 +1169,15 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
     label: "Warehouse business unit",
     module: "warehouse",
     purpose:
-      "View available inventory and reserve stock for confirmed business activity through the governed allocation path.",
+      "View availability, request stock, and acknowledge an eligible handover; warehouse staff control allocation and issue.",
     authority: {
       canDo: [
-        "Review availability and submit or manage reservations for confirmed business demand.",
+        "Review availability and submit stock requests for confirmed business demand.",
         "Track the allocation handoff to warehouse operations.",
       ],
       cannotDo: [
         "Do not issue, receive, transfer, adjust, or price stock.",
-        "Do not reserve stock without a valid business event or approved demand record.",
+        "Do not reserve or allocate stock with the Business Unit role; send the complete request to the authorized warehouse owner.",
       ],
       decisions: [
         "Decide whether the business demand remains valid; warehouse operations decide physical issue and custody.",
@@ -1255,20 +1259,20 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
       "Review landed cost, valuation context, turnover, and controlled warehouse price changes.",
     authority: {
       canDo: [
-        "Review pricing and finance context and set controlled warehouse prices with the required supporting basis.",
+        "Review pricing and finance context, recorded prices, and their supporting basis.",
         "Hand price-change evidence to finance and warehouse operations.",
       ],
       cannotDo: [
-        "Do not change price without the governed basis, valuation review, and audit trail.",
+        "This role is read-only: do not change, propose, approve, or activate prices without a separately assigned Product role.",
         "Do not approve stock adjustments, receive stock, or alter procurement awards.",
       ],
       decisions: [
-        "Decide whether a proposed price change is supported by landed-cost and valuation evidence within the approved pricing remit.",
+        "Identify unsupported cost or valuation details and refer them to the authorized Product or Finance decision owner.",
       ],
       upstreamRoleIds: ["warehouse_procurement", "warehouse_bi_analyst"],
       downstreamRoleIds: ["warehouse_finance", "warehouse_operations"],
       escalation:
-        "Escalate conflicting cost, valuation, or approval evidence to Warehouse Finance before publishing a price change.",
+        "Escalate conflicting cost, valuation, or approval evidence to Warehouse Finance and the authorized Product owner; do not publish a price change from this role.",
     },
   }),
   liveRole({
@@ -1357,6 +1361,7 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
       canDo: [
         "Create sourcing activity, manage vendor information, author purchase orders, and decide the Procurement approval step for a complete request.",
         "Return incomplete requests and coordinate accredited vendor readiness before a supplier commitment.",
+        "Manage replenishment recommendations and request governed PO cancellation within the existing evidence and approval rules.",
       ],
       cannotDo: [
         "Do not approve an award outside the designated approval authority or bypass competition, exception, accreditation, or DOA evidence.",

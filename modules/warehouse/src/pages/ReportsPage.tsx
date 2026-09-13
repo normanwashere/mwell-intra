@@ -3,12 +3,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { InventoryPosition } from '@intra/data-kit';
 import { useWarehouse } from '@/app/store';
 import { prepareWarehouseExport } from '@/app/governedExports';
+import { useCanPrepareWarehouseExport } from '@/auth/useCanPrepareWarehouseExport';
 import { downloadText, downloadUrl } from '@/app/download';
 import { toCsv } from '@/domain/export';
 import { DataTable, EmptyState, Field, PageHeader, SectionTitle, type Column } from '@/components/ui';
 
 export function ReportsPage() {
   const { data, source, loadInventoryPositions } = useWarehouse();
+  const canExport = useCanPrepareWarehouseExport(source);
   const [positions, setPositions] = useState<InventoryPosition[]>([]);
   const [locationId, setLocationId] = useState('all');
   const [productId, setProductId] = useState('all');
@@ -49,6 +51,7 @@ export function ReportsPage() {
   ];
 
   const exportReport = async () => {
+    if (!canExport || exporting || loading) return;
     setExporting(true); setError(''); setExportReady(false);
     try {
       const content = toCsv(rows.map((row) => ({
@@ -71,7 +74,7 @@ export function ReportsPage() {
       <div className="grid min-w-0 gap-3 border-y border-line py-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] [&>div]:min-w-0">
         <Field label="Location filter" htmlFor="report-location"><select id="report-location" className="input" value={locationId} onChange={(event) => setLocationId(event.target.value)}><option value="all">All locations</option>{data.locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select></Field>
         <Field label="Product filter" htmlFor="report-product"><select id="report-product" className="input" value={productId} onChange={(event) => setProductId(event.target.value)}><option value="all">All products</option>{data.products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select></Field>
-        <button type="button" className="btn-primary self-end justify-center" disabled={exporting || loading} onClick={() => void exportReport()}>{exporting ? 'Preparing...' : 'Export report'}</button>
+        <button type="button" className="btn-primary self-end justify-center" disabled={!canExport || exporting || loading} onClick={() => void exportReport()}>{exporting ? 'Preparing...' : 'Export report'}</button>
       </div>
       {exportReady && <p role="status" className="rounded-lg bg-emerald-500/10 p-3 text-sm font-medium text-emerald-700 dark:text-emerald-300">Export ready. The private download link expires shortly; request a new export for corrections.</p>}
       <dl className="grid grid-cols-2 gap-2 sm:grid-cols-5" aria-label="Inventory position totals">

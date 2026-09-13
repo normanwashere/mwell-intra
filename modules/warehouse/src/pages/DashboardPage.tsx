@@ -41,6 +41,7 @@ import {
 import { normalizeWarehouseRole, type WarehouseRouteId } from "@/app/modules";
 import { warehouseRouteIdForPath } from "@/app/authorization";
 import { useSession } from "@/auth/session";
+import { useCanPrepareWarehouseExport } from "@/auth/useCanPrepareWarehouseExport";
 import type { Role } from "@/domain/types";
 import { Icon, type IconName } from "@/components/Icon";
 import {
@@ -267,10 +268,12 @@ function OperatorDashboard({
   name,
   canOpenRoute,
   data,
+  exportAction,
 }: {
   name?: string;
   canOpenRoute: (routeId: WarehouseRouteId) => boolean;
   data: WarehouseData;
+  exportAction?: ReactNode;
 }) {
   const { source, loadReceivableProcurementPOs } = useWarehouse();
   const inbound = useInboundProcurementPOs(source, loadReceivableProcurementPOs);
@@ -372,7 +375,8 @@ function OperatorDashboard({
         icon="box"
         status={<Badge tone="emerald">Shift ready</Badge>}
         action={
-          priorityAction ? (
+          <>
+          {priorityAction ? (
             <Link
               to={priorityAction.to}
               aria-label={`Continue ${priorityAction.label}`}
@@ -381,7 +385,9 @@ function OperatorDashboard({
               Continue next task
               <Icon name="arrowRight" className="h-4 w-4" />
             </Link>
-          ) : undefined
+          ) : undefined}
+          {exportAction}
+          </>
         }
       />
       <section aria-labelledby="operator-overview" className="min-w-0">
@@ -476,23 +482,52 @@ function OperatorDashboard({
 export function DashboardPage() {
   const { data, role, roleLabel, source, can, canOpenRoute } = useWarehouse();
   const { profile } = useSession();
+  const canExport = useCanPrepareWarehouseExport(source, can("view_analytics") || can("view_finance"));
   const navigate = useNavigate();
   const toast = useToast();
   const [exportOpen, setExportOpen] = useState(false);
   const [exporting, setExporting] = useState<WarehouseExportKind | null>(null);
   const [window, setWindow] = useState<Window>("all");
+  const exportCsv = async (kind: WarehouseExportKind, content: string) => {
+    if (!canExport || exporting !== null) return;
+    setExporting(kind);
+    try {
+      const prepared = await prepareWarehouseExport({ source, kind, demoContent: content });
+      if (prepared.downloadUrl) downloadUrl(prepared.filename, prepared.downloadUrl);
+      else downloadText(prepared.filename, prepared.demoContent ?? "");
+      toast.success(source === "memory"
+        ? `Downloaded demo export ${prepared.filename}`
+        : `Recorded and downloaded ${prepared.filename}`);
+      setExportOpen(false);
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Export failed.");
+    } finally {
+      setExporting(null);
+    }
+  };
   if (!data) return null;
+  const exportAction = canExport ? (
+    <button type="button" className="btn-ghost btn-sm shrink-0" onClick={() => setExportOpen(true)}>
+      <Icon name="download" className="h-4 w-4" /> Export data
+    </button>
+  ) : null;
+  const exportSheet = <DashboardExportSheet open={exportOpen} onOpenChange={setExportOpen}
+    canExport={canExport} exporting={exporting} source={source} data={data} onExport={exportCsv} />;
   const operatorExperience =
     can("receive_stock") &&
     can("issue_items") &&
     !can("approve_stock_adjustment");
   if (operatorExperience) {
     return (
+      <>
       <OperatorDashboard
         name={profile?.name?.split(/\s+/)[0]}
         canOpenRoute={canOpenRoute}
         data={data}
+        exportAction={exportAction}
       />
+      {exportSheet}
+      </>
     );
   }
   const liveDashboardRole: Role =
@@ -514,31 +549,6 @@ export function DashboardPage() {
   const rolePresentation = { label: roleLabel };
   const state = toStockState(data);
   const showWindow = WINDOWED_ROLES.includes(dashboardRole);
-
-  const canExport = can("view_analytics") || can("view_finance");
-  const exportCsv = async (kind: WarehouseExportKind, content: string) => {
-    setExporting(kind);
-    try {
-      const prepared = await prepareWarehouseExport({
-        source,
-        kind,
-        demoContent: content,
-      });
-      if (prepared.downloadUrl)
-        downloadUrl(prepared.filename, prepared.downloadUrl);
-      else downloadText(prepared.filename, prepared.demoContent ?? "");
-      toast.success(
-        source === "memory"
-          ? `Downloaded demo export ${prepared.filename}`
-          : `Recorded and downloaded ${prepared.filename}`,
-      );
-      setExportOpen(false);
-    } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Export failed.");
-    } finally {
-      setExporting(null);
-    }
-  };
 
   const mv: Movement[] =
     window === "all" || !showWindow
@@ -1677,15 +1687,7 @@ export function DashboardPage() {
           )}
           {/* Export lives with the data it exports, not as the hero's only
               action (WH-10). */}
-          {canExport ? (
-            <button
-              type="button"
-              className="btn-ghost btn-sm shrink-0"
-              onClick={() => setExportOpen(true)}
-            >
-              <Icon name="download" className="h-4 w-4" /> Export data
-            </button>
-          ) : null}
+          {exportAction}
         </div>
       </div>
 
@@ -1693,28 +1695,44 @@ export function DashboardPage() {
         {panels.map((id) => PANELS[id])}
       </div>
 
+      {exportSheet}
+    </div>
+  );
+}
+
+function DashboardExportSheet({ open, onOpenChange, canExport, exporting, source, data, onExport }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  canExport: boolean;
+  exporting: WarehouseExportKind | null;
+  source: ReturnType<typeof useWarehouse>["source"];
+  data: WarehouseData;
+  onExport: (kind: WarehouseExportKind, content: string) => Promise<void>;
+}) {
+  const state = toStockState(data);
+  return (
       <Sheet
-        open={exportOpen}
-        onOpenChange={setExportOpen}
+        open={open}
+        onOpenChange={onOpenChange}
         title="Export raw data"
         description="Download CSVs for offline analysis & reconciliation."
       >
         <div className="space-y-2">
           <button
             type="button"
-            disabled={exporting !== null}
+            disabled={!canExport || exporting !== null}
             className="btn-outline w-full justify-between"
-            onClick={() => void exportCsv("inventory", inventoryToCsv(state))}
+            onClick={() => void onExport("inventory", inventoryToCsv(state))}
           >
             {exporting === "inventory" ? "Preparing..." : "Inventory snapshot"}{" "}
             <Icon name="download" className="h-4 w-4" />
           </button>
           <button
             type="button"
-            disabled={exporting !== null}
+            disabled={!canExport || exporting !== null}
             className="btn-outline w-full justify-between"
             onClick={() =>
-              void exportCsv(
+              void onExport(
                 "movements",
                 movementsToCsv(data.movements, data.products),
               )
@@ -1725,10 +1743,10 @@ export function DashboardPage() {
           </button>
           <button
             type="button"
-            disabled={exporting !== null}
+            disabled={!canExport || exporting !== null}
             className="btn-outline w-full justify-between"
             onClick={() =>
-              void exportCsv(
+              void onExport(
                 "allocations",
                 allocationsToCsv(data.allocations, data.products, data.events),
               )
@@ -1744,6 +1762,5 @@ export function DashboardPage() {
           </p>
         </div>
       </Sheet>
-    </div>
   );
 }

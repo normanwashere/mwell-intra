@@ -58,10 +58,16 @@ export const ROLE_TASK_GUIDANCE: Readonly<
       { kind: "flow", id: "cycle-count-adjustment" },
   },
   warehouse_operations: {
-    "Execute assigned receiving, putaway, allocation, return, and count tasks.":
-      { kind: "flow", id: "receive-to-putaway" },
-    "Capture scans, quantities, traceability, photos, and exception reasons at the point of work.":
-      { kind: "flow", id: "receive-to-putaway" },
+    "Submit ecommerce demand, stock requests, customer return cases, and replenishment recommendations.": {
+      kind: "written",
+      guidance:
+        "Record the source, item, quantity, recipient, and reason in the governed request or customer case. Hand the record to warehouse operators for physical custody; the Operations role alone does not authorize stock movement or Quality decisions.",
+    },
+    "Prepare governed warehouse exports and follow the handoff to warehouse operators and Procurement.": {
+      kind: "written",
+      guidance:
+        "Prepare exports only through the governed export action with its current certification and source-access checks. Track the linked request: Procurement decides replenishment outcomes, warehouse operators perform physical work, and separately authorized Finance reviews exports.",
+    },
   },
   warehouse_finance: {
     "Review valuation, landed-cost, reconciliation, and material variance queues.":
@@ -76,9 +82,10 @@ export const ROLE_TASK_GUIDANCE: Readonly<
       { kind: "feature", id: "warehouse-reports" },
   },
   warehouse_business_unit: {
-    "Request and reserve stock for approved business needs.": {
-      kind: "flow",
-      id: "allocation-event-return",
+    "Submit stock requests for approved business needs and follow the warehouse allocation decision.": {
+      kind: "written",
+      guidance:
+        "Submit the item, quantity, business purpose, and recipient in a stock request, then follow its status. Authorized warehouse staff control allocation and issue; the Business Unit role does not grant reservation or allocation authority.",
     },
     "Confirm receipt, consumption, return, or discrepancy for issued items.": {
       kind: "flow",
@@ -104,9 +111,10 @@ export const ROLE_TASK_GUIDANCE: Readonly<
       kind: "flow",
       id: "pricing-and-costing",
     },
-    "Record effective price changes with basis, date, and approval evidence.": {
-      kind: "flow",
-      id: "pricing-and-costing",
+    "Check recorded prices and raise discrepancies with the authorized Product and Finance owners.": {
+      kind: "written",
+      guidance:
+        "Compare the recorded price, cost basis, effective date, and supporting evidence. Send discrepancies to the authorized Product and Finance owners; the Pricing role is read-only and does not authorize proposing, approving, or activating prices.",
     },
   },
   warehouse_admin: {

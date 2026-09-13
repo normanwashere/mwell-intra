@@ -50,8 +50,12 @@ export function ReplenishmentControlPanel({
 }: {
   candidates: ReplenishmentCandidate[];
 }) {
-  const { mode, supabaseClient } = useSession();
+  const { mode, supabaseClient, profile, loading, userCapabilities } = useSession();
   const live = mode === "supabase" ? supabaseClient : null;
+  const canRecommend = !!live && !loading && profile !== null &&
+    userCapabilities?.warehouse?.includes("recommend_replenishment") === true;
+  const canManage = !!live && !loading && profile !== null &&
+    userCapabilities?.procurement?.includes("manage_replenishment") === true;
   const toast = useToast();
   const [rows, setRows] = useState<SavedRecommendation[]>([]);
   const [workingId, setWorkingId] = useState<string>();
@@ -112,7 +116,7 @@ export function ReplenishmentControlPanel({
   }, [refresh]);
 
   const recommend = async (candidate: ReplenishmentCandidate) => {
-    if (!live) return;
+    if (!live || !canRecommend) return;
     setWorkingId(candidate.productId);
     const { error } = await live
       .schema("procurement")
@@ -141,7 +145,7 @@ export function ReplenishmentControlPanel({
     record: SavedRecommendation,
     action: "accept" | "handoff" | "dismiss",
   ) => {
-    if (!live) return;
+    if (!live || !canManage) return;
     setWorkingId(record.id);
     const { error } = await live
       .schema("procurement")
@@ -225,7 +229,7 @@ export function ReplenishmentControlPanel({
                   <button
                     type="button"
                     className="btn-outline btn-sm"
-                    disabled={workingId === candidate.productId}
+                    disabled={!canRecommend || workingId === candidate.productId}
                     onClick={() => void recommend(candidate)}
                   >
                     Save +{candidate.recommendedQuantity}
@@ -263,7 +267,7 @@ export function ReplenishmentControlPanel({
                   <button
                     type="button"
                     className="btn-outline btn-sm"
-                    disabled={workingId === record.id}
+                    disabled={!canManage || workingId === record.id}
                     onClick={() => void transition(record, "accept")}
                   >
                     Accept
@@ -273,7 +277,7 @@ export function ReplenishmentControlPanel({
                   <button
                     type="button"
                     className="btn-primary btn-sm"
-                    disabled={workingId === record.id}
+                    disabled={!canManage || workingId === record.id}
                     onClick={() => void transition(record, "handoff")}
                   >
                     Hand off to Procurement
@@ -303,7 +307,7 @@ export function ReplenishmentControlPanel({
                   <button
                     type="button"
                     className="btn-ghost btn-sm"
-                    disabled={workingId === record.id}
+                    disabled={!canManage || workingId === record.id}
                     onClick={() => void transition(record, "dismiss")}
                   >
                     Dismiss

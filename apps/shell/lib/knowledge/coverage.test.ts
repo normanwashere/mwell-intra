@@ -17,14 +17,14 @@ describe("task coverage evidence boundary", () => {
   it("counts the exact inventory without claiming screenshots are accepted", () => {
     const result = validateTaskCoverage(KNOWLEDGE_CONTENT);
     expect(result.counts).toEqual({
-      features: 68, controls: 294, liveFeatures: 59, limitedFeatures: 0,
+      features: 68, controls: 297, liveFeatures: 59, limitedFeatures: 0,
       comingSoonFeatures: 9, flows: 26, decisions: 58, policyReferences: 14,
       evidenceRecords: 53, controlEvidenceMatches: 0,
     });
     expect(result.unmappedLiveControls).toEqual([]);
     expect(result.unresolvedTargets).toEqual([]);
     expect(result.invalidDecisionBranches).toEqual([]);
-    expect(result.missingActionEvidence).toHaveLength(290);
+    expect(result.missingActionEvidence).toHaveLength(293);
     expect(result.missingActionEvidence.filter(key => key.startsWith("vendor-application-submission:"))).toEqual([
       "vendor-application-submission:vendor-self-case",
       "vendor-application-submission:vendor-self-prepare",
@@ -37,6 +37,21 @@ describe("task coverage evidence boundary", () => {
     expect(result.inventory).toHaveLength(result.counts.controls);
     expect(result.unverified).toBe(true);
     expect(result.inventory.every((row) => row.unverified)).toBe(true);
+  });
+
+  it("retains the revised return and Quality controls without screenshot evidence credit", () => {
+    const result = validateTaskCoverage(KNOWLEDGE_CONTENT);
+    for (const key of [
+      "warehouse-fulfillment:Save resolution",
+      "warehouse-returns:Receive physical return",
+      "warehouse-returns:Review in Quality",
+      "warehouse-quality:Pending, Holds and Completed",
+    ]) {
+      const row = result.inventory.find(item => item.key === key);
+      expect(row).toMatchObject({ evidenceIds: [], unverified: true });
+      expect(result.missingActionEvidence).toContain(key);
+    }
+    expect(result.inventory.some(row => row.key === "warehouse-returns:Set disposition")).toBe(false);
   });
 
   it("reports missing control instructions and missing exact control screenshots separately", () => {

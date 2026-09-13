@@ -2,6 +2,10 @@
 
 ## September 13 Return And Quality Display Handover
 
+For export and replenishment training, show each role the records it may read and only its permitted actions. Operations recommendations and Procurement decisions are separate tasks. A viewing permission is not a command permission, and an open dialog does not preserve access after it is removed.
+
+**Role boundaries:** Teach the assigned roles, not just job titles. Operations alone submits demand/customer cases, recommends replenishment and prepares governed exports; it does not receive, inspect, allocate, pick, pack, issue or transfer stock. An Operations Associate with the separate Warehouse Operator assignment can do that floor work. Business Unit requests stock and acknowledges an eligible handover; allocation belongs to authorized warehouse staff. Pricing is read-only. Finance owns warehouse export review; export preparation by Operations or BI is not that review. Procurement Officer/Admin handle replenishment outcomes and governed PO cancellation. The catalogue and KB now match these existing database controls. Test combined-role handoffs and existing training/independent-review requirements without changing the process.
+
 September 14 dialog follow-up: the shared frame clips outer overflow without becoming a second scrolling container. The body remains scrollable. The narrow-screen regression reproduced a 105px outer shift before the adjustment; 24 shared-frame browser cases and 51 warehouse component/accessibility tests passed afterward. Independent focus/scroll stress testing supports the fix, but normal keyboard Tab alone did not reliably reproduce the original issue. Do not describe it as a permissions or transaction failure.
 
 Train users to read customer-case progress, physical intake and current Quality clearance as separate facts. The resolution summary can verify a matching recorded intake but cannot establish current hold/release status. Check Quality before action. Its count now follows Pending, Holds or Completed and the current search; a failed load must not be interpreted as zero work.

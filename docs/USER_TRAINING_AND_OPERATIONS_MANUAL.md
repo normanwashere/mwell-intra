@@ -2,6 +2,10 @@
 
 ## September 13 Return And Quality Display Drill
 
+In the role drill, distinguish viewing information from carrying out a command. Export preparation and replenishment actions follow current command permissions. Operations recommends; Procurement decides and hands off. Also check that a permission change prevents a command from an already-open dialog.
+
+**Check your assigned role before the drill:** Operations alone raises demand and customer return cases, recommends replenishment, and prepares governed exports. Receiving, inspection, picking, packing and stock movement need the separate warehouse execution role. An Operations Associate may hold both roles; the job title by itself is not the permission. Business Unit users request stock and acknowledge eligible handovers, but do not reserve or allocate it. Pricing users review rather than change prices. Finance reviews warehouse exports; Procurement Officer/Admin handle replenishment decisions and governed PO cancellation. Required training, evidence and independent approvals still apply.
+
 Include a long-form navigation check: move to the lower replacement-delivery fields, then back to the first field. The title, Close control and footer should stay in place while the body scrolls. Selecting new delivery details still requires the existing address fields before Save becomes available. Close the drill without saving unless a transaction exercise is intended.
 
 Use a designated synthetic customer case. Open **Resolve return case** and explain the difference between customer-case progress and physical intake. A verified intake link is not Quality clearance. Check the linked return and the current inspection/hold records before making a permitted decision; do not create a duplicate intake when the summary cannot verify a link.

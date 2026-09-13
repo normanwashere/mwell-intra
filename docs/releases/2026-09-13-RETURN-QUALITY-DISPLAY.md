@@ -10,6 +10,10 @@ Your process has not changed. The same permissions, quarantine, evidence and ind
 
 ## Release Evidence
 
+The same candidate corrects export and replenishment action controls to use the corresponding command permissions rather than general viewing permissions. Read-only information stays visible. Replenishment recommendations still pass to Procurement for its separate decision; an export still uses the governed export service. Losing permission while a dialog is open must prevent the next command, not expose a shortcut.
+
+September 14 authority follow-up (candidate until the later deployment record confirms it): the source role catalogue was missing 12 database grant entries introduced by the July 21 and August 13 migrations. The candidate adds only those existing entries and their mutation classifications, preserving the Warehouse Administrator's exact 26-grant boundary. No database grant or workflow changes are included. Role guides and the standalone manual now distinguish Operations from Warehouse Operator, Business Unit requests from allocation, and read-only Pricing from Product price decisions. Export preparation, Finance review and Procurement replenishment/cancellation retain their existing training and approval controls.
+
 The status/count changes and matching documentation shipped to UAT as `c285863112ff43531980a79b22c358dd2bb959a9`, deployment `dpl_AkhWXDirAikptQTqsViNT1TJfw81`. Direct desktop and narrow-screen checks confirmed the new count and submitted-case wording. The September 14 follow-up prevents the outer dialog from scrolling when a lower field is brought into view; its release verification is recorded separately. This adjustment leaves form-body scrolling, required fields, Close and Escape behavior intact.
 
 - Initial application candidate: `c8af48f`, included in the verified `c285863` UAT release above.
