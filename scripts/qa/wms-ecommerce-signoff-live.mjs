@@ -20,6 +20,15 @@ const freeze = value => {
   return value;
 };
 
+export async function captureCheckpointViewport(page, outputPath) {
+  const geometry = await page.evaluate(() => ({ width: innerWidth, height: innerHeight, contentWidth: document.documentElement.scrollWidth }));
+  const bytes = await page.screenshot({ path: outputPath, type: 'png', fullPage: false, scale: 'css' });
+  assert.equal(bytes.subarray(0, 8).toString('hex'), '89504e470d0a1a0a', 'Checkpoint must be a PNG');
+  assert.equal(bytes.readUInt32BE(16), geometry.width, 'Checkpoint width differs from the working viewport');
+  assert.equal(bytes.readUInt32BE(20), geometry.height, 'Checkpoint height differs from the working viewport');
+  return geometry;
+}
+
 export function createManifest({ commit, runId = randomUUID(), orderDate = new Date().toISOString().slice(0, 10) } = {}) {
   assert(UUID.test(runId), 'Canonical run UUID required');
   assert(typeof commit === 'string' && /^[a-f0-9]{40}$/.test(commit), 'Explicit deployed commit SHA required');
@@ -502,8 +511,7 @@ export async function run(folder, env = process.env) {
         assert(!guardError, guardError);
         const snapshot = await read(); const inventory = reconcile(m, c, snapshot, identities);
         const file = `${c.viewport}-${report.checks.length}-${checkpoint}.png`;
-        const geometry = await activePage.evaluate(() => ({ width: innerWidth, contentWidth: document.documentElement.scrollWidth }));
-        await activePage.screenshot({ path: path.join(attempt, file), fullPage: true });
+        const geometry = await captureCheckpointViewport(activePage, path.join(attempt, file));
         report.checks.push({ checkpoint, view: c.viewport, actor: { id: actors[role].id, configuredRoles: actors[role].persona.assignments.warehouse },
           kind: 'live', readback: { source: 'persisted-requery', snapshot, inventory },
           screenshot: { ref: file, reviewed: false, sessionActorId: actors[activeRole]?.id, ...geometry }, ...extra });
