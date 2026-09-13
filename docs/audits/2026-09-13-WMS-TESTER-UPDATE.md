@@ -1,5 +1,7 @@
 # Warehouse Testing Update - September 13
 
+**Latest:** The return-summary and Quality-count changes are now live in `c285863`, with matching KB and handbook updates. [Read the shorter September 14 update](2026-09-14-WMS-TESTER-UPDATE.md). A mobile dialog-header issue remains open; the dated results below retain their original scope.
+
 We fixed the receipt-photo upload that was stopping Marketing from finishing a department request. The fix is live on UAT.
 
 After Warehouse releases your request, open the request, choose **Acknowledge receipt**, attach your receipt photo, and confirm. Use your own requester account. You do not need to switch to a warehouse account or ask Warehouse to issue the items again.

@@ -2,6 +2,8 @@
 
 ## September 13 Return And Quality Display Drill
 
+Include a long-form navigation check: move to the lower replacement-delivery fields, then back to the first field. The title, Close control and footer should stay in place while the body scrolls. Selecting new delivery details still requires the existing address fields before Save becomes available. Close the drill without saving unless a transaction exercise is intended.
+
 Use a designated synthetic customer case. Open **Resolve return case** and explain the difference between customer-case progress and physical intake. A verified intake link is not Quality clearance. Check the linked return and the current inspection/hold records before making a permitted decision; do not create a duplicate intake when the summary cannot verify a link.
 
 In **Quality Control**, select **Holds**, search for the test product, then clear the search. The count must follow that tab and filter, for example **1 of 3**. Repeat on **Completed**. Reading, filtering and closing without saving must leave case state and stock unchanged. Existing evidence, quarantine and independent-review requirements still apply.

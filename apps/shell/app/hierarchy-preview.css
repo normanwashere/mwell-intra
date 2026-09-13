@@ -158,7 +158,8 @@ main:has(> .hierarchy-preview) { background: #eff2f4; }
 }
 
 /* Dialog surfaces also apply to Radix portals outside the page wrapper. */
-.intra-sheet { overflow: hidden; }
+/* Only the form body scrolls; focusing a field must not move the frame. */
+.intra-sheet { overflow: clip; }
 .intra-sheet-header { border-top: 3px solid var(--hp-active); background: var(--hp-band); }
 .intra-sheet-footer { background: var(--hp-band); }
 .intra-sheet-body { background: rgb(var(--c-surface)); }

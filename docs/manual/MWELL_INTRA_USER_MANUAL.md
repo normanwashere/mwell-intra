@@ -2,6 +2,8 @@
 
 ## September 13 Return And Quality Display Update
 
+In long dialogs, scroll within the form to reach the remaining fields. The title, Close control and footer actions stay in the frame. The September 14 dialog adjustment prevents field focus or scrolling from shifting that outer frame; it does not fill, submit or approve the form for you.
+
 In **Resolve return case**, the status describes the customer case, not the location or condition of the returned item. **Customer case submitted / awaiting resolution** means a decision is still needed. Read the separate intake message: a verified link confirms a recorded physical intake, but does not confirm that Quality has cleared the stock. When the summary says intake is not verified in this view, check the original order and saved return before proceeding; do not create a duplicate just to remove the message.
 
 Open **Quality Control** to check the current inspection and holds. **Pending**, **Holds** and **Completed** each show their own count. Search narrows that count: **1 of 3** means one match from three records in the selected tab. Clear search to see the full list. A loading error is not an empty queue.

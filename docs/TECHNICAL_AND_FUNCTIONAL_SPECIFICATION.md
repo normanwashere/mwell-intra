@@ -2,6 +2,8 @@
 
 ## September 13 Return And Quality Display Contract
 
+The September 14 follow-up changes only `.intra-sheet` from `overflow:hidden` to `overflow:clip` in the shared hierarchy stylesheet. The frame is no longer a programmatically scrollable container; the existing `.intra-sheet-body` keeps its scrolling and focus behavior. No React form logic, RPC, permission, validation or stock transition is changed. The browser regression now loads the shell hierarchy stylesheet and asserts header/footer placement after native centered scrolling, keyboard navigation and desktop/mobile resizing.
+
 Candidate `c8af48f` separates the customer return-case state from physical intake in `returnWorkflowSummary`. The summary verifies exactly one matching customer intake with consistent case, source order, product/serial, custody, actor, date and evidence data. A verified link does not establish Quality clearance: the summary has no current inspection/hold snapshot. Missing or ambiguous context remains explicitly unverified rather than being reported as cleared or definitely absent.
 
 Quality counts derive from the selected tab's loaded collection and the same search used for its visible records. A filtered result reports shown versus total; blocked or failed loading does not report a misleading zero. This changes no RPC, transition, stock accounting, authorization, RLS or database schema. No migration is required for these two display fixes.

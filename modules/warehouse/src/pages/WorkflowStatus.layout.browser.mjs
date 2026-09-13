@@ -65,7 +65,7 @@ const bundle = await build({ stdin: { contents: entry, resolveDir: path.join(roo
       : 'export const useSession=()=>({mode:"memory",supabaseClient:null,profile:{id:"offline-supervisor",name:"Offline Supervisor"}});' }));
   } }],
 });
-const cssFiles = ['packages/ui/src/styles.css', 'apps/shell/app/globals.css', 'modules/warehouse/src/pages/FulfillmentPage.css'];
+const cssFiles = ['packages/ui/src/styles.css', 'apps/shell/app/globals.css', 'apps/shell/app/hierarchy-preview.css', 'modules/warehouse/src/pages/FulfillmentPage.css'];
 let input = '';
 for (const file of cssFiles) input += `${await readFile(path.join(root, file), 'utf8')}\n`;
 const css = await postcss([tailwind({ presets: [require('@intra/config/tailwind/preset')], content: [
@@ -75,7 +75,7 @@ const report = { kind: 'offline-real-component-layout', fontMode: 'system-fallba
 const browser = await chromium.launch();
 try {
   for (const [width, height] of [[1440, 900], [390, 844], [320, 720]]) for (const kind of ['quality', 'linked', 'unlinked']) {
-    const context = await browser.newContext({ viewport: { width, height }, isMobile: width <= 390, hasTouch: width <= 390,
+    const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1.25, isMobile: width <= 390, hasTouch: width <= 390,
       serviceWorkers: 'block', reducedMotion: 'reduce' });
     try {
       await context.route('**/*', route => { report.networkRequests.push({ kind, width, method: route.request().method() }); return route.abort(); });
@@ -116,8 +116,27 @@ try {
         const save = dialog.getByRole('button', { name: 'Save resolution', exact: true });
         const bin = dialog.getByLabel('Quarantine bin', { exact: true });
         const body = dialog.getByRole('region', { name: 'Resolve return case content', exact: true });
+        if (width === 1440) {
+          await page.setViewportSize({ width: 390, height: 844 });
+          await dialog.getByRole('radio', { name: 'New delivery details', exact: true }).check();
+          const header = dialog.locator('.intra-sheet-header');
+          const headerBox = await header.boundingBox(), dialogBox = await dialog.boundingBox();
+          assert(headerBox && dialogBox && headerBox.y >= dialogBox.y - 1, `${kind}: resized dialog header clipped`);
+          await dialog.getByRole('radio', { name: 'Original delivery details', exact: true }).check();
+          await page.setViewportSize({ width, height });
+        }
         const fullyVisible = async control => {
           await control.scrollIntoViewIfNeeded();
+          await control.evaluate(el => el.scrollIntoView({ block: 'center' }));
+          const chrome = await dialog.evaluate(el => {
+            const box = el.getBoundingClientRect();
+            const header = el.querySelector('.intra-sheet-header').getBoundingClientRect();
+            const footer = el.querySelector('.intra-sheet-footer').getBoundingClientRect();
+            return { scrollTop: el.scrollTop, top: box.top, bottom: box.bottom, headerTop: header.top, footerBottom: footer.bottom };
+          });
+          assert.equal(chrome.scrollTop, 0, `${kind}-${width}: outer dialog scrolled`);
+          assert(chrome.headerTop >= chrome.top - 1 && chrome.footerBottom <= chrome.bottom + 1,
+            `${kind}-${width}: dialog title or actions clipped`);
           const box = await control.boundingBox(), frame = await body.boundingBox(), footer = await save.boundingBox();
           assert(box && frame && footer && box.y >= frame.y - 1 && box.y + box.height <= Math.min(frame.y + frame.height, footer.y) + 1,
             `${kind}-${width}: field obscured by sheet header/footer`);

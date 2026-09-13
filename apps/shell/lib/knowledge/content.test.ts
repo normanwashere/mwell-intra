@@ -29,6 +29,8 @@ describe("Knowledge Base content", () => {
     const returns = JSON.stringify(EXPLICIT_FEATURE_DETAILS["warehouse-fulfillment"]);
     expect(returns).toMatch(/customer case.*physical intake/i);
     expect(returns).toMatch(/does not confirm Quality clearance/);
+    expect(returns).toMatch(/Scroll within the form/);
+    expect(returns).toMatch(/Reading the summary changes no stock/);
     const quality = JSON.stringify(EXPLICIT_FEATURE_DETAILS["warehouse-quality"]);
     expect(quality).toMatch(/selected tab and search/);
     expect(quality).toMatch(/1 of 3/);

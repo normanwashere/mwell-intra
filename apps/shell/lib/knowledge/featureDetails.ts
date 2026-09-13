@@ -1125,7 +1125,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Save resolution",
           "In Resolve return case, review customer case progress separately from physical intake. A submitted customer case is awaiting resolution; it does not mean the returned item has arrived.",
           "Read the linked-intake message and check current Quality holds before deciding. A verified intake link does not confirm Quality clearance. If intake is not verified in this view, check the source records rather than assuming it is missing or cleared.",
-          "Only saving a permitted resolution records the decision. Reading the summary changes no stock, permissions or case state. Keep the existing quarantine, evidence and independent-review steps.",
+          "Scroll within the form to reach lower fields; the title, Close control and footer actions stay in the dialog frame. Only saving a permitted resolution records the decision. Reading the summary changes no stock, permissions or case state. Keep the existing quarantine, evidence and independent-review steps.",
         ),
         control(
           "Queue filters",

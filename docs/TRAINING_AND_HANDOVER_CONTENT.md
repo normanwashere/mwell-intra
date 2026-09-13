@@ -2,6 +2,8 @@
 
 ## September 13 Return And Quality Display Handover
 
+September 14 dialog follow-up: the shared frame clips outer overflow without becoming a second scrolling container. The body remains scrollable. The narrow-screen regression reproduced a 105px outer shift before the adjustment; 24 shared-frame browser cases and 51 warehouse component/accessibility tests passed afterward. Independent focus/scroll stress testing supports the fix, but normal keyboard Tab alone did not reliably reproduce the original issue. Do not describe it as a permissions or transaction failure.
+
 Train users to read customer-case progress, physical intake and current Quality clearance as separate facts. The resolution summary can verify a matching recorded intake but cannot establish current hold/release status. Check Quality before action. Its count now follows Pending, Holds or Completed and the current search; a failed load must not be interpreted as zero work.
 
 The candidate changes presentation only. Demonstrate the existing quarantine, evidence, permission and independent-review steps without skipping them. Confirm desktop and mobile readability, clear a filtered count, and close the resolution form without submitting as a read-only exercise.
