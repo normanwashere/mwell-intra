@@ -6,6 +6,29 @@ import { makeRepo, renderWithProviders } from '@/test/renderWithProviders';
 import { loadCompleteControlQueue } from '@/domain/controlQueues';
 
 describe('StorageAreasPage', () => {
+  it('keeps long bin identity above a separate zone and opens the same bin without changing stock', async () => {
+    const seed = await makeRepo().getData();
+    const code = 'DEST-4f486cb0-035c-4599-9a6b-bece2440ebc8-desktop1440';
+    const label = 'Synthetic inbound signoff 4f486cb0-035c-4599-9a6b-bece2440ebc8 desktop1440';
+    const zone = '4f486cb0-035c-4599-9a6b-bece2440ebc8';
+    seed.storageAreas = [{ id: 'long-bin', locationId: 'loc-wh', code, label, zone, active: true }];
+    seed.stockLevels = [{ productId: 'shirt-l', locationId: 'loc-wh', binId: 'long-bin', quantity: 7 }];
+    const repo = makeRepo(seed);
+    const before = await repo.getData();
+    const user = userEvent.setup();
+    renderWithProviders(<StorageAreasPage />, { repo });
+    const identity = await screen.findByText(code, { exact: true });
+    const bin = identity.closest('button')!;
+    expect(identity).not.toHaveClass('truncate');
+    expect(within(bin).getByText(label, { exact: true })).not.toHaveClass('truncate');
+    expect(within(bin).getByText(`Zone: ${zone}`, { exact: true })).toBeVisible();
+    expect(within(bin).getByText(/items across 1 SKU/)).toBeVisible();
+    await user.click(bin);
+    const dialog = await screen.findByRole('dialog', { name: `Bin ${code}` });
+    expect(within(dialog).getByText(code, { exact: true })).toBeVisible();
+    expect(await repo.getData()).toEqual(before);
+  });
+
   it('opens generated staging work and refreshes remaining quantity after partial putaway', async () => {
     const seed = await makeRepo().getData();
     seed.stockLevels = [{ productId: 'shirt-l', locationId: 'loc-wh', quantity: 60 }];

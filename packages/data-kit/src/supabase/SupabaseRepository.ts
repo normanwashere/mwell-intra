@@ -152,7 +152,7 @@ const TABLE_PROJECTIONS: Record<string, string> = {
     "id,type,product_id,quantity,unit_cost_at_movement,from_location_id,to_location_id,from_bin_id,to_bin_id,lot_id,serial_number,event_id,reason,reference,evidence_urls,actor,created_at",
   allocations: "id,event_id,product_id,quantity,status,promotional,created_at",
   events: "id,name,type,site_location_id,start_date,end_date,status",
-  returns: "id,source,event_id,lines,evidence_urls,actor,created_at",
+  returns: "id,source,event_id,source_order_id,return_case_id,lines,evidence_urls,actor,created_at",
   cycle_counts:
     "id,location_id,bin_id,category,lines,status,requested_by,submitted_at,actor,created_at",
   receipts:
@@ -1259,6 +1259,8 @@ export class SupabaseRepository implements WarehouseControlRepository {
       return: {
         source: input.source,
         event_id: input.eventId ?? null,
+        ...(input.sourceOrderId ? { source_order_id: input.sourceOrderId } : {}),
+        ...(input.returnCaseId ? { return_case_id: input.returnCaseId } : {}),
         lines: input.lines.map((line) => ({
           productId: line.productId,
           quantity: line.quantity,

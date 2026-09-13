@@ -594,6 +594,10 @@ const procedureArticles: KnowledgeArticle[] = [
         "Inspect",
         "Choose disposition and provide evidence/reason when required.",
       ],
+      [
+        "Preview an attached photo",
+        "Local update, release pending: in Receiving or Quality, select an attached photo to view it full size. Close the preview to return to the unsent form. Previewing does not submit the receipt or inspection.",
+      ],
       ["Put away", "Move accepted stock to a valid bin."],
       [
         "Verify ledger",
@@ -689,6 +693,10 @@ const procedureArticles: KnowledgeArticle[] = [
       [
         "Resolve returns separately",
         "For customer cases, Customer Service scans or enters the returned serial. Intra searches released orders, selects the matching original release when found, and clearly flags an unmatched serial for investigation before Warehouse quarantine and resolution. For event physical returns, open Returns receiving, choose Specific event, select the source event, product, receiving location and bin, then submit to Quality Control. Replacement creates a linked order; refund and write-off require Finance evidence; supplier return requires an RMA reference; Customer Service records closure evidence.",
+      ],
+      [
+        "Link a received return to its original order",
+        "Local candidate, not yet live: select Receive physical return from the customer case or original order. Check Original order, Customer return case, product and any serial before recording physical intake. The customer fields are optional; unlinked intake remains available. Keep and resume an existing draft if a new link has different details. If the result is uncertain, select Recover original result rather than creating another intake. After saving, use View saved return to check the linked history. Recording a customer resolution does not receive the goods or release stock from Quality.",
       ],
     ],
   ),

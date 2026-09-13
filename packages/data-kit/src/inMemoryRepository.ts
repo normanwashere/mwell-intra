@@ -777,12 +777,38 @@ export class InMemoryRepository implements WarehouseControlRepository {
       input,
       () => {
         const createdAt = this.now();
+        let sourceOrderId = input.sourceOrderId || undefined;
         const quarantinedLines = input.lines.map((line) => ({
           ...line,
           allocationId: input.allocationId ?? line.allocationId,
           disposition: "quarantine" as const,
         }));
         try {
+          if (sourceOrderId || input.returnCaseId) {
+            if (input.source !== 'customer') throw new Error('Order and case links are only available for customer returns.');
+            const returnCase = input.returnCaseId
+              ? this.data.customerReturnCases.find(row => row.id === input.returnCaseId) : undefined;
+            if (input.returnCaseId) {
+              if (!returnCase) throw new Error('Customer return case unavailable or outside your access.');
+              if (!returnCase.sourceOrderId || (sourceOrderId && sourceOrderId !== returnCase.sourceOrderId)) {
+                throw new Error('Customer return case does not match the original order.');
+              }
+              sourceOrderId = returnCase.sourceOrderId;
+            }
+            const order = this.data.fulfillmentOrders.find(row => row.id === sourceOrderId);
+            if (!order) throw new Error('Original order unavailable or outside your access.');
+            for (const line of input.lines) {
+              const serial = line.serialNumber ? normalizeSerialIdentity(line.serialNumber) : undefined;
+              if (!order.lines.some(item => item.productId === line.productId && (!serial ||
+                item.pickedSerialNumbers?.some(value => normalizeSerialIdentity(value) === serial)))) {
+                throw new Error('Original order does not contain this product or picked serial.');
+              }
+              if (returnCase && (returnCase.productId !== line.productId || (returnCase.serialNumber &&
+                normalizeSerialIdentity(returnCase.serialNumber) !== serial))) {
+                throw new Error('Return line does not match the customer case product or serial.');
+              }
+            }
+          }
           if (!input.lines.length)
             throw new Error("At least one return line is required.");
           if (!["customer", "vendor", "event"].includes(input.source))
@@ -917,6 +943,8 @@ export class InMemoryRepository implements WarehouseControlRepository {
           id: uid("ret"),
           source: input.source,
           eventId: input.eventId,
+          ...(sourceOrderId ? { sourceOrderId } : {}),
+          ...(input.returnCaseId ? { returnCaseId: input.returnCaseId } : {}),
           lines: quarantinedLines,
           evidenceUrls: input.evidenceUrls,
           actor: input.actor,

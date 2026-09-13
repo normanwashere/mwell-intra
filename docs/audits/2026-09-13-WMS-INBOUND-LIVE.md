@@ -1,6 +1,6 @@
 # Receiving To Putaway - September 13
 
-Status: **Limited live journey completed. Visual follow-up and scoped cleanup remain open. Not a full WMS signoff.**
+Status: **Limited live journey and supplemental visual review completed. Two visual fixes and scoped cleanup remain open. Not a full WMS signoff.**
 
 ## What Passed
 
@@ -37,10 +37,12 @@ Assistant review of the desktop and mobile pre-submit screens confirms visible t
 
 **P2 - Inspection evidence cannot be reviewed at full size before submission. Local candidate fixed; not deployed.** The live uploaded thumbnail crops the image and has no full-size preview. The candidate reuses the existing private-image lightbox with an uncropped thumbnail and keyboard/touch opening. Closing restores the unsent inspection form; preview does not upload, remove or submit evidence. Parent verification passed 30 focused component tests and four offline browser cases at 1440px/390px with portrait and landscape images. Selected screenshots were visually reviewed. Browser artifacts: `outputs/evidence-capture-preview/2026-09-13T06-38-07-913Z`. These are isolated real-component tests with no backend traffic; private transport is mocked in unit tests and still needs post-release live verification.
 
-**Evidence gap - Post-inspection loading capture.** The desktop `inspection-persisted-viewport.png` was captured while Quality was loading. It does not prove the settled completed-inspection screen. Preserve it and add a separate read-only settled-state capture rather than replacing or relabeling the original.
+**Evidence gap - Post-inspection loading captures. Supplement completed.** Both original post-inspection viewport screenshots were captured while Quality was loading. They remain unchanged. Separate `supplement-completed-1789282374742/report.json` completed a business-read-only crawl with six viewport captures and corresponding full-page images, zero blocked requests and zero page errors. Assistant review of all six viewport captures confirms accepted inspections with loaded evidence thumbnails and destination-bin contents of seven units on desktop/mobile. This is later UI evidence, not another transaction run. Review notes: `outputs/wms-signoff/sep13-inbound-full-live/supplement-visual-review.md`.
+
+**P2 - Zone label hides bin identity in the storage list. Local candidate fixed; not deployed.** Both settled live storage-list screenshots show a long zone badge consuming the row, leaving bin names as `D...` and `Q...`. The candidate makes the full bin code primary, wraps its label and places the zone on a separate secondary row. Existing selection, Edit, scan and putaway handlers are unchanged. Parent verification passed all 11 Storage Areas tests and four offline browser viewports (1440, 768, 390 and 320px), covering ordinary and long unbroken values, keyboard/touch selection and unchanged fixture stock. Parent visually reviewed desktop and mobile viewport captures. Artifacts: `outputs/wms-signoff/storage-area-layout/2026-09-13T07-04-32-264Z` (system-font fallback); independent application-font captures: `outputs/wms-signoff/storage-area-layout/2026-09-13T07-00-54-131Z`. These tests mock the store and make no live business calls; post-release checks remain necessary.
 
 ## Remaining Work
 
-Finish the supplemental visual review, then archive-verify and remove only this batch's evidence and exact synthetic database rows using separately reviewed cleanup. The earlier zero-stock batch `658aa8b1` also remains. Tester-owned scenarios are outside these scopes.
+Finish and verify the two visual fixes, then archive-verify and remove only this batch's evidence and exact synthetic database rows using separately reviewed cleanup. The earlier zero-stock batch `658aa8b1` also remains. Tester-owned scenarios are outside these scopes.
 
 Damaged, short, excess, unidentified, partial and serialized receipt paths, broader independent-role and recovery coverage, physical returns, real hardware and the named-user floor pilot remain separate requirements. SMTP stays out of scope.

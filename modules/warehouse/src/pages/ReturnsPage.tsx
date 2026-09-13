@@ -1,6 +1,6 @@
-import { useRef, useState, type SetStateAction } from "react";
+import { useEffect, useRef, useState, type SetStateAction } from "react";
 import { newestFirst } from "@/domain/historyOrder";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useWarehouse } from "@/app/store";
 import type { ReturnSource } from "@/domain/types";
 import {
@@ -18,6 +18,7 @@ import { EvidenceCapture } from "@/components/camera/EvidenceCapture";
 import { EvidenceGallery } from "@/components/EvidenceGallery";
 import { Icon } from "@/components/Icon";
 import { ReturnIntakeProduct } from "./ReturnIntakeProduct";
+import { useReturnHistoryAnchor } from './useReturnHistoryAnchor';
 import { IntakeDraftActions, matchesDraftShape, useIntakeDraft, useIntakeScope } from "@/components/fulfillment/intakeDraft";
 import {
   parseReturnSerials,
@@ -50,6 +51,8 @@ const REASONS: { value: string; label: string }[] = [
 type ReturnCommand = Parameters<ReturnType<typeof useWarehouse>["recordReturn"]>[0];
 interface ReturnDraft {
   source: ReturnSource;
+  sourceOrderId?: string;
+  returnCaseId?: string;
   eventId: string;
   locationId: string;
   binId: string;
@@ -59,17 +62,19 @@ interface ReturnDraft {
 }
 
 const emptyReturnDraft = (): ReturnDraft => ({
-  source: "customer", eventId: "", locationId: "", binId: "", evidence: [], pending: null,
+  source: "customer", sourceOrderId: "", returnCaseId: "", eventId: "", locationId: "", binId: "", evidence: [], pending: null,
   lines: [{ id: 0, productId: "", quantity: 1, reason: REASONS[0]!.value, serials: "" }],
 });
 
 function isReturnDraft(value: unknown): value is ReturnDraft {
   if (!value || typeof value !== "object") return false;
   const draft = value as ReturnDraft;
-  return matchesDraftShape({ ...draft, pending: null }, { ...emptyReturnDraft(), evidence: [""] }) &&
+  const validLinks = (value: { sourceOrderId?: unknown; returnCaseId?: unknown }) =>
+    [value.sourceOrderId, value.returnCaseId].every(id => id === undefined || typeof id === 'string');
+  return validLinks(draft) && matchesDraftShape({ ...draft, sourceOrderId: draft.sourceOrderId ?? '', returnCaseId: draft.returnCaseId ?? '', pending: null }, { ...emptyReturnDraft(), evidence: [""] }) &&
     ["customer", "vendor", "event"].includes(draft.source) && draft.lines.length > 0 &&
     (draft.pending === null || (
-      matchesDraftShape(draft.pending, {
+      validLinks(draft.pending) && matchesDraftShape(draft.pending, {
         idempotencyKey: "", source: "", evidenceUrls: [""],
         lines: [{ productId: "", quantity: 1, reason: "", locationId: "", binId: "", disposition: "" }],
       }) && /^return-intake-[A-Za-z0-9-]+$/.test(draft.pending.idempotencyKey ?? "") &&
@@ -84,9 +89,14 @@ export function ReturnsPage() {
 
 function ReturnsIntake({ scope }: { scope: string }) {
   const { data, recordReturnOutcome, canOpenRoute } = useWarehouse();
+  useReturnHistoryAnchor('return-', data?.returns);
   const toast = useToast();
   const draft = useIntakeDraft(scope, emptyReturnDraft(), isReturnDraft, (value) => !!value.pending);
-  const { source, eventId, locationId, binId, lines, evidence, pending } = draft.value;
+  const { source, sourceOrderId = '', returnCaseId = '', eventId, locationId, binId, lines, evidence, pending } = draft.value;
+  const [params, setParams] = useSearchParams();
+  const contextKey = JSON.stringify([params.get('sourceOrderId'), params.get('returnCaseId')]);
+  const handledContext = useRef('');
+  const [contextError, setContextError] = useState('');
   const inFlight = useRef(false);
   const [submitting, setSubmitting] = useState(false);
   const [evidenceBusy, setEvidenceBusy] = useState(false);
@@ -101,12 +111,46 @@ function ReturnsIntake({ scope }: { scope: string }) {
     draft.update((current) => ({ ...current, [key]: typeof value === "function" ? (value as (previous: ReturnDraft[K]) => ReturnDraft[K])(current[key]) : value }));
   };
   const setLines = (value: SetStateAction<ReturnIntakeLine[]>) => setField("lines", value);
-  const changeContext = (changes: Partial<Pick<ReturnDraft, "source" | "eventId" | "locationId" | "binId">>) => {
+  const changeContext = (changes: Partial<Pick<ReturnDraft, "source" | "eventId" | "locationId" | "binId" | "sourceOrderId" | "returnCaseId">>) => {
     if (locked || inFlight.current) return;
     draft.update((current) => ({ ...current, ...changes, evidence: [] }));
   };
 
+  useEffect(() => {
+    if (!data || handledContext.current === contextKey) return;
+    const [orderId, caseId] = JSON.parse(contextKey) as [string | null, string | null];
+    if (orderId === null && caseId === null) { handledContext.current = contextKey; setContextError(''); return; }
+    const record = caseId ? data.customerReturnCases.find(row => row.id === caseId) : undefined;
+    const order = data.fulfillmentOrders.find(row => row.id === (orderId || record?.sourceOrderId));
+    if (!order || (caseId !== null && !record) || (record && record.sourceOrderId !== order.id)
+      || (record && !order.lines.some(line => line.productId === record.productId))) {
+      setContextError('Original order or customer case is unavailable, or the case does not match the order.'); return;
+    }
+    handledContext.current = contextKey;
+    setContextError('');
+    if (draft.dirty || draft.error || locked) {
+      if (draft.value.source !== 'customer' || draft.value.sourceOrderId !== order.id || (draft.value.returnCaseId || '') !== (caseId || '')) {
+        setContextError('A saved return draft has different context. Keep it before opening another return.');
+      }
+      return;
+    }
+    draft.replace({ ...draft.value, source: 'customer', sourceOrderId: order.id, returnCaseId: caseId || '',
+      lines: [{ id: 0, productId: record?.productId ?? '', quantity: 1, reason: REASONS[0]!.value, serials: record?.serialNumber ?? '' }], evidence: [] });
+  }, [data, contextKey, draft, locked]);
+
   if (!data) return null;
+  const linkedOrder = sourceOrderId ? data.fulfillmentOrders.find(row => row.id === sourceOrderId) : undefined;
+  const linkedCase = returnCaseId ? data.customerReturnCases.find(row => row.id === returnCaseId) : undefined;
+  const caseOptions = data.customerReturnCases.filter(row => row.sourceOrderId && (!sourceOrderId || row.sourceOrderId === sourceOrderId));
+  const linkageError = source === 'customer' && (sourceOrderId || returnCaseId) ? (
+    !linkedOrder ? 'Original order is unavailable.' : returnCaseId && (!linkedCase || linkedCase.sourceOrderId !== linkedOrder.id)
+      ? 'Customer case does not match the original order.' : lines.some(line => line.productId && (
+        !linkedOrder.lines.some(item => item.productId === line.productId && parseReturnSerials(line.serials).every(serial =>
+          item.pickedSerialNumbers?.some(value => value.trim().toUpperCase() === serial.trim().toUpperCase())))
+        || (linkedCase && (line.productId !== linkedCase.productId || (linkedCase.serialNumber &&
+          (parseReturnSerials(line.serials).length !== 1 || parseReturnSerials(line.serials)[0]?.toUpperCase() !== linkedCase.serialNumber.trim().toUpperCase()))))))
+        ? 'Return product or serial does not match the linked order and case.' : ''
+  ) : '';
   const productName = (id: string) =>
     data.products.find((p) => p.id === id)?.name ?? id;
   const quarantineLocations = data.locations.filter(
@@ -120,6 +164,7 @@ function ReturnsIntake({ scope }: { scope: string }) {
     parseReturnSerials(line.serials),
   );
   const canSubmit =
+    !contextError && !linkageError &&
     prepared.lines.length > 0 &&
     (source !== "event" || Boolean(eventId)) &&
     (!eventId || data.events.some((event) => event.id === eventId)) &&
@@ -132,6 +177,8 @@ function ReturnsIntake({ scope }: { scope: string }) {
     const input: ReturnCommand = {
       idempotencyKey: `return-intake-${crypto.randomUUID()}`,
       source,
+      ...(source === 'customer' && sourceOrderId ? { sourceOrderId } : {}),
+      ...(source === 'customer' && returnCaseId ? { returnCaseId } : {}),
       eventId: eventId || undefined,
       evidenceUrls: [...evidence],
       lines: prepared.lines.map((line) => ({ ...line, locationId, binId })),
@@ -216,7 +263,12 @@ function ReturnsIntake({ scope }: { scope: string }) {
             if (resumed) { setConfirmed(false); setRejectionConfirmed(false); setRejectionMessage(""); }
             return resumed;
           } }} busy={submitting || evidenceBusy} locked={!!pending} />
-          {savedReturnId && <a className="text-sm underline" href={`#return-${savedReturnId}`}>View saved return</a>}
+          {contextError && <div role="alert" className="space-y-2 text-sm">
+            <p>{contextError}</p>
+            <button type="button" className="btn-ghost" onClick={() => setParams({})}>Keep saved draft</button>
+          </div>}
+          {linkageError && <p role="alert" className="text-sm">{linkageError}</p>}
+          {savedReturnId && <Link className="text-sm underline" to={`#return-${savedReturnId}`}>View saved return</Link>}
           {rejectionMessage && <p role="status" className="text-sm">{rejectionMessage}</p>}
           {pending && <div className="space-y-2" role="status">
             <p className="text-sm">{confirmed ? "Return confirmed. Draft cleanup is still required." : rejectionConfirmed ? "Return rejected. Save the editable draft before continuing." : "Return outcome unknown. The original quantity, serials, and evidence are locked until recovery."}</p>
@@ -237,7 +289,7 @@ function ReturnsIntake({ scope }: { scope: string }) {
                   id="ret-source"
                   className="input"
                   value={source}
-                  onChange={(e) => changeContext({ source: e.target.value as ReturnSource })}
+                  onChange={(e) => changeContext({ source: e.target.value as ReturnSource, sourceOrderId: '', returnCaseId: '' })}
                 >
                   <option value="customer">Customer</option>
                   <option value="vendor">Vendor</option>
@@ -269,6 +321,27 @@ function ReturnsIntake({ scope }: { scope: string }) {
                 </select>
               </Field>
             </div>
+            {source === 'customer' && <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Original order" htmlFor="ret-order">
+                <select id="ret-order" className="input" value={sourceOrderId} onChange={e => changeContext({ sourceOrderId: e.target.value, returnCaseId: '' })}>
+                  <option value="">Not linked</option>
+                  {data.fulfillmentOrders.map(order => <option key={order.id} value={order.id}>{order.externalReference}</option>)}
+                </select>
+              </Field>
+              <Field label="Customer return case" htmlFor="ret-case">
+                <select id="ret-case" className="input" value={returnCaseId} onChange={e => {
+                  if (locked || inFlight.current) return;
+                  const record = data.customerReturnCases.find(row => row.id === e.target.value);
+                  draft.update(current => ({ ...current, returnCaseId: e.target.value, sourceOrderId: record?.sourceOrderId ?? sourceOrderId, evidence: [],
+                    lines: record && current.lines.length === 1 && !current.lines[0]!.productId && !current.lines[0]!.serials
+                      && current.lines[0]!.quantity === 1 && current.lines[0]!.reason === REASONS[0]!.value
+                      ? [{ ...current.lines[0]!, productId: record.productId, serials: record.serialNumber ?? '' }] : current.lines }));
+                }}>
+                  <option value="">Not linked</option>
+                  {caseOptions.map(record => <option key={record.id} value={record.id}>{record.id} / {productName(record.productId)}</option>)}
+                </select>
+              </Field>
+            </div>}
             <Field
               label="Quarantine location"
               htmlFor="ret-location"
@@ -360,7 +433,7 @@ function ReturnsIntake({ scope }: { scope: string }) {
             <EvidenceCapture
               key={draft.generation}
               value={evidence}
-              reference={`return-${encodeURIComponent(scope)}-${draft.generation}-${source}-${eventId}-${locationId}-${binId}`}
+              reference={`return-${encodeURIComponent(scope)}-${draft.generation}-${source}-${eventId}-${locationId}-${binId}-${sourceOrderId}-${returnCaseId}`}
               label="Attach return evidence"
               onChange={(urls) => setField("evidence", urls)}
               onBusyChange={(busy) => { evidenceBusyRef.current = busy; setEvidenceBusy(busy); }}
@@ -388,7 +461,13 @@ function ReturnsIntake({ scope }: { scope: string }) {
                 .slice()
                 .sort(newestFirst)
                 .map((r) => (
-                  <li key={r.id} id={`return-${r.id}`} className="rounded-xl bg-inset p-3">
+                  <li key={r.id} id={`return-${r.id}`} tabIndex={-1} className="scroll-mt-24 rounded-xl bg-inset p-3">
+                    {r.sourceOrderId && <p className="break-words text-sm">Original order: {data.fulfillmentOrders.some(order => order.id === r.sourceOrderId)
+                      ? <Link className="underline" to={`/fulfillment?tab=orders&order=${encodeURIComponent(r.sourceOrderId)}`}>{data.fulfillmentOrders.find(order => order.id === r.sourceOrderId)!.externalReference}</Link>
+                      : 'Reference unavailable'}</p>}
+                    {r.returnCaseId && <p className="break-all text-sm">Customer case: {data.customerReturnCases.some(record => record.id === r.returnCaseId)
+                      ? <Link className="underline" to={`/fulfillment?tab=returns#return-case-${encodeURIComponent(r.returnCaseId)}`}>{r.returnCaseId}</Link>
+                      : 'Reference unavailable'}</p>}
                     <div className="flex items-center justify-between">
                       <Badge tone={r.source === "vendor" ? "brand" : "cyan"}>
                         {r.source === "vendor"

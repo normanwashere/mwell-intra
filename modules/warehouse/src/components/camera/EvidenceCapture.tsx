@@ -1,6 +1,7 @@
 import { userFacingError } from '@intra/ui';
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Icon } from "../Icon";
+import { EvidenceGallery } from "../EvidenceGallery";
 import { useSession } from "@intra/auth";
 import { uploadEvidence } from "@/data/supabase/evidence";
 
@@ -194,7 +195,12 @@ export function EvidenceCapture({
         <ul className="grid grid-cols-3 gap-2" aria-label="Captured evidence">
           {urls.map((url, index) => (
             <li key={`${url}-${index}`} className="relative">
-              <CapturedThumb url={url} />
+              <EvidenceGallery
+                key={reference}
+                urls={[url]}
+                size="thumb"
+                className="!block aspect-square w-full rounded-lg bg-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface [&_img]:!h-full [&_img]:!w-full [&_img]:!object-contain [&_span]:!h-full [&_span]:!w-full"
+              />
               <button
                 type="button"
                 aria-label="Remove photo"
@@ -211,47 +217,4 @@ export function EvidenceCapture({
       )}
     </div>
   );
-}
-
-/** Renders a captured evidence value inline (data URL now; storage paths
- * resolve to a signed URL for the preview). */
-function CapturedThumb({ url }: { url: string }) {
-  const { supabaseClient, profile } = useSession();
-  const [src, setSrc] = useState<string | null>(
-    url.startsWith("data:") ? url : null,
-  );
-  useEffect(() => {
-    let active = true;
-    setSrc(url.startsWith("data:") ? url : null);
-    if (!url.startsWith("data:"))
-      void resolveEvidenceUrlSafe(url, profile ? supabaseClient : null).then((u) => {
-        if (active) setSrc(u);
-      });
-    return () => {
-      active = false;
-    };
-  }, [url, supabaseClient, profile?.id]);
-  if (!src) {
-    return (
-      <span className="grid aspect-square w-full place-items-center rounded-xl bg-inset text-faint ring-1 ring-line">
-        <Icon name="camera" className="h-5 w-5" />
-      </span>
-    );
-  }
-  return (
-    <img
-      src={src}
-      alt="Evidence"
-      className="aspect-square w-full rounded-xl object-cover ring-1 ring-line"
-    />
-  );
-}
-
-async function resolveEvidenceUrlSafe(value: string, client: ReturnType<typeof useSession>['supabaseClient']): Promise<string | null> {
-  try {
-    const { resolveEvidenceUrl } = await import("@/data/supabase/evidence");
-    return resolveEvidenceUrl(value, client);
-  } catch {
-    return null;
-  }
 }

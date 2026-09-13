@@ -13,7 +13,6 @@ import {
   suggestBinCode,
 } from '@/domain/storage';
 import {
-  Badge,
   Card,
   EmptyState,
   Field,
@@ -442,23 +441,21 @@ export function StorageAreasPage() {
             const items = binContents(state, b.id);
             const totalUnits = items.reduce((s, i) => s + i.quantity, 0);
             return (
-              <Card key={b.id} className="space-y-3 p-4">
+              <Card key={b.id} className="min-w-0 space-y-3 p-4">
                 <button
                   type="button"
-                  className="w-full text-left"
+                  className="min-w-0 w-full text-left"
                   onClick={() => setViewing(b)}
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="truncate font-mono text-base font-bold text-ink">
-                        {b.code}
-                      </p>
-                      {b.label && (
-                        <p className="truncate text-sm text-muted">{b.label}</p>
-                      )}
-                    </div>
-                    {b.zone && <Badge tone="slate">{b.zone}</Badge>}
+                  <div className="min-w-0 space-y-1 [overflow-wrap:anywhere]">
+                    <p className="font-mono text-base font-bold leading-snug text-ink">
+                      {b.code}
+                    </p>
+                    {b.label && (
+                      <p className="text-sm text-muted">{b.label}</p>
+                    )}
                   </div>
+                  {b.zone && <p className="mt-2 min-w-0 text-xs text-faint [overflow-wrap:anywhere]">Zone: {b.zone}</p>}
                   <p className="mt-2 text-sm text-muted">
                     {totalUnits > 0 ? (
                       <>

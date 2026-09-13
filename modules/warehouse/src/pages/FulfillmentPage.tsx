@@ -7,6 +7,7 @@ import {
   type FormEvent,
 } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { useReturnHistoryAnchor } from './useReturnHistoryAnchor';
 import type {
   CustomerReturnCase,
   DepartmentRequestOption,
@@ -1107,7 +1108,7 @@ function OrderDetailsSheet({
   showCommercial: boolean;
   onClose: () => void;
 }) {
-  const { data, actor, identityId } = useWarehouse();
+  const { data, actor, identityId, can } = useWarehouse();
   if (!order) return null;
   const request = data?.departmentStockRequests.find(item => item.fulfillmentOrderId === order.id);
   const internal = order.source === 'department_request';
@@ -1144,8 +1145,17 @@ function OrderDetailsSheet({
           {order.status === 'released' && order.deliveryMethod === 'shipment' ? 'Review shipment timeline' : 'Review order lines'}
         </a>
         <RecordCopyActions reference={order.externalReference} href={`/warehouse/fulfillment?tab=orders&order=${encodeURIComponent(order.id)}`} />
+        {can('manage_returns') && <Link className="inline-flex min-h-11 items-center gap-2 text-sm underline" to={`/returns?sourceOrderId=${encodeURIComponent(order.id)}`}>
+          <Icon name="rotate" /> Receive physical return
+        </Link>}
       </WorkflowSummary>
       <div className="order-record-layout grid min-w-0 items-start gap-5 md:grid-cols-2 [&>section]:min-w-0 [&>section]:border-b [&>section]:border-line [&>section]:pb-4">
+        {data?.returns.some(record => record.sourceOrderId === order.id) && <section aria-label="Physical returns" className="space-y-2 text-sm">
+          <h3 className="font-semibold">Physical returns</h3>
+          {data.returns.filter(record => record.sourceOrderId === order.id).map(record => <p key={record.id} className="break-all">
+            <Link className="underline" to={`/returns#return-${encodeURIComponent(record.id)}`}>{record.id}</Link>
+          </p>)}
+        </section>}
         <section aria-label="Operational summary" className="space-y-2 text-sm [overflow-wrap:anywhere]">
           <h3 className="font-semibold text-ink">Order summary</h3>
           <p className="font-semibold text-ink">{titleCase(order.status)} / {order.externalReference}</p>
@@ -3541,10 +3551,13 @@ function ReturnsWorkspace({
     createCustomerReturnCase,
     resolveCustomerReturnCase,
     closeCustomerReturnCase,
+    data,
+    can,
   } = useWarehouse();
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<CustomerReturnCase>();
   const [closing, setClosing] = useState<CustomerReturnCase>();
+  useReturnHistoryAnchor('return-case-', returns);
   return (
     <section className="space-y-4" aria-labelledby="returns-title">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -3598,7 +3611,7 @@ function ReturnsWorkspace({
           aria-label="Customer return cases"
         >
           {returns.map((record) => (
-            <li key={record.id} className="card p-4">
+            <li key={record.id} id={`return-case-${record.id}`} tabIndex={-1} className="card scroll-mt-24 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="font-semibold text-ink">
@@ -3618,11 +3631,20 @@ function ReturnsWorkspace({
               <p className="mt-2 text-xs text-muted">
                 Resolution: {titleCase(record.resolution)}
               </p>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+              {can('manage_returns') && record.sourceOrderId && orders.some(order => order.id === record.sourceOrderId) && (
+                <Link className="inline-flex min-h-11 items-center gap-2 text-sm underline" to={`/returns?sourceOrderId=${encodeURIComponent(record.sourceOrderId)}&returnCaseId=${encodeURIComponent(record.id)}`}>
+                  <Icon name="rotate" /> Receive physical return
+                </Link>
+              )}
+              {data?.returns.filter(physical => physical.returnCaseId === record.id).map(physical => <p key={physical.id} className="basis-full break-all text-sm">
+                Physical return: <Link className="underline" to={`/returns#return-${encodeURIComponent(physical.id)}`}>{physical.id}</Link>
+              </p>)}
               {resolutionMode !== "read_only" &&
                 !["resolved", "closed"].includes(record.status) && (
                   <button
                     type="button"
-                    className="btn-outline mt-4 w-full sm:w-auto"
+                    className="btn-outline w-full sm:w-auto"
                     onClick={() => setSelected(record)}
                   >
                     {resolutionMode === "finance"
@@ -3633,12 +3655,13 @@ function ReturnsWorkspace({
               {canCreate && record.status === "resolved" && (
                 <button
                   type="button"
-                  className="btn-primary mt-4 w-full sm:w-auto"
+                  className="btn-primary w-full sm:w-auto"
                   onClick={() => setClosing(record)}
                 >
                   Close with customer
                 </button>
               )}
+              </div>
               {record.status === "closed" &&
                 record.customerResolutionReference && (
                   <p className="mt-3 text-xs font-medium text-emerald-700 dark:text-emerald-300">

@@ -9,10 +9,148 @@ import { allPending, availableForProduct, removeEntry, ReturnRejectedError, Supa
 import type { SupabaseClient } from "@supabase/supabase-js";
 import * as evidenceStorage from "@/data/supabase/evidence";
 import * as dataSource from "@/data/createRepository";
+import { useWarehouse } from '@/app/store';
+
+function RefreshReturns() {
+  const { refresh } = useWarehouse();
+  return <><button onClick={() => void refresh()}>Refresh fixture</button><ReturnsPage /></>;
+}
 
 afterEach(() => vi.restoreAllMocks());
 
 describe("ReturnsPage", () => {
+  async function linkedRepo() {
+    const data = await makeRepo().getData();
+    data.fulfillmentOrders = [{ id: 'source-order', externalReference: 'SOURCE-RETURN', source: 'ecommerce', status: 'released',
+      lines: [{ productId: 'shirt-l', quantity: 2, pickedQuantity: 2, pickedSerialNumbers: [] }], packaging: [], shipmentEvents: [], deliveryMethod: 'shipment', createdBy: 'receiver', createdAt: '2026-09-13T00:00:00Z', updatedAt: '2026-09-13T00:00:00Z' }];
+    data.customerReturnCases = [{ id: 'customer-case', sourceOrderId: 'source-order', productId: 'shirt-l', defectDescription: 'Damaged shirt',
+      requestingDepartment: 'customer_service', status: 'submitted', resolution: 'pending', createdBy: 'receiver', createdAt: '2026-09-13T00:00:00Z' }];
+    data.returns = [];
+    return makeRepo(data);
+  }
+
+  it('prefills contextual customer lineage without submitting and retains it in saved history', async () => {
+    const repo = await linkedRepo(); const record = vi.spyOn(repo, 'recordReturn'); const user = userEvent.setup();
+    renderWithProviders(<ReturnsPage />, { repo, route: '/returns?sourceOrderId=source-order&returnCaseId=customer-case' });
+    await waitFor(() => expect(screen.getByLabelText('Customer return case')).toHaveValue('customer-case'));
+    expect(screen.getByLabelText('Original order')).toHaveValue('source-order');
+    expect(screen.getByLabelText('Product')).toHaveValue('shirt-l'); expect(record).not.toHaveBeenCalled();
+    await user.selectOptions(screen.getByLabelText('Quarantine location'), 'loc-wh');
+    await user.selectOptions(screen.getByLabelText('Quarantine bin'), 'bin-pasig-a1');
+    await user.click(screen.getByRole('button', { name: 'Record return' }));
+    await screen.findByText('Return logged in inspection staging');
+    expect(record.mock.calls[0]![0]).toMatchObject({ sourceOrderId: 'source-order', returnCaseId: 'customer-case' });
+    expect(within(screen.getByLabelText('Returns')).getByRole('link', { name: 'SOURCE-RETURN' })).toBeInTheDocument();
+  });
+
+  it('rejects inaccessible contextual sources instead of silently recording an unlinked return', async () => {
+    const repo = await linkedRepo(); const record = vi.spyOn(repo, 'recordReturn');
+    renderWithProviders(<ReturnsPage />, { repo, route: '/returns?sourceOrderId=foreign&returnCaseId=customer-case' });
+    await screen.findByText(/original order.*unavailable|case.*does not match/i);
+    expect(screen.getByRole('button', { name: 'Record return' })).toBeDisabled(); expect(record).not.toHaveBeenCalled();
+  });
+
+  it('retries an unavailable contextual link when a complete refreshed snapshot arrives', async () => {
+    const repo = await linkedRepo(); const full = await repo.getData();
+    vi.spyOn(repo, 'getData').mockResolvedValueOnce({ ...full, fulfillmentOrders: [], customerReturnCases: [] }).mockResolvedValue(full);
+    renderWithProviders(<RefreshReturns />, { repo, route: '/returns?returnCaseId=customer-case' });
+    await screen.findByText(/original order.*unavailable/i);
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh fixture' }));
+    await waitFor(() => expect(screen.getByLabelText('Customer return case')).toHaveValue('customer-case'));
+    expect(screen.queryByText(/original order.*unavailable/i)).not.toBeInTheDocument();
+  });
+
+  it('prefills only an untouched blank line when manually selecting a case', async () => {
+    const repo = await linkedRepo(); const user = userEvent.setup();
+    renderWithProviders(<ReturnsPage />, { repo });
+    await screen.findByText('Recent returns');
+    await user.selectOptions(screen.getByLabelText('Customer return case'), 'customer-case');
+    expect(screen.getByLabelText('Product')).toHaveValue('shirt-l');
+    await user.selectOptions(screen.getByLabelText('Customer return case'), '');
+    await user.selectOptions(screen.getByLabelText('Product'), 'smart-watch');
+    await user.selectOptions(screen.getByLabelText('Customer return case'), 'customer-case');
+    expect(screen.getByLabelText('Product')).toHaveValue('smart-watch');
+    expect(screen.getByRole('button', { name: 'Record return' })).toBeDisabled();
+  });
+
+  it('focuses a saved return anchor after asynchronous history is rendered', async () => {
+    const repo = await linkedRepo(); const full = await repo.getData();
+    full.returns = [{ id: 'linked-history', source: 'customer', actor: 'receiver', createdAt: '2026-09-13T00:00:00Z', lines: [] }];
+    vi.spyOn(repo, 'getData').mockResolvedValueOnce({ ...full, returns: [] }).mockResolvedValue(full);
+    const scroll = vi.fn();
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { callback(0); return 1; });
+    const original = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = scroll;
+    try {
+      renderWithProviders(<RefreshReturns />, { repo, route: '/returns#return-linked-history' });
+      await screen.findByText('No returns recorded yet');
+      await userEvent.click(screen.getByRole('button', { name: 'Refresh fixture' }));
+      await waitFor(() => expect(document.getElementById('return-linked-history')).toHaveFocus());
+      expect(scroll).toHaveBeenCalled();
+    } finally { HTMLElement.prototype.scrollIntoView = original; vi.unstubAllGlobals(); }
+  });
+
+  it('does not overwrite an existing draft with a contextual link and hides customer fields for vendor intake', async () => {
+    const repo = await linkedRepo(); const user = userEvent.setup();
+    const view = renderWithProviders(<ReturnsPage />, { repo }); await screen.findByText('Recent returns');
+    await user.selectOptions(screen.getByLabelText('Product'), 'shirt-l');
+    view.unmount();
+    renderWithProviders(<ReturnsPage />, { repo, route: '/returns?sourceOrderId=source-order&returnCaseId=customer-case' });
+    await screen.findByText(/saved return draft.*different/i);
+    expect(screen.getByLabelText('Original order')).toHaveValue('');
+    await user.click(screen.getByRole('button', { name: 'Keep saved draft' }));
+    await user.click(screen.getByRole('button', { name: 'Resume draft' }));
+    await user.selectOptions(screen.getByLabelText('Return source'), 'vendor');
+    expect(screen.queryByLabelText('Original order')).not.toBeInTheDocument();
+  });
+
+  it.each(['', '?sourceOrderId=unavailable-order&returnCaseId=unavailable-case'])(
+    'recovers the exact linked pending command after reload with context %s', async context => {
+      const repo = await linkedRepo(); const original = repo.recordReturn.bind(repo);
+      const record = vi.spyOn(repo, 'recordReturn').mockImplementationOnce(async input => {
+        await original(input); throw new Error('Linked return response lost');
+      });
+      const user = userEvent.setup();
+      const view = renderWithProviders(<ReturnsPage />, { repo, route: '/returns?sourceOrderId=source-order&returnCaseId=customer-case' });
+      await waitFor(() => expect(screen.getByLabelText('Customer return case')).toHaveValue('customer-case'));
+      await user.selectOptions(screen.getByLabelText('Quarantine location'), 'loc-wh');
+      await user.selectOptions(screen.getByLabelText('Quarantine bin'), 'bin-pasig-a1');
+      await user.click(screen.getByRole('button', { name: 'Increase' }));
+      await user.upload(screen.getByLabelText('Attach return evidence'), new File(['photo'], 'linked.png', { type: 'image/png' }));
+      await screen.findByRole('list', { name: 'Captured evidence' });
+      await user.click(screen.getByRole('button', { name: 'Record return' }));
+      await screen.findByText('Linked return response lost');
+      const command = structuredClone(record.mock.calls[0]![0]);
+      expect(command).toMatchObject({ sourceOrderId: 'source-order', returnCaseId: 'customer-case',
+        lines: [{ productId: 'shirt-l', quantity: 2, locationId: 'loc-wh', binId: 'bin-pasig-a1' }] });
+      expect(command.idempotencyKey).toMatch(/^return-intake-/); expect(command.evidenceUrls).toHaveLength(1);
+      const committed = structuredClone(await repo.getData());
+      expect(committed.returns).toHaveLength(1);
+      view.unmount();
+      renderWithProviders(<ReturnsPage />, { repo, route: `/returns${context}` });
+      await screen.findByRole('button', { name: 'Recover original result' });
+      if (context) await screen.findByText(/original order.*unavailable/i);
+      for (const label of ['Original order', 'Customer return case', 'Product', 'Quantity', 'Attach return evidence']) {
+        expect(screen.getByLabelText(label)).toBeDisabled();
+      }
+      expect(screen.getByLabelText('Original order')).toHaveValue('source-order');
+      expect(screen.getByLabelText('Customer return case')).toHaveValue('customer-case');
+      expect(screen.getByLabelText('Quantity')).toHaveValue(2);
+      expect(screen.getByRole('list', { name: 'Captured evidence' })).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Record return' }));
+      expect(record).toHaveBeenCalledTimes(1);
+      await user.click(screen.getByRole('button', { name: 'Recover original result' }));
+      await screen.findByText('Return logged in inspection staging');
+      expect(record).toHaveBeenCalledTimes(2); expect(record.mock.calls[1]![0]).toEqual(command);
+      const recovered = await repo.getData();
+      expect(recovered.returns).toEqual(committed.returns);
+      expect(recovered.stockLevels).toEqual(committed.stockLevels);
+      expect(recovered.movements).toEqual(committed.movements);
+      expect(within(screen.getByLabelText('Returns')).getByRole('link', { name: 'SOURCE-RETURN' })).toBeInTheDocument();
+      expect(within(screen.getByLabelText('Returns')).getByRole('link', { name: 'customer-case' })).toBeInTheDocument();
+    },
+  );
+
   it.each(["ascending", "descending", "mixed"])("orders %s return history newest first without changing repository data", async (order) => {
     const data = await makeRepo().getData();
     const records = Array.from({ length: 12 }, (_, index) => ({

@@ -316,6 +316,8 @@ export function rowToReturn(r: Row): ReturnRecord {
     id: r.id,
     source: r.source,
     eventId: r.event_id ?? undefined,
+    sourceOrderId: r.source_order_id ?? undefined,
+    returnCaseId: r.return_case_id ?? undefined,
     lines: r.lines ?? [],
     evidenceUrls: r.evidence_urls ?? [],
     actor: r.actor,

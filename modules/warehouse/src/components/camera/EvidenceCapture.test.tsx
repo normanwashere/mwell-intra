@@ -24,7 +24,7 @@ describe('EvidenceCapture', () => {
       expect(last).toHaveLength(2);
       expect(last.every((u) => u.startsWith('data:image/png;base64,'))).toBe(true);
     });
-    expect(screen.getAllByRole('img', { name: /evidence/i })).toHaveLength(2);
+    expect(await screen.findAllByRole('img', { name: /evidence/i })).toHaveLength(2);
   });
 
   it('removes a photo and reports the shortened list', async () => {

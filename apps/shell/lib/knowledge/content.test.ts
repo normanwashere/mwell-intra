@@ -25,6 +25,20 @@ import {
 } from "./validate";
 
 describe("Knowledge Base content", () => {
+  it('keeps return linking and photo preview guidance user-facing and release pending', () => {
+    const text = JSON.stringify(KNOWLEDGE_CONTENT);
+    expect(text).toMatch(/Link a received return to its original order/);
+    expect(text).not.toMatch(/Customer physical lineage candidate/);
+    expect(text).toMatch(/Close the preview to return to the unsent form/);
+    expect(text).toMatch(/Previewing does not submit/);
+    expect(text).toMatch(/release pending/);
+  });
+  it('describes optional candidate physical-return lineage without conflating intake and disposition', () => {
+    const detail = JSON.stringify(EXPLICIT_FEATURE_DETAILS['warehouse-returns']);
+    expect(detail).toMatch(/Original order/); expect(detail).toMatch(/Customer return case/);
+    expect(detail).toMatch(/unlinked/i); expect(detail).toMatch(/candidate/i);
+    expect(detail).toMatch(/Quality/); expect(detail).not.toMatch(/Selects restock, hold, damage, loss/);
+  });
   it("explains bounded Quality recovery without presenting incomplete records as empty", () => {
     const recovery = EXPLICIT_FEATURE_DETAILS["warehouse-quality"]?.controls.find(
       (control) => control.name === "Retry quality queue",

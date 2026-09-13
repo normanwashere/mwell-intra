@@ -1482,21 +1482,27 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
     "warehouse-returns": {
       controls: [
         control(
+          "Receive physical return",
+          "Local candidate, not yet live: opens customer intake from the original order or customer case without submitting it.",
+          "Existing manage_returns authority is required. Original order and Customer return case are optional; legacy unlinked intake remains supported.",
+          "Valid context prefills the draft; mismatched or inaccessible links are blocked, and an existing draft is not overwritten.",
+        ),
+        control(
           "Select return source",
           "Identifies whether the physical return came from a customer, vendor, or specific event.",
           "Event returns require the accountable event before submission.",
           "The return remains linked to its custody source for reconciliation.",
         ),
         control(
-          "Set disposition",
-          "Selects restock, hold, damage, loss, or vendor return handling.",
-          "Disposition must match observed condition and role authority.",
-          "Required reason and destination rules update.",
+          "Review in Quality",
+          "Physical intake always enters quarantine with pending inspection; Quality chooses the final disposition separately.",
+          "Existing inspection and hold-release authority applies. A hold creator cannot release their own hold.",
+          "Accepted stock becomes available; damaged or unavailable stock stays held rather than being automatically written off.",
         ),
         control(
           "Capture return evidence",
           "Attaches proof supporting condition and disposition.",
-          "Adverse dispositions require valid evidence before submission.",
+          "Capture observed condition; inspection and hold-release evidence requirements remain separate.",
           "The evidence reference appears on the return draft.",
         ),
         control(
@@ -1507,6 +1513,10 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
       ],
       fields: [
+        field("Original order", "Local candidate: optional customer source shown in return history.", false,
+          "Choose the original order containing the returned product and any serial. Check the order reference before continuing."),
+        field("Customer return case", "Local candidate: optional link to the customer-resolution record, separate from physical custody.", false,
+          "Choose the matching case. An untouched blank product line is filled from the case; existing entries remain for you to check. Correct any order, product or serial mismatch before recording the return."),
         field(
           "Return source",
           "Identifies whether the physical custody came from a customer, vendor, or event workflow.",
@@ -1523,13 +1533,13 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Product",
           "Shows the product associated with the selected issue.",
           true,
-          "The product is read-only and must match issue custody.",
+          "Select the returned product; when linked, it must match the original order and customer case.",
         ),
         field(
           "Quantity",
           "Records how many issued units are returning.",
           true,
-          "Use a positive value within outstanding custody.",
+          "Use a positive whole quantity. Existing allocation-return custody limits remain unchanged.",
         ),
         field(
           "Condition",
@@ -1539,15 +1549,15 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         field(
           "Disposition",
-          "Determines the resulting stock or exception state.",
-          true,
-          "The disposition must be compatible with condition.",
+          "Intake records quarantine; Quality determines the later stock or exception state.",
+          false,
+          "Not an editable intake field. Acceptance, hold release and vendor disposition remain separate commands.",
         ),
         field(
           "Destination bin",
           "Selects the exact receiving or quarantine bin for physical custody before inspection.",
           true,
-          "Restock-intent returns require an active bin in the selected receiving location.",
+          "Select the active bin where the goods are physically held within the selected receiving location.",
         ),
         field(
           "Reason",

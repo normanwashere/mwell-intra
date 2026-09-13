@@ -199,6 +199,8 @@ export interface ReturnRecord {
   id: Id;
   source: ReturnSource;
   eventId?: Id;
+  sourceOrderId?: Id;
+  returnCaseId?: Id;
   lines: ReturnLine[];
   evidenceUrls?: string[];
   actor: string;

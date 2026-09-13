@@ -31,6 +31,32 @@ function HistoryControls() {
 }
 
 describe("FulfillmentPage", () => {
+  it.each([true, false])('gates contextual physical-return links by intake authority (allowed=%s)', async (allowed) => {
+    const data = buildSeed();
+    data.fulfillmentOrders = [{ id: 'source-order', externalReference: 'SOURCE-RETURN', source: 'ecommerce', status: 'released',
+      lines: [{ productId: 'shirt-l', quantity: 2, pickedQuantity: 2, pickedSerialNumbers: [] }], packaging: [], shipmentEvents: [], deliveryMethod: 'shipment', createdBy: 'receiver', createdAt: '2026-09-13T00:00:00Z', updatedAt: '2026-09-13T00:00:00Z' }];
+    data.customerReturnCases = [{ id: 'customer-case', sourceOrderId: 'source-order', productId: 'shirt-l', defectDescription: 'Damaged shirt',
+      requestingDepartment: 'customer_service', status: 'submitted', resolution: 'pending', createdBy: 'receiver', createdAt: '2026-09-13T00:00:00Z' }];
+    data.returns = [{ id: 'physical-return', source: 'customer', sourceOrderId: 'source-order', returnCaseId: 'customer-case', lines: [], actor: 'receiver', createdAt: '2026-09-13T00:00:00Z' }];
+    renderWithProviders(<FulfillmentPage />, { repo: makeRepo(data), route: '/fulfillment?tab=returns',
+      role: allowed ? 'warehouse_operator' : 'operations' });
+    const list = await screen.findByRole('list', { name: 'Customer return cases' });
+    if (allowed) expect(within(list).getByRole('link', { name: 'Receive physical return' })).toHaveAttribute('href', '/returns?sourceOrderId=source-order&returnCaseId=customer-case');
+    else expect(within(list).queryByRole('link', { name: 'Receive physical return' })).not.toBeInTheDocument();
+    expect(within(list).getByRole('link', { name: 'physical-return' })).toHaveAttribute('href', '/returns#return-physical-return');
+  });
+
+  it('shows original-order physical return action and linked history without requiring completion', async () => {
+    const data = buildSeed();
+    data.fulfillmentOrders = [{ id: 'source-order', externalReference: 'SOURCE-RETURN', source: 'ecommerce', status: 'released',
+      lines: [{ productId: 'shirt-l', quantity: 2, pickedQuantity: 2, pickedSerialNumbers: [] }], packaging: [], shipmentEvents: [], deliveryMethod: 'shipment', createdBy: 'receiver', createdAt: '2026-09-13T00:00:00Z', updatedAt: '2026-09-13T00:00:00Z' }];
+    data.returns = [{ id: 'physical-return', source: 'customer', sourceOrderId: 'source-order', lines: [], actor: 'receiver', createdAt: '2026-09-13T00:00:00Z' }];
+    renderWithProviders(<FulfillmentPage />, { repo: makeRepo(data), route: '/fulfillment?tab=orders&order=source-order' });
+    const dialog = await screen.findByRole('dialog', { name: 'Order details / SOURCE-RETURN' });
+    expect(within(dialog).getByRole('link', { name: 'Receive physical return' })).toHaveAttribute('href', '/returns?sourceOrderId=source-order');
+    expect(within(dialog).getByRole('link', { name: 'physical-return' })).toBeInTheDocument();
+  });
+
   it("keeps Floor work touch-sized and navigates to its actionable queue", async () => {
     const user = userEvent.setup();
     renderWithProviders(<><FulfillmentPage /><LocationProbe /></>, {

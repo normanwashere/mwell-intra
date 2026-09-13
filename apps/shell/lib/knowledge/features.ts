@@ -1041,9 +1041,9 @@ const definitions: FeatureDefinition[] = [
     purpose:
       "Receives multiple customer, vendor, or event-specific return items into a named location and quarantine bin in one governed intake. Enter quantity and serials per item; the complete batch is validated before submission and stays unavailable until an independent Quality decision.",
     reads:
-      "Open issues, event allocations, products, traceability identity, prior returns, and valid destinations.",
+      "Open issues, event allocations, products, traceability identity, prior returns, and valid destinations. Local update, not yet live: check the visible original order and customer return case when linking a customer intake.",
     writes:
-      "Return intake creates unavailable quarantine custody and an inspection task. Independent Quality records the final disposition and only accepted stock becomes available.",
+      "Return intake creates unavailable quarantine custody and an inspection task. Independent Quality records the final disposition and only accepted stock becomes available. In the local candidate, optional Original order and Customer return case links are stored with the intake; legacy unlinked returns remain supported, and links do not approve customer resolution or release a hold.",
     statuses:
       "Expected, received, inspected, restocked, held, damaged, lost, or returned to vendor.",
     exception:

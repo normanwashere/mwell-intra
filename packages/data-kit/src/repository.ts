@@ -164,6 +164,8 @@ export interface ReturnInput {
   idempotencyKey?: string;
   source: ReturnRecord["source"];
   eventId?: string;
+  sourceOrderId?: string;
+  returnCaseId?: string;
   /** When set, the matching allocation is closed out (status -> 'returned'). */
   allocationId?: string;
   lines: {

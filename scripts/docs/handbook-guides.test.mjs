@@ -19,6 +19,20 @@ const {
 
 const root = path.resolve(fileURLToPath(new URL("../../", import.meta.url)));
 
+test('return guide distinguishes optional candidate lineage, physical custody, and customer resolution', () => {
+  const guide = HANDBOOK_GUIDES.find(item => item.id === 'returns-replacements-refunds-rma');
+  const text = JSON.stringify(guide);
+  assert.match(text, /candidate/i); assert.match(text, /unlinked/i);
+  assert.match(text, /Receive physical return/); assert.match(text, /Recover original result/);
+  assert.doesNotMatch(text, /Unmatched returns cannot post reusable stock/);
+});
+
+test('receiving and Quality photo preview guidance keeps the form unsent', () => {
+  const text = JSON.stringify(HANDBOOK_GUIDES.find(item => item.id === 'stock-receiving-putaway'));
+  assert.match(text, /release pending/); assert.match(text, /Receiving or Quality/);
+  assert.match(text, /full size/); assert.match(text, /unsent form/); assert.match(text, /does not submit/);
+});
+
 test("September 7 merchandise guidance is reachable from both receiving and departmental release", () => {
   for (const id of ["stock-receiving-putaway", "department-inventory-release"]) {
     const guide = HANDBOOK_GUIDES.find((item) => item.id === id);

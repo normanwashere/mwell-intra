@@ -30,6 +30,32 @@ const input: ReturnInput = {
 };
 
 describe("return intake safety", () => {
+  it('stores optional customer lineage and rejects mismatched pairs before custody changes', async () => {
+    const data = buildSeed();
+    data.fulfillmentOrders = [{ id: 'source-order', source: 'ecommerce', status: 'released', externalReference: 'SOURCE',
+      lines: [{ productId: 'shirt-l', quantity: 2, pickedQuantity: 2, pickedSerialNumbers: [] }], packaging: [], shipmentEvents: [], deliveryMethod: 'shipment', createdBy: 'receiver', createdAt: '2026-09-13T00:00:00Z', updatedAt: '2026-09-13T00:00:00Z' }];
+    data.customerReturnCases = [{ id: 'customer-case', sourceOrderId: 'source-order', productId: 'shirt-l', defectDescription: 'defective',
+      requestingDepartment: 'customer_service', status: 'submitted', resolution: 'pending', createdBy: 'receiver', createdAt: '2026-09-13T00:00:00Z' }];
+    const repo = new InMemoryRepository(data);
+    const command = { ...input, source: 'customer' as const, eventId: undefined, returnCaseId: 'customer-case', lines: [input.lines[0]!] };
+    const saved = await repo.recordReturn(command);
+    expect(saved).toMatchObject({ sourceOrderId: 'source-order', returnCaseId: 'customer-case' });
+    const state = await repo.getData();
+    expect(await repo.recordReturn(command)).toEqual(saved);
+    for (const patch of [{ sourceOrderId: 'foreign' }, { returnCaseId: 'foreign' }, { source: 'vendor' as const }, { lines: [input.lines[1]!] }]) {
+      await expect(repo.recordReturn({ ...command, idempotencyKey: 'customer-link-invalid', ...patch })).rejects.toThrow(/order|case|customer/i);
+      expect(await repo.getData()).toEqual(state);
+    }
+  });
+
+  it('roundtrips linked RPC fields without changing the unlinked payload', async () => {
+    const rpc = vi.fn(async (_name, args) => ({ data: { id: 'ret-linked', ...args.payload.return }, error: null }));
+    const repo = new SupabaseRepository({ rpc } as unknown as SupabaseClient);
+    const saved = await repo.recordReturn({ ...input, source: 'customer', sourceOrderId: 'source-order', returnCaseId: 'customer-case' });
+    expect(rpc.mock.calls[0]![1].payload.return).toMatchObject({ source_order_id: 'source-order', return_case_id: 'customer-case' });
+    expect(saved).toMatchObject({ sourceOrderId: 'source-order', returnCaseId: 'customer-case' });
+  });
+
   it('WE02 memory cumulative returns stamp identity, reject over-return atomically, and close at 3+7 with replay', async () => {
     const data = buildSeed();
     data.allocations.push({ id: 'cumulative-test', eventId: 'evt-makati', productId: 'shirt-l', quantity: 10, status: 'issued', createdAt: '2026-09-05T00:00:00Z' });
