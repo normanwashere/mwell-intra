@@ -12,7 +12,7 @@ We reran ecommerce delivery from start to finish on the latest build, with fresh
 
 This is not a full warehouse signoff yet. Receiving and putaway, returns and replacements, other stock types, concurrent work and broader recovery checks still need their dedicated runs. Actual warehouse users and devices also need to complete the floor pilot.
 
-Please leave records marked **WMS-ECOM** to the development team. One earlier test order is still at Received; four completed test shipments and their photos are awaiting controlled cleanup. None represents a real shipment. Your normal sample scenarios remain separate.
+Please leave records marked **WMS-ECOM** to the development team. We have cleaned up the older pair of completed test shipments and archived their two delivery photos. A separate database check confirmed no records or photos remain for that batch. One earlier test order is still at Received; the newest pair of completed test shipments and their photos still need cleanup. None represents a real shipment. Your normal sample scenarios remain separate.
 
 The temporary **WMS signoff** records from this department test have now been cleaned up. We archived the four receipt photos first, then removed the exact synthetic records and verified the scoped cleanup. Your existing testing data was outside the deletion scope.
 
