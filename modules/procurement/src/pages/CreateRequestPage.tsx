@@ -15,7 +15,7 @@
 
 import type { ChangeEvent, FormEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Badge,
   Button,
@@ -63,6 +63,7 @@ import {
   type RequestDraftClient,
 } from '../requestDrafts';
 import { validateRequestStep } from '../requestForm';
+import { readAcceptedReplenishment, type ReplenishmentRequestBinding } from '../replenishmentRequest';
 
 interface LineDraft {
   key: string;
@@ -146,6 +147,41 @@ const STEPS = [
 ] as const;
 
 export function CreateRequestPage() {
+  const [params] = useSearchParams();
+  const { profile } = useSession();
+  const bindings = params.getAll('replenishment');
+  if (!bindings.length) return <RequestWizard />;
+  if (bindings.length !== 1) return <p role="alert">A single replenishment reference is required.</p>;
+  return <ReplenishmentCompletion key={`${profile?.id}:${bindings[0]}`} id={bindings[0]!} />;
+}
+
+function ReplenishmentCompletion({ id }: { id: string }) {
+  const { profile, mode, loading, supabaseClient, userCapabilities } = useSession();
+  const allowed = mode === 'supabase' && !loading && !!profile && !!supabaseClient &&
+    userCapabilities?.procurement?.includes('manage_replenishment') === true &&
+    userCapabilities?.procurement?.includes('create_request') === true;
+  const [binding, setBinding] = useState<ReplenishmentRequestBinding>();
+  const [failure, setFailure] = useState('');
+  useEffect(() => {
+    setBinding(undefined);
+    setFailure('');
+    if (!allowed || !supabaseClient) return;
+    let active = true;
+    void readAcceptedReplenishment(supabaseClient, id).then(value => {
+      if (active) setBinding(value);
+    }).catch(() => {
+      if (active) setFailure('Completion outcome could not be verified. The recommendation may have changed or already been handed off. Review its recorded outcome before trying again.');
+    });
+    return () => { active = false; };
+  }, [allowed, id, supabaseClient]);
+  if (loading) return <p role="status">Checking current authority...</p>;
+  if (!allowed) return <p role="alert">Effective request creation and replenishment management authority are required.</p>;
+  if (failure) return <div className="space-y-3"><p role="alert">{failure}</p><a className="btn-outline" href="/warehouse/procurement">Back to recommendation</a></div>;
+  if (!binding) return <p role="status">Checking accepted replenishment...</p>;
+  return <RequestWizard replenishment={binding} />;
+}
+
+function RequestWizard({ replenishment }: { replenishment?: ReplenishmentRequestBinding }) {
   const navigate = useNavigate();
   const { success, error } = useToast();
   const { add } = useProcurementRequests();
@@ -164,7 +200,7 @@ export function CreateRequestPage() {
 
   const [step, setStep] = useState<StepN>(1);
 
-  const [title, setTitle] = useState('');
+  const [title, setTitle] = useState(replenishment ? `Replenish ${replenishment.productId}` : '');
   const [category, setCategory] = useState<RequestCategory | ''>('');
   const [department, setDepartment] = useState('');
   const [costCenter, setCostCenter] = useState('');
@@ -176,8 +212,12 @@ export function CreateRequestPage() {
   const [neededBy, setNeededBy] = useState('');
   const [description, setDescription] = useState('');
   const [vendorId, setVendorId] = useState<string>('');
-  const [lines, setLines] = useState<LineDraft[]>([blankLine()]);
+  const [lines, setLines] = useState<LineDraft[]>(() => [replenishment ? {
+    ...blankLine(), description: replenishment.productId, quantity: String(replenishment.quantity), uom: 'unit',
+  } : blankLine()]);
   const [submitting, setSubmitting] = useState(false);
+  const submissionRef = useRef(false);
+  const [completionStopped, setCompletionStopped] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [serverDraftId, setServerDraftId] = useState<string>();
   const [serverDraftKey, setServerDraftKey] = useState('');
@@ -191,7 +231,7 @@ export function CreateRequestPage() {
   const unsavedRef = useRef(false);
 
   // Justification (Award Recommendation §9)
-  const [needDesc, setNeedDesc] = useState('');
+  const [needDesc, setNeedDesc] = useState(replenishment?.rationale ?? '');
   const [alternatives, setAlternatives] = useState('');
   const [riskIfNot, setRiskIfNot] = useState('');
 
@@ -239,7 +279,7 @@ export function CreateRequestPage() {
   const [attachments, setAttachments] = useState<PendingRequestAttachment[]>([]);
 
   const liveDraftClient =
-    mode === 'supabase' ? (supabaseClient as RequestDraftClient | null) : null;
+    mode === 'supabase' && !replenishment ? (supabaseClient as RequestDraftClient | null) : null;
 
   useEffect(() => {
     if (mode !== 'supabase' || !supabaseClient) {
@@ -527,13 +567,16 @@ export function CreateRequestPage() {
     : route?.solicitationType === 'rfp'
       ? ['scopeOfWork', 'evaluationApproach', 'responseDeadline'].every((key) => solicitationRequirements[key as keyof SolicitationRequirements]?.trim())
       : true;
-  const canSaveDraft = step1Valid && step2Valid && governedContextReady && Boolean(route) && solicitationReady && routeEvidenceReady;
+  const completionEvidenceReady = !replenishment || (attachments.some(a => a.kind === 'spec') && attachments.some(a => a.kind === 'budget'));
+  const canSaveDraft = !completionStopped && step1Valid && step2Valid && governedContextReady && Boolean(route) && solicitationReady && routeEvidenceReady && completionEvidenceReady;
   const canSubmit = canSaveDraft && missingDocs.length === 0;
 
   function updateLine(key: string, patch: Partial<LineDraft>) {
+    if (replenishment && Object.keys(patch).some(field => field !== 'unitPrice')) return;
     setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   }
   function removeLine(key: string) {
+    if (replenishment) return;
     setLines((prev) => (prev.length === 1 ? prev : prev.filter((l) => l.key !== key)));
   }
 
@@ -640,6 +683,7 @@ export function CreateRequestPage() {
 
   async function handleSubmit(event: FormEvent, andSubmit = false) {
     event.preventDefault();
+    if (submissionRef.current || completionStopped || (replenishment && andSubmit)) return;
     const ready = andSubmit ? canSubmit : canSaveDraft;
     if (!ready) {
       const invalidStep: StepN = step1Valid ? 2 : 1;
@@ -678,6 +722,7 @@ export function CreateRequestPage() {
       error('Each line quantity must be a whole number of at least 1.');
       return;
     }
+    submissionRef.current = true;
     setSubmitting(true);
     try {
       const cleanLines = lines
@@ -727,6 +772,7 @@ export function CreateRequestPage() {
 
       const created = await add({
         draftId: serverDraftId,
+        replenishment,
         title: title.trim(),
         description: description.trim() || undefined,
         department: department.trim() || undefined,
@@ -760,8 +806,10 @@ export function CreateRequestPage() {
         navigate(`/requests/${created.id}`);
       }
     } catch (e) {
+      if (replenishment) setCompletionStopped(true);
       error(e instanceof Error ? e.message : 'Could not save the draft.');
     } finally {
+      submissionRef.current = false;
       setSubmitting(false);
     }
   }
@@ -845,6 +893,7 @@ export function CreateRequestPage() {
           </div>
         )}
 
+        {completionStopped && <p role="alert">Completion stopped. Reopen the recommendation to verify its recorded outcome before trying again. Uploaded evidence may be retained for reconciliation.</p>}
         <form className="space-y-6" onChangeCapture={() => { hasUserEditsRef.current = true; allowExitRef.current = false; }} onSubmit={(e) => handleSubmit(e, false)}>
           {/* ==================== STEP 1 — What ==================== */}
           {step === 1 && (
@@ -966,7 +1015,8 @@ export function CreateRequestPage() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => setLines((prev) => [...prev, blankLine()])}
+                    disabled={!!replenishment}
+                    onClick={() => { if (!replenishment) setLines((prev) => [...prev, blankLine()]); }}
                     className="btn-outline btn-sm"
                   >
                     <Icon name="plus" className="h-4 w-4" />
@@ -1005,6 +1055,7 @@ export function CreateRequestPage() {
                               data-request-line-description="true"
                               aria-invalid={Boolean(fieldErrors.lines)}
                               className="input mt-1"
+                              readOnly={!!replenishment}
                               value={line.description}
                               onChange={(event) =>
                                 updateLine(line.key, {
@@ -1024,6 +1075,7 @@ export function CreateRequestPage() {
                                 inputMode="numeric"
                                 min="0"
                                 step="1"
+                                readOnly={!!replenishment}
                                 value={line.quantity}
                                 onChange={(event) =>
                                   updateLine(line.key, {
@@ -1037,6 +1089,7 @@ export function CreateRequestPage() {
                               <input
                                 aria-label={`Line ${index + 1} unit of measure`}
                                 className="input mt-1"
+                                readOnly={!!replenishment}
                                 value={line.uom}
                                 onChange={(event) =>
                                   updateLine(line.key, {
@@ -1119,6 +1172,7 @@ export function CreateRequestPage() {
                                   data-request-line-description="true"
                                   aria-invalid={Boolean(fieldErrors.lines)}
                                   className="input"
+                                  readOnly={!!replenishment}
                                   value={l.description}
                                   onChange={(e) =>
                                     updateLine(l.key, {
@@ -1136,6 +1190,7 @@ export function CreateRequestPage() {
                                   inputMode="numeric"
                                   min="0"
                                   step="1"
+                                  readOnly={!!replenishment}
                                   value={l.quantity}
                                   onChange={(e) =>
                                     updateLine(l.key, {
@@ -1148,6 +1203,7 @@ export function CreateRequestPage() {
                                 <input
                                   aria-label={`Line ${i + 1} unit of measure`}
                                   className="input"
+                                  readOnly={!!replenishment}
                                   value={l.uom}
                                   onChange={(e) => updateLine(l.key, { uom: e.target.value })}
                                 />
@@ -1355,8 +1411,9 @@ export function CreateRequestPage() {
                   <Textarea
                     id="need-description"
                     aria-invalid={Boolean(fieldErrors.needDescription)}
+                    readOnly={!!replenishment}
                     value={needDesc}
-                    onChange={(e) => setNeedDesc(e.target.value)}
+                    onChange={(e) => { if (!replenishment) setNeedDesc(e.target.value); }}
                     rows={3}
                     placeholder="What outcome does this deliver? Which team benefits and how?"
                     required
@@ -1778,9 +1835,9 @@ export function CreateRequestPage() {
             ) : (
               <div className="flex flex-wrap items-center gap-2">
                 <Button type="submit" variant="outline" disabled={submitting || !canSaveDraft}>
-                  {submitting ? 'Saving…' : 'Save draft'}
+                  {submitting ? 'Saving…' : replenishment ? 'Create draft & complete handoff' : 'Save draft'}
                 </Button>
-                <Button
+                {!replenishment && <Button
                   type="button"
                   variant="primary"
                   disabled={submitting || !canSubmit || !routeConfirmed}
@@ -1791,7 +1848,7 @@ export function CreateRequestPage() {
                     : routeConfirmed
                       ? 'Save & submit for approval'
                       : 'Awaiting Procurement routing'}
-                </Button>
+                </Button>}
               </div>
             )}
           </div>

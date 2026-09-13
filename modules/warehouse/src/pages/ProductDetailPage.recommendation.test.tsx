@@ -40,6 +40,15 @@ beforeEach(() => {
 });
 
 describe('Inventory recommendation entry', () => {
+  it('uses the shared outlined button style for the icon and tap target', async () => {
+    mount();
+    const button = await screen.findByRole('button', { name: 'Recommend replenishment' });
+    expect(button).toHaveClass('btn-outline', 'min-h-11');
+    expect(button).not.toHaveClass('btn-secondary');
+    expect(button).toHaveAttribute('type', 'button');
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
   it.each([{ caps: operationCaps }, { caps: combinedCaps }])('opens for the effective Operations bundle without Procurement navigation', async ({ caps }) => {
     sessionOverrides.userCapabilities = { warehouse: caps }; mount(caps);
     const dialog = await open();

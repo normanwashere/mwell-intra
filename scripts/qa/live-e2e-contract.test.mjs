@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import test from "node:test";
+import * as scenarioReporting from "./live-e2e-scenarios.mjs";
 import {
   CURRENT_LIVE_ROLES,
   CURRENT_LIVE_SCENARIOS,
@@ -198,6 +199,103 @@ test("scenario evidence is enforceable per shard and across the bundle", () => {
     ...workflowEvidence("mobile-390"),
   ]);
   assert.deepEqual(scenarioCoverageFailures(completeBundle), []);
+});
+
+test("empty scenario scope is explicitly not run, never vacuously complete", () => {
+  const coverage = evaluateScenarioCoverage([], []);
+  assert.equal(coverage.length, CURRENT_LIVE_SCENARIOS.length);
+  for (const scenario of coverage) {
+    assert.equal(scenario.status, "not-run");
+    assert.equal(scenario.complete, false);
+    assert.ok(scenario.reason);
+    assert.deepEqual(scenario.requiredViewports, []);
+    assert.deepEqual(scenario.perViewport, []);
+  }
+  assert.ok(scenarioCoverageFailures(coverage).length > 0);
+  assert.ok(scenarioCoverageFailures([]).length > 0);
+});
+
+for (const phase of ["routes", "critical"]) {
+  test(`${phase} producer reports unexecuted transactions without failing route scope`, () => {
+    const report = scenarioReporting.evaluateAuditExecution({
+      phase, mutationsEnabled: false, requiredViewports: ["desktop-1440"], workflows: [],
+      cleanup: { runId: "offline", complete: true, results: [] },
+    });
+    assert.deepEqual(report.failures, []);
+    assert.ok(report.scenarioCoverage.every(item => item.status === "not-run" && item.complete === false));
+    assert.equal(report.cleanup.status, "not-applicable");
+    assert.equal(report.cleanup.complete, false);
+    assert.match(report.cleanup.reason, new RegExp(phase));
+  });
+}
+
+for (const phase of ["all", "transactions"]) {
+  for (const mutationsEnabled of [false, true]) {
+    test(`${phase} producer fails missing required evidence with mutations=${mutationsEnabled}`, () => {
+      for (const requiredViewports of [["desktop-1440"], []]) {
+        const report = scenarioReporting.evaluateAuditExecution({
+          phase, mutationsEnabled, requiredViewports, workflows: [],
+          cleanup: { runId: "offline", complete: true, results: [] },
+        });
+        assert.ok(report.failures.length > 0);
+        assert.ok(report.scenarioCoverage.every(item => item.complete === false));
+        assert.equal(report.cleanup.complete, false);
+        assert.equal(report.cleanup.status, "not-run");
+        assert.ok(report.failures.some(failure => failure.includes("cleanup incomplete")));
+        if (!mutationsEnabled) assert.ok(report.failures.some(failure => failure.includes("mutations disabled")));
+      }
+    });
+  }
+}
+
+test("transaction producer preserves complete evidence and cleanup, never disabled execution credit", () => {
+  const workflows = WORKFLOW_SCENARIO_EVIDENCE.map(item => ({
+    ok: true, viewport: "desktop-1440", workflow: item.workflow, scenarioEvidence: [item],
+  }));
+  const input = {
+    phase: "transactions", mutationsEnabled: true, requiredViewports: ["desktop-1440"], workflows,
+    cleanup: { runId: "offline", complete: true, results: [{ entity: "fixture", remaining: 0 }] },
+  };
+  const report = scenarioReporting.evaluateAuditExecution(input);
+  assert.deepEqual(report.failures, []);
+  assert.ok(report.scenarioCoverage.every(item => item.status === "complete" && item.complete));
+  assert.equal(report.cleanup.status, "complete");
+  assert.equal(report.cleanup.complete, true);
+  const disabled = scenarioReporting.evaluateAuditExecution({ ...input, mutationsEnabled: false });
+  assert.ok(disabled.failures.length > 0);
+  assert.ok(disabled.scenarioCoverage.every(item => !item.complete));
+  assert.equal(disabled.cleanup.complete, false);
+  const failedCleanup = scenarioReporting.evaluateAuditExecution({ ...input, cleanup: { ...input.cleanup, complete: false } });
+  assert.equal(failedCleanup.cleanup.status, "incomplete");
+  assert.ok(failedCleanup.failures.includes("cleanup incomplete"));
+  assert.equal(input.cleanup.complete, true, "Producer must not mutate input evidence");
+});
+
+test("producer retains actor, case, checkpoint and residue failures", () => {
+  const input = {
+    phase: "transactions",
+    mutationsEnabled: true,
+    requiredViewports: ["desktop-1440"],
+    workflows: WORKFLOW_SCENARIO_EVIDENCE.map((item) => ({
+      ok: true, viewport: "desktop-1440", scenarioEvidence: [item],
+    })),
+    cleanup: { complete: true, results: [{ remaining: 0 }] },
+  };
+  for (const field of ["actors", "cases", "checkpoints"]) {
+    const workflows = input.workflows.map((workflow) => ({
+      ...workflow,
+      scenarioEvidence: workflow.scenarioEvidence.map((item) => ({ ...item, [field]: [] })),
+    }));
+    const report = scenarioReporting.evaluateAuditExecution({ ...input, workflows });
+    assert.ok(report.failures.some((failure) => failure.includes(`${field}=`)));
+  }
+  for (const result of [{ remaining: 1 }, { remaining: null }, { remaining: 0, error: "read failed" }]) {
+    const report = scenarioReporting.evaluateAuditExecution({
+      ...input, cleanup: { complete: true, results: [result] },
+    });
+    assert.equal(report.cleanup.status, "incomplete");
+    assert.ok(report.failures.includes("cleanup incomplete"));
+  }
 });
 
 test("every scenario evidence workflow is registered by the live runner", async () => {
@@ -625,9 +723,11 @@ test("cross-module scenarios are imported and executed as browser/database contr
     source,
     /Unified Finance exposed an inaccessible receiving link/,
   );
-  assert.match(source, /evaluateScenarioCoverage\(/);
+  assert.match(source, /evaluateAuditExecution\(\{/);
   assert.match(source, /scenarioCoverage/);
-  assert.match(source, /scenarioCoverageFailures\(scenarioCoverage\)/);
+  assert.match(source, /executionReport\.failures\.map/);
+  assert.match(source, /const shardCoverageViewports = runTransactionAudit/);
+  assert.match(source, /cleanup = executionReport\.cleanup/);
   assert.match(source, /shardCoverageViewports/);
 });
 

@@ -3,11 +3,32 @@ import {
   attachmentMetadataForRpc,
   buildRequestAttachmentPath,
   createGovernedAttachmentUrl,
+  uploadRequestAttachments,
   validateRequestAttachment,
 } from './attachments';
 import { vi } from 'vitest';
 
 describe('procurement attachment governance', () => {
+  const pending = () => (['spec', 'budget'] as const).map(kind => {
+    const file = new File(['synthetic fixture'], `${kind}.pdf`, { type: 'application/pdf' });
+    return { file, kind, filename: file.name, mimeType: file.type, sizeBytes: file.size };
+  });
+  it.each([false, true])('preserves generic partial-upload cleanup unless retention is explicit: %s', async retainOnFailure => {
+    const upload = vi.fn().mockResolvedValueOnce({ error: null }).mockResolvedValueOnce({ error: { message: 'Upload interrupted' } });
+    const remove = vi.fn().mockResolvedValue({ error: null });
+    const client = { storage: { from: vi.fn(() => ({ upload, remove })) } };
+    await expect(uploadRequestAttachments(client, 'req_fixture', pending(), retainOnFailure ? { retainOnFailure: true } : undefined)).rejects.toThrow('Upload interrupted');
+    expect(upload).toHaveBeenCalledTimes(2);
+    if (retainOnFailure) expect(remove).not.toHaveBeenCalled();
+    else expect(remove).toHaveBeenCalledExactlyOnceWith([upload.mock.calls[0]![0]]);
+    expect(upload.mock.calls[0]![2]).toEqual({ contentType: 'application/pdf', upsert: false });
+  });
+  it('runs the optional synchronous preflight before any Storage request', async () => {
+    const upload = vi.fn(), remove = vi.fn();
+    const client = { storage: { from: vi.fn(() => ({ upload, remove })) } };
+    await expect(uploadRequestAttachments(client, 'req_fixture', pending(), { beforeUpload: () => { throw new Error('Context invalid'); }, retainOnFailure: true })).rejects.toThrow('Context invalid');
+    expect(upload).not.toHaveBeenCalled(); expect(remove).not.toHaveBeenCalled();
+  });
   it('rejects unsupported types and files over 10 MB', () => {
     expect(() =>
       validateRequestAttachment({ type: 'text/html', size: 100 }),

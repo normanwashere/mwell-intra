@@ -112,12 +112,32 @@ describe("inventory recommendation guidance", () => {
     expect(save.validation).not.toContain("cannot duplicate an active recommendation");
     expect(handoff.behavior).toContain("Procurement Officer or Procurement Administrator");
     expect(handoff.behavior).toContain("Accept");
-    expect(handoff.behavior).toContain("Hand off to Procurement");
+    expect(handoff.behavior).toContain("Complete Procurement request");
+    expect(handoff.behavior).toContain("Create draft & complete handoff");
+    expect(handoff.validation).toContain("request-creation permission");
+    expect(handoff.validation).toContain("specification and budget evidence");
+    expect(handoff.result).toContain("Confirm procurement route");
+    expect(handoff.result).toContain("Back to recommendation");
+    expect(handoff.result).toContain("If the initial check fails");
+    expect(handoff.result).toContain("If saving stops, reopen Warehouse replenishment planning");
     expect(handoff.validation).toContain("current Procurement replenishment-management permission");
     expect(handoff.validation).toContain("Operations recommendation permission alone is not enough");
     expect(handoff.behavior).not.toContain("after Operations accepts");
     expect(handoff.result).toContain("draft purchase request");
     expect(handoff.result).toContain("not an issued purchase order");
     expect(planning.exceptions.join(" ")).toContain("page access does not grant recommendation or acceptance authority");
+  });
+
+  it("keeps Procurement acceptance and draft completion distinct from Operations recommendation", () => {
+    const article = KNOWLEDGE_CONTENT.articles.find(item => item.id === "warehouse-replenishment-handoff")!;
+    const text = JSON.stringify(article);
+    expect(text).not.toContain("authorized Operations owner");
+    expect(text).toContain("authorized Procurement decision maker");
+    expect(text).toContain("Complete Procurement request");
+    expect(text).toContain("Create draft & complete handoff");
+    expect(text).toContain("Confirm procurement route");
+    expect(text).toContain("not a submission or approval");
+    expect(text).toContain("Do not recreate an earlier linked draft");
+    expect(text).toContain("If saving stops, reopen Warehouse replenishment planning");
   });
 });

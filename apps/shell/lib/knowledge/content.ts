@@ -529,18 +529,19 @@ const procedureArticles: KnowledgeArticle[] = [
       [
         "Save recommendation",
         "Record the proposed replenishment quantity so it can be reviewed without creating a purchase commitment.",
-        "A traceable recommendation enters the Operations review state.",
+        "A traceable recommendation enters the recommended state for Procurement review.",
       ],
       [
         "Accept operational need",
-        "An authorized Operations owner confirms the quantity and urgency against current warehouse conditions.",
+        "An authorized Procurement decision maker reviews the quantity and urgency against current warehouse conditions, then selects Accept.",
         "The recommendation becomes eligible for Procurement handoff.",
-        "Dismiss or revise a recommendation that is no longer supported; do not hand off stale demand.",
+        "Dismiss unsupported demand while permitted. Only a recommended record can be revised; acceptance locks the recommendation's product, quantity and reason.",
       ],
       [
         "Hand to Procurement",
-        "Create the linked draft purchase request. Warehouse stops at the handoff and does not select a vendor, approve spend, or issue a PO.",
-        "Procurement receives the authoritative draft request with its warehouse source reference.",
+        "Select Complete Procurement request on the accepted recommendation. With both replenishment-management and request-creation permission, choose the requirement classification, enter the estimate, department, cost center, funding and applicable solicitation details, and attach specification and budget evidence. Use Create draft & complete handoff after reviewing the details.",
+        "The linked draft retains the accepted product, quantity and reason. Use Confirm procurement route separately in the draft; this is not a submission or approval, a supplier commitment, or a stock movement.",
+        "If the initial check fails, use Back to recommendation when offered. If saving stops, reopen Warehouse replenishment planning and check for the linked draft before retrying; uploaded evidence may be retained for reconciliation. Do not recreate an earlier linked draft that reports a missing classification; give its reference to support for review.",
       ],
       [
         "Follow order and arrival",

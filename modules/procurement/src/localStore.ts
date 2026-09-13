@@ -61,6 +61,7 @@ import {
   type PendingRequestAttachment,
 } from './attachments';
 import { requestCreationRpc } from './requestDrafts';
+import { readAcceptedReplenishment, type ReplenishmentRequestBinding } from './replenishmentRequest';
 
 type MaybePromise<T> = T | Promise<T>;
 type LiveClient = NonNullable<ReturnType<typeof useSession>['supabaseClient']>;
@@ -638,6 +639,7 @@ export function isProvisional(v: ProcurementVendor): boolean {
 
 export interface NewRequestInput {
   draftId?: string;
+  replenishment?: ReplenishmentRequestBinding;
   title: string;
   description?: string;
   department?: string;
@@ -709,6 +711,15 @@ export interface ProcurementRequestsAPI {
 
 export function useProcurementRequests(): ProcurementRequestsAPI {
   const live = useLiveClient();
+  const session = useSession();
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
+  const replenishmentAttempts = useRef(new Set<string>());
+  const activeRef = useRef(true);
+  useEffect(() => {
+    activeRef.current = true;
+    return () => { activeRef.current = false; };
+  }, []);
   const [localRows, set, localLoading] = useTrackedRows<ProcurementRequest>(REQ_KEY, !isLive(live));
   const [liveBaseRows, liveRowsLoading, refreshRequests, requestsError] = useLiveRows<LiveRow>(
     live,
@@ -740,6 +751,29 @@ export function useProcurementRequests(): ProcurementRequestsAPI {
 
   const add = useCallback(
     async (input: NewRequestInput): Promise<ProcurementRequest> => {
+      const bound = input.replenishment;
+      const actorId = sessionRef.current.profile?.id;
+      const assertCompletionAuthority = () => {
+        const current = sessionRef.current;
+        if (!activeRef.current || !live || current.mode !== 'supabase' || current.loading || !actorId || current.profile?.id !== actorId ||
+          !current.userCapabilities?.procurement?.includes('manage_replenishment') ||
+          !current.userCapabilities?.procurement?.includes('create_request')) {
+          throw new Error('Current request creation and replenishment management authority are required.');
+        }
+      };
+      if (bound) {
+        assertCompletionAuthority();
+        if (input.draftId || replenishmentAttempts.current.has(bound.id)) {
+          throw new Error('Reopen the replenishment and verify its recorded outcome before another completion attempt.');
+        }
+        replenishmentAttempts.current.add(bound.id);
+        await readAcceptedReplenishment(live!, bound.id, bound);
+        assertCompletionAuthority();
+        if (input.lines.length !== 1 || input.lines[0]?.description !== bound.productId ||
+          input.lines[0]?.quantity !== bound.quantity || input.lines[0]?.uom !== 'unit' || input.justification?.need !== bound.rationale) {
+          throw new Error('The request must preserve the accepted replenishment product, quantity and need.');
+        }
+      }
       const lines: ProcurementRequestLine[] = input.lines.map((l) => ({
         ...l,
         id: newId('rl'),
@@ -750,7 +784,10 @@ export function useProcurementRequests(): ProcurementRequestsAPI {
       }
       const requestId = input.draftId ?? newId('req');
       const attachments: RequestAttachment[] = isLive(live)
-        ? await uploadRequestAttachments(live, requestId, input.attachments ?? [])
+        ? await uploadRequestAttachments(live, requestId, input.attachments ?? [], bound ? {
+            beforeUpload: assertCompletionAuthority,
+            retainOnFailure: true,
+          } : undefined)
         : await materializeMemoryAttachments(input.attachments ?? []);
       const next: ProcurementRequest = {
         id: requestId,
@@ -781,11 +818,7 @@ export function useProcurementRequests(): ProcurementRequestsAPI {
       };
       if (isLive(live)) {
         try {
-          const row = await liveRpc<LiveRow>(
-            live,
-            'procurement',
-            requestCreationRpc(input.draftId),
-            {
+          const requestPayload = {
               id: next.id,
               title: next.title,
               description: next.description,
@@ -809,12 +842,35 @@ export function useProcurementRequests(): ProcurementRequestsAPI {
               justification: next.justification,
               attachments: attachments.map(attachmentMetadataForRpc),
               compliance: next.compliance,
-            },
-          );
+            };
+          let row: LiveRow;
+          if (bound) {
+            assertCompletionAuthority();
+            await readAcceptedReplenishment(live, bound.id, bound);
+            assertCompletionAuthority();
+            const result = await liveRpc<{ id: string; status: string; procurement_request_id: string }>(live, 'procurement', 'manage_replenishment_recommendation', {
+              id: bound.id, action: 'handoff', request: requestPayload,
+            });
+            if (result.id !== bound.id || result.status !== 'handed_off' || result.procurement_request_id !== requestId) {
+              throw new Error('Handoff outcome could not be verified. Do not repeat the command.');
+            }
+            const readback = await live.schema('procurement').from('requests').select('*').eq('id', requestId).single();
+            const saved = readback.data;
+            if (readback.error || !saved || saved.id !== requestId || saved.status !== 'draft' || saved.requester_id !== actorId ||
+              saved.requirement_kind !== input.requirementKind || saved.justification?.replenishmentRecommendationId !== bound.id || saved.route_confirmed_at !== null) {
+              throw new Error('The linked draft could not be verified. Do not repeat the handoff.');
+            }
+            row = saved as LiveRow;
+          } else {
+            row = await liveRpc<LiveRow>(live, 'procurement', requestCreationRpc(input.draftId), requestPayload);
+          }
           const mapped = mapProcurementRequest(row);
           await refreshLive();
           return mapped;
         } catch (error) {
+          // A lost response may hide a committed handoff. Never remove its
+          // evidence or automatically retry; the accepted record is re-read on reopening.
+          if (bound) throw error;
           await removeUploadedRequestAttachments(
             live,
             attachments.flatMap((attachment) =>

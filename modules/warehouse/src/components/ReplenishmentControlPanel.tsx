@@ -56,6 +56,7 @@ export function ReplenishmentControlPanel({
     userCapabilities?.warehouse?.includes("recommend_replenishment") === true;
   const canManage = !!live && !loading && profile !== null &&
     userCapabilities?.procurement?.includes("manage_replenishment") === true;
+  const canComplete = canManage && userCapabilities?.procurement?.includes("create_request") === true;
   const toast = useToast();
   const [rows, setRows] = useState<SavedRecommendation[]>([]);
   const [workingId, setWorkingId] = useState<string>();
@@ -143,7 +144,7 @@ export function ReplenishmentControlPanel({
 
   const transition = async (
     record: SavedRecommendation,
-    action: "accept" | "handoff" | "dismiss",
+    action: "accept" | "dismiss",
   ) => {
     if (!live || !canManage) return;
     setWorkingId(record.id);
@@ -157,11 +158,7 @@ export function ReplenishmentControlPanel({
       toast.error(error.message);
       return;
     }
-    toast.success(
-      action === "handoff"
-        ? "Draft Procurement request created and linked."
-        : "Replenishment status updated.",
-    );
+    toast.success("Replenishment status updated.");
     await refresh();
   };
 
@@ -274,14 +271,15 @@ export function ReplenishmentControlPanel({
                   </button>
                 )}
                 {record.status === "accepted" && (
-                  <button
-                    type="button"
-                    className="btn-primary btn-sm"
-                    disabled={!canManage || workingId === record.id}
-                    onClick={() => void transition(record, "handoff")}
-                  >
-                    Hand off to Procurement
-                  </button>
+                  canComplete ? (
+                    <a className="btn-primary btn-sm" href={"/procurement/requests/new?replenishment=" + encodeURIComponent(record.id)}>
+                      Complete Procurement request
+                    </a>
+                  ) : (
+                    <button type="button" className="btn-primary btn-sm" disabled title="Effective request creation and replenishment management authority are required.">
+                      Complete Procurement request
+                    </button>
+                  )
                 )}
                 {record.procurementRequestId && (
                   <a

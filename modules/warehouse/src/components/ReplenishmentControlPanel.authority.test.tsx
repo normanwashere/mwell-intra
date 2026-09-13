@@ -33,7 +33,7 @@ beforeEach(() => {
 });
 
 const controls = () => [screen.getByRole("button", { name: "Save +5" }), screen.getByRole("button", { name: "Accept" }),
-  screen.getByRole("button", { name: "Hand off to Procurement" }), ...screen.getAllByRole("button", { name: "Dismiss" })] as const;
+  ...screen.getAllByRole("button", { name: "Dismiss" })] as const;
 
 describe("Replenishment effective action authority", () => {
   it.each([
@@ -71,7 +71,7 @@ describe("Replenishment effective action authority", () => {
   });
 
   it.each([
-    ["Accept", "accept", "rec-1"], ["Hand off to Procurement", "handoff", "rec-2"], ["Dismiss", "dismiss", "rec-1"],
+    ["Accept", "accept", "rec-1"], ["Dismiss", "dismiss", "rec-1"],
   ])("effective Procurement management preserves %s payload but cannot Save", async (label, action, id) => {
     session.userCapabilities = { procurement: ["manage_replenishment"] };
     render(ui());
@@ -90,6 +90,23 @@ describe("Replenishment effective action authority", () => {
     render(ui());
     await screen.findByText("saved-product");
     controls().forEach(button => expect(button).toBeEnabled());
+  });
+
+  it('requires additional effective creation authority only for the bound wizard entry', async () => {
+    session.userCapabilities = { procurement: ['manage_replenishment'] };
+    const { rerender } = render(ui());
+    await screen.findByText('accepted-product');
+    expect(screen.getByRole('button', { name: 'Accept' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Complete Procurement request' })).toBeDisabled();
+    session = { ...session, userCapabilities: { procurement: ['manage_replenishment', 'create_request'] } };
+    rerender(ui());
+    expect(screen.getByRole('link', { name: 'Complete Procurement request' })).toHaveAttribute('href', '/procurement/requests/new?replenishment=rec-2');
+    expect(rpc).not.toHaveBeenCalled();
+    session = { ...session, userCapabilities: { procurement: ['manage_replenishment'] } };
+    rerender(ui());
+    expect(screen.queryByRole('link', { name: 'Complete Procurement request' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Complete Procurement request' })).toBeDisabled();
+    expect(rpc).not.toHaveBeenCalled();
   });
 
   it.each(["loading", "signed-out", "missing-projection"])("denies all actions when %s while retaining fetched rows", async state => {

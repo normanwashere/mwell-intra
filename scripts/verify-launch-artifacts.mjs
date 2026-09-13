@@ -354,12 +354,18 @@ function transactionReportFailures(report, viewport, evidenceBasenames) {
       `transactions-${viewport}.json does not declare the transactions phase`,
     );
   }
-  if (!report.cleanup?.complete) {
+  if (
+    report.cleanup?.complete !== true ||
+    (report.cleanup.status !== undefined && report.cleanup.status !== "complete") ||
+    !Array.isArray(report.cleanup.results) ||
+    report.cleanup.results.length === 0 ||
+    report.cleanup.results.some((item) => item?.remaining !== 0 || Boolean(item.error))
+  ) {
     failures.push(`transactions-${viewport}.json reports incomplete cleanup`);
   }
-  const productCleanup = report.cleanup?.results?.find(
-    (item) => item.entity === "product-governance",
-  );
+  const productCleanup = Array.isArray(report.cleanup?.results)
+    ? report.cleanup.results.find((item) => item?.entity === "product-governance")
+    : undefined;
   if (
     !productCleanup ||
     productCleanup.remaining !== 0 ||
@@ -412,7 +418,14 @@ function transactionReportFailures(report, viewport, evidenceBasenames) {
     );
   }
   for (const scenario of localCoverage) {
-    if (scenario.complete !== true) {
+    if (
+      scenario.complete !== true ||
+      (scenario.status !== undefined && scenario.status !== "complete") ||
+      !Array.isArray(scenario.perViewport) ||
+      scenario.perViewport.length !== 1 ||
+      scenario.perViewport[0]?.viewport !== viewport ||
+      scenario.perViewport[0]?.complete !== true
+    ) {
       failures.push(
         `transactions-${viewport}.json scenario ${scenario.id ?? "unknown"} reports incomplete coverage for ${viewport}`,
       );
@@ -511,7 +524,8 @@ export async function verifyCertificationBundle(certificationDir) {
       const cleanup = await readJson(cleanupFile, failures);
       if (
         cleanup &&
-        (!cleanup.complete ||
+        (cleanup.complete !== true ||
+          (cleanup.status !== undefined && cleanup.status !== "complete") ||
           cleanup.viewport !== viewport ||
           !Array.isArray(cleanup.results) ||
           cleanup.results.length === 0 ||

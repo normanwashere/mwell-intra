@@ -11,8 +11,7 @@ import {
 import {
   CURRENT_LIVE_SCENARIOS,
   assertAuditRunId,
-  evaluateScenarioCoverage,
-  scenarioCoverageFailures,
+  evaluateAuditExecution,
   workflowScenarioEvidence,
   recordedWorkflowScenarioEvidence,
 } from "./live-e2e-scenarios.mjs";
@@ -8684,7 +8683,15 @@ if (runRouteAudit) {
 }
 
 const workflows = [];
-let cleanup = { runId: auditRunId, complete: true, results: [] };
+let cleanup = {
+  runId: auditRunId,
+  status: runTransactionAudit ? "not-run" : "not-applicable",
+  complete: false,
+  reason: runTransactionAudit
+    ? "Transaction cleanup has not executed."
+    : `Transaction cleanup is outside the ${auditPhase} phase.`,
+  results: [],
+};
 auditProgressSnapshot = () => ({
   workflows,
   cleanup,
@@ -9556,13 +9563,18 @@ const aggregate = results.map((item) => ({
   consoleErrors: item.consoleErrors,
 }));
 
-const shardCoverageViewports = mutatingPhase
+const shardCoverageViewports = runTransactionAudit
   ? transactionViewports.map((viewport) => viewport.name)
   : [];
-const scenarioCoverage = evaluateScenarioCoverage(
+const executionReport = evaluateAuditExecution({
+  phase: auditPhase,
+  mutationsEnabled: allowMutations,
   workflows,
-  shardCoverageViewports,
-);
+  requiredViewports: shardCoverageViewports,
+  cleanup,
+});
+const { scenarioCoverage } = executionReport;
+cleanup = executionReport.cleanup;
 
 const outputPath = path.resolve(
   process.env.AUDIT_OUTPUT_PATH ??
@@ -9641,15 +9653,9 @@ const workflowFailures = workflows
     (workflow) =>
       `${workflow.viewport}/${workflow.workflow}: ${workflow.error ?? "failed"}`,
   );
-if (mutatingPhase) {
-  workflowFailures.push(
-    ...scenarioCoverageFailures(scenarioCoverage).map(
-      (failure) => `${auditRunId}: ${failure}`,
-    ),
-  );
-}
-if (!cleanup.complete)
-  workflowFailures.push(`${auditRunId}: cleanup incomplete`);
+workflowFailures.push(
+  ...executionReport.failures.map((failure) => `${auditRunId}: ${failure}`),
+);
 
 console.log(`Wrote ${outputPath}`);
 if (routeFailures.length || workflowFailures.length) {

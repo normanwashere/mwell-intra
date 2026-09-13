@@ -314,11 +314,11 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="h-dvh overflow-hidden bg-app md:flex md:h-auto md:min-h-screen md:overflow-visible">
       {/* Desktop sidebar */}
       <aside id="warehouse-side-navigation" style={desktopNavigation.hidden ? { display: "none" } : undefined} className="hidden w-60 shrink-0 flex-col border-r border-line bg-surface md:sticky md:top-0 md:flex md:h-dvh md:self-start lg:w-64">
-        <div className="safe-top flex shrink-0 items-center gap-2 px-5 py-5">
+        <div className="safe-top flex shrink-0 items-center gap-2 px-5 py-3">
           <a
             href="/"
             aria-label="Mwell Intra home"
-            className="flex min-w-0 items-center gap-2 transition hover:opacity-80"
+            className="flex min-h-11 min-w-0 items-center gap-2 transition hover:opacity-80"
             title="Mwell Intra home"
           >
             <Logo className="h-7 w-auto" />

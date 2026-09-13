@@ -1878,9 +1878,9 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         control(
           "Hand to Procurement",
-          "A Procurement Officer or Procurement Administrator with access to this page uses Accept on a recommended record, then Hand off to Procurement on an accepted record to create a linked draft purchase request.",
-          "Acceptance, handoff and Dismiss require current Procurement replenishment-management permission and any required training, alongside page access. Operations recommendation permission alone is not enough. Handoff requires accepted status; it does not select a supplier or issue a purchase order.",
-          "The linked draft purchase request enters the normal Procurement process. It is not an issued purchase order, sourcing approval or stock movement.",
+          "A Procurement Officer or Procurement Administrator with access to this page uses Accept on a recommended record, then Complete Procurement request on an accepted record. Complete the existing request wizard and select Create draft & complete handoff.",
+          "Acceptance and Dismiss require current Procurement replenishment-management permission and any required training, alongside page access. Completion also requires current request-creation permission, explicit requirement classification, estimate, funding, applicable solicitation details, and specification and budget evidence. Operations recommendation permission alone is not enough. The accepted product, quantity and reason stay fixed; completion requires an unlinked accepted recommendation.",
+          "The linked draft purchase request enters the normal Procurement process with its warehouse source reference. Confirm procurement route remains a separate draft action, not submission or approval. It is not an issued purchase order, sourcing approval or stock movement. If the initial check fails, use Back to recommendation when offered. If saving stops, reopen Warehouse replenishment planning and check for a linked request before trying again; uploaded evidence may be retained for reconciliation. Do not recreate an earlier malformed linked draft.",
         ),
         control(
           "Review inbound supply",

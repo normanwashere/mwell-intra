@@ -161,6 +161,7 @@ export async function uploadRequestAttachments(
   client: StorageClient,
   requestId: string,
   pending: readonly PendingRequestAttachment[],
+  options: { beforeUpload?: () => void; retainOnFailure?: boolean } = {},
 ): Promise<RequestAttachment[]> {
   const uploaded: RequestAttachment[] = [];
   try {
@@ -168,6 +169,7 @@ export async function uploadRequestAttachments(
       validateRequestAttachment(attachment.file);
       const id = newAttachmentId();
       const storagePath = buildRequestAttachmentPath(requestId, id, attachment.filename);
+      options.beforeUpload?.();
       const [{ error }, checksum] = await Promise.all([
         client.storage.from(REQUEST_ATTACHMENT_BUCKET).upload(storagePath, attachment.file, {
           contentType: attachment.mimeType,
@@ -190,10 +192,12 @@ export async function uploadRequestAttachments(
     }
     return uploaded;
   } catch (error) {
-    await removeUploadedRequestAttachments(
-      client,
-      uploaded.flatMap((attachment) => attachment.storagePath ? [attachment.storagePath] : []),
-    ).catch(() => undefined);
+    if (!options.retainOnFailure) {
+      await removeUploadedRequestAttachments(
+        client,
+        uploaded.flatMap((attachment) => attachment.storagePath ? [attachment.storagePath] : []),
+      ).catch(() => undefined);
+    }
     throw error;
   }
 }

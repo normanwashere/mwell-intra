@@ -115,7 +115,7 @@ export function InventoryRecommendationAction({ product, available, source, stoc
   }
 
   return <>
-    {allowed && <button type="button" className="btn-secondary min-h-11" disabled={!ready} onClick={() => changeOpen(true)}>
+    {allowed && <button type="button" className="btn-outline min-h-11" disabled={!ready} onClick={() => changeOpen(true)}>
       <Icon name="plus" className="h-4 w-4" />Recommend replenishment
     </button>}
     <Sheet open={open} onOpenChange={changeOpen} title="Recommend replenishment"

@@ -681,18 +681,36 @@ export function evaluateScenarioCoverage(
         complete: Object.values(gaps).every((items) => items.length === 0),
       };
     });
+    const complete =
+      perViewport.length > 0 && perViewport.every((item) => item.complete);
     return {
       id: scenario.id,
       requiredViewports,
       perViewport,
-      complete: perViewport.every((item) => item.complete),
+      status: !perViewport.length ? "not-run" : complete ? "complete" : "incomplete",
+      ...(!perViewport.length
+        ? { reason: "No transaction viewports evaluated." }
+        : {}),
+      complete,
     };
   });
 }
 
 export function scenarioCoverageFailures(coverage) {
-  return coverage.flatMap((scenario) =>
-    scenario.perViewport.flatMap((viewport) => {
+  if (!coverage.length)
+    return ["scenario coverage not run: no required evidence evaluated"];
+  return coverage.flatMap((scenario) => {
+    if (
+      !scenario.perViewport.length ||
+      (scenario.status !== undefined &&
+        scenario.status !== "complete" &&
+        scenario.status !== "incomplete")
+    ) {
+      return [
+        `scenario ${scenario.id} not run: ${scenario.reason ?? "no viewport evidence evaluated"}`,
+      ];
+    }
+    return scenario.perViewport.flatMap((viewport) => {
       if (viewport.complete) return [];
       const details = Object.entries(viewport.missing)
         .filter(([, items]) => items.length)
@@ -701,8 +719,64 @@ export function scenarioCoverageFailures(coverage) {
       return [
         `scenario ${scenario.id}/${viewport.viewport} incomplete: ${details}`,
       ];
-    }),
+    });
+  });
+}
+
+// Used by the collector for both report fields and its required-transaction exit gate.
+export function evaluateAuditExecution({
+  phase,
+  mutationsEnabled,
+  requiredViewports,
+  workflows,
+  cleanup,
+}) {
+  const transactionsRequired = ["all", "transactions"].includes(phase);
+  let scenarioCoverage = evaluateScenarioCoverage(
+    workflows,
+    transactionsRequired ? requiredViewports : [],
   );
+  if (transactionsRequired && !mutationsEnabled) {
+    scenarioCoverage = scenarioCoverage.map((scenario) => ({
+      ...scenario,
+      status: "not-run",
+      complete: false,
+      reason: "Required transaction mutations disabled.",
+    }));
+  }
+  let reportedCleanup;
+  if (!transactionsRequired) {
+    reportedCleanup = {
+      ...cleanup,
+      status: "not-applicable",
+      complete: false,
+      reason: `Transaction cleanup is outside the ${phase} phase.`,
+    };
+  } else if (!mutationsEnabled || !cleanup.results?.length) {
+    reportedCleanup = {
+      ...cleanup,
+      status: "not-run",
+      complete: false,
+      reason: "Required transaction cleanup was not executed with result evidence.",
+    };
+  } else {
+    const complete =
+      cleanup.complete === true &&
+      cleanup.results.every((item) => item.remaining === 0 && !item.error);
+    reportedCleanup = {
+      ...cleanup,
+      status: complete ? "complete" : "incomplete",
+      complete,
+    };
+  }
+  const failures = transactionsRequired
+    ? scenarioCoverageFailures(scenarioCoverage)
+    : [];
+  if (transactionsRequired && !mutationsEnabled)
+    failures.push("required transaction mutations disabled");
+  if (transactionsRequired && !reportedCleanup.complete)
+    failures.push("cleanup incomplete");
+  return { scenarioCoverage, cleanup: reportedCleanup, failures };
 }
 
 export function assertScenarioEvidenceRegistry() {

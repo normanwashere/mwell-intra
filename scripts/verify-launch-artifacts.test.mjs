@@ -270,3 +270,91 @@ test("static launch verifier no longer relies on quote-sensitive source includes
   assert.match(source, /Process Reference Library/);
   assert.doesNotMatch(source, /manual missing the live Knowledge Base link/);
 });
+
+test("explicit route non-execution and substantive legacy transaction evidence remain compatible", async () => {
+  const root = await makeCertificationBundle();
+  try {
+    for (const viewport of routeViewports) {
+      const file = `routes-${viewport}.json`;
+      const report = JSON.parse(await readFile(path.join(root, file), "utf8"));
+      report.scenarioCoverage = evaluateScenarioCoverage([], []);
+      report.cleanup = { status: "not-applicable", complete: false, results: [], reason: "Route-only phase" };
+      await writeJson(root, file, report);
+    }
+    for (const { name: viewport } of REQUIRED_TRANSACTION_VIEWPORTS) {
+      const file = `transactions-${viewport}.json`;
+      const report = JSON.parse(await readFile(path.join(root, file), "utf8"));
+      for (const scenario of report.scenarioCoverage) delete scenario.status;
+      await writeJson(root, file, report);
+    }
+    assert.deepEqual(await verifyCertificationBundle(root), []);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+for (const status of ["not-run", "not-applicable"]) {
+  for (const target of ["scenario", "transaction-cleanup", "standalone-cleanup"]) {
+    test(`bundle rejects ${target} ${status} even with complete true`, async () => {
+      const root = await makeCertificationBundle();
+      try {
+        const file = target === "standalone-cleanup" ? "cleanup-desktop-1440.json" : "transactions-desktop-1440.json";
+        const report = JSON.parse(await readFile(path.join(root, file), "utf8"));
+        const evidence = target === "scenario" ? report.scenarioCoverage[0] : target === "transaction-cleanup" ? report.cleanup : report;
+        evidence.status = status;
+        evidence.complete = true;
+        await writeJson(root, file, report);
+        assert.ok((await verifyCertificationBundle(root)).length > 0);
+      } finally { await rm(root, { recursive: true, force: true }); }
+    });
+  }
+}
+
+test("bundle rejects vacuous per-viewport completion and relabeled route evidence", async () => {
+  const root = await makeCertificationBundle();
+  try {
+    const file = "transactions-desktop-1440.json";
+    const report = JSON.parse(await readFile(path.join(root, file), "utf8"));
+    for (const perViewport of [undefined, [], {}, [{ viewport: "mobile-390", complete: true }], [{ viewport: "desktop-1440", complete: false }]]) {
+      report.scenarioCoverage[0].perViewport = perViewport;
+      await writeJson(root, file, report);
+      assert.ok((await verifyCertificationBundle(root)).length > 0);
+    }
+    await writeJson(root, file, { phase: "transactions", workflows: [], scenarioCoverage: evaluateScenarioCoverage([], []), cleanup: { complete: true, results: [] } });
+    const failures = await verifyCertificationBundle(root);
+    assert.ok(failures.some(failure => failure.includes("no workflow evidence")));
+    assert.ok(failures.some(failure => failure.includes("cross-shard coverage")));
+    assert.ok(failures.some(failure => failure.includes("cleanup")));
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+for (const results of [[], [{ entity: "fixture", remaining: 1 }], [{ entity: "fixture", remaining: null }], [{ entity: "fixture", remaining: 0, error: "failed readback" }]]) {
+  test(`standalone cleanup cannot claim completion with ${JSON.stringify(results)}`, async () => {
+    const root = await makeCertificationBundle();
+    try {
+      await writeJson(root, "cleanup-desktop-1440.json", { viewport: "desktop-1440", complete: true, results });
+      assert.ok((await verifyCertificationBundle(root)).includes("cleanup-desktop-1440.json does not prove zero residue"));
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+}
+
+for (const result of [
+  { remaining: 1 },
+  { remaining: null },
+  {},
+  { remaining: 0, error: "failed readback" },
+]) {
+  test(`transaction cleanup rejects non-Product residue despite valid standalone cleanup: ${JSON.stringify(result)}`, async () => {
+    const root = await makeCertificationBundle();
+    try {
+      const file = "transactions-desktop-1440.json";
+      const report = JSON.parse(await readFile(path.join(root, file), "utf8"));
+      report.cleanup.status = "complete";
+      report.cleanup.results.push({ entity: "other-fixture", ...result });
+      await writeJson(root, file, report);
+      assert.deepEqual(await verifyCertificationBundle(root), [
+        "transactions-desktop-1440.json reports incomplete cleanup",
+      ]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+}

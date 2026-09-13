@@ -12,6 +12,15 @@ function LocationProbe() {
 }
 
 describe("AppShell navigation", () => {
+  it('keeps the desktop home target spacious without increasing the brand row height', async () => {
+    renderWithProviders(<AppShell>content</AppShell>);
+    const home = await screen.findByRole('link', { name: 'Mwell Intra home' });
+    expect(home).toHaveAttribute('href', '/');
+    expect(home).toHaveClass('flex', 'min-h-11');
+    expect(home.parentElement).toHaveClass('py-3');
+    expect(home.parentElement).not.toHaveClass('py-5');
+    expect(within(home).getByRole('img', { name: 'mWell' })).toHaveClass('h-7');
+  });
   it('names active Warehouse alerts consistently and exposes the main keyboard scroller', async () => {
     renderWithProviders(<AppShell>Read-only exceptions</AppShell>);
     const main = await screen.findByRole('main', { name: 'Warehouse workspace' });
