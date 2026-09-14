@@ -32,6 +32,45 @@ function HistoryControls() {
 
 describe("FulfillmentPage", () => {
   it.each([
+    { name: "ready line bin", status: "ready", bins: ["bin-pasig-a1"], expected: "Warehouse A / PASIG-A-01 (First bin)" },
+    { name: "released line bin", status: "released", bins: ["bin-pasig-a1"], expected: "Warehouse A / PASIG-A-01 (First bin)" },
+    { name: "completed line bin", status: "completed", bins: ["bin-pasig-a1"], expected: "Warehouse A / PASIG-A-01 (First bin)" },
+    { name: "multiple deduplicated bins", status: "ready", bins: ["bin-pasig-a1", "bin-cebu-a1", "bin-pasig-a1"], expected: "Warehouse A / PASIG-A-01 (First bin); Warehouse B / CEBU-A-01 (Second bin)" },
+    { name: "distinct bins sharing a label", status: "ready", bins: ["bin-pasig-a1", "bin-same-label"], expected: "Warehouse A / PASIG-A-01 (First bin); Warehouse A / AUDIT-B-02 (First bin)" },
+    { name: "unavailable recorded bin", status: "ready", bins: ["unknown-bin"], expected: "Recorded bin unavailable" },
+    { name: "partly unavailable recorded bins", status: "ready", bins: ["bin-pasig-a1", "unknown-bin"], expected: "Warehouse A / PASIG-A-01 (First bin); Recorded bin unavailable" },
+    { name: "missing completed pick", status: "completed", bins: [], expected: "Pick location not recorded" },
+    { name: "unpicked order", status: "received", bins: [], expected: "Pending pick" },
+    { name: "existing header source", status: "ready", bins: ["bin-cebu-a1"], sourceLocationId: "loc-wh", expected: "Warehouse A" },
+  ] as const)("shows truthful card pick location for $name without changing the order", async (fixture) => {
+    const data = structuredClone(buildSeed());
+    data.locations.find((row) => row.id === "loc-wh")!.name = "Warehouse A";
+    data.locations.find((row) => row.id === "loc-cebu")!.name = "Warehouse B";
+    data.storageAreas.find((row) => row.id === "bin-pasig-a1")!.label = "First bin";
+    data.storageAreas.find((row) => row.id === "bin-cebu-a1")!.label = "Second bin";
+    data.storageAreas.push({ ...data.storageAreas.find((row) => row.id === "bin-pasig-a1")!, id: "bin-same-label", code: "AUDIT-B-02" });
+    data.fulfillmentOrders = [{
+      id: "pick-label-order", externalReference: "SYNTHETIC-PICK-LABEL", source: "department_request",
+      status: fixture.status,
+      sourceLocationId: "sourceLocationId" in fixture ? fixture.sourceLocationId : undefined,
+      lines: (fixture.bins.length ? fixture.bins : [undefined]).map((pickBinId, index) => ({
+        productId: `label-product-${index}`, quantity: 2, pickedQuantity: pickBinId ? 2 : 0,
+        pickBinId, pickedSerialNumbers: [],
+      })),
+      packaging: [], shipmentEvents: [], deliveryMethod: "internal_handover",
+      createdBy: "requester", createdAt: "2026-09-14T00:00:00Z", updatedAt: "2026-09-14T00:00:00Z",
+    }];
+    const repo = makeRepo(data);
+    const before = await repo.getData();
+    renderWithProviders(<FulfillmentPage />, { repo, role: "warehouse_operator", route: "/fulfillment?tab=orders&status=all" });
+    const card = await screen.findByRole("listitem", { name: "Order SYNTHETIC-PICK-LABEL" });
+    const location = within(card).getByText("Pick location").parentElement!;
+    expect(within(location).getByText(fixture.expected, { exact: true })).toBeInTheDocument();
+    expect(within(card).queryByText("Assign on allocation")).not.toBeInTheDocument();
+    expect(await repo.getData()).toEqual(before);
+  });
+
+  it.each([
     { role: 'warehouse_operator', allowed: true },
     { role: 'operations', allowed: false },
     { role: 'finance', allowed: false },

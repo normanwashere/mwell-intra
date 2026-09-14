@@ -570,6 +570,28 @@ export function FulfillmentPage() {
   );
 }
 
+function orderPickLocation(
+  order: FulfillmentOrder,
+  locations: Array<{ id: string; name: string }>,
+  storageAreas: StorageArea[],
+): string {
+  const source = locations.find((row) => row.id === order.sourceLocationId);
+  if (source) return source.name;
+  const pickedLines = order.lines.filter((line) => line.pickedQuantity > 0);
+  const labels = [...new Set(pickedLines.map((line) => line.pickBinId))].map((id) => {
+    if (!id) return "Pick location not recorded";
+    const bin = storageAreas.find((row) => row.id === id);
+    if (!bin) return "Recorded bin unavailable";
+    const location = locations.find((row) => row.id === bin.locationId);
+    const label = bin.label && bin.label !== bin.code ? ` (${bin.label})` : "";
+    return `${location?.name ?? "Location unavailable"} / ${bin.code}${label}`;
+  });
+  if (labels.length) return labels.join("; ");
+  return ["received", "allocated", "picking"].includes(order.status)
+    ? "Pending pick"
+    : "Pick location not recorded";
+}
+
 function OrdersWorkspace({
   products,
   locations,
@@ -870,9 +892,8 @@ function OrdersWorkspace({
               <div className="mt-3 grid grid-cols-2 gap-2 rounded-lg bg-inset p-3 text-xs">
                 <div>
                   <span className="block text-faint">Pick location</span>
-                  <span className="font-medium text-ink">
-                    {locations.find((row) => row.id === order.sourceLocationId)
-                      ?.name ?? "Assign on allocation"}
+                  <span className="font-medium text-ink [overflow-wrap:anywhere]">
+                    {orderPickLocation(order, locations, storageAreas)}
                   </span>
                 </div>
                 <div>

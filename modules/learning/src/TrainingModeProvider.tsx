@@ -19,6 +19,7 @@ import type {
   TrainingStep,
 } from "./training/types";
 import { createIdempotencyKey } from "./training/idempotency";
+import { useRouter } from "next/navigation.js";
 
 const clone = <T,>(value: T): T => structuredClone(value);
 
@@ -258,4 +259,21 @@ export function useTraining<TState = unknown>(): TrainingContextValue<TState> {
   const value = useContext(TrainingContext);
   if (!value) throw new Error("useTraining must be used within TrainingModeProvider.");
   return value as TrainingContextValue<TState>;
+}
+
+export function useFinishTrainingReview(onClose: () => void): (() => void) | undefined {
+  const training = useTraining();
+  const router = useRouter();
+  const ready = training.completed && training.currentStep.terminal === true &&
+    !training.busy && !training.checkpointError;
+  const current = useRef({ ready, training, onClose });
+  current.current = { ready, training, onClose };
+  const finish = useCallback(() => {
+    if (!current.current.ready) return;
+    current.current.ready = false;
+    current.current.training.exit();
+    current.current.onClose();
+    router.replace("/onboarding");
+  }, [router]);
+  return ready ? finish : undefined;
 }

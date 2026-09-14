@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CycleCountsPage } from "./CycleCountsPage";
 import { makeRepo, renderWithProviders } from "@/test/renderWithProviders";
@@ -13,6 +13,74 @@ async function attachCountEvidence(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("CycleCountsPage", () => {
+  it.each([120, 100])('keeps blind matching and differing entries private until successful submission (%i)', async (counted) => {
+    const user = userEvent.setup();
+    const repo = makeRepo();
+    const submit = vi.spyOn(repo, 'createAndSubmitCycleCount');
+    renderWithProviders(<CycleCountsPage />, { repo, role: 'warehouse_operator' });
+    await user.click(await screen.findByRole('button', { name: /blind count/i }));
+    fireEvent.change(screen.getByLabelText(/Counted Event Shirt \(L\)/i), { target: { value: String(counted) } });
+    const assertBlind = () => {
+      expect(screen.queryByText('balanced')).not.toBeInTheDocument();
+      expect(screen.queryByText(/\d+ variance\(s\)/i)).not.toBeInTheDocument();
+      expect(screen.queryByText('±0')).not.toBeInTheDocument();
+      expect(screen.queryByText('-20')).not.toBeInTheDocument();
+      expect(screen.queryByText('Var.')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Variance')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /variances only/i })).not.toBeInTheDocument();
+      expect(screen.getByText('in progress')).toBeInTheDocument();
+      expect(screen.getByLabelText(/Counted Event Shirt \(L\)/i)).toHaveAttribute('placeholder', '—');
+      expect(screen.getByLabelText(/Event Shirt \(L\) counted quantity/i)).toHaveValue(counted);
+    };
+    assertBlind();
+    expect(submit).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: /submit count/i })).toBeDisabled();
+    await attachCountEvidence(user);
+    assertBlind();
+    submit.mockRejectedValueOnce(new Error('Count submission interrupted'));
+    await user.click(screen.getByRole('button', { name: /submit count/i }));
+    await screen.findByText('Count submission interrupted');
+    assertBlind();
+    await user.click(screen.getByRole('button', { name: /submit count/i }));
+    await screen.findByText(counted === 120 ? 'Count completed · balanced' : /awaiting warehouse supervisor/i);
+    expect(submit).toHaveBeenLastCalledWith(expect.objectContaining({
+      reason: 'Blind cycle count',
+      lines: [{ productId: 'shirt-l', expected: 120, counted }],
+      evidenceUrls: [expect.any(String)],
+    }));
+  });
+
+  it('ignores a preselected variance filter in blind mode without losing normal-mode filtering', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<CycleCountsPage />, { route: '/cycle-counts?filter=variances' });
+    const blind = await screen.findByRole('button', { name: /blind count/i });
+    expect(screen.queryByLabelText(/Counted Event Shirt \(L\)/i)).not.toBeInTheDocument();
+    await user.click(blind);
+    const shirt = screen.getByLabelText(/Counted Event Shirt \(L\)/i);
+    fireEvent.change(shirt, { target: { value: '120' } });
+    expect(shirt).toBeInTheDocument();
+    expect(within(screen.getByRole('list', { name: 'Count sheet' })).getByLabelText(/Event Shirt \(L\) counted quantity/i)).toHaveValue(120);
+    await user.click(blind);
+    expect(screen.getByRole('button', { name: /variances only/i })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByLabelText(/Counted Event Shirt \(L\)/i)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /variances only/i }));
+    expect(screen.getByLabelText(/Counted Event Shirt \(L\)/i)).toHaveValue(120);
+  });
+
+  it('hides blind serialized shortage feedback while preserving unexpected-serial validation', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<CycleCountsPage />, { role: 'warehouse_operator' });
+    await user.click(await screen.findByRole('button', { name: /blind count/i }));
+    await user.selectOptions(screen.getByLabelText('Category'), 'device');
+    const serials = screen.getByLabelText(/Scanned serials ECG Ring \(Size 6\)/i);
+    fireEvent.change(serials, { target: { value: 'ECG-RING-6-SN0003' } });
+    expect(screen.queryByText(/\d+ missing for/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Variance')).not.toBeInTheDocument();
+    fireEvent.change(serials, { target: { value: 'NOT-IN-THIS-BIN' } });
+    expect(screen.getByText(/unexpected serial/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /submit count/i })).toBeDisabled();
+  });
+
   it("opens an exact historical count outside the initial snapshot and retries a failed read", async () => {
     const repo = makeRepo();
     const read = vi.spyOn(repo, 'getCycleCount')

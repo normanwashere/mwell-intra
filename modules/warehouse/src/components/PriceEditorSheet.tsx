@@ -1,4 +1,5 @@
 import type { Product } from '@/domain/types';
+import { useCan, useSession } from '@intra/auth';
 import { Sheet, money } from './ui';
 
 /**
@@ -14,6 +15,10 @@ export function PriceEditorSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { profile, loading } = useSession();
+  const viewProduct = useCan('product', 'view_readiness');
+  const viewPricing = useCan('product', 'view_pricing');
+  const canOpenPricing = Boolean(profile) && !loading && viewProduct && viewPricing;
   if (!product) return null;
 
   const currentPrice = product.price ?? 0;
@@ -29,12 +34,12 @@ export function PriceEditorSheet({
       title="Pricing governance"
       description={`${product.name} · ${product.sku}`}
       footer={
-        <a
+        canOpenPricing ? <a
           className="btn-primary min-h-11 w-full"
           href={`/product/pricing?productId=${encodeURIComponent(product.id)}`}
         >
           Open governed pricing
-        </a>
+        </a> : <p className="text-sm text-muted">Next owner: Product team. Contact them for a governed price revision.</p>
       }
     >
       <div className="space-y-4">

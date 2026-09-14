@@ -151,7 +151,7 @@ export function CycleCountsPage() {
   const isVisible = (id: string, name: string, sku: string, expected: number) => {
     if (q && !(name.toLowerCase().includes(q) || sku.toLowerCase().includes(q)))
       return false;
-    if (variancesOnly && (!isCounted(id) || countedFor(id, expected) === expected)) return false;
+    if (!blind && variancesOnly && (!isCounted(id) || countedFor(id, expected) === expected)) return false;
     return true;
   };
 
@@ -324,7 +324,9 @@ export function CycleCountsPage() {
           action={
             // "Balanced" is only earned by real entries — before anyone
             // counts, the sheet is simply "not started" (WH-18).
-            variances.length > 0 ? (
+            blind ? (
+              <Badge tone="slate">{enteredCount > 0 ? 'in progress' : 'not started'}</Badge>
+            ) : variances.length > 0 ? (
               <Badge tone="amber">{variances.length} variance(s)</Badge>
             ) : enteredCount > 0 ? (
               <Badge tone="emerald">balanced</Badge>
@@ -362,7 +364,7 @@ export function CycleCountsPage() {
               >
                 <Icon name="clipboard" className="h-4 w-4" /> Blind count
               </button>
-              <button
+              {!blind && <button
                 type="button"
                 aria-pressed={variancesOnly}
                 onClick={() => setVariancesOnly((v) => !v)}
@@ -374,7 +376,7 @@ export function CycleCountsPage() {
                 )}
               >
                 <Icon name="alert" className="h-4 w-4" /> Variances only
-              </button>
+              </button>}
             </div>
             <p className="text-xs text-faint">
               {enteredCount}/{items.length} counted
@@ -384,7 +386,7 @@ export function CycleCountsPage() {
             <p role="alert" className="rounded-lg bg-rose-500/10 px-3 py-2 text-sm font-medium text-rose-700 dark:text-rose-300">
               Unexpected serial {serialIssues[0]!.serial} for {serialIssues[0]!.product}. Receive or relocate it before submitting this count.
             </p>
-          ) : firstMissing ? (
+          ) : !blind && firstMissing ? (
             <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-800 dark:text-amber-200">
               {firstMissing.expected - countedFor(firstMissing.product.id, firstMissing.expected)} missing for {firstMissing.product.name}.
             </p>
@@ -398,7 +400,7 @@ export function CycleCountsPage() {
                 <th className="py-2">Item</th>
                 <th className="py-2 text-right">Expected</th>
                 <th className="py-2 text-right">Counted</th>
-                <th className="py-2 text-right">Var.</th>
+                {!blind && <th className="py-2 text-right">Var.</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
@@ -413,7 +415,7 @@ export function CycleCountsPage() {
                     {grouped && (
                       <tr>
                         <td
-                          colSpan={4}
+                          colSpan={blind ? 3 : 4}
                           className="bg-inset/60 py-1.5 pl-1 text-xs font-semibold uppercase tracking-wide text-muted"
                         >
                           {fam.label}
@@ -460,7 +462,7 @@ export function CycleCountsPage() {
                               />
                             )}
                           </td>
-                          <td
+                          {!blind && <td
                             className={
                               !has || variance === 0
                                 ? 'py-2 text-right tabular-nums text-faint'
@@ -468,7 +470,7 @@ export function CycleCountsPage() {
                             }
                           >
                             {!has ? '—' : variance === 0 ? '±0' : variance > 0 ? `+${variance}` : variance}
-                          </td>
+                          </td>}
                         </tr>
                       );
                     })}
@@ -513,7 +515,7 @@ export function CycleCountsPage() {
                             {product.sku}
                           </span>
                         </div>
-                        <span
+                        {!blind && <span
                           className={clsx(
                             'shrink-0 rounded-md px-2 py-1 text-xs font-semibold tabular-nums',
                             !has || variance === 0
@@ -523,7 +525,7 @@ export function CycleCountsPage() {
                           aria-label="Variance"
                         >
                           {!has ? 'Var —' : variance === 0 ? '±0' : variance > 0 ? `+${variance}` : variance}
-                        </span>
+                        </span>}
                       </div>
                       <div className="flex items-center justify-between gap-3">
                         <span className="text-xs text-faint">

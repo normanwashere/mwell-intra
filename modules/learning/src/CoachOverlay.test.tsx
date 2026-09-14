@@ -39,6 +39,27 @@ function visible(element: HTMLElement, rect: Partial<DOMRect> = {}) {
 }
 
 describe("CoachOverlay", () => {
+  it("offers only an explicit terminal Finish review action", () => {
+    const finish = vi.fn();
+    render(<CoachOverlay step={{ ...step, terminal: true }} canGoBack
+      onBack={vi.fn()} onExit={vi.fn()} onResumeLater={vi.fn()} onFinishReview={finish} />);
+    fireEvent.click(screen.getByRole("button", { name: "Finish review" }));
+    expect(finish).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("button", { name: "Resume later" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Back" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Exit training" })).not.toBeInTheDocument();
+  });
+
+  it.each(["nonterminal", "busy", "failed", "generic"])("does not replace existing controls for %s coaches", (state) => {
+    render(<CoachOverlay step={{ ...step, terminal: state !== "nonterminal" }} canGoBack
+      onBack={vi.fn()} onExit={vi.fn()} onResumeLater={vi.fn()}
+      onFinishReview={state === "generic" ? undefined : vi.fn()}
+      continueDisabled={state === "busy"} error={state === "failed" ? "Not saved" : null} />);
+    expect(screen.queryByRole("button", { name: "Finish review" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Resume later" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Exit training" })).toBeInTheDocument();
+  });
+
   it("bounds a desktop coach to the viewport and scrolls long feedback", () => {
     const anchor = document.createElement("button");
     anchor.dataset.onboardingAnchor = "purchase-order";

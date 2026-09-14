@@ -92,6 +92,7 @@ export function CoachOverlay({
   onExit,
   onResumeLater,
   onContinue,
+  onFinishReview,
   onChoose,
   selectedChoiceId,
   choiceFeedback,
@@ -105,6 +106,7 @@ export function CoachOverlay({
   onExit(): void;
   onResumeLater(): void;
   onContinue?(): void;
+  onFinishReview?(): void;
   onChoose?(choice: NonNullable<TrainingStep["choices"]>[number]): void;
   selectedChoiceId?: string | null;
   choiceFeedback?: string | null;
@@ -115,6 +117,7 @@ export function CoachOverlay({
   const [layout, setLayout] = useState<AnchorLayout>(() => locate(step.anchor));
   const [collapsed, setCollapsed] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const finishReview = step.terminal && !continueDisabled && !error ? onFinishReview : undefined;
 
   useLayoutEffect(() => {
     const update = () => setLayout(locate(step.anchor));
@@ -299,30 +302,38 @@ export function CoachOverlay({
       </div>
 
       <div className="mt-5 flex flex-wrap gap-2 border-t border-line pt-4">
-        {onContinue && layout.valid && !step.choices?.length && (
-          <Button
-            size="sm"
-            iconRight="arrowRight"
-            disabled={continueDisabled}
-            onClick={onContinue}
-          >
-            {continueLabel}
+        {finishReview ? (
+          <Button size="sm" iconRight="arrowRight" onClick={finishReview}>
+            Finish review
           </Button>
+        ) : (
+          <>
+            {onContinue && layout.valid && !step.choices?.length && (
+              <Button
+                size="sm"
+                iconRight="arrowRight"
+                disabled={continueDisabled}
+                onClick={onContinue}
+              >
+                {continueLabel}
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!canGoBack}
+              onClick={onBack}
+            >
+              Back
+            </Button>
+            <Button variant="ghost" size="sm" onClick={onResumeLater}>
+              Resume later
+            </Button>
+            <Button variant="ghost" size="sm" onClick={onExit}>
+              Exit training
+            </Button>
+          </>
         )}
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!canGoBack}
-          onClick={onBack}
-        >
-          Back
-        </Button>
-        <Button variant="ghost" size="sm" onClick={onResumeLater}>
-          Resume later
-        </Button>
-        <Button variant="ghost" size="sm" onClick={onExit}>
-          Exit training
-        </Button>
       </div>
     </div>
   );

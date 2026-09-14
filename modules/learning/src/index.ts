@@ -58,6 +58,7 @@ export {
 export {
   TrainingModeProvider,
   useTraining,
+  useFinishTrainingReview,
   type TrainingContextValue,
 } from "./TrainingModeProvider";
 export { TrainingBanner } from "./TrainingBanner";

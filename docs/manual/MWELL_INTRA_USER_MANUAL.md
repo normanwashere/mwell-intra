@@ -283,6 +283,8 @@ Local demo or sandbox completion is practice evidence, not a live certification 
 
 For receiving practice, choose the practice PO, record delivery details and traceability, select the training destination, attach practice evidence, and confirm the condition. Review the simulated receipt before submitting. The saved-draft checkpoint is recorded when you reach review; you do not need to pause the exercise to earn it. Completion still requires the final submission and a confirmed training result. If a result cannot be confirmed, return to onboarding and refresh status before retrying; do not repeatedly submit or create a live receipt to finish training.
 
+After receiving practice confirms completion, select **Finish review** to return to your onboarding checklist. The completed coach offers Finish instead of **Resume later**; the completed banner's Exit also returns to the checklist. This ends practice without opening live receiving or submitting another receipt. Unfinished practice keeps its Pause/Resume and Exit controls. Finish is unavailable while completion is saving or has failed. Your recorded learning evidence is kept. When returning to an existing work form, use **Refresh access** and recheck the record before acting.
+
 **Emergency access may be requested. Approval is required** means you may follow the emergency-access process. It does not mean access has been granted or that required training can be skipped.
 
 See [Reviewed Task Training](REVIEWED_TASK_TRAINING.md) for the four reviewed inspection, payment-readiness, putaway and pick/pack scenarios, the separate vendor evidence review, and the dated release-status snapshot. Coverage applies **when assigned**; learning does not replace operational authority. The content received independent automated review, not a human pilot.
@@ -915,6 +917,8 @@ For a third-party event sale, Marketing owns and approves the event, a Warehouse
 **Completion criteria:** event demand, approval, transfer scans, sales/giveaway quantities, returned/lost/damaged evidence, re-kitting decision and Finance settlement reconcile to the final event balance.
 
 ### Inventory Integrity
+
+For a **Blind count**, enter the quantities and serials you physically observe. Expected quantities, variance amounts, balance feedback and the **Variances only** filter are hidden while you count, including after an unsuccessful submission. An unexpected serial still blocks submission; investigate it through the controlled receiving or relocation process. Attach the required evidence before **Submit count**. Only a successfully recorded count provides its balance or review outcome; a draft does not complete a count or adjust stock. Normal counting mode retains its comparison and filtering controls.
 
 ```mermaid
 %% handbook-flow: workflow=inventory-integrity; view=overview; stages=Count|Variance|Approval|Adjust|Expiry|Recall|Reconcile

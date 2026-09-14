@@ -40,6 +40,7 @@ export function PricingPage() {
   const { data } = useWarehouse();
   const [varianceProduct, setVarianceProduct] = useState('');
   const [editing, setEditing] = useState<Product | null>(null);
+  const [productLimit, setProductLimit] = useState(12);
 
   const rows = useMemo<PriceRow[]>(() => {
     if (!data) return [];
@@ -102,7 +103,7 @@ export function PricingPage() {
         r.product.price != null ? (
           money(r.product.price)
         ) : (
-          <span className="font-semibold text-brand-700 dark:text-brand-300">Set</span>
+          <span className="text-muted">Not set</span>
         ),
     },
     { key: 'onhand', header: 'On hand', align: 'right', render: (r) => r.onHandUnits },
@@ -139,15 +140,25 @@ export function PricingPage() {
       <Card>
         <SectionTitle
           title="Landed cost & turnover"
-          subtitle="Tap a row to set the sell price"
+          subtitle="Price context and Product governance"
         />
         <DataTable
           columns={columns}
-          rows={rows.slice(0, 12)}
+          rows={rows.slice(0, productLimit)}
           keyOf={(r) => r.product.id}
           ariaLabel="Pricing table"
           onRowClick={(r) => setEditing(r.product)}
         />
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-muted" role="status">
+            Showing {Math.min(productLimit, rows.length)} of {rows.length} products
+          </p>
+          {productLimit < rows.length && (
+            <button type="button" className="btn-ghost" onClick={() => setProductLimit((limit) => limit + 12)}>
+              Load more products
+            </button>
+          )}
+        </div>
       </Card>
 
       <Card className="space-y-3">
@@ -182,22 +193,31 @@ export function PricingPage() {
             const items = b.productIds
               .map((id) => data.products.find((p) => p.id === id))
               .filter((p): p is Product => Boolean(p));
-            const cost = items.reduce((s, p) => s + landedCost(p, data.lots), 0);
-            const price = Math.round((cost * b.markup) / 10) * 10;
+            const missingCount = b.productIds.length - items.length;
+            const cost = missingCount === 0
+              ? items.reduce((s, p) => s + landedCost(p, data.lots), 0)
+              : null;
+            const price = cost === null ? null : Math.round((cost * b.markup) / 10) * 10;
             return (
               <li key={b.name} className="rounded-xl bg-inset p-3">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-ink">{b.name}</span>
-                  <span className="tnum font-bold text-brand-600 dark:text-brand-300">
-                    {money(price)}
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="min-w-0 break-words font-semibold text-ink">{b.name}</span>
+                  <span className={`min-w-0 max-w-full break-words ${price === null ? 'text-sm text-muted' : 'tnum font-bold text-brand-600 dark:text-brand-300'}`}>
+                    {price === null ? 'Unavailable' : money(price)}
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-muted">
                   {items.map((p) => productName(p.id)).join(' + ')}
                 </p>
-                <p className="mt-0.5 text-xs text-faint">
-                  Kit cost {money(cost)} · margin {Math.round((b.markup - 1) * 100)}%
-                </p>
+                {cost === null ? (
+                  <p className="mt-0.5 text-xs text-muted">
+                    Incomplete bundle: {missingCount} of {b.productIds.length} products unavailable.
+                  </p>
+                ) : (
+                  <p className="mt-0.5 text-xs text-faint">
+                    Kit cost {money(cost)} · markup {Math.round((b.markup - 1) * 100)}%
+                  </p>
+                )}
               </li>
             );
           })}

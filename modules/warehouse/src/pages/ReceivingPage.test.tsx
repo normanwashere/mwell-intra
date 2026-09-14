@@ -1,15 +1,106 @@
 import { describe, it, expect, vi } from "vitest";
-import { fireEvent, screen, within, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { TrainingContextValue } from "@intra/learning";
 import { ReceivingPage, ReceivingPageSurface } from "./ReceivingPage";
-import type { ReceivingTrainingState } from "@/training/receivingAdapter";
+import { createReceivingTrainingState, type ReceivingTrainingState } from "@/training/receivingAdapter";
 import {
   certifiedTestLearning,
   makeRepo,
   renderWithProviders,
 } from "@/test/renderWithProviders";
 import { availableForProduct } from "@/domain/stock";
+
+const shellRouter = vi.hoisted(() => ({ replace: vi.fn() }));
+// Shell navigation belongs to Learning; Warehouse has no Next dependency.
+vi.mock("../../../learning/node_modules/next/navigation.js", () => ({ useRouter: () => shellRouter }));
+
+function renderReceiptReview(recordCheckpoint = vi.fn().mockResolvedValue(undefined)) {
+  shellRouter.replace.mockClear();
+  const storageKey = "intra-training:assignment-review:attempt-review:warehouse-receiving-v1:v1";
+  window.sessionStorage.setItem(storageKey, JSON.stringify({
+    stepId: "submit", completed: false,
+    state: {
+      ...createReceivingTrainingState(), purchaseOrderId: "TRAIN-PO1042",
+      expectedQuantity: 2, receivedQuantity: 2, productId: "smart-watch",
+      category: "sku", serialized: true, serials: ["TRAIN-1", "TRAIN-2"],
+      deliveryDate: "2026-09-14", batchNumber: "TRAIN-BATCH",
+      destinationId: "training-qa", evidenceUrls: ["training://delivery-photo-1"],
+    },
+  }));
+  const closeTraining = vi.fn();
+  const repo = makeRepo();
+  const receive = vi.spyOn(repo, "receiveStock");
+  renderWithProviders(<ReceivingPage />, {
+    repo, route: "/receiving?training=warehouse-receiving-v1",
+    learning: {
+      ...certifiedTestLearning, recordCheckpoint, closeTraining,
+      activeTraining: {
+        mode: "scenario",
+        assignmentRequirementId: "assignment-review", attemptId: "attempt-review",
+        requirementId: "receiving-practice", simulationId: "warehouse-receiving-v1",
+      },
+    },
+  });
+  return { storageKey, closeTraining, receive, recordCheckpoint };
+}
+
+describe("Receiving practice completion", () => {
+  it("finishes a persisted terminal review at the canonical checklist without live receiving or replay", async () => {
+    const { closeTraining, receive, recordCheckpoint, storageKey } = renderReceiptReview();
+    fireEvent.click(await screen.findByRole("button", { name: /receive .*item/i }));
+    const finish = await screen.findByRole("button", { name: "Finish review" });
+    expect(screen.queryByRole("button", { name: "Resume later" })).not.toBeInTheDocument();
+    expect(shellRouter.replace).not.toHaveBeenCalled();
+    fireEvent.click(finish);
+    fireEvent.click(finish);
+    expect(shellRouter.replace).toHaveBeenCalledExactlyOnceWith("/onboarding");
+    expect(closeTraining).toHaveBeenCalledOnce();
+    expect(window.sessionStorage.getItem(storageKey)).toBeNull();
+    expect(recordCheckpoint).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ checkpointId: "complete", terminal: true }));
+    expect(receive).not.toHaveBeenCalled();
+  });
+
+  it("also takes a completed banner Exit to the checklist without another command", async () => {
+    const { closeTraining, recordCheckpoint, receive } = renderReceiptReview();
+    fireEvent.click(await screen.findByRole("button", { name: /receive .*item/i }));
+    await screen.findByRole("button", { name: "Finish review" });
+    fireEvent.click(within(screen.getByRole("region", { name: "Training mode" })).getByRole("button", { name: "Exit training" }));
+    expect(shellRouter.replace).toHaveBeenCalledExactlyOnceWith("/onboarding");
+    expect(closeTraining).toHaveBeenCalledOnce();
+    expect(recordCheckpoint).toHaveBeenCalledOnce();
+    expect(receive).not.toHaveBeenCalled();
+  });
+
+  it("does not offer terminal navigation while persistence is pending or failed", async () => {
+    let reject!: (error: Error) => void;
+    const checkpoint = vi.fn(() => new Promise<void>((_, fail) => { reject = fail; }));
+    const { closeTraining, receive } = renderReceiptReview(checkpoint);
+    fireEvent.click(await screen.findByRole("button", { name: /receive .*item/i }));
+    expect(checkpoint).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("button", { name: "Finish review" })).not.toBeInTheDocument();
+    expect(shellRouter.replace).not.toHaveBeenCalled();
+    await act(async () => reject(new Error("Checkpoint readback failed")));
+    expect(screen.getByRole("alert")).toHaveTextContent("Checkpoint readback failed");
+    expect(screen.queryByRole("button", { name: "Finish review" })).not.toBeInTheDocument();
+    expect(closeTraining).not.toHaveBeenCalled();
+    expect(shellRouter.replace).not.toHaveBeenCalled();
+    expect(receive).not.toHaveBeenCalled();
+  });
+
+  it("keeps unfinished Resume later and Exit behavior without checklist navigation", async () => {
+    const { closeTraining, receive, recordCheckpoint } = renderReceiptReview();
+    await screen.findByRole("button", { name: /receive .*item/i });
+    expect(screen.queryByRole("button", { name: "Finish review" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Resume later" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(recordCheckpoint).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ checkpointId: "draft-saved", terminal: false }));
+    fireEvent.click(screen.getByRole("button", { name: "Exit training" }));
+    expect(closeTraining).toHaveBeenCalledOnce();
+    expect(shellRouter.replace).not.toHaveBeenCalled();
+    expect(receive).not.toHaveBeenCalled();
+  });
+});
 
 async function evidenceDirectReceipt(user: ReturnType<typeof userEvent.setup>) {
   await user.type(

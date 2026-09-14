@@ -10,6 +10,7 @@ import {
   TrainingModeProvider,
   useOptionalLearning,
   useTraining,
+  useFinishTrainingReview,
   type LearningContextValue,
   type TrainingContextValue,
 } from "@intra/learning";
@@ -57,6 +58,7 @@ function ReceivingTrainingRuntime({
   learning: LearningContextValue;
 }) {
   const training = useTraining<ReceivingTrainingState>();
+  const finishReview = useFinishTrainingReview(learning.closeTraining);
   const close = () => {
     training.exit();
     learning.closeTraining();
@@ -80,7 +82,7 @@ function ReceivingTrainingRuntime({
 
   return (
     <>
-      <TrainingBanner onExit={close} />
+      <TrainingBanner onExit={finishReview ?? close} />
       <ReceivingPageSurface training={training} />
       {training.active && (
         <CoachOverlay
@@ -89,6 +91,7 @@ function ReceivingTrainingRuntime({
           onBack={training.back}
           onResumeLater={resumeLater}
           onExit={close}
+          onFinishReview={finishReview}
           onContinue={
             continueCommand
               ? () => {
