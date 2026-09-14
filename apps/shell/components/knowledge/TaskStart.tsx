@@ -49,7 +49,7 @@ export function TaskStart({ tasks, onSelect, selectedTaskId, learningHref = "/on
         <label htmlFor="task-search" className="label">All eligible tasks</label>
         <input id="task-search" type="search" className="input mt-2 min-h-11" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search task, module or role" />
         <p role="status" className="mt-2 text-xs text-muted">{complete.length} tasks</p>
-        <div role="region" aria-label="Eligible tasks by module" tabIndex={0} className="mt-2 max-h-80 overflow-y-auto overscroll-contain px-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-700">
+        <div role="region" aria-label="Eligible tasks by module" tabIndex={0} className="mt-2 px-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-700">
           {[...new Set(complete.map(task => task.moduleLabel))].map(moduleLabel => <section key={moduleLabel} aria-label={moduleLabel}>
             <h3 className="border-b border-line py-2 text-sm font-bold">{moduleLabel}</h3>
             <ul className="divide-y divide-line">

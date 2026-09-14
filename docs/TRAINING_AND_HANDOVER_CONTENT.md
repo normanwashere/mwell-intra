@@ -2,9 +2,13 @@
 
 ## September 14 Receiving Practice Follow-Up
 
+Show learners their progress and next required action before opening the optional task chooser. Buttons use Start, Resume or Try again beside the requirement title. Expand Choose a task or Change task to search and scroll through eligible tasks. Test the same behavior for internal, vendor and multi-role users, including Browser Back, prerequisites and return destinations. Returning to work remains available and grants no learning credit. The isolated operator completed all nine assigned steps on live UAT on September 14; that evidence is not a substitute for the other role journeys, real transactions or a human pilot.
+
 Demonstrate receiving practice without pausing: complete the practice PO, delivery date, item, batch/unit traceability, destination, evidence and condition; review, then submit. Verify both the saved-draft and completion checkpoints in the learner's recorded result. Repeat with damage and verify the simulated quarantine handoff. Do not mark the exercise complete based only on the final button or a screenshot. If the result is uncertain, refresh onboarding status before retrying and retain the original attempt for support review. The new checkpoint correction is a candidate until live deployment and retest are recorded in the release note.
 
 Explain that emergency access may be requested only through approval; the eligibility label is not a permission grant. For Procurement, a confirmed route with no sourcing event should show a not-started workspace, not an unrelated variance-review error. Existing-event and later-stage sourcing checks still need their own evidence.
+
+Include a separate sourcing-owner drill: create the plan once, reopen the same event before an award recommendation exists, and later verify persisted commercial and technical evaluation evidence. Confirm unrelated users remain denied, view-only users cannot record an award, and variance decisions still require the independent reviewer. Unavailable variance history must be explained as restricted visibility, never reported as an empty history. The sourcing read-contract migration must precede its UI deployment.
 
 ## Warehouse Access Recovery Handover
 

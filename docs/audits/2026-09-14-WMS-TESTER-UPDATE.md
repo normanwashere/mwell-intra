@@ -19,9 +19,11 @@ We also removed two obsolete test-role references from an approval group. The re
 
 ## Still Being Tested
 
-We found and fixed a receiving-practice bug that made learners pause unnecessarily to save progress. The fix is live, and the original blocked attempt now shows passed: the learner is at **6 of 9 required steps complete**. We also made it clear that emergency access still needs approval. All 1,103 Warehouse and 299 Learning tests passed. The remaining exercises and a fresh uninterrupted receiving run still need testing; this is not an all-roles pass.
+We fixed the receiving-practice bug and completed the operator's remaining Quality, putaway and pick/pack exercises on UAT. That test account now shows **9 of 9 learning steps complete**, with the results checked in the database. Emergency access still needs approval. Other role journeys and a fresh uninterrupted receiving run are still being tested; this is not an all-roles or full transaction pass.
 
-The latest desktop replenishment run saved the draft, registered both required documents, and verified that the owner could download the correct files. Route confirmation also saved. The test then stopped on unexpected page reads. We fixed the page asking for evaluation data before a sourcing event exists. That fix is deployed and passes all 377 Procurement tests locally, but its live handoff retest is **not passed yet**. Please leave marked audit records to us and do not create duplicate requests to get around them.
+The original replenishment request now opens correctly on live UAT: its confirmed route, two attachments and not-started sourcing form are visible without the earlier error. We checked desktop and mobile. We also found a separate problem when a sourcing event already exists and are correcting that read without changing who can approve. Please leave marked audit records to us; do not create duplicates to work around them.
+
+The onboarding layout candidate puts progress and the next Start/Resume action first. Task selection is tucked into an expandable control, and long button labels no longer crowd the page. Desktop and mobile screenshots have been reviewed locally; deployment and live checks are still pending.
 
 Seven separate warehouse test accounts are now ready, including an operator/supervisor multi-role account. All seven signed in; 217 capability checks found no assignment mismatches. A separate database check matched all 111 warehouse role-permission entries to the app definitions. Existing tester accounts were unchanged. These checks do **not** mean the new accounts have completed onboarding or their warehouse transactions.
 

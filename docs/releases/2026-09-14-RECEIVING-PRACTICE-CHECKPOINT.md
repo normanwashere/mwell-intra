@@ -6,6 +6,10 @@ Released to live UAT as `b3b74983c7260d5b0ff3a2049b94c67d10e3d0be`, deployment `
 
 ## Changes
 
+The next layout candidate collapses the optional task chooser, removes its nested scrolling, keeps action buttons compact with full accessible names, and places the next required action before the optional return to work. The verified operator curriculum version 2 also receives its correct display role. Desktop 1440x900 and mobile 390x844 candidate screenshots were reviewed; mobile Start now appears above the bottom navigation. These layout changes are not live until the next exact-build deployment is recorded.
+
+The existing-event sourcing correction extends the existing sourcing read with event-bound evaluation evidence, while retaining narrower variance-history visibility and server-derived review eligibility. The app no longer needs the variance-review-only endpoint just to open sourcing. The database migration was applied to UAT after a baseline/ACL review; the independent variance function and both function ACLs are unchanged. Security advisors show the same 13 informational no-policy notices before and after. Local validation passed 414 Procurement tests and 25 policy/SQL tests. The UI deployment and existing-event live retest remain pending.
+
 - Receiving practice records its saved-draft checkpoint at receipt review. Learners no longer need to pause just to satisfy this checkpoint. Final submission, required evidence and controlled quality routing remain mandatory.
 - Emergency-access wording now says approval is required. It does not imply that access has already been granted.
 - Procurement verifies sourcing state before requesting event-specific reads. A confirmed request without a sourcing event shows the valid not-started state; a failed read offers Retry sourcing.
@@ -23,4 +27,8 @@ Desktop 1440x900 and mobile 390x844 screenshots of the same resumed learner were
 
 ## Still Open
 
-A fresh uninterrupted receiving attempt; the remaining exercises and all seven isolated-role journeys; later-stage sourcing authority and the sourcing fix's own live retest; task-picker/checklist ergonomics; remaining warehouse transactions and desktop/mobile certification; real-user and physical-device testing. Existing test records are retained for reconciliation, not recreated to bypass a failed step.
+The same operator subsequently completed Quality, putaway and pick/pack guided practices through the live UI on build `3b2d766`. Read-only database evidence confirms three passed attempts and their validated checkpoints; the UI shows **9 of 9 complete** and five active capability certifications. This completes that assigned learning path, not the operator's business transactions or a fresh uninterrupted receiving attempt.
+
+The preserved replenishment request `req_6297bc50-5f26-4a75-a455-fd3bb64cbff7` was reopened as its normal Procurement Lead on live UAT. The confirmed route, original two attachments and valid **Not started** sourcing form displayed without a variance-review error. Desktop and mobile screenshots were saved. No duplicate request or repeated route command was created. An existing-event read-contract defect was separately confirmed: the sourcing page calls a variance-review-only endpoint before a recommendation exists. Its correction and live validation remain separate work.
+
+Still open: a fresh uninterrupted receiving attempt; the other isolated-role journeys; existing-event/later-stage sourcing validation; deployment and live verification of the layout candidate; remaining warehouse transactions and full desktop/mobile CI certification; real-user and physical-device testing. Existing test records are retained for reconciliation. SMTP remains untouched.

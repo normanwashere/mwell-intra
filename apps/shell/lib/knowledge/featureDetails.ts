@@ -206,13 +206,13 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
       controls: [
         control(
           "Change task / All eligible tasks",
-          "In the September 11 UAT release, expand Change task, search All eligible tasks by task, module or role, and choose Select task. Clear search to see the complete eligible list beyond the recommendations.",
+          "Expand Choose a task, or Change task when one is selected, then search All eligible tasks by task, module or role and choose Select task. The chooser starts closed so readiness and the next required action are easy to reach. Clear search to see the complete eligible list beyond the recommendations; scroll the page to reach further tasks.",
           "Only eligible tasks are listed. A safe return destination is retained only within the selected task's workspace; unrelated selected requirements are cleared. Selection grants neither access nor completion.",
           "The selected task opens with its learning requirements. Browser Back returns to the preceding task selection; an incompatible return destination is replaced by the task's own destination.",
         ),
         control(
           "Start or resume requirement",
-          "Opens the next assigned orientation, policy, practice, assessment, or attestation. In receiving practice, complete the delivery details, traceability, destination, evidence and condition, then review and submit the simulated receipt. There is no need to pause just to save a training checkpoint.",
+          "Use Start, Resume or Try again beside the named requirement. The next required action appears before the optional return-to-work panel. In receiving practice, complete the delivery details, traceability, destination, evidence and condition, then review and submit the simulated receipt. There is no need to pause just to save a training checkpoint.",
           "The requirement must belong to an effective curriculum assigned through a current scoped role.",
           "A governed attempt starts or the existing attempt resumes without duplicating shared requirements.",
         ),
@@ -2964,7 +2964,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         control(
           "Confirm sourcing route",
-          "Records the officer-selected route and risk facts.",
+          "Records the officer-selected route and risk facts. A confirmed request can show sourcing as Not started until a plan exists. Reopen the same request to review saved sourcing and evaluation evidence; a failed read offers Retry sourcing. Viewing evidence does not grant independent variance-review or award authority. Restricted variance history is explicitly identified, not treated as no decisions.",
           "The actor needs manage_rfp and current request data.",
           "The request stores a confirmed policy route.",
         ),

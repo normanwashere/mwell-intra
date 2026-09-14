@@ -2011,6 +2011,55 @@ test("executes versioned tabulation, technical best-value evidence, and independ
       package_hash: "a".repeat(64),
     })}) as event`);
     const eventId = event.rows[0].event.id;
+    // The historical final RPC is variance-only, even for the sourcing manager.
+    await setPolicyActor(db, actorId, false, ['manage_rfp']);
+    await assert.rejects(db.query(`select procurement.evaluation_workspace(${sqlJson({ request_id: requestId })})`), /No governed variance decision/);
+    const readSourcing = async () => (await db.query(`select procurement.sourcing_workspace(${sqlJson({ request_id: requestId })}) as workspace`)).rows[0].workspace;
+    const historicalWorkspace = await readSourcing();
+    assert.equal(historicalWorkspace.event.commercialTabulations, undefined, 'historical sourcing response lacks the evaluation evidence');
+    // Apply this function's selected original ACL, rather than relying on the
+    // test database's default PUBLIC EXECUTE for newly created functions.
+    const aclSource = readFileSync(resolve('supabase/migrations/20260804170000_procurement_to_payment_completion.sql'), 'utf8');
+    const sourceAcls = [...aclSource.matchAll(/((?:revoke all|grant execute) on function )([^;]+?)( (?:from public,anon|to authenticated,service_role);)/g)]
+      .filter(match => match[2].includes('procurement.sourcing_workspace(jsonb)'));
+    assert.equal(sourceAcls.length, 2);
+    for (const match of sourceAcls) await db.exec(`${match[1]}procurement.sourcing_workspace(jsonb)${match[3]}`);
+    await db.exec('grant usage on schema procurement to authenticated,anon');
+    const functionInventory = async () => (await db.query(`select n.nspname,p.proname,p.proacl,pg_get_functiondef(p.oid) as definition
+      from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+      where n.nspname in ('procurement','private') and p.prokind='f' order by n.nspname,p.proname,p.oid`)).rows;
+    const beforeFunctions = await functionInventory();
+    const readContractMigration = readFileSync(resolve('supabase/migrations/20260914025434_restore_sourcing_evaluation_read_contract.sql'), 'utf8');
+    await db.exec(readContractMigration);
+    const afterFunctions = await functionInventory();
+    const isSourcing = row => row.nspname === 'procurement' && row.proname === 'sourcing_workspace';
+    assert.deepEqual(afterFunctions.filter(row => !isSourcing(row)), beforeFunctions.filter(row => !isSourcing(row)), 'variance authority and all write functions stay byte-identical');
+    assert.deepEqual(afterFunctions.find(isSourcing).proacl, beforeFunctions.find(isSourcing).proacl, 'existing sourcing EXECUTE ACL is preserved');
+    assert.equal((await db.query("select has_function_privilege('anon','procurement.sourcing_workspace(jsonb)','execute') as allowed")).rows[0].allowed, false);
+    await db.exec('set role anon');
+    await assert.rejects(readSourcing(), /permission denied for function sourcing_workspace/);
+    await db.exec('reset role; set role authenticated');
+    const draftWorkspace = await readSourcing();
+    await db.exec('reset role');
+    const addedKeys = ['commercialTabulations', 'technicalEvaluations', 'awardRecommendation', 'varianceDecisions', 'varianceDecisionsVisible', 'varianceEligibility'];
+    assert.deepEqual(Object.fromEntries(Object.entries(draftWorkspace.event).filter(([key]) => !addedKeys.includes(key))), historicalWorkspace.event,
+      'all original sourcing metadata, controls, response and communication fields are preserved');
+    assert.equal(draftWorkspace.event.id, eventId);
+    assert.deepEqual(draftWorkspace.event.commercialTabulations, []);
+    assert.deepEqual(draftWorkspace.event.technicalEvaluations, []);
+    assert.equal(draftWorkspace.event.awardRecommendation, null);
+    assert.deepEqual(draftWorkspace.event.varianceDecisions, []);
+    assert.equal(draftWorkspace.event.varianceDecisionsVisible, true);
+    assert.deepEqual(draftWorkspace.event.varianceEligibility, { canReview: false });
+    await assert.rejects(db.query(`select procurement.evaluation_workspace(${sqlJson({ request_id: requestId })})`), /No governed variance decision/);
+    const unrelatedRequestId = 'sourcing-read-contract-other-request';
+    await insertRequest(db, { id: unrelatedRequestId, requirementKind: 'materials' });
+    await db.query(`update procurement.requests set policy_profile_id=$1 where id=$2`, [operatingProfileId, unrelatedRequestId]);
+    assert.deepEqual((await db.query(`select procurement.sourcing_workspace(${sqlJson({ request_id: unrelatedRequestId })}) as workspace`)).rows[0].workspace,
+      { requestId: unrelatedRequestId, event: null }, 'no event remains explicit, not a denied variance read');
+    await assert.rejects(db.query(`select procurement.sourcing_workspace('{}'::jsonb)`), /Request not found/);
+    await assert.rejects(db.query(`select procurement.sourcing_workspace(${sqlJson({ request_id: 'unknown-request' })})`), /Request not found/);
+    await setPolicyActor(db, actorId, true);
     await db.query(`select procurement.invite_sourcing_vendors(${sqlJson({ sourcing_event_id: eventId, vendor_ids: vendorIds })})`);
     await db.query(`select procurement.transition_sourcing_event(${sqlJson({ id: eventId, action: "issue" })})`);
     for (const [index, vendorId] of vendorIds.entries()) {
@@ -2066,6 +2115,15 @@ test("executes versioned tabulation, technical best-value evidence, and independ
       }
     }
     assert.equal(evaluations[0].total_score, 92, 'the complete criterion average must be stored');
+    await setPolicyActor(db, actorId, false, ['manage_rfp']);
+    const evidenceWorkspace = await readSourcing();
+    assert.equal(evidenceWorkspace.event.commercialTabulations[0].id, tabulation.rows[0].tabulation.id);
+    assert.equal(evidenceWorkspace.event.commercialTabulations[0].evidenceReference, 'private/tabulations/RFQ-BV-v1.xlsx');
+    assert.deepEqual(evidenceWorkspace.event.technicalEvaluations.map(row => row.id).sort(), evaluations.map(row => row.id).sort());
+    assert.equal(evidenceWorkspace.event.technicalEvaluations[0].evidenceReference, 'private/technical/1.pdf');
+    assert.equal(evidenceWorkspace.event.awardRecommendation, null);
+    await assert.rejects(db.query(`select procurement.evaluation_workspace(${sqlJson({ request_id: requestId })})`), /No governed variance decision/);
+    await setPolicyActor(db, actorId, true);
     await assert.rejects(
       () => db.query(`select procurement.submit_award_recommendation(${sqlJson({
         sourcing_event_id: eventId,
@@ -2131,6 +2189,57 @@ test("executes versioned tabulation, technical best-value evidence, and independ
     await setPolicyActor(db, checkerId, true);
     const departmentDecision = await db.query(`select procurement.review_recommendation_variance(${sqlJson({ award_recommendation_id: recommendation.rows[0].recommendation.id, expected_version: 1, decision: "approved", note: "Department Head confirms the documented variance rationale." })}) as recommendation`);
     assert.equal(departmentDecision.rows[0].recommendation.status, 'pending_variance');
+    const foreignEventId = '74000000-0000-4000-8000-000000000090';
+    await db.query(`insert into procurement.sourcing_events
+      select (jsonb_populate_record(null::procurement.sourcing_events, to_jsonb(event) || jsonb_build_object('id',$1::text,'request_id',$2::text))).*
+      from procurement.sourcing_events event where id=$3`, [foreignEventId, unrelatedRequestId, eventId]);
+    for (const table of ['commercial_tabulations', 'technical_evaluations', 'award_recommendations']) {
+      await db.query(`insert into procurement.${table}
+        select (jsonb_populate_record(null::procurement.${table}, to_jsonb(evidence) || jsonb_build_object('id',gen_random_uuid(),'sourcing_event_id',$1::text))).*
+        from procurement.${table} evidence where sourcing_event_id=$2`, [foreignEventId, eventId]);
+    }
+    await db.exec(`insert into procurement.award_recommendation_variance_decisions
+      select (jsonb_populate_record(null::procurement.award_recommendation_variance_decisions,
+        to_jsonb(audit_row) || jsonb_build_object('id',gen_random_uuid(),'award_recommendation_id',foreign_recommendation.id))).*
+      from procurement.award_recommendation_variance_decisions audit_row
+      cross join procurement.award_recommendations foreign_recommendation
+      where foreign_recommendation.sourcing_event_id='${foreignEventId}'`);
+    const evidenceInventory = async () => (await db.query(`select
+      (select jsonb_agg(t order by t.id) from procurement.commercial_tabulations t) as tabulations,
+      (select jsonb_agg(t order by t.id) from procurement.technical_evaluations t) as technical,
+      (select jsonb_agg(t order by t.id) from procurement.award_recommendations t) as recommendations,
+      (select jsonb_agg(t order by t.id) from procurement.award_recommendation_variance_decisions t) as decisions`)).rows;
+    const beforeReads = await evidenceInventory();
+    for (const capabilities of [['manage_rfp'], ['approve_award'], ['view_dashboard', 'view_finance']]) {
+      await setPolicyActor(db, actorId, false, capabilities);
+      const current = await readSourcing();
+      assert.equal(current.event.awardRecommendation.id, recommendation.rows[0].recommendation.id);
+      assert.equal(current.event.awardRecommendation.version, 2);
+      assert.equal(current.event.commercialTabulations.length, 1);
+      assert.equal(current.event.technicalEvaluations.length, 3);
+      assert(current.event.commercialTabulations.every(row => row.sourcingEventId === eventId));
+      assert(current.event.technicalEvaluations.every(row => row.sourcingEventId === eventId));
+      assert.equal(current.event.varianceDecisionsVisible, true);
+      assert.equal(current.event.varianceDecisions.length, 1);
+      assert(current.event.varianceDecisions.every(row => row.awardRecommendationId === recommendation.rows[0].recommendation.id));
+      assert.equal(current.event.varianceDecisions[0].decisionType, 'department_head');
+      assert.equal(current.event.varianceEligibility.canReview, false, 'sourcing access never substitutes for the current independent Finance decision');
+      await assert.rejects(db.query(`select procurement.evaluation_workspace(${sqlJson({ request_id: requestId })})`), /No governed variance decision/);
+    }
+    await setPolicyActor(db, actorId, false, ['view_dashboard']);
+    const dashboardWorkspace = await readSourcing();
+    assert.equal(dashboardWorkspace.event.commercialTabulations.length, 1);
+    assert.equal(dashboardWorkspace.event.technicalEvaluations.length, 3);
+    assert.equal(dashboardWorkspace.event.awardRecommendation.id, recommendation.rows[0].recommendation.id);
+    assert.equal(dashboardWorkspace.event.varianceDecisionsVisible, false);
+    assert.equal(Object.hasOwn(dashboardWorkspace.event, 'varianceDecisions'), false, 'withheld history must not masquerade as an empty result');
+    assert.deepEqual(dashboardWorkspace.event.varianceEligibility, { canReview: false });
+    for (const [id, capabilities] of [[checkerId, []], [unauthorizedActorId, []], [financeActorId, ['view_finance']]]) {
+      await setPolicyActor(db, id, false, capabilities);
+      await assert.rejects(readSourcing(), /No procurement sourcing access/);
+    }
+    assert.deepEqual(await evidenceInventory(), beforeReads, 'read contract cannot change evidence or approval state');
+    await setPolicyActor(db, checkerId, true);
     await assert.rejects(
       () => db.query(`select procurement.review_recommendation_variance(${sqlJson({ award_recommendation_id: recommendation.rows[0].recommendation.id, expected_version: 2, decision: "approved", note: "Dual-assignment actor attempts Finance approval." })})`),
       /independent from the Department Head/i,

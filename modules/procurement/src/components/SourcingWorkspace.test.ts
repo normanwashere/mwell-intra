@@ -13,8 +13,9 @@ vi.mock('@intra/ui', async (importOriginal) => ({
 
 let root: Root, host: HTMLDivElement;
 const requestId = 'req_11111111-1111-4111-8111-111111111111';
-const event = { id: 'event-1', status: 'draft', responses: [], communications: [] };
 const evaluation = { commercialTabulations: [], technicalEvaluations: [], awardRecommendation: null, varianceDecisions: [] };
+const event = { id: 'event-1', status: 'draft', responses: [], communications: [], ...evaluation,
+  varianceDecisionsVisible: true, varianceEligibility: { canReview: false } };
 const empty = () => ({ data: { requestId, event: null }, error: null });
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -72,7 +73,7 @@ describe('SourcingWorkspace', () => {
     expect(rpc.mock.calls.map(call => call[0])).toEqual(['sourcing_workspace']);
     expect(host.querySelector('[aria-busy="true"]')).not.toBeNull();
     await act(async () => first.resolve({ data: { requestId, event }, error: null }));
-    expect(rpc.mock.calls).toEqual(['sourcing_workspace', 'insufficient_bid_exception', 'evaluation_workspace']
+    expect(rpc.mock.calls).toEqual(['sourcing_workspace', 'insufficient_bid_exception']
       .map(name => [name, { payload: { request_id: requestId } }]));
     expect(host.textContent).toContain('Save plan');
     expect(toast.error).not.toHaveBeenCalled();
@@ -104,7 +105,7 @@ describe('SourcingWorkspace', () => {
     expect(host.textContent).toContain('Not started');
   });
 
-  it.each(['insufficient_bid_exception', 'evaluation_workspace'])('keeps an existing-event %s denial visible without inventing empty evidence', async denied => {
+  it.each(['insufficient_bid_exception'])('keeps an existing-event %s denial visible without inventing empty evidence', async denied => {
     const rpc = vi.fn(async (name: string) => name === 'sourcing_workspace' ? { data: { requestId, event }, error: null }
       : name === denied ? { data: null, error: { message: 'Current governed access denied' } }
       : { data: name === 'evaluation_workspace' ? evaluation : null, error: null });
@@ -114,6 +115,142 @@ describe('SourcingWorkspace', () => {
     expect(host.textContent).not.toContain('Not started');
     expect(host.textContent).not.toContain('Create plan');
     expect(host.textContent).not.toContain('Save plan');
-    expect(rpc).toHaveBeenCalledTimes(3);
+    expect(rpc).toHaveBeenCalledTimes(2);
+  });
+
+  it('reads a draft event without invoking the variance-only RPC and retries a failed dependent read without writes', async () => {
+    let deny = true;
+    const rpc = vi.fn(async (name: string) => name === 'sourcing_workspace' ? { data: { requestId, event }, error: null }
+      : name === 'insufficient_bid_exception' ? { data: null, error: deny ? { message: 'Read interrupted' } : null }
+      : { data: null, error: { message: 'Variance reviewer only' } });
+    await mount(rpc);
+    expect(host.querySelector('[role="alert"]')).not.toBeNull();
+    deny = false;
+    await act(async () => [...host.querySelectorAll('button')].find(button => button.textContent === 'Retry sourcing')!.click());
+    expect(host.textContent).toContain('Save plan');
+    expect(rpc.mock.calls.map(call => call[0])).toEqual(['sourcing_workspace', 'insufficient_bid_exception', 'sourcing_workspace', 'insufficient_bid_exception']);
+  });
+
+  it('keeps plan creation payload and subsequent governed read unchanged', async () => {
+    let created = false;
+    const rpc = vi.fn(async (name: string) => {
+      if (name === 'sourcing_workspace') return { data: { requestId, event: created ? event : null }, error: null };
+      if (name === 'save_sourcing_event') { created = true; return { data: { id: event.id }, error: null }; }
+      return { data: null, error: name === 'insufficient_bid_exception' ? null : { message: 'Unexpected RPC' } };
+    });
+    await mount(rpc);
+    for (const [label, value] of [['Submission deadline', '2030-01-15T12:00'], ['Package version', 'RFQ-READ-v1'], ['Package SHA-256', 'a'.repeat(64)]]) {
+      const input = host.querySelector(`input[aria-label="${label}"]`)!;
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    }
+    const create = [...host.querySelectorAll('button')].find(button => button.textContent === 'Create plan')!;
+    expect(create.disabled).toBe(false);
+    await act(async () => create.click());
+    expect(rpc.mock.calls.map(call => call[0])).toEqual(['sourcing_workspace', 'save_sourcing_event', 'sourcing_workspace', 'insufficient_bid_exception']);
+    expect(rpc).toHaveBeenCalledWith('save_sourcing_event', { payload: { request_id: requestId,
+      submission_deadline: new Date('2030-01-15T12:00').toISOString(), intended_responses: 3, package_version: 'RFQ-READ-v1', package_hash: 'a'.repeat(64) } });
+    expect(host.textContent).toContain('Save plan'); expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it.each([{}, [], { id: 'exception-1', status: 'approved', justification: {} }])('rejects malformed exception without showing stale actions: %j', async data => {
+    const rpc = vi.fn(async (name: string) => ({ data: name === 'sourcing_workspace' ? { requestId, event } : data, error: null }));
+    await mount(rpc);
+    expect(host.querySelector('[role="alert"]')).not.toBeNull(); expect(host.textContent).not.toContain('Save plan');
+    expect(rpc.mock.calls.map(call => call[0])).toEqual(['sourcing_workspace', 'insufficient_bid_exception']);
+  });
+
+  it.each([
+    {}, [], { ...event, id: '' }, { ...event, status: 'unknown' }, { ...event, responses: {} },
+    { ...event, responses: [null] }, { ...event, responses: [{ id: 'r', vendorId: 'v', vendorName: {} }] },
+    { ...event, communications: [{}] }, { ...event, commercialTabulations: undefined },
+    { ...event, technicalEvaluations: {} }, { ...event, technicalEvaluations: [null] },
+    { ...event, awardRecommendation: undefined }, { ...event, awardRecommendation: {} },
+    { ...event, varianceDecisionsVisible: undefined }, { ...event, varianceDecisionsVisible: false },
+    { ...event, varianceDecisions: undefined }, { ...event, varianceDecisions: [{}] },
+    { ...event, varianceEligibility: { canReview: 'true' } },
+    { ...event, varianceEligibility: { canReview: true } },
+    { ...event, submissionDeadline: {} }, { ...event, policyControls: { inviteTargetMin: {} } },
+  ])('rejects malformed event/evidence before dependent reads: %j', async malformed => {
+    const rpc = vi.fn(async (name: string) => name === 'sourcing_workspace'
+      ? { data: { requestId, event: malformed }, error: null } : { data: null, error: null });
+    await mount(rpc);
+    expect(host.querySelector('[role="alert"]')).not.toBeNull();
+    expect(host.textContent).not.toContain('Create plan');
+    expect(host.textContent).not.toContain('Save plan');
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
+
+  const persistedEvent = () => ({ ...event, status: 'evaluation',
+    responses: [{ id: 'response-1', vendorId: 'vendor-1', vendorName: 'Reviewed vendor', receivedAt: '2026-09-01T00:00:00Z', commercial: { amount: 100 } }],
+    commercialTabulations: [{ id: 'tab-1', sourcingEventId: event.id, version: 1, entries: [], status: 'submitted',
+      evidenceReference: 'private/tabulation.pdf', dueAt: '2026-09-02T00:00:00Z', responseClosedAt: '2026-09-01T00:00:00Z', escalationStatus: 'on_track' }],
+    technicalEvaluations: [{ id: 'tech-1', sourcingEventId: event.id, vendorId: 'vendor-1', version: 1, criteria: [], status: 'submitted',
+      evidenceReference: 'private/technical.pdf', totalScore: 92, dueAt: '2026-09-03T00:00:00Z', escalationStatus: 'on_track' }],
+    awardRecommendation: { id: 'recommendation-1', sourcingEventId: event.id, version: 2, evaluatedVendorId: 'vendor-1', recommendedVendorId: 'vendor-1',
+      commercialTabulationId: 'tab-1', technicalEvaluationId: 'tech-1', rationale: 'Persisted reviewed rationale', status: 'pending_variance', createdAt: '2026-09-03T00:00:00Z' },
+    varianceDecisions: [{ id: 'decision-1', awardRecommendationId: 'recommendation-1', decisionType: 'department_head', decision: 'approved',
+      rationale: 'Independent prior decision', decidedByName: 'Reviewed approver', decidedAt: '2026-09-03T00:00:00Z' }],
+    varianceEligibility: { canReview: false, nextStage: 'finance' },
+  });
+
+  it('renders persisted sourcing-owned evidence without granting a manager variance authority', async () => {
+    const rpc = vi.fn(async (name: string) => name === 'sourcing_workspace' ? { data: { requestId, event: persistedEvent() }, error: null }
+      : name === 'insufficient_bid_exception' ? { data: null, error: null } : { data: null, error: { message: 'Variance reviewer only' } });
+    await mount(rpc);
+    expect(host.textContent).toContain('private/tabulation.pdf');
+    expect(host.textContent).toContain('private/technical.pdf');
+    expect(host.textContent).toContain('Persisted reviewed rationale');
+    expect(host.textContent).toContain('Reviewed approver');
+    expect(host.textContent).not.toContain('Record Finance approval');
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+    expect(rpc.mock.calls.map(call => call[0])).toEqual(['sourcing_workspace', 'insufficient_bid_exception']);
+  });
+
+  it('keeps withheld variance history distinct from a confirmed empty collection', async () => {
+    const { varianceDecisions: _history, ...data } = persistedEvent();
+    const rpc = vi.fn(async (name: string) => name === 'sourcing_workspace'
+      ? { data: { requestId, event: { ...data, varianceDecisionsVisible: false, varianceEligibility: { canReview: false } } }, error: null }
+      : { data: null, error: null });
+    await mount(rpc, false);
+    expect(host.textContent).toContain('Variance decision history is not available to this account.');
+    expect(host.textContent).toContain('Persisted reviewed rationale');
+    expect(host.textContent).not.toContain('Reviewed approver');
+    expect(host.textContent).not.toContain('Record Finance approval');
+    expect(host.textContent).not.toContain('Save commercial tabulation');
+    expect(host.textContent).toContain('Next variance stage: Stage unavailable.');
+    expect(host.textContent).not.toContain('Next variance stage: Finance.');
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it('retains independent review controls only for a complete server eligibility result', async () => {
+    const current = { ...persistedEvent(), varianceEligibility: { canReview: true, nextStage: 'finance',
+      doaMatrixId: 'matrix-1', doaMatrixVersion: 'reviewed-1', doaAssignmentId: 'assignment-1' } };
+    const rpc = vi.fn(async (name: string) => ({ data: name === 'sourcing_workspace' ? { requestId, event: current } : null, error: null }));
+    await mount(rpc, false);
+    expect(host.textContent).toContain('Record Finance approval');
+    expect(host.textContent).not.toContain('Save commercial tabulation');
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+    expect(rpc.mock.calls.map(call => call[0])).toEqual(['sourcing_workspace', 'insufficient_bid_exception']);
+  });
+
+  it.each([false, true])('keeps the approved-award action management-only (manager=%s)', async canManage => {
+    const current = persistedEvent(); current.awardRecommendation.status = 'approved';
+    const rpc = vi.fn(async (name: string) => ({ data: name === 'sourcing_workspace' ? { requestId, event: current } : null, error: null }));
+    await mount(rpc, canManage);
+    expect(host.textContent).toContain('Persisted reviewed rationale');
+    expect(host.textContent?.includes('Record controlled award')).toBe(canManage);
+    expect(rpc.mock.calls.map(call => call[0])).toEqual(['sourcing_workspace', 'insufficient_bid_exception']);
+  });
+
+  it.each(['commercialTabulations', 'technicalEvaluations', 'awardRecommendation'])('rejects %s belonging to another event', async field => {
+    const data = persistedEvent();
+    if (field === 'awardRecommendation') data.awardRecommendation.sourcingEventId = 'foreign-event';
+    else data[field as 'commercialTabulations' | 'technicalEvaluations'][0]!.sourcingEventId = 'foreign-event';
+    const rpc = vi.fn(async () => ({ data: { requestId, event: data }, error: null }));
+    await mount(rpc);
+    expect(host.querySelector('[role="alert"]')).not.toBeNull(); expect(rpc).toHaveBeenCalledTimes(1);
   });
 });

@@ -18,7 +18,7 @@ vi.mock('@intra/learning', () => ({
   taskSelectionQuery,
   useOptionalLearning: () => ({ snapshot: {}, loading: false, stale: false }),
   taskRequirementIds: () => ['req-1'],
-  OnboardingCenter: ({ selectedTask }: { selectedTask?: TaskDefinition }) => selectedTask ? <section data-task-id={selectedTask.id}><h2>{selectedTask.title}</h2></section> : null,
+  OnboardingCenter: ({ selectedTask }: { selectedTask?: TaskDefinition }) => selectedTask ? <section data-task-id={selectedTask.id}><h2>{selectedTask.title}</h2></section> : <section aria-label="Required learning">Progress and next required action</section>,
 }));
 import { TaskLearningWorkspace } from './TaskLearningWorkspace';
 
@@ -37,7 +37,7 @@ it('UX11 offers all tasks once with human roles and restores task, requirement a
     expect(host.textContent).not.toContain('core_staff_only');
     const region = host.querySelector<HTMLElement>('[aria-label="Eligible tasks by module"]')!;
     expect(region.tabIndex).toBe(0);
-    expect(region.className).toContain('max-h-80');
+    expect(region.className).not.toContain('overflow-y-auto');
     await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Select Task 5"]')!.click());
     expect(push).toHaveBeenCalledOnce();
     expect(new URLSearchParams(window.location.search).get('next')).toBe('/product#readiness-42');
@@ -48,5 +48,21 @@ it('UX11 offers all tasks once with human roles and restores task, requirement a
     expect(new URLSearchParams(window.location.search).get('requirement')).toBe('req-1');
     expect(new URLSearchParams(window.location.search).get('next')).toBe('/product#readiness-42');
     expect(document.activeElement?.textContent).toBe('Task 0');
+  } finally { await act(async () => root.unmount()); host.remove(); }
+});
+
+it.each(['internal', 'vendor'] as const)('keeps %s learning visible before choosing a task', async (audience) => {
+  vi.stubGlobal('React', React); vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  window.history.replaceState(null, '', '/onboarding');
+  const host = document.createElement('div'); document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => root.render(<TaskLearningWorkspace audience={audience} />));
+    const chooser = host.querySelector('details');
+    expect(chooser).not.toBeNull();
+    expect(chooser?.open).toBe(false);
+    expect(chooser?.querySelector('summary')?.textContent).toBe('Choose a task');
+    expect(host.querySelector('[aria-label="Required learning"]')).not.toBeNull();
+    expect(host.querySelectorAll('button[aria-label^="Select Task"]')).toHaveLength(6);
   } finally { await act(async () => root.unmount()); host.remove(); }
 });

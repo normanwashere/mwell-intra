@@ -109,7 +109,8 @@ function curriculumScope(
           item.role === "warehouse_operator" &&
           curriculumId ===
             "internal.warehouse.warehouse_operator.receiving-certification.v1" &&
-          curriculumVersion === 1)),
+          // Version 2 adds published custody exercises; verified on UAT 2026-09-14.
+          (curriculumVersion === 1 || curriculumVersion === 2))),
   );
 }
 
@@ -195,7 +196,7 @@ function RequirementAction({
         disabled={Boolean(unavailableReason)}
         onClick={(event) => onResume(event.currentTarget)}
       >
-        {verb} {requirement.title}
+        {verb}<span className="sr-only"> {requirement.title}</span>
       </Button>
       {unavailableReason && (
         <span className="max-w-64 text-xs font-medium text-muted">
@@ -827,35 +828,6 @@ export function OnboardingCenter({
           completed={view.completed}
           total={view.required.length}
         />
-        {returnPath && (
-          <div
-            className={
-              selectedTask
-                ? "mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
-                : "mt-5 flex flex-col gap-3 border-l-4 border-emerald-500 bg-emerald-500/5 p-4 sm:flex-row sm:items-center sm:justify-between"
-            }
-          >
-            <div>
-              <p className="text-xs font-semibold uppercase text-emerald-700 dark:text-emerald-300">
-                Workspace access
-              </p>
-              <p className="mt-1 font-display text-base font-bold text-ink">
-                Continue your authorized work
-              </p>
-              <p className="mt-1 text-sm text-muted">
-                You can return before finishing this checklist. Requirements
-                still apply to their specific actions.
-              </p>
-            </div>
-            <a
-              href={returnPath}
-              className="btn-primary btn-sm inline-flex justify-center"
-            >
-              Continue to {returnLabel}
-              <Icon name="arrowRight" className="h-4 w-4" />
-            </a>
-          </div>
-        )}
         {next && !selectedTask && (
           <div className="mt-5 flex flex-col gap-3 border-l-4 border-brand-500 bg-brand-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -890,6 +862,35 @@ export function OnboardingCenter({
                 );
               }}
             />
+          </div>
+        )}
+        {returnPath && (
+          <div
+            className={
+              selectedTask
+                ? "mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+                : "mt-5 flex flex-col gap-3 border-l-4 border-emerald-500 bg-emerald-500/5 p-4 sm:flex-row sm:items-center sm:justify-between"
+            }
+          >
+            <div>
+              <p className="text-xs font-semibold uppercase text-emerald-700 dark:text-emerald-300">
+                Workspace access
+              </p>
+              <p className="mt-1 font-display text-base font-bold text-ink">
+                Continue your authorized work
+              </p>
+              <p className="mt-1 text-sm text-muted">
+                You can return before finishing this checklist. Requirements
+                still apply to their specific actions.
+              </p>
+            </div>
+            <a
+              href={returnPath}
+              className="btn-primary btn-sm inline-flex justify-center"
+            >
+              Continue to {returnLabel}
+              <Icon name="arrowRight" className="h-4 w-4" />
+            </a>
           </div>
         )}
       </section>

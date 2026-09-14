@@ -218,6 +218,21 @@ function renderCenter(overrides: Partial<LearningContextValue> = {}) {
 }
 
 describe("OnboardingCenter", () => {
+  it("puts the next required action before the optional workspace return", () => {
+    renderCenter();
+    expect(
+      screen.getByText("Next required action").compareDocumentPosition(
+        screen.getByText("Workspace access"),
+      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Continue to My Work" })).toBeInTheDocument();
+  });
+  it("keeps action text compact while retaining the full accessible requirement name", () => {
+    renderCenter();
+    const action = screen.getByRole("button", { name: "Resume Receive and inspect a serialized device" });
+    expect(action.querySelector('.sr-only')?.textContent?.trim()).toBe('Receive and inspect a serialized device');
+    expect(action.textContent).toContain('Resume');
+  });
   it("prioritizes task learning and retains the complete mandatory checklist", () => {
     const task = {
       id: "receive",
@@ -795,6 +810,18 @@ describe("OnboardingCenter", () => {
       1,
       "warehouse",
       "Warehouse / Warehouse Operator",
+    ],
+    [
+      "internal.warehouse.warehouse_operator.receiving-certification.v1",
+      2,
+      "warehouse",
+      "Warehouse / Warehouse Operator",
+    ],
+    [
+      "internal.warehouse.warehouse_operator.receiving-certification.v1",
+      3,
+      "warehouse",
+      "Warehouse / Role context unavailable",
     ],
     [
       "vendor.role.core.vendor_portal.capability-practice.v1.curriculum",

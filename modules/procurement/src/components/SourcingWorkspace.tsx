@@ -10,8 +10,56 @@ import type { AwardRecommendation, CommercialTabulation, FailedBidReason, Procur
 interface RpcClient { schema(name: string): { rpc(name: string, args: { payload: Record<string, unknown> }): PromiseLike<{ data: unknown; error: { message: string } | null }> } }
 interface SourcingResponse { id: string; vendorId: string; vendorName: string; accredited?: boolean; invitedAt?: string; receivedAt?: string; deadlineCompliant?: boolean; proposalReference?: string; commercial?: { amount?: number }; technical?: { score?: number } }
 interface Communication { id: string; communicationType: 'invitation' | 'clarification' | 'extension' | 'requote' | 'award_notice' | 'failed_bid_notice'; notificationGroupId?: string; packageVersion?: string; packageHash?: string; sentAt?: string; deliveredAt?: string; acknowledgedAt?: string; acknowledgementState?: 'pending' | 'overdue' | 'acknowledged' | 'superseded'; clarificationState?: 'pending' | 'overdue' | 'answered' }
-interface SourcingEvent { id: string; status: SourcingEventStatus; submissionDeadline?: string; intendedResponses?: number; packageVersion?: string; packageHash?: string; failedBidReason?: FailedBidReason; selectedVendorId?: string; closureNote?: string; responses: SourcingResponse[]; communications?: Communication[]; policyControls?: ProcurementPolicyControls; policyControlSources?: Partial<Record<keyof ProcurementPolicyControls, string>>; commercialTabulations?: CommercialTabulation[]; technicalEvaluations?: TechnicalEvaluation[]; awardRecommendation?: AwardRecommendation | null; varianceDecisions?: RecommendationVarianceDecision[]; varianceEligibility?: VarianceReviewEligibility }
+interface SourcingEvent { id: string; status: SourcingEventStatus; submissionDeadline?: string; intendedResponses?: number; packageVersion?: string; packageHash?: string; failedBidReason?: FailedBidReason; selectedVendorId?: string; closureNote?: string; responses: SourcingResponse[]; communications?: Communication[]; policyControls?: ProcurementPolicyControls; policyControlSources?: Partial<Record<keyof ProcurementPolicyControls, string>>; commercialTabulations: CommercialTabulation[]; technicalEvaluations: TechnicalEvaluation[]; awardRecommendation: AwardRecommendation | null; varianceDecisionsVisible: boolean; varianceDecisions?: RecommendationVarianceDecision[]; varianceEligibility: VarianceReviewEligibility }
 interface BidException { id: string; status: 'under_review' | 'approved' | 'rejected'; justification: string; price_reasonableness?: string }
+
+const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
+const text = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0;
+const numeric = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+const optionalText = (value: unknown) => value == null || typeof value === 'string';
+const strings = (value: Record<string, unknown>, keys: string[]) => keys.every(key => optionalText(value[key]));
+const oneOf = (value: unknown, values: string[]) => typeof value === 'string' && values.includes(value);
+const rows = (value: unknown, valid: (row: Record<string, unknown>) => boolean) => Array.isArray(value) && value.every(row => record(row) && valid(row));
+
+function isSourcingEvent(value: unknown): value is SourcingEvent {
+  if (!record(value) || !text(value.id) || !oneOf(value.status, ['draft', 'issued', 'response_closed', 'failed_bid', 'evaluation', 'awarded', 'cancelled'])) return false;
+  if (!strings(value, ['submissionDeadline', 'packageVersion', 'packageHash', 'failedBidReason', 'selectedVendorId', 'closureNote'])
+    || (value.intendedResponses != null && !numeric(value.intendedResponses))) return false;
+  if (value.policyControls != null && (!record(value.policyControls) || !Object.values(value.policyControls).every(item => item === null || numeric(item)))) return false;
+  if (value.policyControlSources != null && (!record(value.policyControlSources) || !Object.values(value.policyControlSources).every(optionalText))) return false;
+  if (!rows(value.responses, row => text(row.id) && text(row.vendorId) && text(row.vendorName)
+    && strings(row, ['invitedAt', 'receivedAt', 'proposalReference'])
+    && ['accredited', 'deadlineCompliant'].every(key => row[key] == null || typeof row[key] === 'boolean')
+    && (row.commercial == null || (record(row.commercial) && (row.commercial.amount == null || numeric(row.commercial.amount))))
+    && (row.technical == null || (record(row.technical) && (row.technical.score == null || numeric(row.technical.score)))))) return false;
+  if (!rows(value.communications, row => text(row.id)
+    && oneOf(row.communicationType, ['invitation', 'clarification', 'extension', 'requote', 'award_notice', 'failed_bid_notice'])
+    && strings(row, ['notificationGroupId', 'packageVersion', 'packageHash', 'sentAt', 'deliveredAt', 'acknowledgedAt', 'acknowledgementState', 'clarificationState']))) return false;
+  const evidenceRow = (row: Record<string, unknown>) => text(row.id) && row.sourcingEventId === value.id
+    && Number.isInteger(row.version) && Number(row.version) > 0 && text(row.dueAt) && text(row.evidenceReference)
+    && oneOf(row.status, ['draft', 'submitted', 'superseded']) && oneOf(row.escalationStatus, ['on_track', 'overdue', 'escalated'])
+    && strings(row, ['submittedAt', 'submittedByName', 'submittedByEmail', 'reviewerName', 'reviewerEmail', 'comments']);
+  if (!rows(value.commercialTabulations, row => evidenceRow(row) && text(row.responseClosedAt) && rows(row.entries, () => true))
+    || !rows(value.technicalEvaluations, row => evidenceRow(row) && text(row.vendorId) && numeric(row.totalScore) && rows(row.criteria, () => true))) return false;
+  const recommendation = value.awardRecommendation;
+  if (recommendation !== null && (!record(recommendation) || !text(recommendation.id) || recommendation.sourcingEventId !== value.id
+    || !['evaluatedVendorId', 'recommendedVendorId', 'commercialTabulationId', 'technicalEvaluationId', 'rationale', 'createdAt'].every(key => text(recommendation[key]))
+    || !Number.isInteger(recommendation.version) || Number(recommendation.version) < 1
+    || !oneOf(recommendation.status, ['draft', 'pending_variance', 'approved', 'rejected', 'superseded'])
+    || !strings(recommendation, ['riskEvidenceReference', 'varianceJustification']))) return false;
+  if (typeof value.varianceDecisionsVisible !== 'boolean') return false;
+  if (value.varianceDecisionsVisible) {
+    if (!rows(value.varianceDecisions, row => text(row.id) && record(recommendation) && row.awardRecommendationId === recommendation.id
+      && oneOf(row.decisionType, ['department_head', 'finance']) && oneOf(row.decision, ['approved', 'rejected'])
+      && text(row.rationale) && text(row.decidedAt) && strings(row, ['decidedByName', 'decidedByEmail', 'doaMatrixId', 'doaMatrixVersion', 'doaAssignmentId']))) return false;
+  } else if (Object.hasOwn(value, 'varianceDecisions')) return false;
+  const eligibility = value.varianceEligibility;
+  if (!record(eligibility) || typeof eligibility.canReview !== 'boolean'
+    || (eligibility.nextStage != null && !oneOf(eligibility.nextStage, ['department_head', 'finance']))
+    || !strings(eligibility, ['doaMatrixId', 'doaMatrixVersion', 'doaAssignmentId'])) return false;
+  return !eligibility.canReview || (value.varianceDecisionsVisible && record(recommendation) && recommendation.status === 'pending_variance'
+    && oneOf(eligibility.nextStage, ['department_head', 'finance']) && ['doaMatrixId', 'doaMatrixVersion', 'doaAssignmentId'].every(key => text(eligibility[key])));
+}
 
 const failedBidOptions: Array<{ value: FailedBidReason; label: string }> = [
   { value: 'insufficient_responses', label: 'Insufficient usable responses' },
@@ -64,8 +112,8 @@ export function SourcingWorkspace({ requestId, method, canManage, canApprove, cl
     setReadError(false);
     try {
       const data = await call('sourcing_workspace', { request_id: requestId }) as { requestId: string; event: SourcingEvent | null } | null;
-      if (!data || data.requestId !== requestId || !Object.hasOwn(data, 'event') || data.event === undefined ||
-        (data.event !== null && (typeof data.event !== 'object' || Array.isArray(data.event)))) {
+      if (!data || data.requestId !== requestId || !Object.hasOwn(data, 'event') ||
+        (data.event !== null && !isSourcingEvent(data.event))) {
         throw new Error('The current sourcing state could not be verified.');
       }
       // A confirmed route can legitimately have no sourcing event yet. In
@@ -74,12 +122,12 @@ export function SourcingWorkspace({ requestId, method, canManage, canApprove, cl
         setEvent(null); setBidException(null);
         return;
       }
-      const [exception, evaluation] = await Promise.all([
-        call('insufficient_bid_exception', { request_id: requestId }) as Promise<BidException | null>,
-        call('evaluation_workspace', { request_id: requestId }) as Promise<Pick<SourcingEvent, 'commercialTabulations' | 'technicalEvaluations' | 'awardRecommendation' | 'varianceDecisions'>>,
-      ]);
-      const next = { ...data.event, ...evaluation };
-      setEvent(next); setBidException(exception);
+      const exception = await call('insufficient_bid_exception', { request_id: requestId });
+      if (exception !== null && (!record(exception) || !text(exception.id)
+        || !oneOf(exception.status, ['under_review', 'approved', 'rejected']) || !text(exception.justification)
+        || !optionalText(exception.price_reasonableness))) throw new Error('The current sourcing exception could not be verified.');
+      const next = data.event;
+      setEvent(next); setBidException(exception as BidException | null);
       if (next?.submissionDeadline) setDeadline(next.submissionDeadline.slice(0, 16));
       if (next?.intendedResponses) setInvitationTarget(next.intendedResponses);
       if (next?.packageVersion) setPackageVersion(next.packageVersion);
@@ -141,8 +189,9 @@ export function SourcingWorkspace({ requestId, method, canManage, canApprove, cl
       {canManage && (event.status === 'issued' || event.status === 'response_closed' || event.status === 'evaluation') && <section className="grid gap-3 rounded-lg border border-line p-3 md:grid-cols-2"><label className="block text-sm font-semibold text-ink">Clarification question<textarea aria-label="Clarification question" className="input mt-1.5" rows={2} value={clarificationQuestion} onChange={(e) => setClarificationQuestion(e.target.value)} /></label><label className="block text-sm font-semibold text-ink">Approved answer<textarea aria-label="Approved answer" className="input mt-1.5" rows={2} value={clarificationAnswer} onChange={(e) => setClarificationAnswer(e.target.value)} /></label><button type="button" className="btn-outline min-h-11 w-full md:w-auto" disabled={busy || !clarificationQuestion.trim() || !clarificationAnswer.trim()} onClick={() => void communicate('clarification')}><Icon name="arrowRight" className="h-4 w-4" />Broadcast identical clarification</button></section>}
       {event.status === 'failed_bid' && <section className="space-y-3 rounded-lg border border-rose-500/30 bg-rose-500/5 p-3"><div><p className="font-semibold text-ink">Failed-bid recovery</p><p className="text-sm text-muted">Reason: {failedBidOptions.find((item) => item.value === event.failedBidReason)?.label ?? 'Not recorded'}. Requote, extend, or submit an independently reviewed evaluation exception.</p></div>{canManage && (!bidException || bidException.status === 'rejected') && <div className="grid gap-3 md:grid-cols-2"><label className="block text-sm font-semibold text-ink md:col-span-2">Why evaluation may proceed<textarea className="input mt-1.5" rows={3} value={exceptionJustification} onChange={(e) => setExceptionJustification(e.target.value)} /></label><label className="block text-sm font-semibold text-ink md:col-span-2">Price reasonableness evidence<textarea className="input mt-1.5" rows={2} value={priceReasonableness} onChange={(e) => setPriceReasonableness(e.target.value)} /></label><button type="button" className="btn-outline min-h-11 w-full md:w-auto" disabled={busy || exceptionJustification.trim().length < 20 || priceReasonableness.trim().length < 10} onClick={() => void submitException()}><Icon name="arrowRight" className="h-4 w-4" />Submit evaluation exception</button></div>}{canApprove && bidException?.status === 'under_review' && <div className="space-y-3 border-t border-rose-500/20 pt-3"><p className="text-sm text-ink">{bidException.justification}</p><label className="block text-sm font-semibold text-ink">Independent review note<textarea className="input mt-1.5" rows={2} value={exceptionReviewNote} onChange={(e) => setExceptionReviewNote(e.target.value)} /></label><div className="flex flex-wrap gap-2"><button type="button" className="btn-outline min-h-11" disabled={busy || !exceptionReviewNote.trim()} onClick={() => void reviewException('rejected')}>Reject exception</button><button type="button" className="btn-primary min-h-11" disabled={busy || !exceptionReviewNote.trim()} onClick={() => void reviewException('approved')}><Icon name="check" className="h-4 w-4" />Approve exception</button></div></div>}</section>}
       {canManage && canOpenEvaluation && <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-cyan-500/30 bg-cyan-500/5 p-3"><div><p className="font-semibold text-ink">Controlled opening ready</p><p className="text-sm text-muted">Open evaluation only after the response evidence and any approved exception are complete.</p></div><button type="button" className="btn-primary min-h-11 w-full sm:w-auto" disabled={busy || !readiness.ready} onClick={() => void transition('evaluation', 'Controlled evaluation opened')}><Icon name="arrowRight" className="h-4 w-4" />Open controlled evaluation</button></section>}
+      {canEvaluate && !event.varianceDecisionsVisible && <p className="text-sm text-muted">Variance decision history is not available to this account.</p>}
       {canEvaluate && <BestValueEvaluation requestId={requestId} event={event} canManage={canManage} client={client} onChanged={async () => { await load(); await onChanged?.(); }} />}
-      {canEvaluate && event.awardRecommendation?.status === 'approved' && <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3"><div><p className="font-semibold text-ink">Approved best-value recommendation</p><p className="text-sm text-muted">Record the final award as a separate controlled transition. The evaluated score and recommendation did not award this vendor by themselves.</p></div><button type="button" className="btn-primary min-h-11 w-full sm:w-auto" disabled={busy || !readiness.ready} onClick={() => void transition('award', 'Sourcing award recorded', { selected_vendor_id: event.awardRecommendation?.recommendedVendorId, closure_note: event.awardRecommendation?.rationale })}><Icon name="check" className="h-4 w-4" />Record controlled award</button></section>}
+      {canManage && canEvaluate && event.awardRecommendation?.status === 'approved' && <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3"><div><p className="font-semibold text-ink">Approved best-value recommendation</p><p className="text-sm text-muted">Record the final award as a separate controlled transition. The evaluated score and recommendation did not award this vendor by themselves.</p></div><button type="button" className="btn-primary min-h-11 w-full sm:w-auto" disabled={busy || !readiness.ready} onClick={() => void transition('award', 'Sourcing award recorded', { selected_vendor_id: event.awardRecommendation?.recommendedVendorId, closure_note: event.awardRecommendation?.rationale })}><Icon name="check" className="h-4 w-4" />Record controlled award</button></section>}
       {event.communications && event.communications.length > 0 && <section className="rounded-lg border border-line p-3"><h3 className="font-semibold text-ink">Equal communication evidence</h3><p className="mt-1 text-xs text-muted">Acknowledgement status applies only to the vendor&apos;s current invitation or requote package. Earlier packages remain as immutable history.</p><ul className="mt-2 space-y-2 text-sm">{event.communications.map((item) => <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-2 first:border-0 first:pt-0"><span className="min-w-0 text-ink"><span className="block">{item.communicationType.replaceAll('_', ' ')} {item.notificationGroupId ? `· ${item.notificationGroupId}` : ''}</span>{item.packageVersion && <span className="block text-xs text-muted">{item.packageVersion}{item.packageHash ? ` · ${item.packageHash.slice(0, 12)}...` : ''}</span>}</span><span className="text-xs text-muted">{item.acknowledgementState === 'overdue' ? 'Acknowledgment overdue' : item.acknowledgementState === 'superseded' ? 'Superseded package' : item.clarificationState === 'overdue' ? 'Clarification overdue' : item.acknowledgedAt ? 'Acknowledged' : item.deliveredAt ? 'Delivered' : 'Sent'}</span></li>)}</ul></section>}
       {canManage && !['awarded', 'cancelled'].includes(event.status) && <button type="button" className="btn-outline min-h-11" disabled={busy} onClick={() => void transition('cancel', 'Sourcing event cancelled', { closure_note: 'Cancelled by Procurement' })}><Icon name="x" className="h-4 w-4" />Cancel event</button>}
     </>}

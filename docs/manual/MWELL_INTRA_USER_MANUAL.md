@@ -1,5 +1,9 @@
 # Mwell Intra Standalone Operating Handbook
 
+Onboarding opens with a compact **Choose a task** control, your progress and your next required action. Select **Start**, **Resume** or **Try again** beside the requirement title. Expand **Choose a task** (or **Change task**) to find another task, then scroll the page through the results. **Continue to My Work** remains available before all learning is finished; actions that require certification still wait for their assigned learning. Shared multi-role requirements, prerequisites and approvals are unchanged.
+
+In Procurement, a confirmed request may show sourcing as **Not started** until its plan is created. Once a sourcing event exists, reopen the same request to review its saved sourcing and evaluation records. Viewing that evidence does not authorize variance approval or award. If variance history is unavailable to your account, use the designated reviewer; do not treat missing review visibility as an empty history. A failed sourcing read offers Retry sourcing and should not be worked around by creating a duplicate request.
+
 ## Warehouse Access Recovery
 
 Returning to a browser tab should keep the open form while the app successfully rechecks the same user's access. **Checking warehouse access** means verification is still running. **Could not verify warehouse access** means the check did not finish: check your connection, then choose **Retry access**. Retry checks permissions only; it does not submit, approve or replay your work.

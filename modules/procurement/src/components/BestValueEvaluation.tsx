@@ -110,7 +110,8 @@ export function BestValueEvaluation({
   const recommendation = event.awardRecommendation ?? null;
   const pendingVariance = recommendation?.status === 'pending_variance';
   const varianceEligibility = event.varianceEligibility;
-  const varianceStageLabel = varianceEligibility?.nextStage === 'department_head' ? 'Department Head' : 'Finance';
+  const varianceStageLabel = varianceEligibility?.nextStage === 'department_head' ? 'Department Head'
+    : varianceEligibility?.nextStage === 'finance' ? 'Finance' : 'Stage unavailable';
 
   async function call(name: string, payload: Record<string, unknown>) {
     if (!client) throw new Error('The governed best-value workspace requires the live database.');

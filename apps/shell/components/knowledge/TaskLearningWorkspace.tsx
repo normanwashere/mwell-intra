@@ -32,10 +32,10 @@ export function TaskLearningWorkspace({ audience = "internal" }: { audience?: "i
   }} />;
   return (
     <div ref={workspace} className="space-y-6">
-      {selectedTask ? <details className="border-b border-line">
-        <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-muted">Change task</summary>
+      <details key={selectedTask?.id ?? 'all-learning'} className="border-b border-line">
+        <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-muted">{selectedTask ? 'Change task' : 'Choose a task'}</summary>
         {chooser}
-      </details> : chooser}
+      </details>
       <OnboardingCenter audience={audience} selectedTask={selectedTask} />
     </div>
   );
