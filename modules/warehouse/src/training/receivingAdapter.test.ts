@@ -10,11 +10,13 @@ const run = (
 ) => {
   let state = createReceivingTrainingState(branch);
   let transition;
+  const checkpoints: string[] = [];
   for (const command of commands) {
     transition = receivingTrainingAdapter.dispatch(state, command);
+    if (transition.checkpointId) checkpoints.push(transition.checkpointId);
     state = transition.state;
   }
-  return { state, transition };
+  return { state, transition, checkpoints };
 };
 
 const cleanCommands = [
@@ -37,6 +39,30 @@ const cleanCommands = [
 ] as const;
 
 describe("receivingTrainingAdapter", () => {
+  it.each(["clean", "damaged"] as const)(
+    "records both published checkpoints on the uninterrupted %s path",
+    (condition) => {
+      const result = run("clean", [
+        ...cleanCommands.slice(0, -1),
+        { type: "mark-condition", payload: condition },
+        { type: "submit-receipt" },
+      ]);
+      expect(result.checkpoints).toEqual(["draft-saved", "complete"]);
+      expect(result.transition?.completed).toBe(true);
+    },
+  );
+
+  it("saves the review checkpoint without claiming receipt completion", () => {
+    const result = run("clean", [...cleanCommands]);
+    expect(result.transition).toMatchObject({
+      nextStepId: "submit",
+      checkpointId: "draft-saved",
+      outcomeId: "ready_for_review",
+    });
+    expect(result.transition?.completed).not.toBe(true);
+    expect(result.state.status).toBe("active");
+  });
+
   it("completes a clean serialized SKU receipt with inspection handoff evidence", () => {
     const result = run("clean", [...cleanCommands, { type: "submit-receipt" }]);
     expect(result.transition).toMatchObject({

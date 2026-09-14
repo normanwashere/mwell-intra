@@ -307,7 +307,11 @@ export const receivingTrainingAdapter: TrainingAdapter<ReceivingTrainingState> &
         if (command.payload !== "clean" && command.payload !== "damaged")
           throw new Error("Delivery condition is invalid");
         state.condition = command.payload;
-        return next(state, "submit");
+        // The published lesson requires a saved draft even when practice is not paused.
+        return next(state, "submit", {
+          checkpointId: "draft-saved",
+          outcomeId: "ready_for_review",
+        });
       case "interrupt":
         state.interrupted = true;
         return next(state, "paused", {

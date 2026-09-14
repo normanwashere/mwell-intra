@@ -1025,7 +1025,7 @@ export function OnboardingCenter({
                       </p>
                       {lock.canRequestEmergencyException && (
                         <p className="mt-1 text-xs font-semibold text-amber-800 dark:text-amber-300">
-                          Temporary emergency access
+                          Emergency access may be requested. Approval is required.
                         </p>
                       )}
                     </li>

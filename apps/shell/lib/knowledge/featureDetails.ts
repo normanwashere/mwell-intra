@@ -212,9 +212,15 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         control(
           "Start or resume requirement",
-          "Opens the next assigned orientation, policy, practice, assessment, or attestation.",
+          "Opens the next assigned orientation, policy, practice, assessment, or attestation. In receiving practice, complete the delivery details, traceability, destination, evidence and condition, then review and submit the simulated receipt. There is no need to pause just to save a training checkpoint.",
           "The requirement must belong to an effective curriculum assigned through a current scoped role.",
           "A governed attempt starts or the existing attempt resumes without duplicating shared requirements.",
+        ),
+        control(
+          "Emergency access eligibility",
+          "Explains when emergency access may be requested. The message is not an access grant.",
+          "Approval is required; training requirements, scoped authority and current stock controls remain enforced.",
+          "A request must follow the approved emergency-access process before any temporary permission can apply.",
         ),
         control(
           "Refresh status",

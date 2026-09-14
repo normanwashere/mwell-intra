@@ -1,45 +1,32 @@
 # Warehouse Update - September 14
 
-A few more fixes are live on UAT:
+## What's Live
 
-- **Returns:** the summary now separates the customer case from physical receipt of the item. It also makes clear that a recorded return does not mean Quality has cleared the stock.
-- **Quality:** the count now follows the tab and search you are viewing. Clear search to see the full list.
-- **Forms:** the title, Close button and Save area now stay in place when you scroll to a lower field. We checked the return form on desktop and at 390px and 320px widths.
-- **Exports:** Operations Associates with export permission can now open Export data from their warehouse home screen. We checked the dialog on desktop and mobile.
-- **Action buttons:** export and replenishment buttons now follow the permission needed for that action, not just permission to view the page.
-- **Guides:** the export instructions now explain page access and export permission separately. We checked the updated wording on desktop and mobile.
-- **Replenishment:** authorized Operations users can now open an item in Inventory and choose Recommend replenishment. Procurement still handles acceptance and the linked draft request. We fixed the incorrect permission error and protected recommendations that Procurement has already accepted.
-- **Receiving guides:** the KB and handbook now distinguish the receiver, independent inspector and hold reviewer more clearly. These are the existing checks, not extra approval steps.
-- **Mobile forms:** the app-update notice no longer covers open warehouse forms. We checked desktop and both 390px and 320px screens with an update actually waiting. Reload is still your choice after closing the form.
+- **Returns and Quality:** clearer return summaries, counts that follow the selected tab/search, and larger return-reference links.
+- **Forms:** the title, Close button and Save area stay in place while scrolling. App-update notices no longer cover warehouse forms.
+- **Access recovery:** a failed permission check now offers **Retry access** instead of incorrectly saying your access was removed.
+- **Exports:** Operations Associates with export permission can open Export data from the warehouse home screen.
+- **Replenishment:** after accepting a recommendation, Procurement can use **Complete Procurement request** to provide the required details and documents. **Confirm procurement route** remains a separate step.
+- **Guides:** receiving instructions now distinguish the receiver, independent inspector and hold reviewer more clearly.
 
-The process and database permissions have not changed. We corrected the app's role list and made the role guides and handbook clearer about who requests, who handles stock and who approves.
+These changes are on UAT build `f8d437d`. Required fields, approvals and stock controls still apply.
 
-The warehouse app changes passed 1,053 tests. The latest guide update passed 746 shell tests, with one skip. Live checks on the preceding application release covered 341 permission decisions across 11 test accounts, with no mismatches. Some audit visibility is intentionally restricted, so this is not full WMS certification.
+## What We Checked
 
-Required fields and permissions still apply. Empty replacement delivery details still prevent saving. The live form checks were closed without changing the test record.
+All six screen-size jobs passed: two desktop sizes, tablet and three mobile sizes. The warehouse scenarios included in the main CI run passed their existing checks, but those checks do not cover every warehouse journey.
 
-The four old test receipt photos have been archived and cleaned up. Your regular test data was outside that cleanup. Please leave the marked WMS audit records to us.
+We also removed two obsolete test-role references from an approval group. The real approvers, user assignments and permissions are unchanged. The four old test receipt photos were archived and removed; regular tester data was outside that cleanup.
 
-We tested replenishment with separate Operations and Procurement accounts on desktop and mobile. Both recommendations were saved, accepted and linked to draft purchase requests. All 14 permission, sequencing and duplicate-action checks passed, with no purchase orders or stock movements created.
+## Still Being Tested
 
-There is still a real handoff issue: those new drafts are missing a requirement classification, so Procurement cannot continue routing them. The saved reason also does not appear in the right field. We caught both while reviewing the screenshots. We are fixing the handoff so Procurement can supply the required details through the existing request form. Please do not create duplicate requests to get around it. A separate read-only check now confirms the correct item and quantity on both desktop and mobile, but the full journey is not passed yet.
+We tried onboarding with a fresh Warehouse Operator account and completed five of its nine assigned requirements. Receiving practice then exposed a bug: it expected a saved-draft checkpoint that was only recorded when the learner paused. The local fix records that checkpoint at receipt review, so pausing is optional. All 1,103 warehouse tests passed. We also clarified that emergency access needs approval; the label does not mean access is already granted. These fixes still need deployment and a live retest before we call them resolved.
 
-**Access recovery is now live on UAT (`48ca3a7`).** We checked desktop and mobile: the draft stayed in place during a successful focus check. When we simulated a failed permission read, the app showed **Could not verify warehouse access** instead of saying your access was removed. **Retry access** restored the page without repeating a transaction. We reviewed screenshots of both the error and the recovered page. Unsaved work is still not guaranteed after a failed check or reload.
+The latest desktop replenishment run saved the draft, registered both required documents, and verified that the owner could download the correct files. Route confirmation also saved. The test then stopped on unexpected page reads. We confirmed a real issue: the page asks for evaluation data before a sourcing event exists and shows an irrelevant access error. The fix passes all 377 Procurement tests locally, but it is **not deployed or live-verified yet**. The complete handoff is **not passed yet**. Please leave marked audit records to us and do not create duplicate requests to get around them.
 
-Return-reference links now have larger tap areas, with the same destinations. We also corrected the test that mistook the gap between wrapped links for an obstruction. Both changes are released. The first focused check passed 11 of 12 role-and-screen combinations. A separate 320px follow-up now passes all four links and Back navigation, with eight screenshots reviewed. That closes the focused check without relabeling the earlier failed report. A separate display issue with the replenishment button is fixed locally but not released yet.
+Seven separate warehouse test accounts are now ready, including an operator/supervisor multi-role account. All seven signed in; 217 capability checks found no assignment mismatches. A separate database check matched all 111 warehouse role-permission entries to the app definitions. Existing tester accounts were unchanged. These checks do **not** mean the new accounts have completed onboarding or their warehouse transactions.
 
-We also fixed the source of the training CI failure: permission updates were silently expanding older training definitions. That correction shipped in `4b2a8e1` and remains included. It passed all 298 Learning tests and independent review, with the original checks kept intact. It does not reset anyone's progress, publish new training or mark a user trained. The release is not fully certified yet.
+Remaining work includes the isolated-role journeys, the remaining training/guide coverage, and checks with actual warehouse users and devices. The main CI run also has incomplete vendor invitation/onboarding evidence. SMTP remains outside this warehouse work.
 
-The replenishment completion fix has passed independent code review and the application build. We are preparing its live test and updated instructions before rollout. It will let Procurement complete the missing details in the existing request form, keeping the original recommendation linked. It is not live yet, so please leave the two marked audit drafts for us to review.
+**UAT is available for testing. Full WMS certification is still open.**
 
-All six screen-size checks passed in the latest CI run: two desktop sizes, tablet and three mobile sizes. The warehouse checks included in the transaction runs also passed. Full CI is still red because vendor invitation/onboarding evidence is incomplete: desktop email delivery hit a rate limit. Both cleanup checks passed. SMTP stays outside this warehouse work, as agreed; we are not calling the whole app certified.
-
-We also made the Warehouse home link easier to click without moving the sidebar items. That small layout fix and the replenishment completion fix are tested locally but are not live yet. We are tightening the audit report too, so a step that was not tested cannot show as passed.
-
-Still open: the remaining isolated-role journeys, new training coverage, older guides outside receiving/Quality, and the actual user/device pilot. The permission-read failure described above is fixed and checked on the released build; broader session scenarios still need coverage. An older SQL-verifier gap remains separate from this fix. SMTP is not included.
-
-[Detailed verification and limits](2026-09-14-WMS-DISPLAY-LIVE-REVIEW.md)
-
-[Role and action checks](2026-09-14-WMS-ROLE-AUTHORITY-REVIEW.md)
-
-[Replenishment checks and remaining work](2026-09-14-WMS-REPLENISHMENT-REMEDIATION.md)
+[Detailed fixes and verification](2026-09-14-WMS-REPLENISHMENT-REMEDIATION.md) | [Role checks](2026-09-14-WMS-ROLE-AUTHORITY-REVIEW.md) | [Visual checks](2026-09-14-WMS-DISPLAY-LIVE-REVIEW.md)

@@ -446,11 +446,26 @@ describe("OnboardingCenter", () => {
     ).toBeInTheDocument();
     expect(screen.getAllByText("Warehouse safety orientation")).toHaveLength(1);
     expect(screen.getByText("Retraining required")).toBeInTheDocument();
-    expect(screen.getByText("Temporary emergency access")).toBeInTheDocument();
+    expect(screen.getByText("Emergency access may be requested. Approval is required.")).toBeInTheDocument();
+    expect(screen.queryByText("Temporary emergency access")).not.toBeInTheDocument();
     expect(screen.getByText("Needs support")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "Read recovery guidance" }),
     ).toHaveAttribute("href", "/knowledge?article=trouble-access-denied");
+  });
+
+  it("does not offer emergency access when the learner is not eligible to request it", () => {
+    renderCenter({
+      snapshot: {
+        ...snapshot,
+        lockedCapabilities: snapshot.lockedCapabilities.map((lock) => ({
+          ...lock,
+          canRequestEmergencyException: false,
+        })),
+      },
+    });
+    expect(screen.getByText("Retraining required")).toBeInTheDocument();
+    expect(screen.queryByText("Emergency access may be requested. Approval is required.")).not.toBeInTheDocument();
   });
 
   it("keeps same-title orientations independent across personas", () => {

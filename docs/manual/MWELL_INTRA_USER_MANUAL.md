@@ -275,6 +275,10 @@ In employee and vendor onboarding, read the coach's feedback before choosing aga
 
 Local demo or sandbox completion is practice evidence, not a live certification or a new permission. Existing completed onboarding also does not prove that a new attempt was completed during a later verification run.
 
+For receiving practice, choose the practice PO, record delivery details and traceability, select the training destination, attach practice evidence, and confirm the condition. Review the simulated receipt before submitting. The saved-draft checkpoint is recorded when you reach review; you do not need to pause the exercise to earn it. Completion still requires the final submission and a confirmed training result. If a result cannot be confirmed, return to onboarding and refresh status before retrying; do not repeatedly submit or create a live receipt to finish training.
+
+**Emergency access may be requested. Approval is required** means you may follow the emergency-access process. It does not mean access has been granted or that required training can be skipped.
+
 See [Reviewed Task Training](REVIEWED_TASK_TRAINING.md) for the four reviewed inspection, payment-readiness, putaway and pick/pack scenarios, the separate vendor evidence review, and the dated release-status snapshot. Coverage applies **when assigned**; learning does not replace operational authority. The content received independent automated review, not a human pilot.
 
 The candidate vendor evidence-responsibility review explains how to prepare evidence and keep legal declarations separate. It does not upload documents, sign an MNDA, acknowledge a purchase order, submit accreditation, or approve a vendor. Complete those steps in the actual vendor workflow. This new exercise is local catalog content until a reviewed version is published to the live learning curriculum.

@@ -14,6 +14,20 @@ export const HANDBOOK_TABS = Object.freeze([
 
 const CATALOG = [
   {
+    source: "docs/releases/2026-09-14-RECEIVING-PRACTICE-CHECKPOINT.md",
+    id: "sept14-receiving-practice-checkpoint",
+    title: "September 14 Receiving Practice",
+    primaryTab: "release",
+    relatedTabs: ["roles", "workflows"],
+    contentType: "release-note",
+    audience: ["operator", "trainer", "release-reviewer"],
+    summary: "Receiving practice checkpoint correction, emergency-access wording, sourcing recovery and separate live validation limits.",
+    keywords: ["receiving", "onboarding", "practice", "checkpoint", "sourcing"],
+    sortOrder: 0,
+    collapse: "reference",
+    relatedSources: ["docs/manual/MWELL_INTRA_USER_MANUAL.md"],
+  },
+  {
     source: "docs/releases/2026-09-13-RETURN-QUALITY-DISPLAY.md",
     id: "sept13-return-quality-display",
     title: "September 13 Return and Quality Display",

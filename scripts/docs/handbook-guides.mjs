@@ -1066,6 +1066,7 @@ function roleGuide(definition) {
 }
 
 const SOURCE_ROOT_HEADINGS = {
+  "sept14-receiving-practice-checkpoint": "September 14 - Receiving Practice And Sourcing Recovery",
   "sept13-return-quality-display": "Return And Quality Display Update",
   "sept12-workspace-layout": "September 12 Workspace Layout Release",
   "sept11-ux-remediation-candidate": "September 11 UX Release and Verification",
@@ -1409,6 +1410,7 @@ function markdownHeadings(source) {
 }
 
 const LEGACY_TARGET_BY_SOURCE_ID = {
+  "sept14-receiving-practice-checkpoint": ["system", "source-references", "source-sept14-receiving-practice-checkpoint"],
   "sept13-return-quality-display": ["system", "source-references", "source-sept13-return-quality-display"],
   "sept12-workspace-layout": ["system", "source-references", "source-sept12-workspace-layout"],
   "sept11-ux-remediation-candidate": ["system", "source-references", "source-sept11-ux-remediation-candidate"],

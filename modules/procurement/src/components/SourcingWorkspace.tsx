@@ -34,6 +34,7 @@ export function SourcingWorkspace({ requestId, method, canManage, canApprove, cl
   const [event, setEvent] = useState<SourcingEvent | null>(null);
   const [bidException, setBidException] = useState<BidException | null>(null);
   const [loading, setLoading] = useState(Boolean(client));
+  const [readError, setReadError] = useState(false);
   const [busy, setBusy] = useState(false);
   const [deadline, setDeadline] = useState('');
   const [invitationTarget, setInvitationTarget] = useState(3);
@@ -60,20 +61,34 @@ export function SourcingWorkspace({ requestId, method, canManage, canApprove, cl
   const load = useCallback(async () => {
     if (!client) { setLoading(false); return; }
     setLoading(true);
+    setReadError(false);
     try {
-      const [data, exception, evaluation] = await Promise.all([
-        call('sourcing_workspace', { request_id: requestId }) as Promise<{ event?: SourcingEvent | null }>,
+      const data = await call('sourcing_workspace', { request_id: requestId }) as { requestId: string; event: SourcingEvent | null } | null;
+      if (!data || data.requestId !== requestId || !Object.hasOwn(data, 'event') || data.event === undefined ||
+        (data.event !== null && (typeof data.event !== 'object' || Array.isArray(data.event)))) {
+        throw new Error('The current sourcing state could not be verified.');
+      }
+      // A confirmed route can legitimately have no sourcing event yet. In
+      // particular, variance review is not available before its governed stage.
+      if (data.event === null) {
+        setEvent(null); setBidException(null);
+        return;
+      }
+      const [exception, evaluation] = await Promise.all([
         call('insufficient_bid_exception', { request_id: requestId }) as Promise<BidException | null>,
         call('evaluation_workspace', { request_id: requestId }) as Promise<Pick<SourcingEvent, 'commercialTabulations' | 'technicalEvaluations' | 'awardRecommendation' | 'varianceDecisions'>>,
       ]);
-      const next = data.event ? { ...data.event, ...evaluation } : null;
+      const next = { ...data.event, ...evaluation };
       setEvent(next); setBidException(exception);
       if (next?.submissionDeadline) setDeadline(next.submissionDeadline.slice(0, 16));
       if (next?.intendedResponses) setInvitationTarget(next.intendedResponses);
       if (next?.packageVersion) setPackageVersion(next.packageVersion);
       if (next?.packageHash) setPackageHash(next.packageHash);
       if (next?.failedBidReason) setFailedBidReason(next.failedBidReason);
-    } catch (cause) { error(cause instanceof Error ? cause.message : 'Could not load sourcing.'); } finally { setLoading(false); }
+    } catch (cause) {
+      setEvent(null); setBidException(null); setReadError(true);
+      error(cause instanceof Error ? cause.message : 'Could not load sourcing.');
+    } finally { setLoading(false); }
   }, [call, client, error, requestId]);
   useEffect(() => { void load(); }, [load]);
 
@@ -107,6 +122,10 @@ export function SourcingWorkspace({ requestId, method, canManage, canApprove, cl
   const reviewException = (decision: 'approved' | 'rejected') => bidException && run(() => call('review_insufficient_bid_exception', { id: bidException.id, decision, note: exceptionReviewNote.trim() }).then(() => undefined), decision === 'approved' ? 'Sourcing exception approved' : 'Sourcing exception rejected').finally(() => setExceptionReviewNote(''));
 
   if (loading) return <div className="h-32 animate-pulse rounded-lg bg-inset" aria-busy="true" />;
+  if (readError) return <div role="alert" className="space-y-3">
+    <p>The current sourcing state could not be verified. Retry before continuing.</p>
+    <button type="button" className="btn-outline min-h-11" onClick={() => void load()}>Retry sourcing</button>
+  </div>;
   return <section className="space-y-4" aria-label="Governed competitive sourcing">
     <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-semibold text-ink">{method.toUpperCase()} competitive sourcing</h2><p className="max-w-2xl text-sm text-muted">Issue one controlled package, capture equal communications, and open only compliant responses. The server owns deadline, quorum, exception, and transition decisions.</p></div><Badge tone={statusTone(event?.status)}>{event?.status?.replaceAll('_', ' ') ?? 'Not started'}</Badge></div>
     {!client && <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-ink">Connect to the live database to operate governed sourcing.</p>}
