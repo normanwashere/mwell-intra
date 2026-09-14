@@ -217,12 +217,6 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "A governed attempt starts or the existing attempt resumes without duplicating shared requirements.",
         ),
         control(
-          "Emergency access eligibility",
-          "Explains when emergency access may be requested. The message is not an access grant.",
-          "Approval is required; training requirements, scoped authority and current stock controls remain enforced.",
-          "A request must follow the approved emergency-access process before any temporary permission can apply.",
-        ),
-        control(
           "Refresh status",
           "Rechecks assignments, progress, capability locks, and certifications after stale or failed loading.",
           "The authenticated identity and current authority snapshot must still be available.",
@@ -250,7 +244,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         field(
           "Certification status",
-          "Shows active, expired, superseded, or revoked capability evidence.",
+          "Shows active, expired, superseded, or revoked capability evidence. Emergency-access eligibility means approval may be requested, not that access has been granted; required learning, scoped authority and current stock controls still apply.",
           false,
           "Dates and status come from immutable certification records; hidden or stale evidence cannot unlock a live capability.",
         ),
