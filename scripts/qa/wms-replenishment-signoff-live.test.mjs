@@ -105,14 +105,77 @@ test('test-only PDF bytes are deterministic and bound to full run, view and docu
   assert.match(bytes.toString(), /TEST ONLY/); assert.match(bytes.toString(), /startxref/);
   assert.throws(() => syntheticPdf(run, '../foreign', 'spec'));
 });
+async function pdfPythonRuntime({ env = process.env, platform = process.platform, execute = promisify(execFile) } = {}) {
+  const configured = Object.hasOwn(env, 'WMS_PDF_PYTHON');
+  const executable = configured ? env.WMS_PDF_PYTHON : platform === 'win32' ? 'python' : 'python3';
+  const failure = () => new Error('Required PDF parser unavailable. Set WMS_PDF_PYTHON to the absolute executable path of an approved Python 3 runtime with PyMuPDF installed. '
+    + (configured ? 'The explicit interpreter is not replaced by a fallback. ' : `The default ${executable} on PATH must satisfy the same prerequisite. `)
+    + 'Install PyMuPDF in that interpreter environment or select an existing approved runtime. No PDF checks are skipped.');
+  if (configured && (typeof executable !== 'string' || !path.isAbsolute(executable))) throw failure();
+  const probe = "import fitz,json,sys; assert callable(fitz.open) and callable(fitz.TOOLS.mupdf_warnings); print(json.dumps({'pythonMajor':sys.version_info.major,'pymupdf':fitz.VersionBind}))";
+  try {
+    const { stdout } = await execute(executable, ['-c', probe], { timeout: 10000, maxBuffer: 65536, encoding: 'utf8', shell: false, windowsHide: true });
+    const result = JSON.parse(stdout);
+    assert.equal(result.pythonMajor, 3);
+    assert(typeof result.pymupdf === 'string' && /^[0-9][0-9A-Za-z.+-]{0,63}$/.test(result.pymupdf));
+    return { executable, pymupdf: result.pymupdf };
+  } catch { throw failure(); }
+}
+
+test('PDF runtime uses the explicit executable verbatim, including spaces, and probes PyMuPDF without a shell', async () => {
+  const executable = path.resolve(tmpdir(), 'approved runtime', 'python.exe'), calls = [];
+  const runtime = await pdfPythonRuntime({ env: { WMS_PDF_PYTHON: executable }, execute: async (...args) => {
+    calls.push(args); return { stdout: JSON.stringify({ pythonMajor: 3, pymupdf: '1.26.4' }) };
+  } });
+  assert.deepEqual(runtime, { executable, pymupdf: '1.26.4' });
+  assert.equal(calls.length, 1); assert.equal(calls[0][0], executable);
+  assert.equal(calls[0][1][0], '-c'); assert.match(calls[0][1][1], /fitz\.VersionBind/);
+  assert.equal(calls[0][2].shell, false); assert.equal(calls[0][2].windowsHide, true);
+  assert.equal(calls[0][2].timeout, 10000); assert.equal(calls[0][2].maxBuffer, 65536);
+});
+for (const [platform, executable] of [['win32', 'python'], ['linux', 'python3'], ['darwin', 'python3']]) {
+  test(`PDF runtime uses the standard ${platform} PATH executable, independent of Node's installation`, async () => {
+    const calls = [];
+    const runtime = await pdfPythonRuntime({ env: {}, platform, execute: async name => {
+      calls.push(name); return { stdout: JSON.stringify({ pythonMajor: 3, pymupdf: '1.26.4' }) };
+    } });
+    assert.equal(runtime.executable, executable); assert.deepEqual(calls, [executable]);
+  });
+}
+for (const configured of ['', 'python', 'relative/python.exe', '--version']) {
+  test(`PDF runtime rejects invalid explicit configuration ${JSON.stringify(configured)} before execution`, async () => {
+    let calls = 0;
+    await assert.rejects(pdfPythonRuntime({ env: { WMS_PDF_PYTHON: configured }, execute: async () => { calls++; } }), /WMS_PDF_PYTHON.*absolute.*Python 3.*PyMuPDF/);
+    assert.equal(calls, 0);
+  });
+}
+for (const defect of ['missing-executable', 'missing-module', 'timeout', 'malformed-probe', 'python2', 'missing-pymupdf']) {
+  test(`PDF runtime ${defect} fails actionably without skip, raw stderr or silently replacing an explicit interpreter`, async () => {
+    const executable = path.resolve(tmpdir(), 'configured-python.exe'); let calls = 0;
+    await assert.rejects(pdfPythonRuntime({ env: { WMS_PDF_PYTHON: executable }, execute: async () => {
+      calls++;
+      if (['missing-executable', 'missing-module', 'timeout'].includes(defect)) {
+        throw Object.assign(new Error('PRIVATE_PROCESS_ERROR'), { code: defect === 'missing-executable' ? 'ENOENT' : 1, stderr: 'PRIVATE_STDERR' });
+      }
+      return { stdout: defect === 'malformed-probe' ? 'PRIVATE_STDOUT' : JSON.stringify({ pythonMajor: defect === 'python2' ? 2 : 3,
+        pymupdf: defect === 'missing-pymupdf' ? null : '1.26.4' }) };
+    } }), error => {
+      assert.match(error.message, /WMS_PDF_PYTHON.*absolute.*Python 3.*PyMuPDF/);
+      assert.match(error.message, /No PDF checks are skipped/); assert.doesNotMatch(error.message, /PRIVATE/); return true;
+    });
+    assert.equal(calls, 1);
+  });
+}
+
 test('all four deterministic PDFs parse without repair and render visible text with MuPDF offline', async t => {
   const root = await mkdtemp(path.join(tmpdir(), 'wms-pdf-parse-')); t.after(() => rm(root, { recursive: true, force: true }));
-  const python = process.env.WMS_PDF_PYTHON ?? path.resolve(path.dirname(process.execPath), '../../python/python.exe');
+  const { executable: python, pymupdf } = await pdfPythonRuntime();
+  t.diagnostic(`Required Python 3/PyMuPDF ${pymupdf} verified; runtime selected by ${Object.hasOwn(process.env, 'WMS_PDF_PYTHON') ? 'explicit WMS_PDF_PYTHON' : 'platform PATH default'}.`);
   const script = "import fitz,json,sys; d=fitz.open(sys.argv[1]); p=d[0]; x=p.get_pixmap(); print(json.dumps({'pages':len(d),'repaired':d.is_repaired,'text':p.get_text(),'width':x.width,'height':x.height,'ink':sum(v<240 for v in x.samples),'warnings':fitz.TOOLS.mupdf_warnings()}))";
   const m = manifest();
   for (const c of m.cases) for (const d of c.documents) {
     const file = path.join(root, d.filename); await writeFile(file, syntheticPdf(m.runId, c.viewport, d.kind), { flag: 'wx' });
-    const { stdout } = await promisify(execFile)(python, ['-c', script, file], { timeout: 20000, windowsHide: true });
+    const { stdout } = await promisify(execFile)(python, ['-c', script, file], { timeout: 20000, shell: false, windowsHide: true });
     const result = JSON.parse(stdout); assert.equal(result.pages, 1); assert.equal(result.repaired, false); assert.equal(result.warnings, '');
     assert.equal(result.width, 612); assert.equal(result.height, 792); assert(result.ink > 1000);
     assert(result.text.includes(m.runId)); assert(result.text.includes(`${c.viewport} ${d.kind}`)); assert(result.text.includes('TEST ONLY'));
