@@ -110,8 +110,18 @@ const editDistance = (left: string, right: string) => {
   return previous[right.length] ?? right.length;
 };
 
+const inflectionRoot = (token: string) => {
+  if (token.length >= 6 && token.endsWith("ed")) return token.slice(0, -2);
+  if (token.length >= 5 && token.endsWith("s") && !token.endsWith("ss"))
+    return token.slice(0, -1);
+  return token;
+};
+
 const approximatelyIncludesToken = (haystack: string, token: string) => {
   if (includesToken(haystack, token)) return true;
+  // Recognize simple word forms such as failed/fails without fuzzy-matching short roots.
+  if (haystack.split(" ").some(candidate => inflectionRoot(candidate) === inflectionRoot(token)))
+    return true;
   if (token.length < 5) return false;
   const tolerance = token.length >= 9 ? 2 : 1;
   return [...new Set(haystack.split(" "))]
@@ -167,6 +177,7 @@ const scoreText = (text: WeightedText, query: string) => {
   score += phraseScore(body, query, 90);
 
   if (tokens.every((token) => includesToken(title, token))) score += 100;
+  else if (matchedTitleTokens === tokens.length) score += 80;
 
   for (const token of tokens) {
     if (includesToken(title, token)) score += 24;

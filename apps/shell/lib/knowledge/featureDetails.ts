@@ -214,7 +214,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Start or resume requirement",
           "Use Start, Resume or Try again beside the named requirement. The next required action appears before the optional return-to-work panel. In receiving practice, complete the delivery details, traceability, destination, evidence and condition, then review and submit the simulated receipt. There is no need to pause just to save a training checkpoint. After confirmed completion, select Finish review to return to the onboarding checklist. The completed banner's Exit takes you there too.",
           "The requirement must belong to an effective curriculum assigned through a current scoped role. Finish requires confirmed completion of the final receiving-practice step, with no saving in progress or error. Unfinished Pause/Exit and other guided practices are unchanged.",
-          "A governed attempt starts or the existing attempt resumes without duplicating shared requirements. Finish review ends the practice session and shows your onboarding checklist. It does not start live receiving, submit another receipt, erase learning evidence or grant access. Use Refresh access when returning to an existing work form.",
+          "A governed attempt starts or the existing attempt resumes without duplicating shared requirements. Finish review ends the practice session and shows your onboarding checklist. While navigation is pending, use Return to onboarding if needed rather than submitting again. It does not start live receiving, submit another receipt, erase learning evidence or grant access. Use Refresh access when returning to an existing work form.",
         ),
         control(
           "Refresh status",
@@ -244,7 +244,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         field(
           "Certification status",
-          "Shows active, expired, superseded, or revoked capability evidence. Emergency-access eligibility means approval may be requested, not that access has been granted; required learning, scoped authority and current stock controls still apply.",
+          "Shows active, expired, superseded, or revoked capability evidence. An empty list does not necessarily mean training is incomplete: check required-step progress, because some learning does not issue a certificate. Emergency-access eligibility means approval may be requested, not that access has been granted; required learning, scoped authority and current stock controls still apply.",
           false,
           "Dates and status come from immutable certification records; hidden or stale evidence cannot unlock a live capability.",
         ),

@@ -1088,7 +1088,12 @@ export function OnboardingCenter({
                 </ul>
               ) : inactiveCertifications.length === 0 ? (
                 <p className="mt-2 text-sm text-muted">
-                  Complete your first capability path to earn certification.
+                  No certifications have been recorded.{" "}
+                  {view.required.length === 0
+                    ? "No required learning is currently assigned."
+                    : view.completed === view.required.length
+                      ? "Your required learning is complete; existing permissions still apply."
+                      : "Check your remaining required learning above."}
                 </p>
               ) : null}
               {inactiveCertifications.length > 0 && (

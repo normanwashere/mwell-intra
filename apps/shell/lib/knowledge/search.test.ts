@@ -3,6 +3,39 @@ import { KNOWLEDGE_CONTENT } from "./content";
 import { searchKnowledge } from "./search";
 
 describe("knowledge search taxonomy", () => {
+  it.each(["internal", "vendor"] as const)("ranks upload recovery ahead of an incidental feature mention for %s readers", (audience) => {
+    for (const query of ["failed upload", "upload failed", "upload fails"]) {
+      const results = searchKnowledge(KNOWLEDGE_CONTENT, query, { audience });
+      expect(results[0], query).toMatchObject({ id: "trouble-upload", type: "procedure" });
+      const incidental = results.find(result => result.title === "Vendor onboarding");
+      if (incidental) expect(incidental.score).toBeLessThan(results[0]!.score);
+      if (query === "failed upload") expect(incidental).toBeDefined();
+    }
+  });
+
+  it("prefers subject metadata to an incidental body phrase without preferring procedure types", () => {
+    const recovery = KNOWLEDGE_CONTENT.articles.find(article => article.id === "trouble-upload")!;
+    const article = { ...recovery, id: "subject-guide", title: "Evidence upload fails", keywords: ["upload"],
+      sections: [{ id: "recovery", title: "Recovery", body: "Check whether the upload failed before retrying." }] };
+    const feature = { ...KNOWLEDGE_CONTENT.features[0]!, id: "subject-feature", title: "Document submission", capabilityIds: [],
+      controls: [], fields: [], statuses: [], exceptions: [], reads: [], writes: [], policyBasis: [],
+      purpose: "A failed upload can also affect this page." };
+    const content = { ...KNOWLEDGE_CONTENT, articles: [article], features: [feature], flows: [], glossary: [], futureFeatures: [] };
+    expect(searchKnowledge(content, "failed upload")[0]?.id).toBe(article.id);
+
+    const swapped = { ...content,
+      articles: [{ ...article, title: "Document submission", keywords: [] }],
+      features: [{ ...feature, title: "Evidence upload fails" }],
+    };
+    expect(searchKnowledge(swapped, "failed upload")[0]?.id).toBe(feature.id);
+    expect(searchKnowledge(content, "document submission")[0]?.id).toBe(feature.id);
+    expect(searchKnowledge(content, "failed upload", { type: "feature" })[0]?.id).toBe(feature.id);
+    const differentSubject = { ...content, features: [{ ...feature, purpose: "A failed payment needs reconciliation." }] };
+    expect(searchKnowledge(differentSubject, "failed payment")[0]?.id).toBe(feature.id);
+    const exactTitle = { ...content, features: [{ ...feature, title: "Failed upload" }] };
+    expect(searchKnowledge(exactTitle, "failed upload")[0]?.id).toBe(feature.id);
+  });
+
   it("preserves task, role and feature filter behavior without mutating query context", () => {
     const filters = Object.freeze({ type: "task" as const, audience: "internal" as const, userRoles: { procurement: ["requester"] } });
     const results = searchKnowledge(KNOWLEDGE_CONTENT, "buy something", filters);

@@ -54,11 +54,13 @@ type ReceivingTraining = TrainingContextValue<ReceivingTrainingState>;
 
 function ReceivingTrainingRuntime({
   learning,
+  onFinishClose,
 }: {
   learning: LearningContextValue;
+  onFinishClose: () => void;
 }) {
   const training = useTraining<ReceivingTrainingState>();
-  const finishReview = useFinishTrainingReview(learning.closeTraining);
+  const finishReview = useFinishTrainingReview(onFinishClose);
   const close = () => {
     training.exit();
     learning.closeTraining();
@@ -156,6 +158,7 @@ function persistPendingReceiptCommand(command: PendingReceiptCommand | null) {
 export function ReceivingPage() {
   const learning = useOptionalLearning();
   const location = useLocation();
+  const [finishingReview, setFinishingReview] = useState(false);
   const resumeRequested = useRef<string | null>(null);
   const activeTraining = learning?.activeTraining;
   const requestedTraining =
@@ -176,6 +179,7 @@ export function ReceivingPage() {
   useEffect(() => {
     if (
       !learning ||
+      finishingReview ||
       activeTraining ||
       !recoverable ||
       resumeRequested.current === requirement.id
@@ -184,7 +188,20 @@ export function ReceivingPage() {
     }
     resumeRequested.current = requirement.id;
     void learning.resume(requirement.id);
-  }, [activeTraining, learning, recoverable, requirement]);
+  }, [activeTraining, finishingReview, learning, recoverable, requirement]);
+
+  if (finishingReview) {
+    return (
+      <div className="grid min-h-[50vh] place-content-center gap-4 text-center">
+        <p role="status" className="text-sm font-semibold text-muted">
+          Returning to your onboarding checklist
+        </p>
+        <a href="/onboarding" className="btn-outline">
+          Return to onboarding
+        </a>
+      </div>
+    );
+  }
 
   if (!learning || !requestedTraining) {
     return <ReceivingPageSurface />;
@@ -221,7 +238,11 @@ export function ReceivingPage() {
       onCheckpoint={learning.recordCheckpoint}
       persistSession
     >
-      <ReceivingTrainingRuntime learning={learning} />
+      <ReceivingTrainingRuntime learning={learning} onFinishClose={() => {
+        // Keep the old route inert while the shell's checklist navigation settles.
+        setFinishingReview(true);
+        learning.closeTraining();
+      }} />
     </TrainingModeProvider>
   );
 }

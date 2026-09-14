@@ -1,7 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
-import { act, fireEvent, screen, within, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { TrainingContextValue } from "@intra/learning";
+import { useState } from "react";
+import { MemoryRouter, useLocation } from "react-router-dom";
+import { LearningContext, type TrainingContextValue, type LearningContextValue } from "@intra/learning";
 import { ReceivingPage, ReceivingPageSurface } from "./ReceivingPage";
 import { createReceivingTrainingState, type ReceivingTrainingState } from "@/training/receivingAdapter";
 import {
@@ -10,12 +12,16 @@ import {
   renderWithProviders,
 } from "@/test/renderWithProviders";
 import { availableForProduct } from "@/domain/stock";
+import { WarehouseProvider } from "@/app/store";
+import { ThemeProvider } from "@/app/theme";
+import { ToastProvider } from "@/components/ui";
+import { SessionProvider } from "@/auth/session";
 
 const shellRouter = vi.hoisted(() => ({ replace: vi.fn() }));
 // Shell navigation belongs to Learning; Warehouse has no Next dependency.
 vi.mock("../../../learning/node_modules/next/navigation.js", () => ({ useRouter: () => shellRouter }));
 
-function renderReceiptReview(recordCheckpoint = vi.fn().mockResolvedValue(undefined)) {
+function renderReceiptReview(recordCheckpoint = vi.fn().mockResolvedValue(undefined), liveCapability = true) {
   shellRouter.replace.mockClear();
   const storageKey = "intra-training:assignment-review:attempt-review:warehouse-receiving-v1:v1";
   window.sessionStorage.setItem(storageKey, JSON.stringify({
@@ -31,21 +37,61 @@ function renderReceiptReview(recordCheckpoint = vi.fn().mockResolvedValue(undefi
   const closeTraining = vi.fn();
   const repo = makeRepo();
   const receive = vi.spyOn(repo, "receiveStock");
-  renderWithProviders(<ReceivingPage />, {
-    repo, route: "/receiving?training=warehouse-receiving-v1",
-    learning: {
-      ...certifiedTestLearning, recordCheckpoint, closeTraining,
-      activeTraining: {
+  function ReactiveLearning() {
+    const location = useLocation();
+    const [activeTraining, setActiveTraining] = useState<LearningContextValue["activeTraining"]>({
         mode: "scenario",
         assignmentRequirementId: "assignment-review", attemptId: "attempt-review",
         requirementId: "receiving-practice", simulationId: "warehouse-receiving-v1",
-      },
-    },
-  });
+    });
+    return <LearningContext.Provider value={{
+      ...certifiedTestLearning, recordCheckpoint, activeTraining,
+      isLiveCapability: () => liveCapability,
+      closeTraining: () => { closeTraining(); setActiveTraining(null); },
+    }}>
+      <output aria-label="Current test route">{location.pathname}{location.search}</output>
+      <ReceivingPage />
+    </LearningContext.Provider>;
+  }
+  window.sessionStorage.setItem("intra.memory-session.v1", JSON.stringify({
+    profileId: "demo-logistics_supervisor", roles: { warehouse: ["logistics_supervisor"] },
+  }));
+  // Match WarehouseApp's real basename so cross-module fallback links cannot pass accidentally.
+  render(<MemoryRouter basename="/warehouse" initialEntries={["/warehouse/receiving?training=warehouse-receiving-v1"]}>
+    <SessionProvider config={{ mode: "memory", profiles: [{
+      id: "demo-logistics_supervisor", email: "logistics_supervisor@mwell.com.ph",
+      kind: "employee", name: "Demo User", roles: { warehouse: ["logistics_supervisor"] },
+    }] }}>
+      <ThemeProvider><ToastProvider>
+        <WarehouseProvider repo={repo} source="memory" initialRole="logistics_supervisor">
+          <ReactiveLearning />
+        </WarehouseProvider>
+      </ToastProvider></ThemeProvider>
+    </SessionProvider>
+  </MemoryRouter>);
   return { storageKey, closeTraining, receive, recordCheckpoint };
 }
 
 describe("Receiving practice completion", () => {
+  it.each([true, false])("hides live receiving and recovery while checklist navigation is pending (live capability %s)", async (liveCapability) => {
+    const { closeTraining, receive, recordCheckpoint } = renderReceiptReview(undefined, liveCapability);
+    fireEvent.click(await screen.findByRole("button", { name: /receive .*item/i }));
+    const finish = await screen.findByRole("button", { name: "Finish review" });
+    fireEvent.click(finish);
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByLabelText("Current test route")).toHaveTextContent("/receiving?training=warehouse-receiving-v1");
+    expect(screen.queryByText("Complete onboarding before this action")).not.toBeInTheDocument();
+    expect(screen.getByText("Returning to your onboarding checklist")).toHaveAttribute("role", "status");
+    expect(screen.getByRole("link", { name: "Return to onboarding" })).toHaveAttribute("href", "/onboarding");
+    expect(screen.queryByLabelText("Quantity to add")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /receive .*item/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(shellRouter.replace).toHaveBeenCalledExactlyOnceWith("/onboarding");
+    expect(closeTraining).toHaveBeenCalledOnce();
+    expect(recordCheckpoint).toHaveBeenCalledOnce();
+    expect(receive).not.toHaveBeenCalled();
+  });
+
   it("finishes a persisted terminal review at the canonical checklist without live receiving or replay", async () => {
     const { closeTraining, receive, recordCheckpoint, storageKey } = renderReceiptReview();
     fireEvent.click(await screen.findByRole("button", { name: /receive .*item/i }));

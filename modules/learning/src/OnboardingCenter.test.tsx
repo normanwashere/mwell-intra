@@ -667,6 +667,52 @@ describe("OnboardingCenter", () => {
     ).toBeInTheDocument();
   });
 
+  it.each(["passed", "waived"] as const)("does not promise a first certificate after 4/4 required steps are %s", (state) => {
+    const requirements = Array.from({ length: 4 }, (_, index) => ({
+      ...snapshot.curricula[0]!.requirements[0]!,
+      id: `leadership-step-${index}`,
+      title: `Leadership step ${index + 1}`,
+    }));
+    const completedSnapshot: LearningSnapshot = {
+      ...snapshot,
+      curricula: [{ ...snapshot.curricula[0]!, requirements,
+        curriculum: { ...snapshot.curricula[0]!.curriculum, requirementIds: requirements.map(item => item.id) } }],
+      progress: requirements.map(item => ({ ...snapshot.progress[0]!,
+        requirementId: item.id, assignmentRequirementId: `ar-${item.id}`, state })),
+      certifications: [],
+      lockedCapabilities: [],
+    };
+    const before = JSON.stringify(completedSnapshot);
+    renderCenter({ snapshot: completedSnapshot });
+    expect(screen.getByText("4 of 4 required steps complete")).toBeInTheDocument();
+    expect(screen.getByText("No certifications have been recorded. Your required learning is complete; existing permissions still apply.")).toBeInTheDocument();
+    expect(screen.queryByText(/Complete your first capability path/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Certification active")).not.toBeInTheDocument();
+    expect(JSON.stringify(completedSnapshot)).toBe(before);
+  });
+
+  it("points incomplete learners to remaining requirements without promising certification", () => {
+    renderCenter({ snapshot: { ...snapshot, certifications: [] } });
+    expect(screen.getByText("1 of 3 required steps complete")).toBeInTheDocument();
+    expect(screen.getByText("No certifications have been recorded. Check your remaining required learning above.")).toBeInTheDocument();
+    expect(screen.queryByText(/Your required learning is complete/)).not.toBeInTheDocument();
+  });
+
+  it("does not imply optional-only assignments are required to earn a certificate", () => {
+    renderCenter({ snapshot: { ...snapshot, certifications: [],
+      curricula: snapshot.curricula.map(item => ({ ...item,
+        requirements: item.requirements.map(requirement => ({ ...requirement, mandatory: false })) })) } });
+    expect(screen.getByText("No certifications have been recorded. No required learning is currently assigned.")).toBeInTheDocument();
+    expect(screen.queryByText(/Your required learning is complete/)).not.toBeInTheDocument();
+  });
+
+  it("preserves the no-assignment view without claiming certification or completion", () => {
+    renderCenter({ snapshot: { ...snapshot, curricula: [], progress: [], certifications: [], lockedCapabilities: [] } });
+    expect(screen.getByRole("heading", { name: "No onboarding assigned yet" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Certifications" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Complete your first capability path/)).not.toBeInTheDocument();
+  });
+
   it("keeps expired certification evidence visible with a clear recovery state", () => {
     renderCenter({
       snapshot: {
