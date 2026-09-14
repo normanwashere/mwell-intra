@@ -34,3 +34,32 @@ test('other verified workflows retain their registered evidence', () => {
   const evidence = recordedWorkflowScenarioEvidence('procurement request draft', { ok: true });
   assert.deepEqual(evidence[0].checkpoints, ['draft-created']);
 });
+
+const application = { matched: 1, caseId: 'qa_vendor_application_123', vendorId: 'vendor', actorId: 'vendor-actor',
+  snapshotId: 'snapshot', version: 2, documentHash: 'a'.repeat(64), documentCount: 8 };
+test('only a verified signed application earns application-readback, not invite or Legal handoff credit', () => {
+  const result = { ok: true, applicationCheckpoint: application, validationGuard: true,
+    replayCheckpoint: { replayed: true, snapshotId: application.snapshotId, version: application.version, unchanged: true, commandKeySha256: 'b'.repeat(64) } };
+  const [row] = recordedWorkflowScenarioEvidence('vendor owned application submission', result);
+  assert.deepEqual(row.checkpoints, ['application-readback']);
+  assert.deepEqual(row.actors, ['vendor_representative']);
+  assert.deepEqual(row.cases, ['authorized', 'validation', 'duplicate']);
+  for (const replayCheckpoint of [null, { ...result.replayCheckpoint, unchanged: false }, { ...result.replayCheckpoint, snapshotId: 'foreign' }]) {
+    assert.ok(!recordedWorkflowScenarioEvidence('vendor owned application submission', { ...result, replayCheckpoint })[0].cases.includes('duplicate'));
+  }
+  for (const changed of [{ applicationCheckpoint: null }, { applicationCheckpoint: { ...application, matched: 0 } },
+    { applicationCheckpoint: { ...application, documentCount: 0 } }, { ok: false }, { interactionSurfaceOnly: true }]) {
+    assert.deepEqual(recordedWorkflowScenarioEvidence('vendor owned application submission', { ...result, ...changed }), []);
+  }
+});
+
+test('Legal handoff needs an attributable independent reader of the persisted version', () => {
+  const result = { ok: true, handoffCheckpoint: { ...application, readerId: 'legal-actor' } };
+  const [row] = recordedWorkflowScenarioEvidence('legal submitted application handoff', result);
+  assert.deepEqual(row.checkpoints, ['legal-handoff']);
+  assert.deepEqual(row.cases, ['handoff']);
+  assert.deepEqual(row.actors, ['legal_compliance_lead']);
+  for (const handoffCheckpoint of [null, { ...application, readerId: application.actorId }, { ...application, version: 0 }]) {
+    assert.deepEqual(recordedWorkflowScenarioEvidence('legal submitted application handoff', { ...result, handoffCheckpoint }), []);
+  }
+});

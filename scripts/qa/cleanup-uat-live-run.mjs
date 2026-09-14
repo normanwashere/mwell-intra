@@ -8,6 +8,7 @@ import { assertApprovedMutationTarget } from "../lib/target-environment.mjs";
 import { createAuditDatabaseClient } from "./live-e2e-db-verify.mjs";
 import { assertDeterministicAuditRunId } from "./uat-ci-run-id.mjs";
 import { createReceivingAuditEvidence } from "./receiving-audit-evidence.mjs";
+import { cleanupVendorApplicationCase } from './vendor-application-fixture.mjs';
 
 const TRANSACTION_VIEWPORTS = new Set(["desktop-1440", "mobile-390"]);
 
@@ -300,6 +301,7 @@ export async function cleanupAndVerifyRun({
   client,
   env = process.env,
   approvalMembershipFile,
+  vendorApplicationFile,
 }) {
   assertApprovedMutationTarget({
     appEnv: env.APP_ENV,
@@ -313,6 +315,16 @@ export async function cleanupAndVerifyRun({
   const database = client ?? createAuditDatabaseClient(env);
   const results = [];
   const discovered = {};
+
+  if (vendorApplicationFile !== undefined) {
+    try {
+      results.push(await cleanupVendorApplicationCase({ client: database, file: vendorApplicationFile, env,
+        scope: { runId, viewport, project: env.SUPABASE_PROJECT_REF, buildId: env.GITHUB_SHA ?? env.AUDIT_EXPECTED_COMMIT } }));
+    } catch (error) {
+      results.push({ entity: 'legal.synthetic-vendor-application-case', remaining: null,
+        error: error instanceof Error ? error.message : String(error) });
+    }
+  }
 
   const find = async (key, schema, table, select, configure) => {
     try {
@@ -434,10 +446,22 @@ export async function cleanupAndVerifyRun({
   const inviteIds = unique(inviteRows.map((row) => row.id));
   const requestRows = unionRows(requestById, requestByTitle, receiptRequest);
   const caseIds = unique(caseRows.map((row) => row.id));
-  const vendorIds = unique([
-    ...vendorRows.map((row) => row.id),
-    ...caseRows.map((row) => row.vendor_id),
-  ]);
+  // A run-owned case can belong to the reusable synthetic vendor. Case linkage
+  // is not proof of ownership of either its vendor or procurement supplier.
+  let vendorIds = unique(vendorRows.map((row) => row.id));
+  if (vendorIds.length) {
+    const { data: accounts, error } = await database.schema('core').from('profiles')
+      .select('id,email,vendor_id').in('vendor_id', vendorIds).abortSignal(AbortSignal.timeout(15000));
+    if (error || !Array.isArray(accounts)) {
+      vendorIds = [];
+      results.push({ entity: 'core.vendors:parent-ownership', remaining: null, error: 'Vendor account binding readback unavailable' });
+    } else {
+      const protectedIds = new Set(accounts.filter(row => row.email !== scope.authEmail).map(row => row.vendor_id));
+      vendorIds = vendorIds.filter(id => !protectedIds.has(id));
+      if (protectedIds.size) results.push({ entity: 'core.vendors:parent-ownership', remaining: null,
+        error: 'Run-like vendor has a foreign or reusable account; vendor/supplier parents preserved' });
+    }
+  }
   const requestIds = unique(requestRows.map((row) => row.id));
   const organizationRows = await find("auditDepartments", "core", "departments", "id,code,name", (query) =>
     query.in("name", scope.departments),
@@ -1105,7 +1129,8 @@ async function main() {
     "test-results/cleanup.json";
   let report;
   try {
-    report = await cleanupAndVerifyRun({ runId, viewport, approvalMembershipFile: argument('--approval-membership-evidence') });
+    report = await cleanupAndVerifyRun({ runId, viewport, approvalMembershipFile: argument('--approval-membership-evidence'),
+      vendorApplicationFile: argument('--vendor-application-evidence') });
   } catch (error) {
     report = {
       runId: runId ?? null,

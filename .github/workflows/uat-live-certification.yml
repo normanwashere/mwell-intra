@@ -109,7 +109,7 @@ jobs:
       - name: Verify live audit contracts
         run: pnpm test:intra-live-contract
       - name: Verify evidence upload and cleanup contracts
-        run: node --test scripts/qa/payment-audit-evidence.test.mjs scripts/qa/payment-harness.integration.test.mjs scripts/qa/payment-storage-cleanup.test.mjs scripts/qa/payment-run-cleanup.test.mjs scripts/qa/payment-fixture.lifecycle.test.mjs scripts/qa/approval-group-cleanup.test.mjs
+        run: node --test scripts/qa/payment-audit-evidence.test.mjs scripts/qa/payment-harness.integration.test.mjs scripts/qa/payment-storage-cleanup.test.mjs scripts/qa/payment-run-cleanup.test.mjs scripts/qa/payment-fixture.lifecycle.test.mjs scripts/qa/approval-group-cleanup.test.mjs scripts/qa/vendor-application-fixture.test.mjs scripts/qa/vendor-application-cleanup.pglite.test.mjs
       - name: Verify release documentation is synchronized
         run: |
           node scripts/qa/verify-release-documentation.mjs --manifest test-results/documentation-sync-source.json
@@ -421,6 +421,7 @@ jobs:
             --run-id "$AUDIT_RUN_ID" \
             --viewport "${{ matrix.viewport }}" \
             --approval-membership-evidence "test-results/transaction-source/evidence/approval-membership-$AUDIT_RUN_ID-${{ matrix.viewport }}.json" \
+            --vendor-application-evidence "test-results/transaction-source/evidence/vendor-application-$AUDIT_RUN_ID-${{ matrix.viewport }}.json" \
             --output "$CLEANUP_OUTPUT_PATH"
       - name: Upload independent cleanup evidence
         if: always()
@@ -430,6 +431,7 @@ jobs:
           path: |
             test-results/cleanup-${{ matrix.viewport }}.json
             test-results/transaction-source/evidence/approval-membership-*
+            test-results/transaction-source/evidence/vendor-application-*
           if-no-files-found: error
           retention-days: 30
 

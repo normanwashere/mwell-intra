@@ -27,6 +27,8 @@ import { cleanupCertificationRequestEvidence, cleanupExcessCustodyStorage, gateC
 import { resolveSharedUatPassword } from "./provision-uat-intra-test-users.mjs";
 import { certifyPoLineIdentity, certifyControlledExceptionDenial } from "./receipt-quality-probes.mjs";
 import { auditPersonas, assertAuditIdentityScope, criticalRoutes } from './uat-audit-identities.mjs';
+import { prepareVendorApplicationCase, cleanupVendorApplicationCase, verifyVendorApplicationActor,
+  runVendorApplicationUi, runLegalApplicationHandoffUi } from './vendor-application-fixture.mjs';
 
 const require = createRequire(path.resolve("apps/shell/package.json"));
 const { chromium } = require("@playwright/test");
@@ -1831,6 +1833,8 @@ async function legalInviteVendorWorkflow(page, marker) {
     })
     .catch(() => {});
   await waitForMeaningfulRoute(page);
+  const caseHeading = page.getByRole("heading", { name: companyName, exact: true, level: 1 });
+  await caseHeading.waitFor({ state: "visible", timeout: 15_000 });
   const audit = await pageAudit(page);
   const checkpoint = await verifyCheckpoint({
     schema: "legal",
@@ -2078,7 +2082,8 @@ async function legalInviteVendorWorkflow(page, marker) {
   }
   return {
     name: "legal vendor invite",
-    ok: audit.text.includes(companyName) && /\/legal\/cases\//.test(page.url()),
+    ok: (await caseHeading.isVisible()) && /\/legal\/cases\//.test(page.url())
+      && checkpoint.matched === 1 && inviteCheckpoint.matched === 1,
     finalUrl: page.url().replace(baseUrl, ""),
     text: audit.text.slice(0, 260),
     checkpoint,
@@ -5319,6 +5324,26 @@ async function waitForUploadedEvidence(dialog, filename) {
     throw new Error(`Evidence upload failed: ${(await error.allTextContents()).join("; ")}`);
   }
   await uploaded.waitFor({ state: "visible" });
+}
+
+async function vendorApplicationBrowserClient(page) {
+  const token = await browserAccessToken(page);
+  if (!token || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) throw new Error('Ordinary vendor journey session required');
+  const { createClient } = require('@supabase/supabase-js');
+  const client = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { headers: { Authorization: `Bearer ${token}` }, fetch: (url, options = {}) =>
+      fetch(url, { ...options, signal: AbortSignal.timeout(15000) }) },
+  });
+  return {
+    schema: name => client.schema(name),
+    auth: { getUser: async () => {
+      if (!page.isClosed() && await browserAccessToken(page) !== token) throw new Error('Vendor journey browser session changed; no automatic replay');
+      const result = await client.auth.getUser(token);
+      if (result.data?.user?.role !== 'authenticated') throw new Error('Ordinary authenticated user required');
+      return result;
+    } },
+  };
 }
 
 async function waitForExcessSaveOutcome(page, dialog, timeout = 30_000) {
@@ -8673,6 +8698,7 @@ auditProgressSnapshot = () => ({
   results,
 });
 const task3Fixtures = [];
+const vendorApplicationFixtures = [];
 const registerTask3Cleanup = (fixture) => task3Fixtures.push(fixture);
 const vendorAuditEmail = (marker) =>
   controlledVendorEmail?.replaceAll("{marker}", marker.toLowerCase()) ||
@@ -9227,6 +9253,39 @@ try {
             },
           ),
         );
+        const applicationFixture = {
+          client: createAuditDatabaseClient(),
+          scope: { runId: auditRunId, viewport: viewport.name, project: projectRef,
+            buildId: process.env.GITHUB_SHA ?? process.env.AUDIT_EXPECTED_COMMIT },
+          file: path.join(auditEvidenceDir, `vendor-application-${marker}.json`),
+        };
+        vendorApplicationFixtures.push(applicationFixture);
+        const legalPreflight = await runWorkflow(browser, viewport, { email: 'intra.test.legal.lead@mwell.com.ph' }, {
+          name: 'vendor application legal prerequisite',
+          run: async page => {
+            applicationFixture.legalClient = await vendorApplicationBrowserClient(page);
+            const actor = await verifyVendorApplicationActor(applicationFixture.legalClient, true);
+            return { ok: true, actor, certificationCredit: false };
+          },
+        });
+        workflows.push(legalPreflight);
+        const applicationSubmission = await runWorkflow(browser, viewport, { email: 'intra.test.vendor@mwell.com.ph' }, {
+          name: 'vendor owned application submission', scenarioId: 'vendor-accreditation',
+          run: async (page, { captureState }) => {
+            if (!legalPreflight.ok) throw new Error('Verified Legal prerequisite required before fixture setup');
+            applicationFixture.vendorClient = await vendorApplicationBrowserClient(page);
+            applicationFixture.intent = await prepareVendorApplicationCase(applicationFixture);
+            return runVendorApplicationUi({ page, client: applicationFixture.vendorClient, intent: applicationFixture.intent,
+              captureState, origin: baseUrl });
+          },
+        });
+        workflows.push(applicationSubmission);
+        workflows.push(await runWorkflow(browser, viewport, { email: 'intra.test.legal.lead@mwell.com.ph' }, {
+          name: 'legal submitted application handoff', scenarioId: 'vendor-accreditation',
+          run: async (page, { captureState }) => runLegalApplicationHandoffUi({ page,
+            client: await vendorApplicationBrowserClient(page), intent: applicationFixture.intent,
+            submission: applicationSubmission, captureState, origin: baseUrl }),
+        }));
         workflows.push(
           await runWorkflow(
             browser,
@@ -9412,6 +9471,11 @@ try {
             error: error instanceof Error ? error.message : String(error),
           });
         }
+      }
+      for (const fixture of [...vendorApplicationFixtures].reverse()) {
+        try { task3Results.push(await cleanupVendorApplicationCase(fixture)); }
+        catch (error) { task3Results.push({ entity: 'legal.synthetic-vendor-application-case', remaining: null,
+          error: error instanceof Error ? error.message : String(error) }); }
       }
       const requestEvidenceGate = await gateCertificationRequestCleanup(
         createAuditDatabaseClient(), auditMarkers, cleanupTargets,

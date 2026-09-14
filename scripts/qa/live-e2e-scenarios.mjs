@@ -620,6 +620,20 @@ export function workflowScenarioEvidence(workflow) {
 
 export function recordedWorkflowScenarioEvidence(workflow, result) {
   if (result?.ok === false || result?.interactionSurfaceOnly) return [];
+  if (['vendor owned application submission', 'legal submitted application handoff'].includes(workflow)) {
+    const handoff = workflow === 'legal submitted application handoff';
+    const checkpoint = handoff ? result?.handoffCheckpoint : result?.applicationCheckpoint;
+    if (result?.ok !== true || checkpoint?.matched !== 1 || !checkpoint.caseId || !checkpoint.vendorId
+      || !checkpoint.actorId || !checkpoint.snapshotId || !Number.isInteger(checkpoint.version) || checkpoint.version < 1
+      || !/^[a-f0-9]{64}$/.test(checkpoint.documentHash) || !Number.isInteger(checkpoint.documentCount) || checkpoint.documentCount < 1
+      || (handoff && (!checkpoint.readerId || checkpoint.readerId === checkpoint.actorId))) return [];
+    return [evidence(workflow, 'vendor-accreditation', [handoff ? 'legal_compliance_lead' : 'vendor_representative'],
+      handoff ? ['handoff'] : ['authorized', ...(result.validationGuard === true ? ['validation'] : []),
+        ...(result.replayCheckpoint?.replayed === true && result.replayCheckpoint.unchanged === true
+          && result.replayCheckpoint.snapshotId === checkpoint.snapshotId && result.replayCheckpoint.version === checkpoint.version
+          && /^[a-f0-9]{64}$/.test(result.replayCheckpoint.commandKeySha256) ? ['duplicate'] : [])],
+      [handoff ? 'legal-handoff' : 'application-readback'])];
+  }
   const registered = workflowScenarioEvidence(workflow);
   if (workflow !== "legal vendor invite") return registered;
   // Creating an invitation is not an application submission or a Legal handoff.

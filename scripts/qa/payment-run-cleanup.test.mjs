@@ -135,6 +135,40 @@ function fixture({ storageFailure = false, discoveryFailure = false, draft = fal
   return { client, tables, blobs, calls, draftId };
 }
 
+test('independent cleanup never infers ownership of a reusable vendor from its run case', async () => {
+  const h = fixture();
+  h.tables.set('legal.accreditation_cases', [{ id: `${marker}-temporary-clearance-case`,
+    vendor_id: 'shared-vendor', vendor_name: `${marker} Vendor` }]);
+  h.tables.set('core.vendors', [{ id: 'shared-vendor', legal_name: 'MWELL UAT Test Vendor' }]);
+  h.tables.set('procurement.suppliers', [{ id: 'proc-shared-vendor' }]);
+  h.tables.set('core.profiles', [{ id: 'ordinary-vendor-user', email: 'intra.test.vendor@mwell.com.ph', vendor_id: 'shared-vendor' }]);
+  const report = await cleanupAndVerifyRun({ runId, viewport, env, client: h.client });
+  assert.equal(report.complete, true);
+  assert.equal(h.tables.get('core.vendors').length, 1);
+  assert.equal(h.tables.get('procurement.suppliers').length, 1);
+  assert.equal(h.tables.get('core.profiles').length, 1);
+  assert.ok(!h.calls.some(call => call.type === 'delete' && call.matched.some(row =>
+    ['shared-vendor', 'proc-shared-vendor', 'ordinary-vendor-user'].includes(row.id))));
+});
+
+test('a run-like vendor name cannot put an existing ordinary account parent into generic deletion', async () => {
+  const h = fixture();
+  h.tables.set('core.vendors', [{ id: 'shared-vendor', legal_name: `${marker} Vendor` }]);
+  h.tables.set('procurement.suppliers', [{ id: 'proc-shared-vendor' }]);
+  h.tables.set('core.profiles', [{ id: 'ordinary-vendor-user', email: 'intra.test.vendor@mwell.com.ph', vendor_id: 'shared-vendor' }]);
+  await assert.rejects(cleanupAndVerifyRun({ runId, viewport, env, client: h.client }), /discovery failed/);
+  assert.equal(h.tables.get('core.vendors').length, 1);
+  assert.equal(h.tables.get('procurement.suppliers').length, 1);
+  assert.equal(h.tables.get('core.profiles').length, 1);
+});
+
+test('explicit missing vendor-case provenance fails independent cleanup instead of legacy omission credit', async () => {
+  const h = fixture();
+  await assert.rejects(cleanupAndVerifyRun({ runId, viewport, env, client: h.client,
+    vendorApplicationFile: 'does-not-exist-vendor-application.json' }), /discovery failed/);
+  assert.ok(!h.calls.some(call => call.type === 'delete' || call.type === 'storage-remove'));
+});
+
 // Run the actual in-process evidence block without starting the live harness.
 async function inProcessRequestCleanup(h) {
   const source = readFileSync(new URL('./full-intra-live-e2e.mjs', import.meta.url), 'utf8');

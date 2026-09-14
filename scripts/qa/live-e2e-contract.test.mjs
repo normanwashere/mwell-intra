@@ -15,6 +15,71 @@ import {
   scenarioCoverageFailures,
 } from "./live-e2e-scenarios.mjs";
 
+async function legalInviteFixture({ headingVisible = true, caseMatched = 1, inviteMatched = 1,
+  requireDelivery = false, delivery = { status: 'delivery_failed', delivery_error: 'email rate limit exceeded' } } = {}) {
+  const source = await readFile(new URL('./full-intra-live-e2e.mjs', import.meta.url), 'utf8');
+  const start = source.indexOf('async function legalInviteVendorWorkflow(');
+  const end = source.indexOf('async function legalInviteVendorInteractionWorkflow(', start);
+  assert(start >= 0 && end > start);
+  const marker = 'QA-20260914-00000001-desktop-1440', companyName = `${marker} Vendor`;
+  const baseUrl = 'https://offline.invalid', finalUrl = `${baseUrl}/legal/cases/case_offline`;
+  let currentUrl = '', headingWaits = 0, reads = 0;
+  const page = {
+    async goto(url) { currentUrl = url; }, url: () => currentUrl,
+    getByLabel: () => ({ async fill() {} }),
+    getByRole(role, options) {
+      if (role === 'heading') {
+        assert.deepEqual(options, { name: companyName, exact: true, level: 1 });
+        return { async waitFor(settings) { assert.deepEqual(settings, { state: 'visible', timeout: 15000 }); headingWaits++;
+          if (!headingVisible) throw Error('Exact case heading unavailable'); }, async isVisible() { return headingVisible; } };
+      }
+      assert.equal(role, 'button');
+      return { async click() { if (options.name.test('send invite & open case')) currentUrl = finalUrl; } };
+    },
+    async waitForURL(predicate) { assert(predicate(new URL(currentUrl))); },
+    async waitForTimeout() { assert.fail('SMTP retry must not run when delivery certification is disabled'); },
+    async evaluate() { assert.fail('No delivery retries or acceptance mutations in this offline case'); },
+  };
+  const dependencies = {
+    vendorDeliveryConfigurationError: null, vendorAuditEmail: () => 'offline@example.invalid', baseUrl,
+    waitForMeaningfulRoute: async () => {},
+    pageAudit: async () => ({ text: `${'Unrelated shell and notice text '.repeat(40)}${companyName}`.slice(0, 700) }),
+    verifyCheckpoint: async ({ table }) => { reads++; return { matched: table === 'accreditation_cases' ? caseMatched : inviteMatched }; },
+    createAuditDatabaseClient: () => ({ schema: () => ({ from: () => ({ select: () => ({ eq: async () => ({ data: [delivery], error: null }) }) }) }) }),
+    requireVendorDelivery: requireDelivery,
+  };
+  const run = new Function(...Object.keys(dependencies), `${source.slice(start, end)}; return legalInviteVendorWorkflow;`)(...Object.values(dependencies));
+  return { run: () => run(page, marker), headingWaits: () => headingWaits, reads: () => reads };
+}
+
+test('legal invite uses exact visible case heading, not a truncated audit preview, with SMTP excluded', async () => {
+  const h = await legalInviteFixture(), result = await h.run();
+  assert.equal(result.ok, true); assert.equal(h.headingWaits(), 1); assert.equal(h.reads(), 2);
+  assert.equal(result.deliveryStatus, 'delivery_failed'); assert.equal(result.acceptanceCheckpoint, null);
+  assert.equal(result.acceptanceUsedAuditToken, false); assert.equal(result.replayStatus, null);
+  const evidence = scenarioReporting.recordedWorkflowScenarioEvidence('legal vendor invite', result);
+  assert.deepEqual(evidence[0].checkpoints, ['invite-created', 'case-visible']);
+  const coverage = evaluateScenarioCoverage([{ ...result, workflow: 'legal vendor invite', viewport: 'desktop-1440', scenarioEvidence: evidence }], ['desktop-1440']);
+  assert.equal(coverage.find(row => row.id === 'vendor-accreditation').complete, false);
+});
+
+test('legal invite missing exact case heading fails before persisted checkpoint credit', async () => {
+  const h = await legalInviteFixture({ headingVisible: false });
+  await assert.rejects(h.run(), /Exact case heading unavailable/); assert.equal(h.reads(), 0);
+});
+
+for (const field of ['caseMatched', 'inviteMatched']) test(`legal invite rejects absent ${field} even with visible heading`, async () => {
+  const h = await legalInviteFixture({ [field]: 0 });
+  assert.equal((await h.run()).ok, false);
+});
+
+test('legal invite required delivery still fails, and malformed delivery remains an error', async () => {
+  const required = await legalInviteFixture({ requireDelivery: true, delivery: { status: 'delivery_failed', delivery_error: 'offline delivery denied' } });
+  await assert.rejects(required.run(), /delivery certification failed/);
+  const malformed = await legalInviteFixture({ delivery: { status: 'unknown' } });
+  await assert.rejects(malformed.run(), /Unexpected vendor invite delivery status/);
+});
+
 test("declares every current live role exactly once", () => {
   assert.equal(CURRENT_LIVE_ROLES.length, 11);
   assert.equal(new Set(CURRENT_LIVE_ROLES.map((item) => item.role)).size, 11);
