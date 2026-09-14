@@ -644,6 +644,7 @@ function classify(text, url) {
     lower.includes("not available for your role") ||
     lower.includes("doesn't include") ||
     lower.includes("not authorized") ||
+    lower.includes("vendor onboarding unavailable") ||
     lower.includes("no access") ||
     /\bno (?:warehouse|procurement|legal|vendor|admin|my work|events|insights|finance|product) access\b/.test(
       lower,
@@ -729,10 +730,10 @@ function describeRouteStructureProblems(readiness) {
   ].filter(Boolean);
 }
 
-async function waitForMeaningfulRoute(page, { timeout = 12_000 } = {}) {
+async function waitForMeaningfulRoute(page, { timeout = 12_000, route } = {}) {
   await page.waitForLoadState("domcontentloaded", { timeout: 20_000 });
   await page.waitForFunction(
-    () => {
+    (vendorAllowed) => {
       const visible = (element) => {
         for (let details = element.parentElement?.closest("details:not([open])"); details; details = details.parentElement?.closest("details:not([open])")) {
           const summary = [...details.children].find(child => child.tagName === "SUMMARY");
@@ -774,12 +775,13 @@ async function waitForMeaningfulRoute(page, { timeout = 12_000 } = {}) {
         routeOwnedTextLength >= 20 &&
         busyCount === 0 &&
         loadingStateCount === 0 &&
+        (!vendorAllowed || visibleH1s[0].innerText.trim() === "Vendor onboarding") &&
         !document.body.innerText
           .toLowerCase()
           .includes("restoring your session")
       );
     },
-    undefined,
+    route?.path === "/vendor/onboarding" && route.expectedAccess === "allowed",
     { timeout },
   );
 }
@@ -1476,6 +1478,7 @@ async function captureScrollableEvidenceForPage(
   targetPath,
   quality = 72,
   mask = [],
+  inspectFrame,
 ) {
   await mkdir(path.dirname(targetPath), { recursive: true });
   const scrollHandle = await page.evaluateHandle(() => {
@@ -1557,6 +1560,7 @@ async function captureScrollableEvidenceForPage(
         uniqueOffsets.length === 1
           ? targetPath
           : `${base}-frame-${String(index + 1).padStart(2, "0")}${extension}`;
+      await inspectFrame?.();
       await page.screenshot({
         path: framePath,
         type: "jpeg",
@@ -1564,6 +1568,7 @@ async function captureScrollableEvidenceForPage(
         fullPage: false,
         mask,
       });
+      await inspectFrame?.();
       screenshots.push(
         path.relative(process.cwd(), framePath).replaceAll("\\", "/"),
       );
@@ -1585,6 +1590,7 @@ async function captureScrollableEvidenceForPage(
 async function captureRouteEvidence(
   page,
   { viewport, role, route, state = "failed" },
+  inspectFrame,
 ) {
   const filename = [viewport, role, route, state]
     .map(routeEvidenceToken)
@@ -1598,6 +1604,7 @@ async function captureRouteEvidence(
     // Retain choice/button states; text-entry fields include revealed passwords.
     // Excluding non-text types also keeps missing/invalid types (text) private.
     [page.locator("input:not([type='checkbox' i], [type='radio' i], [type='button' i], [type='submit' i], [type='reset' i], [type='image' i], [type='hidden' i], [type='range' i], [type='color' i], [type='file' i]), textarea, [contenteditable]:not([contenteditable='false' i])")],
+    inspectFrame,
   );
   if (!screenshots.length) throw new Error("No route screenshot evidence captured.");
   return screenshots;
@@ -1605,12 +1612,27 @@ async function captureRouteEvidence(
 
 async function attachRouteEvidence(page, routeResult, identity) {
   try {
-    const evidenceScreenshots = await captureRouteEvidence(page, identity);
+    const evidenceStateProblems = new Set();
+    // Vendor profile hydration can replace an initial audience-denial screen
+    // after the DOM audit. Keep the original observation and reject mixed states.
+    const inspectFrame = routeResult.route === "/vendor/onboarding" && routeResult.expectationMet
+      ? async () => {
+        const readiness = await routeReadinessSnapshot(page);
+        const audit = await pageAudit(page);
+        if (describeRouteStructureProblems(readiness).length) evidenceStateProblems.add("not-ready");
+        if (JSON.stringify(audit.h1) !== JSON.stringify(routeResult.h1)) evidenceStateProblems.add("heading-changed");
+        if (classify(audit.text, page.url()) !== routeResult.class) evidenceStateProblems.add("class-changed");
+        if (new URL(page.url()).pathname !== "/vendor/onboarding") evidenceStateProblems.add("route-changed");
+      }
+      : undefined;
+    const evidenceScreenshots = await captureRouteEvidence(page, identity, inspectFrame);
     return {
       ...routeResult,
+      expectationMet: routeResult.expectationMet && evidenceStateProblems.size === 0,
       evidenceScreenshot: evidenceScreenshots[0],
       evidenceScreenshots,
-      evidenceCaptureError: null,
+      evidenceCaptureError: evidenceStateProblems.size ? "Route screenshot state changed or was not ready." : null,
+      ...(inspectFrame ? { evidenceStateProblems: [...evidenceStateProblems] } : {}),
     };
   } catch {
     // Do not leak page values or provider errors through an evidence failure.
@@ -1631,7 +1653,7 @@ async function auditRoute(page, route) {
   );
   let readinessError = null;
   try {
-    await waitForMeaningfulRoute(page);
+    await waitForMeaningfulRoute(page, { route });
   } catch (error) {
     readinessError = String(error.message || error).slice(0, 300);
   }
@@ -1649,7 +1671,7 @@ async function auditRoute(page, route) {
     await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
     readinessError = null;
     try {
-      await waitForMeaningfulRoute(page);
+      await waitForMeaningfulRoute(page, { route });
     } catch (error) {
       readinessError = String(error.message || error).slice(0, 300);
     }

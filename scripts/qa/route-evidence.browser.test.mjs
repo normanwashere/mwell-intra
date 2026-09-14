@@ -10,7 +10,7 @@ const { chromium } = require("@playwright/test");
 const ts = require("typescript");
 const source = await readFile(new URL("./full-intra-live-e2e.mjs", import.meta.url), "utf8");
 const ast = ts.createSourceFile("audit.mjs", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
-const names = ["routeEvidenceToken", "routeNeedsFailureEvidence", "captureScrollableEvidenceForPage", "captureRouteEvidence", "attachRouteEvidence"];
+const names = ["classify", "routeReadinessSnapshot", "describeRouteStructureProblems", "waitForMeaningfulRoute", "pageAudit", "routeEvidenceToken", "routeNeedsFailureEvidence", "captureScrollableEvidenceForPage", "captureRouteEvidence", "attachRouteEvidence"];
 const definitions = names.map(name => {
   const node = ast.statements.find(item => ts.isFunctionDeclaration(item) && item.name?.text === name);
   assert.ok(node, `actual helper ${name} exists`);
@@ -255,5 +255,117 @@ test("a non-scrolling visible dialog captures once without scrolling the backgro
     assert.equal(result.length, 1);
     assert.equal(await page.evaluate(() => document.scrollingElement.scrollTop), 137);
     assert.equal(await page.locator('dialog').evaluate(el => el.open), true);
+  });
+});
+
+const vendorUnavailable = '<section role="alert"><h1>Vendor onboarding unavailable</h1><p>This workspace is limited to signed-in vendor representatives.</p><a href="/">Return home</a></section>';
+const vendorLoading = '<h1>Role onboarding</h1><p>Loading your onboarding</p>';
+const vendorReady = '<h1>Vendor onboarding</h1><p>4 of 4 required steps complete</p><a href="/vendor">Vendor portal</a>';
+const vendorRoute = { path: '/vendor/onboarding', expectedAccess: 'allowed' };
+
+async function vendorFixture(width, run) {
+  const context = await browser.newContext({ viewport: { width, height: 900 } });
+  await context.route('**/*', route => route.fulfill({ contentType: 'text/html', body: `<main>${vendorUnavailable}</main>` }));
+  const page = await context.newPage();
+  await page.goto('https://fixture.test/vendor/onboarding');
+  try { await run(page); } finally { await context.close(); }
+}
+
+test('vendor unavailable is denial, never rendered success', () => {
+  assert.equal(helpers.classify('Vendor onboarding unavailable This workspace is limited to signed-in vendor representatives.', 'https://fixture.test/vendor/onboarding'), 'access-denied');
+});
+
+test('both initial and recovery route audits pass the exact route to readiness', () => {
+  const audit = ast.statements.find(item => ts.isFunctionDeclaration(item) && item.name?.text === 'auditRoute');
+  const calls = [];
+  const visit = node => {
+    if (ts.isCallExpression(node) && node.expression.getText(ast) === 'waitForMeaningfulRoute') calls.push(node);
+    ts.forEachChild(node, visit);
+  };
+  visit(audit);
+  assert.equal(calls.length, 2);
+  for (const call of calls) assert.equal(call.arguments[1]?.getText(ast), '{ route }');
+});
+
+for (const width of [768, 1440]) {
+  test(`vendor readiness waits through profile-unavailable and learning-loading hydration (${width})`, async () => {
+    await vendorFixture(width, async page => {
+      let settled = false;
+      const ready = helpers.waitForMeaningfulRoute(page, { route: vendorRoute, timeout: 1500 }).then(() => { settled = true; });
+      await page.waitForTimeout(80);
+      assert.equal(settled, false, 'initial audience denial cannot satisfy allowed readiness');
+      await page.locator('main').evaluate((main, html) => { main.innerHTML = html; }, vendorLoading);
+      await page.waitForTimeout(80);
+      assert.equal(settled, false, 'loading heading cannot satisfy readiness');
+      await page.locator('main').evaluate((main, html) => { main.innerHTML = html; }, vendorReady);
+      await ready;
+      assert.deepEqual((await helpers.pageAudit(page)).h1, ['Vendor onboarding']);
+    });
+  });
+}
+
+test('permanent vendor denial times out for allowed access but stays auditable as expected denial', async () => {
+  await vendorFixture(768, async page => {
+    await assert.rejects(helpers.waitForMeaningfulRoute(page, { route: vendorRoute, timeout: 200 }), /Timeout/);
+    await helpers.waitForMeaningfulRoute(page, { route: { ...vendorRoute, expectedAccess: 'denied' }, timeout: 200 });
+  });
+});
+
+for (const transition of ['before-capture', 'during-capture', 'stale-denial', 'stable']) {
+  test(`vendor screenshot and audited state remain bound: ${transition}`, async () => {
+    await vendorFixture(768, async page => {
+      await page.locator('main').evaluate((main, html) => { main.innerHTML = html; }, vendorReady);
+      const audit = { route: '/vendor/onboarding', class: 'rendered', expectedAccess: 'allowed', expectationMet: true,
+        h1: [transition === 'stale-denial' ? 'Vendor onboarding unavailable' : 'Vendor onboarding'] };
+      if (transition === 'before-capture') await page.locator('main').evaluate((main, html) => { main.innerHTML = html; }, vendorLoading);
+      const screenshot = page.screenshot.bind(page);
+      page.screenshot = async options => {
+        if (transition === 'during-capture') await page.locator('main').evaluate((main, html) => { main.innerHTML = html; }, vendorLoading);
+        return screenshot(options);
+      };
+      const result = await helpers.attachRouteEvidence(page, audit, { viewport: '768', role: 'vendor', route: audit.route, state: 'allowed' });
+      assert.equal(result.expectationMet, transition === 'stable');
+      assert.ok(result.evidenceScreenshots.length > 0, 'failed-state captures are retained, not relabeled as success');
+      if (transition !== 'stable') assert.match(result.evidenceCaptureError, /state changed|not ready/i);
+      assert.equal(result.class, audit.class, 'original observation remains intact');
+    });
+  });
+}
+
+test('a changed middle frame fails even when the final vendor frame recovers', async () => {
+  await vendorFixture(768, async page => {
+    await page.locator('main').evaluate((main, html) => { main.innerHTML = html; main.style.minHeight = '2200px'; }, vendorReady);
+    const audit = { route: '/vendor/onboarding', class: 'rendered', expectationMet: true, h1: ['Vendor onboarding'] };
+    const screenshot = page.screenshot.bind(page);
+    let frames = 0;
+    page.screenshot = async options => {
+      frames += 1;
+      await page.locator('main').evaluate((main, html) => { main.innerHTML = html; }, frames === 2 ? vendorLoading : vendorReady);
+      return screenshot(options);
+    };
+    const result = await helpers.attachRouteEvidence(page, audit, { viewport: '768', role: 'vendor', route: audit.route });
+    assert.ok(frames >= 3);
+    assert.equal(result.evidenceScreenshots.length, frames);
+    assert.equal(result.expectationMet, false);
+    assert.ok(result.evidenceStateProblems.includes('not-ready'));
+    assert.deepEqual((await helpers.pageAudit(page)).h1, ['Vendor onboarding']);
+    assert.equal(await page.evaluate(() => scrollY), 0);
+  });
+});
+
+test('vendor expected denial stays passing only when its capture stays denied; failed audits are never upgraded', async () => {
+  await vendorFixture(768, async page => {
+    const denied = { route: '/vendor/onboarding', class: 'access-denied', expectedAccess: 'denied', expectationMet: true, h1: ['Vendor onboarding unavailable'] };
+    const identity = { viewport: '768', role: 'employee', route: denied.route, state: 'denied' };
+    const stable = await helpers.attachRouteEvidence(page, denied, identity);
+    assert.equal(stable.expectationMet, true);
+    await page.locator('main').evaluate((main, html) => { main.innerHTML = html; }, vendorReady);
+    const changed = await helpers.attachRouteEvidence(page, denied, identity);
+    assert.equal(changed.expectationMet, false);
+    assert.ok(changed.evidenceStateProblems.includes('class-changed'));
+    const failed = await helpers.attachRouteEvidence(page, { ...denied, expectationMet: false, error: 'Original failure' }, identity);
+    assert.equal(failed.expectationMet, false);
+    assert.equal(failed.error, 'Original failure');
+    assert.ok(failed.evidenceScreenshots.length);
   });
 });

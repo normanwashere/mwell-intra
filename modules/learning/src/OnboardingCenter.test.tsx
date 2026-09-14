@@ -22,12 +22,14 @@ import {
 const push = vi.fn();
 const prefetch = vi.fn();
 let searchParams = new URLSearchParams();
+let sessionProfileMissing = false;
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push, prefetch }),
   useSearchParams: () => searchParams,
 }));
 
 const session = {
+  loading: false,
   userRoles: { warehouse: ["operations"] } as Partial<UserRoles>,
   profile: {
     id: "learner-1",
@@ -40,7 +42,10 @@ const session = {
 vi.mock("@intra/auth", async () => {
   const actual =
     await vi.importActual<typeof import("@intra/auth")>("@intra/auth");
-  return { ...actual, useSession: () => session };
+  return { ...actual, useSession: () => ({
+    ...session,
+    profile: sessionProfileMissing ? undefined : session.profile,
+  }) };
 });
 
 const snapshot: LearningSnapshot = {
@@ -374,6 +379,8 @@ describe("OnboardingCenter", () => {
   });
 
   beforeEach(() => {
+    session.loading = false;
+    sessionProfileMissing = false;
     push.mockClear();
     prefetch.mockClear();
     searchParams = new URLSearchParams();
@@ -854,6 +861,11 @@ describe("OnboardingCenter", () => {
       "Core / Vendor Portal User",
     ],
     ["internal.role.legal.compliance.v1", 1, "legal", "Legal / Compliance"],
+    ["vendor.role.core.vendor_portal.capability-practice.v1.curriculum", 3, "core", "Core / Role context unavailable"],
+    ["internal.role.core.vendor_portal.capability-practice.v1.curriculum", 2, "core", "Core / Role context unavailable"],
+    ["vendor.role.core.platform_admin.capability-practice.v1.curriculum", 2, "core", "Core / Role context unavailable"],
+    ["vendor.role.core.vendor_portal.capability-practice.v1.curriculum", 2, "procurement", "Procurement / Role context unavailable"],
+    ["vendor.role.core.vendor_portal.evidence-review.v2.curriculum", 2, "core", "Core / Role context unavailable"],
     [
       "internal.role.legal.compliance.capability-practice.v1.curriculum",
       2,
@@ -893,8 +905,13 @@ describe("OnboardingCenter", () => {
     },
   );
 
-  it.each([1, 2])("labels the verified Procurement admin v%s payment assignment and certificate without changing readiness", (version) => {
-    const curriculumId = "internal.role.procurement.admin.capability-practice.v1.curriculum";
+  it.each([
+    ["admin", 1, "Procurement Admin"],
+    ["admin", 2, "Procurement Admin"],
+    ["finance", 1, "Finance"],
+    ["finance", 2, "Finance"],
+  ] as const)("labels the verified Procurement %s v%s payment assignment and certificate without changing readiness", (role, version, label) => {
+    const curriculumId = `internal.role.procurement.${role}.capability-practice.v1.curriculum`;
     const requirement = {
       ...snapshot.curricula[0]!.requirements[1]!,
       id: "payment-review-only",
@@ -917,8 +934,8 @@ describe("OnboardingCenter", () => {
     const before = structuredClone(observed);
     const resume = vi.fn(), refreshAccess = vi.fn(), isLiveCapability = vi.fn().mockReturnValue(false);
     renderCenter({ snapshot: observed, resume, refreshAccess, isLiveCapability });
-    expect(screen.getByText("Assigned to: Procurement / Procurement Admin")).toBeInTheDocument();
-    expect(screen.getByText("Procurement / Procurement Admin", { selector: "p.break-words" })).toBeInTheDocument();
+    expect(screen.getByText(`Assigned to: Procurement / ${label}`)).toBeInTheDocument();
+    expect(screen.getByText(`Procurement / ${label}`, { selector: "p.break-words" })).toBeInTheDocument();
     expect(screen.getByText("Review Payment Readiness")).toBeInTheDocument();
     expect(screen.getByText("Certification active")).toBeInTheDocument();
     expect(observed).toEqual(before);
@@ -932,11 +949,87 @@ describe("OnboardingCenter", () => {
     ["vendor.role.procurement.admin.capability-practice.v1.curriculum", 2, "procurement"],
     ["internal.role.procurement.admin.capability-practice.v1.curriculum", 2, "warehouse"],
     ["internal.role.procurement.admin.payment-readiness.v2.curriculum", 2, "procurement"],
+    ["internal.role.procurement.finance.capability-practice.v1.curriculum", 3, "procurement"],
+    ["vendor.role.procurement.finance.capability-practice.v1.curriculum", 2, "procurement"],
+    ["internal.role.procurement.finance.capability-practice.v1.curriculum", 2, "warehouse"],
+    ["internal.role.procurement.finance.payment-readiness.v2.curriculum", 2, "procurement"],
+    ["internal.role.procurement.approver.capability-practice.v1.curriculum", 2, "procurement"],
   ] as const)("does not infer a payment role from unverified %s v%s in %s", (curriculumId, curriculumVersion, module) => {
     renderCenter({ snapshot: { ...snapshot, certifications: [{ ...snapshot.certifications[0]!,
       curriculumId, curriculumVersion, capability: { module, capability: "review_payment_readiness" } }] } });
     expect(screen.getByText(`${MODULES[module].label} / Role context unavailable`)).toBeInTheDocument();
     expect(screen.getByText("Certification active")).toBeInTheDocument();
+  });
+
+  it.each([1, 2])("labels the exact published Vendor Portal v%s assignment and certificate without changing readiness", (version) => {
+    const curriculumId = "vendor.role.core.vendor_portal.capability-practice.v1.curriculum";
+    const requirement = { ...snapshot.curricula[0]!.requirements[1]!, id: "vendor-evidence-review",
+      audience: "vendor" as const, title: "Review vendor evidence", prerequisiteIds: [],
+      capabilityOutcomes: [{ module: "core" as const, capability: "submit_accreditation" }] };
+    const observed: LearningSnapshot = { ...snapshot,
+      curricula: [{ ...snapshot.curricula[0]!, curriculum: { ...snapshot.curricula[0]!.curriculum,
+        id: curriculumId, version, audience: "vendor", requirementIds: [requirement.id] }, requirements: [requirement] }],
+      progress: [{ ...snapshot.progress[0]!, requirementId: requirement.id }],
+      certifications: [{ ...snapshot.certifications[0]!, curriculumId, curriculumVersion: version,
+        capability: { module: "core", capability: "submit_accreditation" } }], lockedCapabilities: [] };
+    const before = structuredClone(observed);
+    const context = value({ snapshot: observed });
+    session.profile.kind = "vendor";
+    try {
+      render(<LearningContext.Provider value={context}><OnboardingCenter audience="vendor" /></LearningContext.Provider>);
+      expect(screen.getByText("Assigned to: Core / Vendor Portal User")).toBeInTheDocument();
+      expect(screen.getByText("Core / Vendor Portal User", { selector: "p.break-words" })).toBeInTheDocument();
+      expect(screen.getByText("Certification active")).toBeInTheDocument();
+      expect(observed).toEqual(before);
+      expect(context.resume).not.toHaveBeenCalled();
+      expect(context.refreshAccess).not.toHaveBeenCalled();
+    } finally { session.profile.kind = "employee"; }
+  });
+
+  it("waits for a cold vendor session before deciding audience, then shows the existing learning placeholder", () => {
+    session.loading = true;
+    sessionProfileMissing = true;
+    const context = value({ snapshot: null, loading: true });
+    const { rerender } = render(<LearningContext.Provider value={context}><OnboardingCenter audience="vendor" /></LearningContext.Provider>);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByText("Loading your onboarding").closest('[aria-live="polite"]')).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Role onboarding" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Continue to Vendor" })).not.toBeInTheDocument();
+    session.loading = false;
+    sessionProfileMissing = false;
+    session.profile.kind = "vendor";
+    try {
+      rerender(<LearningContext.Provider value={context}><OnboardingCenter audience="vendor" /></LearningContext.Provider>);
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(screen.getByText("Loading your onboarding")).toBeInTheDocument();
+      expect(context.resume).not.toHaveBeenCalled();
+      expect(context.refreshAccess).not.toHaveBeenCalled();
+    } finally { session.profile.kind = "employee"; }
+  });
+
+  it.each([false, true])("denies settled non-vendor or failed missing-profile sessions even while learning loads (missing=%s)", (missing) => {
+    sessionProfileMissing = missing;
+    const context = value({ loading: true, error: missing ? "Session unavailable" : null });
+    render(<LearningContext.Provider value={context}><OnboardingCenter audience="vendor" /></LearningContext.Provider>);
+    expect(screen.getByRole("alert")).toHaveTextContent("Vendor onboarding unavailable");
+    expect(screen.queryByText("Loading your onboarding")).not.toBeInTheDocument();
+    expect(screen.queryByText("Certification active")).not.toBeInTheDocument();
+    expect(context.resume).not.toHaveBeenCalled();
+  });
+
+  it("does not reveal stale learning while vendor session identity is pending, and stops loading after auth failure", () => {
+    session.loading = true;
+    sessionProfileMissing = true;
+    const context = value();
+    const { rerender } = render(<LearningContext.Provider value={context}><OnboardingCenter audience="vendor" /></LearningContext.Provider>);
+    expect(screen.getByText("Loading your onboarding")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByText("Certification active")).not.toBeInTheDocument();
+    session.loading = false;
+    rerender(<LearningContext.Provider value={context}><OnboardingCenter audience="vendor" /></LearningContext.Provider>);
+    expect(screen.getByRole("alert")).toHaveTextContent("Vendor onboarding unavailable");
+    expect(screen.queryByText("Loading your onboarding")).not.toBeInTheDocument();
+    expect(screen.queryByText("Certification active")).not.toBeInTheDocument();
   });
 
   it("does not guess role or expose assignment IDs for an unknown curriculum", () => {

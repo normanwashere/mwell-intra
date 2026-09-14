@@ -108,7 +108,12 @@ function curriculumScope(
               curriculumVersion === 2) ||
             // Published payment-readiness addition verified on UAT, 2026-09-14.
             (item.module === "procurement" &&
-              item.role === "admin" &&
+              (item.role === "admin" || item.role === "finance") &&
+              curriculumVersion === 2) ||
+            // Published vendor-evidence addition verified on UAT, 2026-09-14.
+            (item.audience === "vendor" &&
+              item.module === "core" &&
+              item.role === "vendor_portal" &&
               curriculumVersion === 2))) ||
         (item.module === "warehouse" &&
           item.role === "warehouse_operator" &&
@@ -212,6 +217,18 @@ function RequirementAction({
   );
 }
 
+function OnboardingLoading() {
+  return (
+    <div className="space-y-5" aria-live="polite">
+      <h1 className="font-display text-2xl font-bold text-ink">
+        Role onboarding
+      </h1>
+      <div className="h-28 animate-pulse rounded-lg bg-inset" />
+      <p className="text-sm text-muted">Loading your onboarding</p>
+    </div>
+  );
+}
+
 export function OnboardingCenter({
   audience = "internal",
   selectedTask,
@@ -219,7 +236,7 @@ export function OnboardingCenter({
   audience?: "internal" | "vendor";
   selectedTask?: SelectedLearningTask;
 }) {
-  const { profile, userRoles } = useSession();
+  const { profile, userRoles, loading: sessionLoading } = useSession();
   const assignedScopes = Object.entries(MODULES).flatMap(([moduleId, module]) =>
     Object.entries(module.roles).flatMap(([roleId, role]) =>
       (
@@ -403,6 +420,10 @@ export function OnboardingCenter({
     });
   }, [requestedRequirementId, view.requirements]);
 
+  if (audience === "vendor" && sessionLoading) {
+    return <OnboardingLoading />;
+  }
+
   if (audience === "vendor" && profile?.kind !== "vendor") {
     return (
       <section
@@ -444,15 +465,7 @@ export function OnboardingCenter({
   }
 
   if (loading && !snapshot) {
-    return (
-      <div className="space-y-5" aria-live="polite">
-        <h1 className="font-display text-2xl font-bold text-ink">
-          Role onboarding
-        </h1>
-        <div className="h-28 animate-pulse rounded-lg bg-inset" />
-        <p className="text-sm text-muted">Loading your onboarding</p>
-      </div>
-    );
+    return <OnboardingLoading />;
   }
 
   if (!snapshot) {

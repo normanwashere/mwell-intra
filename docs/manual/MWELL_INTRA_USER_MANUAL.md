@@ -8,7 +8,7 @@ Sourcing deadlines use the local time on your device. The deadline editor and sa
 
 Prepared after the `05b2326` sourcing observation: guidance follows the recorded sourcing stage. **Not started** means prepare the plan; **draft** means complete the plan and accredited invitations before governed issue, not close the response window. Issued events handle responses and controlled closure; evaluation, any required independent review and award remain separate steps. Failed bids use recovery controls, while awarded or cancelled events retain their history. Retry an unavailable sourcing read before continuing. This copy correction does not enable actions and has not yet been live-verified.
 
-For the verified Procurement Admin version-2 curriculum, **Procurement / Procurement Admin** identifies the existing assignment and certificate context, including **Review Payment Readiness**. Follow your actual assigned requirement and current access checks; this label does not add authority, complete learning or certify payment release. An unrecognized curriculum or version must remain unidentified rather than be guessed from its name.
+Current version-2 learning shows the verified role context for **Procurement Admin**, **Procurement Finance** and **Vendor Portal**. These labels identify existing assignments and certificates; they do not add authority, complete learning or certify payment release. Unrecognized curricula or versions remain unidentified. Vendor onboarding shows a loading state while the session is restored, then checks the resolved account before displaying its learning.
 
 ## Warehouse Access Recovery
 

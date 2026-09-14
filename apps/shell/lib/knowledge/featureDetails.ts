@@ -254,7 +254,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
       controls: [
         control(
           "Start or resume vendor requirement",
-          "Opens the next accreditation-oriented learning requirement assigned to the vendor identity.",
+          "Wait for the session and assigned learning to load, then open the next accreditation requirement. Current published Vendor Portal version-2 learning keeps its verified role label; a loading screen is not a completed checklist.",
           "The requirement must belong to that vendor's current assignment.",
           "Progress is recorded for the signed-in vendor only.",
         ),
