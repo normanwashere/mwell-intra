@@ -49,9 +49,9 @@ const PERSONA_MATCHES: readonly PersonaMatch[] = [
   {
     id: "operations_lead",
     matches: (_profile, roles) =>
-      hasRole(roles, "warehouse", "warehouse_supervisor") ||
-      (hasRole(roles, "warehouse", "logistics_supervisor") &&
-        hasRole(roles, "procurement", "approver")),
+      (hasRole(roles, "warehouse", "warehouse_supervisor") ||
+        hasRole(roles, "warehouse", "logistics_supervisor")) &&
+      hasRole(roles, "procurement", "approver"),
   },
   {
     id: "operations_associate",
@@ -143,14 +143,18 @@ export function resolvePersonaPresentation(
   const persona = matched
     ? OPERATING_PERSONAS.find((candidate) => candidate.id === matched.id)
     : undefined;
+  const authority = authorityFor(roles);
+  const isolatedSupervisor = authority.length === 1 &&
+    authority[0]?.module === "warehouse" && authority[0].role === "warehouse_supervisor";
 
   return {
     title:
       persona?.label ??
       profile.title?.trim() ??
+      (isolatedSupervisor ? authority[0]!.label : undefined) ??
       (profile.kind === "vendor" ? "Vendor Representative" : "Employee"),
     department: persona?.department ?? fallbackDepartment(profile, roles),
     responsibility: persona?.responsibility,
-    authority: authorityFor(roles),
+    authority,
   };
 }

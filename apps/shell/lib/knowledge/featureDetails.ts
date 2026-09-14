@@ -206,7 +206,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
       controls: [
         control(
           "Change task / All eligible tasks",
-          "Expand Choose a task, or Change task when one is selected, then search All eligible tasks by task, module or role and choose Select task. The chooser starts closed so readiness and the next required action are easy to reach. Clear search to see the complete eligible list beyond the recommendations; scroll the page to reach further tasks.",
+          "Expand Choose a task, or Change task when one is selected, then search All eligible tasks by task, module or role and choose Select task. The chooser starts closed so readiness and the next required action are easy to reach. Shared tasks show Available to followed by a role count; expand it to see the full audience. Clear search to see the complete eligible list beyond the recommendations; scroll the page to reach further tasks.",
           "Only eligible tasks are listed. A safe return destination is retained only within the selected task's workspace; unrelated selected requirements are cleared. Selection grants neither access nor completion.",
           "The selected task opens with its learning requirements. Browser Back returns to the preceding task selection; an incompatible return destination is replaced by the task's own destination.",
         ),

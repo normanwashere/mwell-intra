@@ -53,14 +53,21 @@ export function TaskStart({ tasks, onSelect, selectedTaskId, learningHref = "/on
           {[...new Set(complete.map(task => task.moduleLabel))].map(moduleLabel => <section key={moduleLabel} aria-label={moduleLabel}>
             <h3 className="border-b border-line py-2 text-sm font-bold">{moduleLabel}</h3>
             <ul className="divide-y divide-line">
-              {complete.filter(task => task.moduleLabel === moduleLabel).map(task => <li key={task.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+              {complete.filter(task => task.moduleLabel === moduleLabel).map(task => {
+                const audience = [...new Set(task.roleIds.flatMap(role => roleLabels.has(role) ? [roleLabels.get(role)!] : []))];
+                return <li key={task.id} className="flex flex-wrap items-start justify-between gap-2 py-3">
                 <div className="min-w-0 basis-48 flex-1">
                   <p className="break-words text-sm font-semibold">{task.title}</p>
-                  <p className="break-words text-xs text-muted">{task.roleIds.flatMap(role => roleLabels.has(role) ? [roleLabels.get(role)!] : []).join(', ') || 'Assigned role'}</p>
+                  {audience.length > 3 ? <details className="mt-1 text-xs text-muted">
+                    <summary className="min-h-11 cursor-pointer content-center rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-700">Available to {audience.length} roles</summary>
+                    <ul className="mb-2 grid gap-1.5 border-l border-line pl-3 sm:grid-cols-2">
+                      {audience.map(label => <li key={label} className="break-words">{label}</li>)}
+                    </ul>
+                  </details> : <p className="mt-1 break-words text-xs text-muted">{audience.join(', ') || 'Assigned role'}</p>}
                   {recommendations.some(item => item.id === task.id) && <span className="text-xs text-brand-700">Recommended</span>}
                 </div>
                 <button type="button" className="btn-secondary min-h-11" aria-label={`Select ${task.title}`} aria-pressed={task.id === selectedTaskId} onClick={() => onSelect(task)}>{task.id === selectedTaskId ? 'Selected' : 'Select task'}</button>
-              </li>)}
+              </li>; })}
             </ul>
           </section>)}
         </div>

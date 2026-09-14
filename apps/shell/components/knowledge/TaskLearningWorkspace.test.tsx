@@ -21,6 +21,28 @@ vi.mock('@intra/learning', () => ({
   OnboardingCenter: ({ selectedTask }: { selectedTask?: TaskDefinition }) => selectedTask ? <section data-task-id={selectedTask.id}><h2>{selectedTask.title}</h2></section> : <section aria-label="Required learning">Progress and next required action</section>,
 }));
 import { TaskLearningWorkspace } from './TaskLearningWorkspace';
+import { TaskStart } from './TaskStart';
+import { KNOWLEDGE_ROLES } from '../../lib/knowledge/roles';
+
+it('keeps shared task audiences compact without removing roles or changing selection', async () => {
+  vi.stubGlobal('React', React); vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  const onSelect = vi.fn();
+  const task: TaskDefinition = { ...tasks[0]!, roleIds: KNOWLEDGE_ROLES.map(role => role.id) };
+  const host = document.createElement('div'); document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => root.render(<TaskStart tasks={[task]} onSelect={onSelect} />));
+    const audience = host.querySelector<HTMLDetailsElement>('details');
+    expect(audience).not.toBeNull();
+    expect(audience?.open).toBe(false);
+    expect(audience?.querySelector('summary')?.textContent).toBe(`Available to ${KNOWLEDGE_ROLES.length} roles`);
+    for (const role of KNOWLEDGE_ROLES) expect(audience?.textContent).toContain(role.label);
+    await act(async () => audience!.querySelector('summary')!.click());
+    expect(audience?.open).toBe(true);
+    await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Select Task 0"]')!.click());
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith(task);
+  } finally { await act(async () => root.unmount()); host.remove(); }
+});
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 it('UX11 offers all tasks once with human roles and restores task, requirement and next on Back', async () => {

@@ -3,6 +3,7 @@ import test from 'node:test';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import * as vendorFixture from './vendor-application-fixture.mjs';
 import { prepareVendorApplicationCase, cleanupVendorApplicationCase, loadAuthoritativeVendorChecklist, verifyVendorApplicationSubmission,
   runVendorApplicationUi, runLegalApplicationHandoffUi } from './vendor-application-fixture.mjs';
 
@@ -12,6 +13,27 @@ const env = { APP_ENV: 'uat', NEXT_PUBLIC_SUPABASE_URL: `https://${scope.project
 const vendorId = '10000000-0000-4000-8000-000000000001';
 const vendorUser = '20000000-0000-4000-8000-000000000001';
 const legalUser = '30000000-0000-4000-8000-000000000001';
+
+test('authoritative checklist source uses identical strict pins for LF and CRLF', async () => {
+  const source = (await readFile(new URL('../../supabase/migrations/20260815154324_legal_vendor_launch_blockers.sql', import.meta.url), 'utf8')).replaceAll('\r\n', '\n');
+  const lf = vendorFixture.extractAuthoritativeVendorChecklistSql(source);
+  const crlf = vendorFixture.extractAuthoritativeVendorChecklistSql(source.replaceAll('\n', '\r\n'));
+  assert.equal(lf, crlf);
+  assert.equal(lf.includes('\r'), false);
+  assert.equal(vendorFixture.VENDOR_CHECKLIST_MANIFEST.sourceSha256,
+    '4ed03ca4dc21a9d50c37b3e9a26163595fc4d330512c4f65538cdc8cbd164728');
+});
+
+test('authoritative checklist source rejects content changes and lone carriage returns', async () => {
+  const source = (await readFile(new URL('../../supabase/migrations/20260815154324_legal_vendor_launch_blockers.sql', import.meta.url), 'utf8')).replaceAll('\r\n', '\n');
+  const marker = 'create or replace function private.legal_tailored_requirement_set(profile jsonb)';
+  assert.ok(source.includes(marker));
+  for (const text of [source, source.replaceAll('\n', '\r\n')]) {
+    assert.throws(() => vendorFixture.extractAuthoritativeVendorChecklistSql(text.replace(marker, `${marker} `)), /SQL source pin mismatch/);
+  }
+  assert.throws(() => vendorFixture.extractAuthoritativeVendorChecklistSql(source.replace(marker, `${marker}\r `)), /lone carriage return/);
+  assert.throws(() => vendorFixture.extractAuthoritativeVendorChecklistSql(source.replace(marker, 'missing function')), /source not found/);
+});
 
 async function fixture(t) {
   const root = await mkdtemp(path.join(tmpdir(), 'vendor-case-fixture-'));

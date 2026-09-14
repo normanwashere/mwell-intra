@@ -1,8 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionProfile } from "@intra/auth";
 import type { UserRoles } from "@intra/rbac";
 import { resolvePersonaPresentation } from "./personaPresentation";
 import { DEMO_PROFILES } from "./demoProfiles";
+import React, { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { PersonaContext } from "../components/PersonaContext";
 
 const profile = (title?: string): SessionProfile => ({
   id: "person-1",
@@ -115,6 +118,40 @@ const personas: Array<{
 ];
 
 describe("resolvePersonaPresentation", () => {
+  beforeEach(() => vi.stubGlobal('React', React));
+  afterEach(() => vi.unstubAllGlobals());
+  it('presents an isolated Warehouse Supervisor as scoped Warehouse authority, not an Operations Lead', () => {
+    const roles: Partial<UserRoles> = { core: ['staff'], warehouse: ['warehouse_supervisor'] };
+    const before = structuredClone(roles);
+    const result = resolvePersonaPresentation(profile(), roles);
+    expect(result.title).toBe('Warehouse Supervisor');
+    expect(result.department).toBe('Warehouse operations');
+    expect(result.responsibility).toBeUndefined();
+    expect(result.authority).toEqual([{ module: 'warehouse', moduleLabel: 'Warehouse', role: 'warehouse_supervisor', label: 'Warehouse Supervisor' }]);
+    for (const compact of [false, true]) {
+      const html = renderToStaticMarkup(createElement(PersonaContext, { profile: profile(), userRoles: roles, compact }));
+      expect(html).toContain('Warehouse Supervisor');
+      expect(html).toContain('Warehouse operations');
+      expect(html).not.toContain('Operations Lead');
+    }
+    expect(roles).toEqual(before);
+  });
+
+  it('preserves a genuine custom supervisor title without inventing an Operations persona', () => {
+    const result = resolvePersonaPresentation(profile('Regional Warehouse Supervisor'), {
+      core: ['staff'], warehouse: ['warehouse_supervisor'],
+    });
+    expect(result.title).toBe('Regional Warehouse Supervisor');
+    expect(result.department).toBe('Warehouse operations');
+    expect(result.responsibility).toBeUndefined();
+  });
+
+  it.each(['warehouse_supervisor', 'logistics_supervisor'])('retains the combined Operations Lead presentation for %s plus Procurement approver', (role) => {
+    const result = resolvePersonaPresentation(profile(), { core: ['staff'], warehouse: [role], procurement: ['approver'] });
+    expect(result.title).toBe('Operations Lead');
+    expect(result.department).toBe('Operations');
+  });
+
   it.each(personas)("resolves the canonical $title persona", (persona) => {
     const result = resolvePersonaPresentation(
       { ...profile(), kind: persona.kind ?? "employee" },

@@ -19,19 +19,27 @@ const policyFile = new URL('../../supabase/migrations/20260815154324_legal_vendo
 const policyStart = 'create or replace function private.legal_tailored_requirement_set(profile jsonb)';
 export const VENDOR_CHECKLIST_MANIFEST = Object.freeze({ version: 1, policyId: 'vendor-accreditation', policyVersion: '2025',
   migrationVersion: '20260815154324',
-  sourceSha256: 'de1e09b298a2ed3b61fc16debe84c007aaf2bc042320b63450f7b36ca2223c1a',
+  sourceSha256: '4ed03ca4dc21a9d50c37b3e9a26163595fc4d330512c4f65538cdc8cbd164728',
   rowsSha256: '0f934381d654879f1efb8744c917f259d146b77417c4e6178cc11e36ec92876d' });
 let policyPromise;
+
+export function extractAuthoritativeVendorChecklistSql(source) {
+  // Normalize before locating the LF delimiter so CRLF cannot leave a trailing CR.
+  source = source.replaceAll('\r\n', '\n');
+  check(!source.includes('\r'), 'Authoritative checklist source contains lone carriage return');
+  const start = source.indexOf(policyStart), end = source.indexOf('\nrevoke all on function private.legal_tailored_requirement_set', start);
+  check(start >= 0 && end > start, 'Authoritative checklist source not found');
+  const sql = source.slice(start, end);
+  check(hash(sql) === VENDOR_CHECKLIST_MANIFEST.sourceSha256, 'Checklist manifest SQL source pin mismatch');
+  return sql;
+}
 
 // Execute the real, pure SQL policy selector locally, not a hand-maintained
 // shortened checklist. This is source-derived fixture evidence, not a live DDL attestation.
 export async function loadAuthoritativeVendorChecklist() {
   policyPromise ??= (async () => {
     const source = await readFile(policyFile, 'utf8');
-    const start = source.indexOf(policyStart), end = source.indexOf('\nrevoke all on function private.legal_tailored_requirement_set', start);
-    check(start >= 0 && end > start, 'Authoritative checklist source not found');
-    const sql = source.slice(start, end).replaceAll('\r\n', '\n');
-    check(hash(sql) === VENDOR_CHECKLIST_MANIFEST.sourceSha256, 'Checklist manifest SQL source pin mismatch');
+    const sql = extractAuthoritativeVendorChecklistSql(source);
     const { PGlite } = await import('@electric-sql/pglite');
     const db = new PGlite();
     try {
