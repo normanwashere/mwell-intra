@@ -9,7 +9,7 @@
 // core.assert_document_valid function in migration 20260706160000.
 
 import { useState, type ChangeEvent } from 'react';
-import { Icon, useToast } from '@intra/ui';
+import { Icon, useToast, userFacingError } from '@intra/ui';
 import type { RequirementChecklistItem } from '../types';
 import { useAccreditationDocs } from '../localStore';
 
@@ -39,23 +39,31 @@ export function DocumentUploader({
   const [file, setFile] = useState<File | null>(null);
   const [expiresAt, setExpiresAt] = useState('');
   const [busy, setBusy] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  function reportError(message: string) {
+    setUploadError(userFacingError(message));
+    error(message);
+  }
 
   function onPick(e: ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     setFile(f ?? null);
+    setUploadError(null);
   }
 
   async function handleUpload() {
+    setUploadError(null);
     if (!file) {
-      error('Pick a file to upload first.');
+      reportError('Pick a file to upload first.');
       return;
     }
     if (!ALLOWED_MIME.has(file.type)) {
-      error(`Unsupported file type (${file.type || 'unknown'}). Allowed: JPEG, PNG, WebP, PDF.`);
+      reportError(`Unsupported file type (${file.type || 'unknown'}). Allowed: JPEG, PNG, WebP, PDF.`);
       return;
     }
     if (file.size > MAX_BYTES) {
-      error(`File is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Max 10 MB.`);
+      reportError(`File is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Max 10 MB.`);
       return;
     }
     setBusy(true);
@@ -75,7 +83,7 @@ export function DocumentUploader({
       });
       onDone({ id: doc.id, filename: doc.filename });
     } catch (e) {
-      error(e instanceof Error ? e.message : 'Could not read the file.');
+      reportError(e instanceof Error ? e.message : 'Could not read the file.');
     } finally {
       setBusy(false);
     }
@@ -121,10 +129,11 @@ export function DocumentUploader({
         </p>
       </div>
 
+      {uploadError && <p role="alert" className="text-sm text-rose-700 dark:text-rose-300 break-words">{uploadError}</p>}
       <div className="flex justify-end gap-2 pt-2">
         <button
           type="button"
-          onClick={() => setFile(null)}
+          onClick={() => { setFile(null); setUploadError(null); }}
           disabled={busy || !file}
           className="btn-ghost"
         >

@@ -10,6 +10,8 @@ Prepared after the `05b2326` sourcing observation: guidance follows the recorded
 
 Current version-2 learning shows the verified role context for **Procurement Admin**, **Procurement Finance** and **Vendor Portal**. These labels identify existing assignments and certificates; they do not add authority, complete learning or certify payment release. Unrecognized curricula or versions remain unidentified. Vendor onboarding shows a loading state while the session is restored, then checks the resolved account before displaying its learning.
 
+Vendor accreditation accepts original JPEG, PNG, WebP or PDF files up to 10 MB. If an upload fails, the message stays beside the upload controls and your selected file remains available. Follow the message; if the result is uncertain, check the case's document list before uploading again. Uploading documents does not submit the application or complete Legal review.
+
 ## Warehouse Access Recovery
 
 Returning to a browser tab should keep the open form while the app successfully rechecks the same user's access. **Checking warehouse access** means verification is still running. **Could not verify warehouse access** means the check did not finish: check your connection, then choose **Retry access**. Retry checks permissions only; it does not submit, approve or replay your work.

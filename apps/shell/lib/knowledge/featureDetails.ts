@@ -256,7 +256,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Start or resume vendor requirement",
           "Wait for the session and assigned learning to load, then open the next accreditation requirement. Current published Vendor Portal version-2 learning keeps its verified role label; a loading screen is not a completed checklist.",
           "The requirement must belong to that vendor's current assignment.",
-          "Progress is recorded for the signed-in vendor only.",
+          "Progress is recorded for the signed-in vendor only. Accreditation document uploads remain separate: a failed upload keeps its message and selected file visible. Check the case document list before retrying an uncertain result; file selection is not application submission.",
         ),
         control(
           "Return to vendor portal",

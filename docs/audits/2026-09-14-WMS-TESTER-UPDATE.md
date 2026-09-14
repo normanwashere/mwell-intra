@@ -14,11 +14,11 @@ At the latest deployment check, UAT is on **05b2326** (11:07 UTC). Please leave 
 - Supervisor and combined-role onboarding layouts at desktop and mobile widths, including task search, selection and Back.
 - Sourcing opens with the correct 5:00 PM deadline in both views. Earlier unchanged Save/reload checks passed; invitations, evaluation and award were not tested in that check.
 - Logistics submitted a synthetic count and a different supervisor reviewed its image and approved it. Stock changed from **5 to 4**, once. Mobile review of the approved record also passed; this was not a physical count or mobile submission.
-- All **1,136 Warehouse regression tests** passed on the released source. CI194 preparation and all six route jobs passed; transaction tests are still running. Screenshot review found two vendor captures still loading, so those are not clean visual passes.
+- All **1,136 Warehouse regression tests** passed on the released source. CI194 preparation and all six route jobs passed, but both transaction runs stopped at vendor document upload. Each passed 46/48 workflows; cleanup passed. Two vendor screenshots were still loading, so those are not clean visual passes.
 
 ## Next Update
 
-Prepared for the next release: sourcing guidance that matches the event's stage; correct Procurement Admin, Finance and Vendor learning labels; and a fix for the brief vendor access-denied message while signing in. The screenshot audit will also reject loading or mismatched captures. Permissions and workflow steps stay the same. The updated Learning suite passed **337 tests**, and replenishment checks passed **144 tests** from a clean checkout.
+Prepared for the next release: stage-appropriate sourcing guidance, correct learning role labels, and a fix for the brief vendor access-denied message during sign-in. We also fixed the PDF conversion that blocked vendor uploads and added a message that stays visible when upload fails. Permissions, workflow steps and browser security stay the same. Local checks passed **337 Learning tests**, **237 Legal tests** and **144 replenishment tests**; live reruns still need to confirm the fixes.
 
 Mobile replenishment completion, additional return branches, live **Finish review**, and full certification remain open. Automated tests do not replace real-user or device acceptance. **SMTP remains untouched.**
 

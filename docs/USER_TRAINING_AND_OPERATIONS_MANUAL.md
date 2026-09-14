@@ -173,6 +173,8 @@ For the stage-guidance correction prepared after `05b2326`, reopen the same sour
 
 Check current version-2 assignment and certificate labels against the learner's actual Procurement Admin, Procurement Finance or Vendor Portal scope. Labels do not change progress, activate access or prove payment release; unknown curricula and versions remain unidentified. Vendor onboarding waits for the session to resolve before deciding whether the account belongs in that workspace. A loading capture is not evidence of completed onboarding.
 
+For vendor documents, use an original JPEG, PNG, WebP or PDF of at most 10 MB. A failed upload leaves a visible message and retains the selected file. When the outcome is uncertain, check the case document list before retrying. Verify document registration, then application submission, then the separate Legal handoff; these are distinct steps.
+
 Include an account with several scoped roles in onboarding rehearsal. Read each certification's module and role alongside its capability, status and validity. Similar names must remain separate when their authority differs. Historical curriculum context may be unavailable; escalate it rather than treating the label as an access change. A screenshot with all requirements already completed proves the completed view only, not a fresh orientation or assessment attempt.
 
 For vendors, the candidate evidence-responsibility review is training only. It must never be presented as a signature, legal acknowledgment, document upload, application submission, or accreditation decision. The new local exercise requires a reviewed versioned curriculum publication before trainers can claim it is available in live UAT.

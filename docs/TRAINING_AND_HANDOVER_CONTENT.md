@@ -20,6 +20,8 @@ Add a read-only stage-advice check for the correction prepared after `05b2326`: 
 
 For verified version-2 curricula, compare assignment and certificate labels with the learner's Procurement Admin, Procurement Finance or Vendor Portal role. Preserve the recorded progress; these presentation aliases neither complete learning nor grant access. Unknown versions remain unknown. Demonstrate vendor session loading followed by resolved access, and capture the settled page rather than a loading screen. A previously completed checklist is not a new first-time learning run.
 
+Demonstrate an accreditation PDF upload and confirm its registered document before submitting the application. Show the persistent inline error for an invalid file and that the selection remains available. If a result is uncertain, check the document list before retrying. Legal review remains a separate handoff; file selection alone proves neither upload nor submission.
+
 ## Warehouse Access Recovery Handover
 
 Teach verification failure separately from confirmed permission denial. **Checking warehouse access** is a pending check. **Could not verify warehouse access** offers **Retry access** after checking the connection. Retry only re-reads current permissions; it never replays a receiving, approval or stock transaction. **No warehouse access** follows a completed check without the required access and should be escalated if unexpected.

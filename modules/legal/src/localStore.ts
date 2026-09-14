@@ -124,7 +124,22 @@ function storageSafeSegment(value: string): string {
 }
 
 async function uploadLiveAccreditationDocument(client: LiveClient, input: UploadDocInput): Promise<string | undefined> {
-  if (!input.dataUrl?.startsWith('data:')) return input.storagePath;
+  if (!input.dataUrl) return input.storagePath;
+  const invalidFile = 'The selected file could not be read. Choose the original JPEG, PNG, WebP or PDF file again.';
+  const maxBytes = 10 * 1024 * 1024;
+  if (!Number.isInteger(input.sizeBytes) || input.sizeBytes < 0) throw new Error(invalidFile);
+  if (input.sizeBytes > maxBytes || input.dataUrl.length > Math.ceil(maxBytes / 3) * 4 + 80) {
+    throw new Error('File is too large. Max 10 MB.');
+  }
+  const match = /^data:(application\/pdf|image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/]*={0,2})$/.exec(input.dataUrl);
+  if (!match || match[1] !== input.mimeType || match[2]!.length % 4 !== 0) throw new Error(invalidFile);
+  let binary: string;
+  try { binary = atob(match[2]!); } catch { throw new Error(invalidFile); }
+  if (btoa(binary) !== match[2] || binary.length !== input.sizeBytes) throw new Error(invalidFile);
+  // FileReader data is already local; fetching its data URL violates connect-src.
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const blob = new Blob([bytes], { type: input.mimeType });
 
   const objectPath =
     input.storagePath ??
@@ -137,7 +152,6 @@ async function uploadLiveAccreditationDocument(client: LiveClient, input: Upload
       `${globalThis.crypto?.randomUUID?.() ?? Date.now()}_${storageSafeSegment(input.filename)}`,
     ].join('/');
 
-  const blob = await fetch(input.dataUrl).then((res) => res.blob());
   const { error } = await client.storage.from('documents').upload(objectPath, blob, {
     contentType: input.mimeType,
     upsert: false,
