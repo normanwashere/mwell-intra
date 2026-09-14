@@ -22,7 +22,8 @@ import {
 import { cleanupRun } from "./live-e2e-cleanup.mjs";
 import { createReceivingAuditEvidence } from "./receiving-audit-evidence.mjs";
 import { createPaymentAuditEvidence, evidencePdf } from "./payment-audit-evidence.mjs";
-import { cleanupCertificationRequestEvidence, cleanupExcessCustodyStorage, gateCertificationRequestCleanup } from "./cleanup-uat-live-run.mjs";
+import { cleanupCertificationRequestEvidence, cleanupExcessCustodyStorage, gateCertificationRequestCleanup,
+  prepareTask3ApprovalMembership, changeTask3ApprovalMembership } from "./cleanup-uat-live-run.mjs";
 import { resolveSharedUatPassword } from "./provision-uat-intra-test-users.mjs";
 import { certifyPoLineIdentity, certifyControlledExceptionDenial } from "./receipt-quality-probes.mjs";
 import { auditPersonas, assertAuditIdentityScope, criticalRoutes } from './uat-audit-identities.mjs';
@@ -2607,6 +2608,10 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
     .limit(1);
   if (approverError || !approverProfiles?.[0])
     throw new Error("Procurement amendment approver profile is required.");
+  const approvalMembershipScope = { runId: auditRunId, viewport: marker.slice(auditRunId.length + 1),
+    buildId: process.env.GITHUB_SHA ?? process.env.AUDIT_EXPECTED_COMMIT, project: projectRef };
+  const approvalMembershipFile = path.join(auditEvidenceDir, `approval-membership-${marker}.json`);
+  const approvalMembership = await prepareTask3ApprovalMembership({ client, file: approvalMembershipFile, scope: approvalMembershipScope });
   const ids = {
     vendor: crypto.randomUUID(),
     product: `${marker}-product`,
@@ -2651,8 +2656,8 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
     policyExpired: `${marker}-policy-expired`,
     expiredVendor: crypto.randomUUID(),
     accreditationCase: `${marker}-temporary-clearance-case`,
-    activeApprovalRole: `task3_ref_${crypto.randomUUID().replaceAll("-", "")}`,
-    inactiveApprovalRole: `task3_inactive_${crypto.randomUUID().replaceAll("-", "")}`,
+    activeApprovalRole: approvalMembership.roles[0],
+    inactiveApprovalRole: approvalMembership.roles[1],
     amendmentDoaMatrix: crypto.randomUUID(),
     amendmentDoaAssignments: [
       crypto.randomUUID(),
@@ -2663,17 +2668,6 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
     departmentCostCenter: crypto.randomUUID(),
     departmentCode: `audit.x${crypto.randomUUID().replaceAll("-", "")}`,
   };
-  const { data: approvalGroup, error: approvalGroupError } = await client
-    .schema("core")
-    .from("approval_groups")
-    .select("member_roles")
-    .eq("entity_type", "warehouse_stock_change")
-    .eq("group_code", "logistics_supervisor")
-    .single();
-  if (approvalGroupError || !approvalGroup)
-    throw new Error(
-      `Warehouse Supervisor approval group is required: ${approvalGroupError?.message ?? "missing"}`,
-    );
   const fixture = {
     marker,
     actualDeliveryDate: new Date().toISOString().slice(0, 10),
@@ -2696,7 +2690,8 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
       ids.qualityProbePo,
       ids.collisionPo,
     ],
-    approvalGroupOriginalRoles: approvalGroup.member_roles ?? [],
+    approvalMembershipFile,
+    approvalMembershipScope,
     cleanupActivityEntityIds: [],
     cleanupExceptionIds: [],
     cleanupDecisionIds: [],
@@ -2739,24 +2734,8 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
       role: ids.inactiveApprovalRole,
     },
   ]);
-  const { error: groupUpdateError } = await client
-    .schema("core")
-    .from("approval_groups")
-    .update({
-      member_roles: [
-        ...new Set([
-          ...fixture.approvalGroupOriginalRoles,
-          ids.activeApprovalRole,
-          ids.inactiveApprovalRole,
-        ]),
-      ],
-    })
-    .eq("entity_type", "warehouse_stock_change")
-    .eq("group_code", "logistics_supervisor");
-  if (groupUpdateError)
-    throw new Error(
-      `Approval-group role fixture failed: ${groupUpdateError.message}`,
-    );
+  fixture.approvalMembershipSetup = await changeTask3ApprovalMembership({ client,
+    file: approvalMembershipFile, scope: approvalMembershipScope, mode: 'add' });
   await insertAuditRows(client, "core", "vendors", [
     {
       id: ids.vendor,
@@ -6049,6 +6028,8 @@ async function task3RejectStalePaymentReadiness(page, fixture) {
 async function assertTask3ZeroResidualRows(fixture) {
   const { client, ids, marker } = fixture;
   const { poIds } = fixture;
+  fixture.approvalMembershipVerification = await changeTask3ApprovalMembership({ client,
+    file: fixture.approvalMembershipFile, scope: fixture.approvalMembershipScope, mode: 'verify' });
   const checks = [
     [
       "core.vendors",
@@ -6466,16 +6447,8 @@ async function cleanupTask3ReceiptFixture(fixture) {
         `${schema}.${table} Task 3 cleanup failed: ${error.message}`,
       );
   };
-  const { error: restoreGroupError } = await client
-    .schema("core")
-    .from("approval_groups")
-    .update({ member_roles: fixture.approvalGroupOriginalRoles })
-    .eq("entity_type", "warehouse_stock_change")
-    .eq("group_code", "logistics_supervisor");
-  if (restoreGroupError)
-    throw new Error(
-      `Approval-group role cleanup failed: ${restoreGroupError.message}`,
-    );
+  fixture.approvalMembershipCleanup = await changeTask3ApprovalMembership({ client,
+    file: fixture.approvalMembershipFile, scope: fixture.approvalMembershipScope, mode: 'remove' });
   await fixture.receivingEvidence.cleanup();
   const { data: receiptRows, error: receiptError } = await client
     .schema("warehouse")
@@ -6790,6 +6763,8 @@ async function cleanupTask3ReceiptFixture(fixture) {
     marker,
     removed: true,
     remaining: 0,
+    approvalMembership: { setup: fixture.approvalMembershipSetup, cleanup: fixture.approvalMembershipCleanup,
+      verification: fixture.approvalMembershipVerification },
   };
 }
 

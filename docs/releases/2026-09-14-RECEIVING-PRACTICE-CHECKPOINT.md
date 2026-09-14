@@ -17,6 +17,8 @@ The existing-event sourcing correction extends the existing sourcing read with e
 
 ## Evidence
 
+The next certification source release records the exact temporary approval-group membership before test setup and passes that evidence to independent cleanup. Cleanup uses a compare-and-swap update, preserves unrelated concurrent members, and verifies absence afterward. Missing evidence or an uncertain update blocks cleanup credit instead of reporting success. Independent review passed 255 offline checks with one existing live-contract skip; the parent reran 70 focused regressions successfully. These checks do not replace a completed live CI run. SMTP behavior is unchanged.
+
 The live isolated Warehouse Operator completed five of nine assigned requirements on build `f8d437d`. Receiving practice then stopped because attempt `9eddf857-a376-4e03-b034-10c4ee3ac326` contained a validated `complete` checkpoint but lacked the published `draft-saved` checkpoint. Its status remained `in_progress`; it was not manually certified or resubmitted.
 
 Local checks: 1,103 Warehouse tests, 299 Learning tests and 377 Procurement tests passed. Three new receiving regression cases failed before the adapter fix and passed afterward. The emergency-access copy regression also failed before its fix. Warehouse, Learning and Procurement typechecks passed; 56 handbook/release-documentation tests passed. These are local results, not live completion evidence.

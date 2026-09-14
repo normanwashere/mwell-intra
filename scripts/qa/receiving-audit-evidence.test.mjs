@@ -33,20 +33,14 @@ test('actual fixture cleanup propagates storage failure before deleting receivin
   const ast = ts.createSourceFile('runner.mjs', runner, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
   const definition = ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'cleanupTask3ReceiptFixture');
   assert.ok(definition);
-  const cleanup = new Function(`${definition.getText(ast)}; return cleanupTask3ReceiptFixture;`)();
-  let restored = false;
+  let detached = false;
+  const cleanup = new Function('changeTask3ApprovalMembership', `${definition.getText(ast)}; return cleanupTask3ReceiptFixture;`)(
+    async ({ mode }) => { assert.equal(mode, 'remove'); detached = true; return { remaining: 0 }; });
   const failure = new Error('Receiving evidence storage cleanup failed');
-  const group = {
-    update() { restored = true; return this; },
-    eq() { return this; },
-  };
-  const client = { schema(name) {
-    assert.equal(name, 'core', 'Receiving discovery/deletion must not start after a storage failure');
-    return { from(table) { assert.equal(table, 'approval_groups'); return group; } };
-  } };
-  await assert.rejects(cleanup({ client, marker, ids: {}, poIds: [], approvalGroupOriginalRoles: [],
+  const client = { schema() { assert.fail('Receiving discovery/deletion must not start after a storage failure'); } };
+  await assert.rejects(cleanup({ client, marker, ids: {}, poIds: [],
     receivingEvidence: { async cleanup() { throw failure; } } }), error => error === failure);
-  assert.ok(restored, 'Restore shared group configuration even if storage cleanup fails');
+  assert.ok(detached, 'Detach owned membership even if storage cleanup fails');
 });
 
 test('both receipt race probes prepare evidence before launching competing RPCs', () => {

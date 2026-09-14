@@ -1,4 +1,6 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile, open, lstat, readFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -8,6 +10,121 @@ import { assertDeterministicAuditRunId } from "./uat-ci-run-id.mjs";
 import { createReceivingAuditEvidence } from "./receiving-audit-evidence.mjs";
 
 const TRANSACTION_VIEWPORTS = new Set(["desktop-1440", "mobile-390"]);
+
+const MEMBERSHIP_GROUP = Object.freeze({ entity_type: 'warehouse_stock_change', group_code: 'logistics_supervisor' });
+const membershipHash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+const validMembers = members => Array.isArray(members) && members.length <= 256
+  && members.every(role => typeof role === 'string' && role.length > 0 && role.length <= 128 && !/[\x00-\x1f]/.test(role));
+
+function membershipRoles(scope) {
+  buildRunScope(scope.runId, scope.viewport);
+  if (!/^[a-f0-9]{40}$/.test(scope.buildId) || !/^[a-z]{20}$/.test(scope.project))
+    throw new Error('Approval membership requires exact build and project');
+  const suffix = membershipHash([scope.project, scope.runId, scope.viewport, scope.buildId]).slice(0, 32);
+  return [`task3_ref_${suffix}`, `task3_inactive_${suffix}`];
+}
+
+function membershipQuery(client) {
+  return client.schema('core').from('approval_groups');
+}
+
+function boundMembership(query) {
+  return query.eq('entity_type', MEMBERSHIP_GROUP.entity_type).eq('group_code', MEMBERSHIP_GROUP.group_code)
+    .abortSignal(AbortSignal.timeout(15000));
+}
+
+async function readMembership(client) {
+  const { data, error } = await boundMembership(membershipQuery(client).select('entity_type,group_code,member_roles')).single();
+  if (error || data?.entity_type !== MEMBERSHIP_GROUP.entity_type || data?.group_code !== MEMBERSHIP_GROUP.group_code || !validMembers(data?.member_roles))
+    throw new Error('Approval membership readback missing or malformed');
+  return data.member_roles;
+}
+
+export async function prepareTask3ApprovalMembership({ client, file, scope }) {
+  const roles = membershipRoles(scope);
+  const before = await readMembership(client);
+  if (roles.some(role => before.includes(role))) throw new Error('Approval membership fixture keys already present');
+  const intent = { version: 1, kind: 'task3-approval-membership-intent',
+    runId: scope.runId, viewport: scope.viewport, buildId: scope.buildId, project: scope.project,
+    group: MEMBERSHIP_GROUP, roles, before, createdAt: new Date().toISOString() };
+  await mkdir(path.dirname(file), { recursive: true });
+  const handle = await open(file, 'wx');
+  try { await handle.writeFile(`${JSON.stringify(intent)}\n`); await handle.sync(); } finally { await handle.close(); }
+  return intent;
+}
+
+async function loadMembershipIntent(file, scope) {
+  const roles = membershipRoles(scope);
+  if (typeof file !== 'string' || !file) throw new Error('Approval membership intent required');
+  const stat = await lstat(file);
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 65536) throw new Error('Invalid approval membership intent file');
+  const intent = JSON.parse(await readFile(file, 'utf8'));
+  if (!isDeepStrictEqual(Object.keys(intent).sort(), ['version', 'kind', 'runId', 'viewport', 'buildId', 'project', 'group', 'roles', 'before', 'createdAt'].sort())
+    || intent.version !== 1 || intent.kind !== 'task3-approval-membership-intent'
+    || ['runId', 'viewport', 'buildId', 'project'].some(key => intent[key] !== scope[key])
+    || !isDeepStrictEqual(intent.group, MEMBERSHIP_GROUP) || !isDeepStrictEqual(intent.roles, roles)
+    || !validMembers(intent.before) || roles.some(role => intent.before.includes(role))
+    || typeof intent.createdAt !== 'string' || !Number.isFinite(Date.parse(intent.createdAt)) || Date.parse(intent.createdAt) > Date.now())
+    throw new Error('Approval membership intent binding mismatch');
+  return intent;
+}
+
+export async function changeTask3ApprovalMembership({ client, file, scope, mode }) {
+  if (!['add', 'remove', 'verify'].includes(mode)) throw new Error('Invalid approval membership operation');
+  const intent = await loadMembershipIntent(file, scope);
+  const evidenceFile = `${file}.${mode}-${randomUUID()}.jsonl`;
+  const handle = await open(evidenceFile, 'wx');
+  const intentSha256 = membershipHash(intent);
+  let sequence = 0;
+  const record = async (event, details = {}) => {
+    await handle.writeFile(`${JSON.stringify({ version: 1, event, sequence: sequence++, mode, intentSha256,
+      runId: scope.runId, viewport: scope.viewport, buildId: scope.buildId, project: scope.project,
+      at: new Date().toISOString(), ...details })}\n`);
+    await handle.sync();
+  };
+  try {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const before = await readMembership(client);
+      const after = mode === 'add' ? [...before, ...intent.roles.filter(role => !before.includes(role))]
+        : mode === 'remove' ? before.filter(role => !intent.roles.includes(role)) : before;
+      if (!validMembers(after)) throw new Error('Approval membership exceeds bounded array size');
+      await record('cas-intent', { attempt, before, after });
+      if (!isDeepStrictEqual(before, after)) {
+        let result;
+        try {
+          // PostgREST text[] equality supplies a row-level CAS, not a stale whole-array restore.
+          const literal = `{${before.map(role => `"${role.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`).join(',')}}`;
+          result = await boundMembership(membershipQuery(client).update({ member_roles: after }))
+            .eq('member_roles', literal).select('entity_type,group_code,member_roles');
+          if (result.error || !Array.isArray(result.data) || result.status !== 200
+            || result.data.length > 1) throw new Error('Unknown update response');
+        } catch {
+          await record('unknown-outcome');
+          try { await record('unknown-readback', { memberRoles: await readMembership(client) }); }
+          catch { await record('unknown-readback-failed'); }
+          throw new Error('Approval membership update outcome unknown; no replay');
+        }
+        if (result.data.length === 0) { await record('cas-no-match', { attempt }); continue; }
+        const row = result.data[0];
+        if (row.entity_type !== MEMBERSHIP_GROUP.entity_type || row.group_code !== MEMBERSHIP_GROUP.group_code
+          || !isDeepStrictEqual(row.member_roles, after)) throw new Error('Approval membership update readback mismatch');
+        await record('cas-returned', { memberRoles: row.member_roles });
+      }
+      const readback = await readMembership(client);
+      const remaining = mode === 'add' ? intent.roles.filter(role => !readback.includes(role)).length
+        : readback.filter(role => intent.roles.includes(role)).length;
+      await record('readback', { memberRoles: readback, remaining });
+      if (remaining !== 0) throw new Error('Approval membership residue remains');
+      await record('verified', { remaining });
+      return { entity: 'core.approval_groups:run-role-membership', removed: mode === 'remove' ? before.length - after.length : 0,
+        remaining, intentSha256, evidenceFile, roles: intent.roles, before, after, readback };
+    }
+    throw new Error('Approval membership CAS conflicts exhausted');
+  } catch (error) {
+    await record('stopped');
+    throw error;
+  } finally { await handle.close(); }
+}
 
 // List all pages before deleting; offsets must not shift during discovery.
 async function listFlatStorageFolder(storage, folder, validName) {
@@ -182,6 +299,7 @@ export async function cleanupAndVerifyRun({
   viewport,
   client,
   env = process.env,
+  approvalMembershipFile,
 }) {
   assertApprovedMutationTarget({
     appEnv: env.APP_ENV,
@@ -373,7 +491,7 @@ export async function cleanupAndVerifyRun({
   const departmentRequestIds = unique(
     departmentRequestRows.map((row) => row.id),
   );
-  const runRoles = unique(roleRows.map((row) => row.role));
+  let runRoles = unique(roleRows.map((row) => row.role));
   const profileIds = unique(profileRows.map((row) => row.id));
 
   const [receiptRows, amendmentRows, stockRequestRows] = await Promise.all([
@@ -464,6 +582,16 @@ export async function cleanupAndVerifyRun({
   // Fail closed before removing discoverability rows, including on a failed lookup.
   if (results.some(item => item.error)) throw new Error("Cleanup discovery failed; evidence and parent rows retained");
   try {
+    const membership = await changeTask3ApprovalMembership({ client: database, file: approvalMembershipFile,
+      scope: { runId, viewport, buildId: env.GITHUB_SHA ?? env.AUDIT_EXPECTED_COMMIT, project: env.SUPABASE_PROJECT_REF }, mode: 'remove' });
+    results.push(membership);
+    runRoles = unique([...runRoles, ...membership.roles]);
+  } catch (error) {
+    results.push({ entity: 'core.approval_groups:run-role-membership', removed: 0, remaining: null,
+      error: error instanceof Error ? error.message : String(error) });
+    return { runId, viewport, marker: scope.marker, completedAt: new Date().toISOString(), complete: false, results };
+  }
+  try {
     // A fresh helper discovers crash orphans from the exact run folder without
     // requiring surviving receipt rows or the original process's seed registry.
     const receivingEvidence = createReceivingAuditEvidence(database, scope.marker);
@@ -502,47 +630,6 @@ export async function cleanupAndVerifyRun({
       ...departmentRequestIds,
     ].map(String),
   );
-
-  if (runRoles.length) {
-    try {
-      const { data: group, error } = await database
-        .schema("core")
-        .from("approval_groups")
-        .select("member_roles")
-        .eq("entity_type", "warehouse_stock_change")
-        .eq("group_code", "logistics_supervisor")
-        .single();
-      if (error) throw new Error(error.message);
-      const memberRoles = (group?.member_roles ?? []).filter(
-        (role) => !runRoles.includes(role),
-      );
-      const { error: updateError } = await database
-        .schema("core")
-        .from("approval_groups")
-        .update({ member_roles: memberRoles })
-        .eq("entity_type", "warehouse_stock_change")
-        .eq("group_code", "logistics_supervisor");
-      if (updateError) throw new Error(updateError.message);
-      results.push({
-        entity: "core.approval_groups:run-role-membership",
-        removed: runRoles.length,
-        remaining: 0,
-      });
-    } catch (error) {
-      results.push({
-        entity: "core.approval_groups:run-role-membership",
-        removed: 0,
-        remaining: null,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  } else {
-    results.push({
-      entity: "core.approval_groups:run-role-membership",
-      removed: 0,
-      remaining: 0,
-    });
-  }
 
   await removeWhen(
     decisionIds,
@@ -985,6 +1072,14 @@ export async function cleanupAndVerifyRun({
     });
   }
 
+  try {
+    const verification = await changeTask3ApprovalMembership({ client: database, file: approvalMembershipFile,
+      scope: { runId, viewport, buildId: env.GITHUB_SHA ?? env.AUDIT_EXPECTED_COMMIT, project: env.SUPABASE_PROJECT_REF }, mode: 'verify' });
+    results.push({ ...verification, entity: 'core.approval_groups:final-membership-readback' });
+  } catch (error) {
+    results.push({ entity: 'core.approval_groups:final-membership-readback', remaining: null,
+      error: error instanceof Error ? error.message : String(error) });
+  }
   const complete = results.every((item) => item.remaining === 0 && !item.error);
   return {
     runId,
@@ -1010,7 +1105,7 @@ async function main() {
     "test-results/cleanup.json";
   let report;
   try {
-    report = await cleanupAndVerifyRun({ runId, viewport });
+    report = await cleanupAndVerifyRun({ runId, viewport, approvalMembershipFile: argument('--approval-membership-evidence') });
   } catch (error) {
     report = {
       runId: runId ?? null,

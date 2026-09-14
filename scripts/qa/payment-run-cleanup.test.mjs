@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import * as cleanupTools from './cleanup-uat-live-run.mjs';
-import { cleanupAndVerifyRun } from './cleanup-uat-live-run.mjs';
+import { cleanupAndVerifyRun as actualCleanupAndVerifyRun } from './cleanup-uat-live-run.mjs';
 
 const runId = 'QA-20260905-00003C1F';
 const viewport = 'desktop-1440';
@@ -13,7 +16,26 @@ const custodyPath = `excess-custody/${custodyId}/aaaaaaaa-bbbb-4ccc-8ddd-0000000
 const paymentPath = `request/${requestId}/att_abc-${marker}-invoice.pdf`;
 // Only passed to the target guard with an in-memory client; no network calls.
 const env = { APP_ENV: 'uat', NEXT_PUBLIC_SUPABASE_URL: 'https://abcdefghijklmnopqrst.supabase.co',
-  SUPABASE_PROJECT_REF: 'abcdefghijklmnopqrst', PRODUCTION_SUPABASE_PROJECT_REF: 'zyxwvutsrqponmlkjihg', POLICY_ALLOW_TEST_MUTATIONS: 'true' };
+  SUPABASE_PROJECT_REF: 'abcdefghijklmnopqrst', PRODUCTION_SUPABASE_PROJECT_REF: 'zyxwvutsrqponmlkjihg', POLICY_ALLOW_TEST_MUTATIONS: 'true', GITHUB_SHA: 'a'.repeat(40) };
+
+const membershipFiles = new WeakMap(), membershipRoots = [];
+test.after(async () => {
+  for (const root of membershipRoots) {
+    assert(path.resolve(root).startsWith(path.join(tmpdir(), 'payment-cleanup-membership-')));
+    await rm(root, { recursive: true, force: true });
+  }
+});
+async function cleanupAndVerifyRun(options) {
+  if (!membershipFiles.has(options.client)) {
+    const root = await mkdtemp(path.join(tmpdir(), 'payment-cleanup-membership-'));
+    membershipRoots.push(root);
+    const file = path.join(root, 'intent.json');
+    await cleanupTools.prepareTask3ApprovalMembership({ client: options.client, file,
+      scope: { runId, viewport, project: env.SUPABASE_PROJECT_REF, buildId: env.GITHUB_SHA } });
+    membershipFiles.set(options.client, file);
+  }
+  return actualCleanupAndVerifyRun({ ...options, approvalMembershipFile: membershipFiles.get(options.client) });
+}
 
 function fixture({ storageFailure = false, discoveryFailure = false, draft = false, requestDiscoveryFailure = false } = {}) {
   const tables = new Map(Object.entries({
@@ -46,16 +68,21 @@ function fixture({ storageFailure = false, discoveryFailure = false, draft = fal
         from(table) {
           const key = `${schema}.${table}`;
           const filters = [];
-          let remove = false;
+          let remove = false, single = false;
           let range;
           const query = {
             select() { return query; }, delete() { remove = true; return query; },
+            single() { single = true; return query; }, abortSignal() { return query; },
             order() { return query; }, range(start, end) { range = [start, end]; return query; },
             eq(field, value) { filters.push(row => row[field] === value); return query; },
             in(field, values) { filters.push(row => values.includes(row[field])); return query; },
             like(field, pattern) { filters.push(row => String(row[field] ?? '').startsWith(pattern.replace(/%$/, ''))); return query; },
             then(resolve, reject) {
               return Promise.resolve().then(() => {
+                if (table === 'approval_groups') {
+                  const group = { entity_type: 'warehouse_stock_change', group_code: 'logistics_supervisor', member_roles: ['warehouse_supervisor'] };
+                  return { data: single ? group : [group], error: null, count: 1 };
+                }
                 if (discoveryFailure && table === 'procurement_receipt_excess_custody' && !remove)
                   return { data: null, error: { message: 'discovery denied' } };
                 if (requestDiscoveryFailure && table === 'requests' && !remove)
