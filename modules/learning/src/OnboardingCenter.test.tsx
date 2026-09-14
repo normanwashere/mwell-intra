@@ -893,6 +893,52 @@ describe("OnboardingCenter", () => {
     },
   );
 
+  it.each([1, 2])("labels the verified Procurement admin v%s payment assignment and certificate without changing readiness", (version) => {
+    const curriculumId = "internal.role.procurement.admin.capability-practice.v1.curriculum";
+    const requirement = {
+      ...snapshot.curricula[0]!.requirements[1]!,
+      id: "payment-review-only",
+      title: "Review current payment pack independently",
+      prerequisiteIds: [],
+      capabilityOutcomes: [{ module: "procurement" as const, capability: "review_payment_readiness" }],
+    };
+    const observed: LearningSnapshot = {
+      ...snapshot,
+      curricula: [{
+        ...snapshot.curricula[0]!,
+        curriculum: { ...snapshot.curricula[0]!.curriculum, id: curriculumId, version, requirementIds: [requirement.id] },
+        requirements: [requirement],
+      }],
+      progress: [{ ...snapshot.progress[0]!, requirementId: requirement.id }],
+      certifications: [{ ...snapshot.certifications[0]!, curriculumId, curriculumVersion: version,
+        capability: { module: "procurement", capability: "review_payment_readiness" } }],
+      lockedCapabilities: [],
+    };
+    const before = structuredClone(observed);
+    const resume = vi.fn(), refreshAccess = vi.fn(), isLiveCapability = vi.fn().mockReturnValue(false);
+    renderCenter({ snapshot: observed, resume, refreshAccess, isLiveCapability });
+    expect(screen.getByText("Assigned to: Procurement / Procurement Admin")).toBeInTheDocument();
+    expect(screen.getByText("Procurement / Procurement Admin", { selector: "p.break-words" })).toBeInTheDocument();
+    expect(screen.getByText("Review Payment Readiness")).toBeInTheDocument();
+    expect(screen.getByText("Certification active")).toBeInTheDocument();
+    expect(observed).toEqual(before);
+    expect(resume).not.toHaveBeenCalled();
+    expect(refreshAccess).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["internal.role.procurement.admin.capability-practice.v1.curriculum", 3, "procurement"],
+    ["internal.role.procurement.procurement_officer.capability-practice.v1.curriculum", 2, "procurement"],
+    ["vendor.role.procurement.admin.capability-practice.v1.curriculum", 2, "procurement"],
+    ["internal.role.procurement.admin.capability-practice.v1.curriculum", 2, "warehouse"],
+    ["internal.role.procurement.admin.payment-readiness.v2.curriculum", 2, "procurement"],
+  ] as const)("does not infer a payment role from unverified %s v%s in %s", (curriculumId, curriculumVersion, module) => {
+    renderCenter({ snapshot: { ...snapshot, certifications: [{ ...snapshot.certifications[0]!,
+      curriculumId, curriculumVersion, capability: { module, capability: "review_payment_readiness" } }] } });
+    expect(screen.getByText(`${MODULES[module].label} / Role context unavailable`)).toBeInTheDocument();
+    expect(screen.getByText("Certification active")).toBeInTheDocument();
+  });
+
   it("does not guess role or expose assignment IDs for an unknown curriculum", () => {
     const { container } = renderCenter({
       snapshot: {

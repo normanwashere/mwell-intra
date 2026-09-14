@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { mkdtemp, readFile, readdir, rm, writeFile, link } from 'node:fs/promises';
 import { EventEmitter } from 'node:events';
+import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -9,6 +10,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { auditPersonas } from './uat-audit-identities.mjs';
 import { WMS_CHECKPOINTS, requiredWmsEvidence } from './wms-signoff-contract.mjs';
+import * as replenishmentRunner from './wms-replenishment-signoff-live.mjs';
 import { createManifest, validateManifest, prepareSql, readbackSql, cleanupInventorySql, prepare,
   assertRunPermission, assertActor, assertPayload, reconcile, executeJourney, newReport,
   classifyCliFailure, parseCliRows, main, authorizeBrowserRequest, reviewedReadRpc, createMcpReadback, MCP_BRIDGE_PROTOCOL, createPageErrorMonitor,
@@ -193,6 +195,10 @@ function proofFixture(binding) {
   return { bucket: 'procurement-requests', path: u.path, actorId: u.actorId, uploadStatus: 200, downloadSha256: u.sha256, downloadSizeBytes: u.sizeBytes,
     listedNames: binding.uploads.map(u => u.path.split('/').at(-1)), source: 'authenticated-owner-sdk-download+complete-prefix-list' };
 }
+function uploadReceiptFixture(binding) {
+  const u = binding.uploads.at(-1);
+  return { bucket: 'procurement-requests', path: u.path, actorId: u.actorId, uploadStatus: 200, source: 'intercepted-browser-upload' };
+}
 function harness(m) {
   const states = Object.fromEntries(m.cases.map(c => [c.viewport, initial(m, c)]));
   const calls = [], records = [];
@@ -233,11 +239,12 @@ function harness(m) {
       for (let i = 0; i < 2; i++) {
         await hooks.beforeUpload(copy(binding)); const u = uploadFixture(m, c, binding.requestId, i);
         states[c.viewport].rows.storage.push({ id: ids[i], bucket_id: 'procurement-requests', name: u.path, owner_id: ids[1], metadata: { size: u.sizeBytes, mimetype: 'application/pdf' } });
-        binding.uploads.push(u); await hooks.uploaded(copy(binding), proofFixture(binding));
+        binding.uploads.push(u); await hooks.uploaded(copy(binding), uploadReceiptFixture(binding));
       }
       binding.payload = payloadFixture(m, c, binding); await hooks.beforeHandoff(copy(binding));
       return adapter.command(c, role, 'handoff', { id: recommendationId, action: 'handoff', request: binding.payload });
     },
+    verifyEvidence: async (c, role, binding) => binding.uploads.map(u => ({ ...proofFixture(binding), path: u.path, downloadSha256: u.sha256, downloadSizeBytes: u.sizeBytes })),
     negative: async (c, role, payload) => {
       calls.push([c.viewport, role, `deny:${payload.action}`]);
       const status = states[c.viewport].rows.recommendations[0]?.status;
@@ -503,7 +510,7 @@ test('canonical RFQ guard accepts the actual wizard intendedResponses default, n
     const bad = copy(p); change(bad); assert.throws(() => assertCanonicalPayload(m, c, bad, b));
   }
 });
-for (const defect of ['early-bind-artifact', 'initial-bound-read', 'second-upload-read', 'revoked-before-upload', 'bad-download', 'skip-early-bind', 'skip-handoff-hook']) {
+for (const defect of ['early-bind-artifact', 'initial-bound-read', 'second-upload-read', 'revoked-before-upload', 'premature-byte-proof', 'skip-early-bind', 'skip-handoff-hook']) {
   test(`completion ${defect} stops before the next upload/command and never reaches mobile`, async () => {
     const m = manifest(), h = harness(m), read = h.adapter.read, complete = h.adapter.complete;
     if (defect === 'early-bind-artifact') h.adapter.record = async e => { if (e.kind === 'early-request-binding') throw new Error('disk failure'); };
@@ -513,7 +520,7 @@ for (const defect of ['early-bind-artifact', 'initial-bound-read', 'second-uploa
     h.adapter.complete = async (c, role, id, hooks) => {
       if (defect === 'revoked-before-upload') h.adapter.actor = async r => ({ ...proof(m, r), capabilities: { userCapabilities: {}, roleCapabilities: {} } });
       const wrapped = { ...hooks };
-      if (defect === 'bad-download') wrapped.uploaded = async (b, p) => hooks.uploaded(b, { ...p, downloadSha256: 'f'.repeat(64) });
+      if (defect === 'premature-byte-proof') wrapped.uploaded = async (b, p) => hooks.uploaded(b, { ...p, downloadSha256: 'f'.repeat(64) });
       if (defect === 'skip-early-bind') wrapped.beforeUpload = async () => {};
       if (defect === 'skip-handoff-hook') wrapped.beforeHandoff = async () => { throw new Error('handoff intent not recorded'); };
       return complete(c, role, id, wrapped);
@@ -630,6 +637,230 @@ test('route guard permits one separately armed confirmation but never submit, ap
   assert.throws(() => authorizeBrowserRequest(m, c, role, request, { ...arm, consumed: true }, 'offline'));
   assert.throws(() => authorizeBrowserRequest(m, c, roles[0], request, { ...arm, key: `${c.viewport}:${roles[0]}` }, 'offline'));
 });
+
+function postRouteFixture() {
+  const m = manifest(), c = m.cases[0], role = roles[1], requestId = `req_${ids[0]}`;
+  const arm = { key: `${c.viewport}:${role}`, rpc: 'confirm_route_decision', consumed: true,
+    payload: { request_id: requestId, expected_route_version: 0, requested_mode: 'competitive_bidding' } };
+  const data = { id: ids[1], request_id: requestId, status: 'confirmed', request_version: 1, confirmed_by: m.actors[role].id,
+    route: { status: 'derived', request_id: requestId, policy_profile_id: m.database.policyProfiles[0].id } };
+  const context = { key: arm.key, actorId: m.actors[role].id, requestId, stage: 'route_confirmed', decisionId: data.id, routeVersion: 1 };
+  const request = name => ({ method: 'POST', url: `https://${m.project}.supabase.co/rest/v1/rpc/${name}`,
+    headers: { 'content-profile': 'procurement', authorization: 'Bearer offline-secret' }, body: { payload: { request_id: requestId } } });
+  return { m, c, role, arm, data, context, request };
+}
+test('post-route reads require an actual successful bound confirmation response', () => {
+  const f = postRouteFixture();
+  assert.equal(typeof replenishmentRunner.confirmedRouteReadContext, 'function');
+  assert.deepEqual(replenishmentRunner.confirmedRouteReadContext(f.m, f.c, f.role, f.arm, 200, f.data), f.context);
+  for (const change of [x => { x.status = 400; }, x => { x.arm.consumed = false; }, x => { x.arm.key = `mobile390:${f.role}`; },
+    x => { x.data.request_id = `req_${ids[1]}`; }, x => { x.data.request_version = 0; }, x => { x.data.status = 'draft'; },
+    x => { x.data.confirmed_by = ids[0]; }, x => { x.data.route.status = 'blocked'; }, x => { x.data.route.policy_profile_id = ids[1]; }]) {
+    const x = { arm: copy(f.arm), data: copy(f.data), status: 200 }; change(x);
+    assert.throws(() => replenishmentRunner.confirmedRouteReadContext(f.m, f.c, f.role, x.arm, x.status, x.data));
+  }
+});
+for (const name of ['sourcing_workspace']) {
+  test(`post-route exact ${name} read cannot authorize another actor/request/stage or business RPC`, () => {
+    const { m, c, role, context, request } = postRouteFixture(), r = request(name);
+    assert.equal(authorizeBrowserRequest(m, c, role, r, undefined, 'offline-secret', context), 'post-route-read');
+    for (const change of [x => { x.context = undefined; }, x => { x.context.stage = 'handed_off'; }, x => { x.context.key = `mobile390:${role}`; },
+      x => { x.context.actorId = ids[0]; }, x => { x.r.body.payload.request_id = `req_${ids[1]}`; }, x => { x.r.body.payload.apply = true; },
+      x => { x.r.body.extra = true; }, x => { x.r.body = []; }, x => { x.r.headers.authorization = 'Bearer wrong'; },
+      x => { x.r.headers['content-profile'] = 'warehouse'; }, x => { x.role = roles[0]; }, x => { x.r.method = 'PATCH'; },
+      x => { x.r.url = x.r.url.replace(m.project, 'other'); }]) {
+      const x = { r: copy(r), role, context: copy(context) }; change(x);
+      assert.throws(() => authorizeBrowserRequest(m, c, x.role, x.r, undefined, 'offline-secret', x.context));
+    }
+    for (const rpc of ['save_sourcing_event', 'submit_insufficient_bid_exception', 'review_insufficient_bid_exception', 'submit_request',
+      'confirm_route_decision', 'record_sourcing_response', 'evaluation_workspace_rawcap_20260816_impl_d95c6a']) {
+      assert.throws(() => authorizeBrowserRequest(m, c, role, request(rpc), undefined, 'offline-secret', context));
+    }
+  });
+}
+test('fresh post-route scope excludes dependent exception and variance-review reads', () => {
+  const { m, c, role, context, request } = postRouteFixture();
+  for (const name of ['insufficient_bid_exception', 'evaluation_workspace']) {
+    assert.throws(() => authorizeBrowserRequest(m, c, role, request(name), undefined, 'offline-secret', context));
+  }
+});
+test('post-route diagnostics retain RPC and argument keys but never private values or URLs', () => {
+  const f = postRouteFixture(), r = f.request('evaluation_workspace');
+  r.url += '?apikey=PRIVATE_QUERY'; r.body.payload.note = 'PRIVATE_BODY';
+  assert.equal(typeof replenishmentRunner.browserRpcDiagnostic, 'function');
+  const d = replenishmentRunner.browserRpcDiagnostic(r, f.context);
+  assert.deepEqual(d, { method: 'POST', schema: 'procurement', rpc: 'evaluation_workspace', argumentKeys: ['payload'],
+    payloadKeys: ['note', 'request_id'], requestIdMatches: true });
+  assert(!JSON.stringify(d).match(/PRIVATE|offline-secret|https|req_111/));
+  const malformed = replenishmentRunner.browserRpcDiagnostic({ ...r, body: ['PRIVATE_BODY'] }, f.context);
+  assert.equal(malformed.argumentKeys, null);
+});
+
+test('post-route actual callback validates the fresh no-event response and forwards failures unchanged', async () => {
+  const f = postRouteFixture(), source = await actualSource('scripts/qa/wms-replenishment-signoff-live.mjs');
+  const registration = sourceNode(source.tree, n => ts.isCallExpression(n) && n.expression.getText(source.tree) === 'context.route');
+  const valid = { event: null, requestId: f.context.requestId };
+  const cases = [
+    { status: 200, body: valid, accepted: true },
+    { status: 400, body: { code: 'P0001', message: 'PRIVATE_ERROR_TOKEN' } },
+    ...[{}, null, [], undefined, 'PRIVATE_ERROR_TOKEN', { event: null }, { requestId: f.context.requestId },
+      { ...valid, requestId: `req_${ids[1]}` }, { ...valid, event: {} }, { ...valid, event: { id: ids[1] } },
+      { ...valid, error: 'PRIVATE_ERROR_TOKEN' }, { ...valid, code: 'not-a-sqlstate' },
+      { ...valid, message: 'PRIVATE_ERROR_TOKEN' }, { error: { message: 'PRIVATE_ERROR_TOKEN' } },
+    ].map(body => ({ status: 200, body })),
+    { status: 204, body: valid }, { status: 201, body: valid },
+  ];
+  for (const { status, body, accepted = false } of cases) {
+    const events = [], guard = replenishmentRunner.createGuardFailureLatch(), pendingRoutes = new Set();
+    let fetched = 0, fulfilled = 0, continued = 0, aborted = 0;
+    const callback = sourceEval('', `(${registration.arguments[1].getText(source.tree)})`, {
+      assert, ...f, key: f.context.key, confirmedRouteRead: f.context, armed: undefined, completion: null, token: 'offline-secret',
+      guard, pendingRoutes, RPC: 'manage_replenishment_recommendation', authorizeBrowserRequest,
+      browserRpcDiagnostic: replenishmentRunner.browserRpcDiagnostic,
+      validPostRouteReadResponse: replenishmentRunner.validPostRouteReadResponse,
+      record: async e => events.push(copy(e)),
+    });
+    const raw = f.request('sourcing_workspace');
+    const response = { status: () => status, json: async () => { if (body === undefined) throw new SyntaxError('PRIVATE_ERROR_TOKEN'); return body; } };
+    await callback({ request: () => ({ method: () => raw.method, url: () => raw.url, headers: () => raw.headers, postDataJSON: () => raw.body }),
+      fetch: async options => { fetched++; assert.equal(options.maxRetries, 0); assert.equal(options.maxRedirects, 0); return response; },
+      fulfill: async options => { fulfilled++; assert.equal(options.response, response); guard.throwIfFailed(); },
+      continue: async () => { continued++; }, abort: async () => { aborted++; },
+    });
+    assert.equal(fetched, 1); assert.equal(fulfilled, 1); assert.equal(continued, 0); assert.equal(aborted, 0);
+    assert.equal(pendingRoutes.size, 0);
+    const observed = events.find(e => e.kind === 'post-route-read-response'); assert(observed);
+    assert.equal(observed.status, status); assert.equal(observed.errorCode, status === 400 ? 'P0001' : null);
+    assert(!JSON.stringify(events).includes('PRIVATE_ERROR_TOKEN'));
+    if (accepted) guard.throwIfFailed();
+    else await assert.rejects(guard.run(() => { throw new Error('Must not reach next UI assertion'); }), /Post-route read failed/,
+      `Must reject HTTP ${status} body ${JSON.stringify(body)}`);
+  }
+});
+test('post-route actual confirmation callback binds before releasing the response and never dispatches twice', async () => {
+  const f = postRouteFixture(), source = await actualSource('scripts/qa/wms-replenishment-signoff-live.mjs');
+  const registration = sourceNode(source.tree, n => ts.isCallExpression(n) && n.expression.getText(source.tree) === 'context.route');
+  for (const status of [200, 400]) {
+    const events = [], guard = replenishmentRunner.createGuardFailureLatch(); let dispatched = 0, fulfilled = 0, aborted = 0;
+    const arm = { ...copy(f.arm), consumed: false };
+    const boundary = sourceEval(`let confirmedRouteRead; const callback=${registration.arguments[1].getText(source.tree)};`,
+      '({ callback, state:()=>confirmedRouteRead })', { assert, ...f, armed: arm, key: f.context.key, completion: null, token: 'offline-secret',
+        guard, pendingRoutes: new Set(), RPC: 'manage_replenishment_recommendation', authorizeBrowserRequest,
+        browserRpcDiagnostic: replenishmentRunner.browserRpcDiagnostic, confirmedRouteReadContext: replenishmentRunner.confirmedRouteReadContext,
+        sha: value => createHash('sha256').update(value).digest('hex'), record: async e => events.push(copy(e)),
+      });
+    const raw = { ...f.request('confirm_route_decision'), body: { payload: copy(arm.payload) } };
+    const route = { request: () => ({ method: () => raw.method, url: () => raw.url, headers: () => raw.headers, postDataJSON: () => raw.body }),
+      fetch: async options => { dispatched++; assert.equal(options.maxRetries, 0); assert.equal(options.maxRedirects, 0);
+        return { status: () => status, json: async () => status === 200 ? f.data : { code: 'P0001', message: 'PRIVATE_ERROR_TOKEN' } }; },
+      fulfill: async () => {
+        fulfilled++; guard.throwIfFailed();
+        if (status === 200) {
+          assert.deepEqual(boundary.state(), f.context);
+          assert.equal(authorizeBrowserRequest(f.m, f.c, f.role, f.request('sourcing_workspace'), arm, 'offline-secret', boundary.state()), 'post-route-read');
+        } else assert.equal(boundary.state(), undefined);
+      }, abort: async () => { aborted++; }, continue: async () => { throw new Error('Confirmation must pass the response boundary'); },
+    };
+    await boundary.callback(route);
+    assert.equal(dispatched, 1); assert.equal(fulfilled, 1);
+    if (status === 400) assert.equal(boundary.state(), undefined);
+    await boundary.callback(route); assert.equal(dispatched, 1); assert(aborted >= 1);
+    assert(!JSON.stringify(events).includes('PRIVATE_ERROR_TOKEN'));
+  }
+});
+test('post-route checkpoint waits for the bound sourcing response even when the confirmed badge is already visible', async () => {
+  const f = postRouteFixture(), source = await actualSource('scripts/qa/wms-replenishment-signoff-live.mjs');
+  const method = sourceNode(source.tree, n => ts.isPropertyAssignment(n) && n.name.getText(source.tree) === 'confirmRoute');
+  const api = `https://${f.m.project}.supabase.co`, waits = [], stages = [], events = [];
+  const guard = replenishmentRunner.createGuardFailureLatch();
+  let clicked = 0, settled = false;
+  const page = {
+    url: () => `${f.m.origin}/procurement/requests/${f.context.requestId}`,
+    waitForResponse: (predicate, options) => new Promise(resolve => { waits.push({ predicate, options, resolve }); }),
+    getByRole: () => ({ click: async () => { clicked++; } }),
+    getByLabel: () => ({}), getByText: () => ({ first: () => ({}) }),
+  };
+  const boundary = sourceEval(`let armed; const confirmRoute=${method.initializer.getText(source.tree)};`,
+    '({confirmRoute, consume:()=>{armed.consumed=true;}})', {
+      assert, m: f.m, ROLES: roles, api, pageFor: async () => page, validRequestId: value => value === f.context.requestId,
+      guard, pendingRoutes: new Set(), record: async e => events.push(copy(e)),
+      step: name => stages.push(name), expect: () => ({ toBeVisible: async () => {} }),
+    });
+  const running = boundary.confirmRoute(f.c, f.role, copy(f.arm.payload)).then(value => { settled = true; return value; });
+  await new Promise(resolve => setImmediate(resolve));
+  boundary.consume();
+  const response = name => ({ request: () => ({ method: () => 'POST' }), url: () => `${api}/rest/v1/rpc/${name}`,
+    status: () => 200, ok: () => true, json: async () => f.data });
+  const confirmation = waits.find(w => w.predicate(response('confirm_route_decision')));
+  assert(confirmation); confirmation.resolve(response('confirm_route_decision'));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(settled, false, 'Visible route and Draft labels cannot substitute for the actual sourcing read');
+  const sourcing = waits.find(w => w.predicate(response('sourcing_workspace')));
+  assert(sourcing); assert.equal(sourcing.options.timeout, 30000);
+  assert(stages.includes('route.verify-sourcing-read'));
+  sourcing.resolve(response('sourcing_workspace'));
+  assert.deepEqual(await running, { data: f.data, error: null });
+  assert.equal(clicked, 1); assert.equal(events.filter(e => e.action === 'confirm-route').length, 1);
+});
+
+test('post-route actual blocked callback records the offending RPC and argument keys with values omitted', async () => {
+  const f = postRouteFixture(), source = await actualSource('scripts/qa/wms-replenishment-signoff-live.mjs');
+  const registration = sourceNode(source.tree, n => ts.isCallExpression(n) && n.expression.getText(source.tree) === 'context.route');
+  const events = [], guard = replenishmentRunner.createGuardFailureLatch();
+  const callback = sourceEval('', `(${registration.arguments[1].getText(source.tree)})`, {
+    assert, ...f, key: f.context.key, confirmedRouteRead: f.context, armed: undefined, completion: null, token: 'offline-secret',
+    guard, pendingRoutes: new Set(), RPC: 'manage_replenishment_recommendation', authorizeBrowserRequest,
+    browserRpcDiagnostic: replenishmentRunner.browserRpcDiagnostic, record: async e => events.push(copy(e)),
+  });
+  for (const name of ['save_sourcing_event', 'record_sourcing_response']) {
+    const raw = f.request(name); raw.body.payload.note = 'PRIVATE_NOTE';
+    await callback({ request: () => ({ method: () => raw.method, url: () => raw.url, headers: () => raw.headers, postDataJSON: () => raw.body }),
+      abort: async () => {}, continue: async () => { throw new Error('No dispatch'); }, fetch: async () => { throw new Error('No fetch'); } });
+  }
+  assert.deepEqual(events.map(e => e.request.rpc), ['save_sourcing_event', 'record_sourcing_response']);
+  assert(events.every(e => e.request.payloadKeys.join(',') === 'note,request_id'));
+  assert(!JSON.stringify(events).match(/PRIVATE_NOTE|offline-secret/));
+});
+test('post-route insufficient-bid wrapper is VOLATILE but delegates the original stable read with live-cap admission', async t => {
+  const { PGlite } = await import('@electric-sql/pglite'); const db = new PGlite(); t.after(() => db.close());
+  const raw = (await readFile(new URL('../../supabase/migrations/20260804173000_insufficient_bid_exception_workflow.sql', import.meta.url), 'utf8'))
+    .match(/create or replace function procurement\.insufficient_bid_exception\(payload jsonb\)[\s\S]*?end \$\$;/)[0];
+  const convergence = await readFile(new URL('../../supabase/migrations/20260816090000_security_database_launch_blocker_convergence.sql', import.meta.url), 'utf8');
+  const wrapper = convergence.match(/\$wrapper\$([\s\S]*?)\$wrapper\$/)[1];
+  await db.exec(`create schema procurement; create schema core; create schema auth;
+    create table procurement.requests(id text primary key,requester_id uuid);
+    create table procurement.exception_packs(id text primary key,request_id text,exception_type text,status text);
+    create function auth.uid() returns uuid language sql stable as $$ select '${ids[1]}'::uuid $$;
+    create function auth.role() returns text language sql stable as $$ select 'authenticated'::text $$;
+    create function core.has_cap(text,text) returns boolean language sql stable as $$ select false $$;
+    create function core.has_live_cap(text,text) returns boolean language sql stable as $$ select $1='procurement' and $2='approve_award' and current_setting('test.live_cap',true)='yes' $$;
+    insert into procurement.requests values('req_test','${ids[1]}');
+    ${raw}
+    alter function procurement.insufficient_bid_exception(jsonb) rename to insufficient_bid_exception_rawcap_20260816_impl_d95c6a;`);
+  const formatted = await db.query('select format($1, $2::text,$3::text,$4::text,$5::text,$6::text,$7::text,$8::text) as sql',
+    [wrapper, 'procurement', 'insufficient_bid_exception', 'procurement', 'approve_award', 'procurement.approve_award', 'procurement', 'insufficient_bid_exception_rawcap_20260816_impl_d95c6a']);
+  await db.exec(formatted.rows[0].sql);
+  const volatility = await db.query("select proname,provolatile from pg_proc where proname like 'insufficient_bid_exception%'");
+  assert.equal(volatility.rows.find(r => r.proname === 'insufficient_bid_exception').provolatile, 'v');
+  assert.equal(volatility.rows.find(r => r.proname.includes('_rawcap_')).provolatile, 's');
+  const snapshot = () => db.query('select (select jsonb_agg(r) from procurement.requests r) as requests,(select jsonb_agg(p) from procurement.exception_packs p) as packs');
+  const before = await snapshot();
+  await db.exec("set test.live_cap='no'");
+  await assert.rejects(db.query(`select procurement.insufficient_bid_exception('{"request_id":"req_test"}')`), /Not authorized: procurement.approve_award/);
+  await db.exec("set test.live_cap='yes'");
+  const result = await db.query(`select procurement.insufficient_bid_exception('{"request_id":"req_test"}') as value`);
+  assert.equal(result.rows[0].value, null); assert.deepEqual((await snapshot()).rows, before.rows);
+});
+test('post-route source binding includes the restored no-event contract and generated read-wrapper chain', async () => {
+  const source = await actualSource('scripts/qa/wms-replenishment-signoff-live.mjs');
+  const declaration = sourceNode(source.tree, n => ts.isVariableDeclaration(n) && n.name.getText(source.tree) === 'sourceFiles');
+  const refs = sourceEval('', declaration.initializer.getText(source.tree), { m: manifest() });
+  for (const ref of ['modules/procurement/src/components/SourcingWorkspace.tsx',
+    'supabase/migrations/20260914025434_restore_sourcing_evaluation_read_contract.sql',
+    'supabase/migrations/20260804173000_insufficient_bid_exception_workflow.sql',
+    'supabase/migrations/20260816090000_security_database_launch_blocker_convergence.sql',
+    'supabase/migrations/20260822110000_mpic_procurement_policy_alignment.sql']) assert(refs.includes(ref));
+});
 test('actual intercepted handoff callback reserves before awaited preflight and overlapping requests never dispatch twice', async () => {
   const m = manifest(), c = m.cases[0], h = harness(m), original = h.adapter.complete; let bound;
   h.adapter.complete = async (c, role, id, hooks) => original(c, role, id, { ...hooks, beforeHandoff: async b => { bound = copy(b); throw new Error('offline boundary captured'); } });
@@ -645,10 +876,13 @@ test('actual intercepted handoff callback reserves before awaited preflight and 
       reads++; assertCanonicalPayload(m, c, next.payload, next); reconcile(m, c.viewport, snapshot, 'uploads_ready', next); await barrier;
     } } };
   const events = [];
-  const boundary = sourceEval(`let armed, guardError; const callback=${callback};`, '({ callback, state:()=>({armed,guardError}) })',
+  const guard = replenishmentRunner.createGuardFailureLatch(), pendingRoutes = new Set();
+  const boundary = sourceEval(`let armed, confirmedRouteRead; const callback=${callback};`, '({ callback, state:()=>({armed}) })',
     { assert, m, c, role: roles[1], key: completion.key, completion, token: 'offline-token', RPC: 'manage_replenishment_recommendation',
+      guard, pendingRoutes,
       sameKeys: (value, keys) => assert.deepEqual(Object.keys(value).sort(), [...keys].sort()),
-      assertCanonicalPayload, authorizeBrowserRequest, record: async e => events.push(copy(e)) });
+      assertCanonicalPayload, authorizeBrowserRequest, browserRpcDiagnostic: replenishmentRunner.browserRpcDiagnostic,
+      record: async e => events.push(copy(e)) });
   const route = () => ({ request: () => ({ method: () => 'POST', url: () => `https://${m.project}.supabase.co/rest/v1/rpc/manage_replenishment_recommendation`,
     headers: () => ({ 'content-profile': 'procurement', authorization: 'Bearer offline-token' }),
     postDataJSON: () => ({ payload: { id: completion.recommendationId, action: 'handoff', request: copy(bound.payload) } }) }),
@@ -658,13 +892,84 @@ test('actual intercepted handoff callback reserves before awaited preflight and 
   assert(dispatches <= 1, 'Two exact requests must never dispatch two handoffs');
   assert.equal(reads, 1, 'Only the reserved request may reach fresh preflight');
   assert.equal(dispatches, 0, 'A concurrent blocked write closes the whole guarded attempt before first dispatch');
-  assert.equal(aborted, 2); assert(completion.sent); assert(boundary.state().guardError);
+  assert.equal(aborted, 2); assert(completion.sent); assert.throws(() => guard.throwIfFailed()); assert.equal(pendingRoutes.size, 0);
   assert(!events.some(e => e.kind === 'browser-command'));
 });
-test('canonical wizard and real responsive draft selectors exercise visible inputs/cards offline', async t => {
+test('all three canonical wizard steps retain source-bound field selectors and completion controls', async () => {
+  const s = await actualSource('modules/procurement/src/pages/CreateRequestPage.tsx'), elements = [];
+  const visit = n => { if (ts.isJsxOpeningElement(n) || ts.isJsxSelfClosingElement(n)) elements.push(n); ts.forEachChild(n, visit); }; visit(s.tree);
+  const attr = (node, name) => node.attributes.properties.find(p => ts.isJsxAttribute(p) && p.name.getText(s.tree) === name)?.initializer?.getText(s.tree);
+  const one = (name, value, tag) => {
+    const matches = elements.filter(n => attr(n, name) === JSON.stringify(value) && (!tag || n.tagName.getText(s.tree) === tag));
+    assert.equal(matches.length, 1, `${name}=${value} must remain unique in the actual ${tag ?? 'wizard'} source`); return matches[0];
+  };
+  one('title', 'Draft a purchase request');
+  assert.equal(attr(one('name', 'category'), 'value'), '{c.code}');
+  assert.equal(attr(one('name', 'requirement-kind'), 'value'), '{kind}');
+  assert.equal(attr(one('id', 'title'), 'value'), '{title}');
+  for (const [id, state] of [['department', 'department'], ['costCenter', 'costCenter']]) {
+    const field = one('id', id, 'select'); assert.equal(attr(field, 'value'), `{${state}}`); assert(attr(field, 'disabled').includes("departmentDirectoryStatus !== 'ready'"));
+  }
+  for (const id of ['budgetCode', 'neededBy']) assert.equal(attr(one('id', id), 'value'), `{${id}}`);
+  assert.equal(attr(one('id', 'neededBy'), 'type'), '"date"');
+  assert.equal(attr(one('id', 'need-description'), 'readOnly'), '{!!replenishment}');
+  for (const index of ['index', 'i']) for (const field of ['description', 'quantity', 'unit of measure', 'unit price']) {
+    const label = '{`Line ${' + index + ' + 1} ' + field + '`}';
+    const matches = elements.filter(n => attr(n, 'aria-label') === label); assert.equal(matches.length, 1, label);
+    if (field !== 'unit price') assert.equal(attr(matches[0], 'readOnly'), '{!!replenishment}');
+    else assert(attr(matches[0], 'onChange').includes('unitPrice'));
+  }
+  const rfq = sourceNode(s.tree, n => ts.isJsxElement(n) && n.openingElement.tagName.getText(s.tree) === 'section'
+    && attr(n.openingElement, 'aria-labelledby') === '"rfq-brief-heading"');
+  const fields = sourceNode(rfq, n => ts.isArrayLiteralExpression(n) && n.elements.every(e => ts.isArrayLiteralExpression(e)));
+  assert.deepEqual(sourceEval('', fields.getText(s.tree)).map(([key]) => key), Object.keys(completionInputs().desktop1440.terms));
+  assert(rfq.getText(s.tree).includes('id={`rfq-${key}`}'));
+  const footer = sourceNode(s.tree, n => ts.isJsxElement(n) && attr(n.openingElement, 'aria-label') === '"Request actions"').getText(s.tree);
+  assert(footer.includes('step < 3')); assert(footer.includes('onClick={goNext}')); assert(footer.includes('Continue'));
+  assert(footer.includes("replenishment ? 'Create draft & complete handoff' : 'Save draft'"));
+  assert(footer.includes('!replenishment && <Button')); assert(footer.includes('disabled={submitting || !canSaveDraft}'));
+});
+
+test('canonical wizard serializes actual single-file attachment JSX and handlers in both viewports', async t => {
   const require = createRequire(new URL('../../apps/shell/package.json', import.meta.url));
   const { chromium, expect } = require('@playwright/test'), browser = await chromium.launch(); t.after(() => browser.close());
-  const m = manifest(), source = await readFile(new URL('../../modules/procurement/src/pages/CreateRequestPage.tsx', import.meta.url), 'utf8');
+  const m = manifest(), wizard = await actualSource('modules/procurement/src/pages/CreateRequestPage.tsx'), source = wizard.text;
+  const attachmentSource = await actualSource('modules/procurement/src/attachments.ts');
+  const labelSource = await actualSource('modules/procurement/src/labels.ts');
+  const attachmentSection = sourceNode(wizard.tree, n => ts.isJsxElement(n) && n.openingElement.tagName.getText(wizard.tree) === 'section'
+    && n.getText(wizard.tree).includes('onChange={handleAttachmentPick}')).getText(wizard.tree);
+  const declaration = (s, name) => sourceNode(s.tree, n => ts.isVariableDeclaration(n) && n.name.getText(s.tree) === name).getText(s.tree);
+  const handler = (s, name) => sourceNode(s.tree, n => ts.isFunctionDeclaration(n) && n.name?.text === name).getText(s.tree).replace(/^export /, '');
+  const inputNode = sourceNode(wizard.tree, n => ts.isJsxSelfClosingElement(n) && n.tagName.getText(wizard.tree) === 'input'
+    && n.attributes.properties.some(p => ts.isJsxAttribute(p) && p.name.getText(wizard.tree) === 'type' && p.initializer?.getText(wizard.tree) === '"file"'));
+  assert(!inputNode.attributes.properties.some(p => ts.isJsxAttribute(p) && p.name.getText(wizard.tree) === 'multiple'));
+  const attachmentHarness = ts.transpileModule(`
+    const profile = ${JSON.stringify({ email: bindings.procurement_lead.email })};
+    const ${declaration(wizard, 'KIND_OPTIONS')};
+    const ${declaration(labelSource, 'ATTACHMENT_KIND_LABEL')};
+    const ${declaration(attachmentSource, 'REQUEST_ATTACHMENT_MAX_BYTES')};
+    const ${declaration(attachmentSource, 'REQUEST_ATTACHMENT_MIME_TYPES')};
+    ${handler(attachmentSource, 'validateRequestAttachment')}
+    let attachments = [], events = [];
+    function error(message) { throw new Error(message); }
+    function setAttachments(update) { attachments = update(attachments); events.push(attachments.map(a => ({name:a.filename,kind:a.kind}))); render(); }
+    ${['handleAttachmentPick', 'removeAttachment', 'setAttachmentKind'].map(name => handler(wizard, name)).join('\n')}
+    const Icon = () => document.createElement('span');
+    function h(tag, props, ...children) {
+      if (typeof tag === 'function') return tag(props);
+      const el = document.createElement(tag);
+      for (const [key, value] of Object.entries(props ?? {})) {
+        if (key.startsWith('on')) el.addEventListener(key.slice(2).toLowerCase(), value);
+        else if (!['key','value'].includes(key) && value != null && value !== false) el.setAttribute(key === 'className' ? 'class' : key, value === true ? '' : String(value));
+      }
+      for (const child of children.flat(Infinity)) if (child != null && child !== false) el.append(child instanceof Node ? child : document.createTextNode(String(child)));
+      if (props?.value != null) el.value = props.value;
+      return el;
+    }
+    function render() { document.getElementById('actual-attachments').replaceChildren(${attachmentSection}); }
+    window.readPickedDocuments = async () => ({ events, documents: await Promise.all(attachments.map(async a => ({ filename:a.filename,kind:a.kind,mimeType:a.mimeType,sizeBytes:a.sizeBytes,uploadedByEmail:a.uploadedByEmail,bytes:Array.from(new Uint8Array(await a.file.arrayBuffer())) }))) });
+    render();
+  `, { fileName: 'actual-attachment-boundary.tsx', compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React, jsxFactory: 'h' } }).outputText;
   for (const text of ['Create draft & complete handoff', 'name="requirement-kind"', 'id="need-description"', 'Document type for', 'Line ${index + 1} unit price']) assert(source.includes(text));
   const tableSource = await readFile(new URL('../../packages/ui/src/DataTable.tsx', import.meta.url), 'utf8');
   assert(tableSource.includes('sm:hidden')); assert(tableSource.includes('<dl')); assert(tableSource.includes('<dt')); assert(tableSource.includes('<dd'));
@@ -677,15 +982,20 @@ test('canonical wizard and real responsive draft selectors exercise visible inpu
       <input aria-label="Line 1 unit price" type="number"><div hidden><input aria-label="Line 1 unit price" type="number"></div>
       <button type="button">Continue</button><select id="department"><option value="operations">Operations</option></select>
       <select id="costCenter"><option value="CC-1100">CC-1100</option></select><input id="budgetCode"><input type="date" id="neededBy">
-      <textarea id="need-description" readonly>${c.rationale}</textarea><input type="file" multiple>
-      ${c.documents.map(d => `<select aria-label="Document type for ${d.filename}"><option value="spec">Specification</option><option value="budget">Budget</option></select>`).join('')}
+      <textarea id="need-description" readonly>${c.rationale}</textarea><div id="actual-attachments"></div>
       <h3>RFQ requirements</h3>${Object.keys(c.completion.terms).map(k => `<input id="rfq-${k}">`).join('')}<button>Create draft &amp; complete handoff</button>`);
+    await page.addScriptTag({ content: attachmentHarness });
     await fillCanonicalWizard(page, m, c, expect, value => steps.push(value));
     assert.equal(await page.locator('#budgetCode').inputValue(), 'TEST-ONLY-NOT-FUNDING');
-    assert.equal(await page.locator('input[type=file]').evaluate(input => input.files.length), 2);
-    const bytes = await page.locator('input[type=file]').evaluate(async input => Array.from(new Uint8Array(await input.files[0].arrayBuffer())));
-    assert.deepEqual(Buffer.from(bytes), syntheticPdf(m.runId, c.viewport, 'spec'));
-    assert.equal(steps.length, 3);
+    assert.equal(await page.getByLabel('Add file', { exact: true }).evaluate(input => input.files.length), 0, 'Actual handler resets the single-file input');
+    const picked = await page.evaluate(() => window.readPickedDocuments());
+    assert.deepEqual(picked.events.map(rows => rows.map(r => r.kind)), [['other'], ['spec'], ['spec', 'other'], ['spec', 'budget']]);
+    for (const [i, d] of c.documents.entries()) {
+      assert.deepEqual(picked.documents[i], { filename: d.filename, kind: d.kind, mimeType: d.mimeType, sizeBytes: d.sizeBytes,
+        uploadedByEmail: bindings.procurement_lead.email, bytes: [...syntheticPdf(m.runId, c.viewport, d.kind)] });
+      await expect(page.getByRole('combobox', { name: `Document type for ${d.filename}`, exact: true })).toHaveValue(d.kind);
+    }
+    assert(steps.includes('completion.review-rfq-terms'));
     await page.setContent(`<style>@media(max-width:639px){table{display:none}}@media(min-width:640px){ul{display:none}}</style>
       <h2>Line items</h2><table><tr><td>${c.productId}</td><td>2 unit</td></tr></table>
       <ul><li><div class="card"><div>${c.productId}</div><dl><div><dt>Qty</dt><dd>2 unit</dd></div></dl></div></li></ul>`);
@@ -743,6 +1053,96 @@ test('failure diagnostics never capture login/foreign pages or password-bearing 
   }
 });
 
+test('canonical diagnostics bind the same owned form across steps and reject foreign or sensitive states without navigation', async t => {
+  const { createCanonicalFormDiagnostic } = await import('./wms-replenishment-signoff-live.mjs');
+  assert.equal(typeof createCanonicalFormDiagnostic, 'function');
+  const require = createRequire(new URL('../../apps/shell/package.json', import.meta.url));
+  const { chromium, expect } = require('@playwright/test'), browser = await chromium.launch(); t.after(() => browser.close());
+  const root = await mkdtemp(path.join(tmpdir(), 'wms-replen-form-diagnostic-')); t.after(() => rm(root, { recursive: true, force: true }));
+  const m = manifest(), c = m.cases[0], recommendationId = ids[0];
+  for (const defect of ['owned-step1', 'owned-step2', 'no-context', 'fabricated-context', 'foreign-origin', 'login', 'wrong-path', 'wrong-id', 'duplicate-query', 'extra-query', 'fragment',
+    'password', 'wrong-title', 'wrong-product', 'wrong-quantity', 'wrong-unit', 'editable-line', 'wrong-heading', 'duplicate-form', 'other-actor', 'other-view', 'other-page',
+    'step2-no-prior-proof', 'step2-wrong-need', 'step2-editable-need', 'step2-replaced-form', 'step3', 'unknown-step',
+    'late-form-replacement', 'late-stale-handle', 'late-url', 'late-password']) {
+    const realPage = await browser.newPage(); await realPage.route('**/*', route => route.abort());
+    let url = `${m.origin}/procurement/requests/new?replenishment=${recommendationId}`, navigation = 0, screenshotDispatched = false;
+    const wrapForm = locator => new Proxy(locator, { get(target, key) {
+      if (key === 'filter') return (...args) => wrapForm(target.filter(...args));
+      if (key === 'elementHandle') return async () => {
+        if (defect === 'late-form-replacement') await realPage.locator('form').evaluate(form => {
+          const replacement = form.cloneNode(true); replacement.querySelector('#title').value = 'foreign';
+          replacement.append(document.createTextNode('FOREIGN-CANARY')); form.replaceWith(replacement);
+        });
+        if (defect === 'late-url') url = `${m.origin}/procurement/requests/new?replenishment=${ids[1]}`;
+        if (defect === 'late-password') await realPage.locator('form').evaluate(form => {
+          const input = document.createElement('input'); input.type = 'password'; form.append(input);
+        });
+        const handle = await target.elementHandle();
+        if (defect === 'late-stale-handle') await realPage.locator('form').evaluate(form => form.replaceWith(form.cloneNode(true)));
+        return new Proxy(handle, { get(element, prop) {
+          if (prop === 'screenshot') return () => { screenshotDispatched = true; throw new Error('Intercepted unsafe screenshot; no file written'); };
+          const value = Reflect.get(element, prop); return typeof value === 'function' ? value.bind(element) : value;
+        } });
+      };
+      const value = Reflect.get(target, key); return typeof value === 'function' ? value.bind(target) : value;
+    } });
+    const page = new Proxy(realPage, { get(target, key) {
+      if (key === 'url') return () => url;
+      if (key === 'locator' && defect.startsWith('late-')) return (...args) => args[0] === 'form' ? wrapForm(target.locator(...args)) : target.locator(...args);
+      if (['goto', 'reload', 'goBack', 'goForward'].includes(key)) return () => { navigation++; throw new Error('Diagnostics must not navigate'); };
+      const value = Reflect.get(target, key); return typeof value === 'function' ? value.bind(target) : value;
+    } });
+    await realPage.setContent(`<h1>Draft a purchase request</h1><form><div id="step-one">
+      <input type="radio" name="category" value="goods"><input type="radio" name="requirement-kind" value="materials">
+      <input id="title" value="Replenish ${c.productId}"><input aria-label="Line 1 description" readonly value="${c.productId}">
+      <input aria-label="Line 1 quantity" readonly value="2"><input aria-label="Line 1 unit of measure" readonly value="unit">
+      <input aria-label="Line 1 unit price" type="number"></div><div id="step-two" hidden><textarea id="need-description" readonly>${c.rationale}</textarea>
+      <select><option>private-field-option</option></select></div><button type="button" onclick="document.querySelector('#step-one').hidden=true;document.querySelector('#step-two').hidden=false">Continue</button></form>`);
+    let canonical = createCanonicalFormDiagnostic({ m, c, role: roles[1], page, recommendationId });
+    let step = 'completion.explicit-classification';
+    if (defect === 'owned-step2' || defect.startsWith('step2-') && defect !== 'step2-no-prior-proof') {
+      await assert.rejects(fillCanonicalWizard(page, m, c, expect, name => {
+        step = name; if (name === 'completion.funding-and-owned-files') throw new Error('offline-stop-before-funding');
+      }, canonical), /offline-stop-before-funding/);
+    }
+    if (defect === 'no-context') canonical = undefined;
+    if (defect === 'fabricated-context') canonical = { recommendationId, step1Verified: true };
+    if (defect === 'foreign-origin') url = url.replace(m.origin, 'https://foreign.invalid');
+    if (defect === 'login') url = `${m.origin}/login`;
+    if (defect === 'wrong-path') url = url.replace('/requests/new', '/requests/foreign');
+    if (defect === 'wrong-id') url = url.replace(recommendationId, ids[1]);
+    if (defect === 'duplicate-query') url += `&replenishment=${recommendationId}`;
+    if (defect === 'extra-query') url += '&token=private';
+    if (defect === 'fragment') url += '#private';
+    if (defect === 'password') await realPage.locator('form').evaluate(form => { const input = document.createElement('input'); input.type = 'password'; form.append(input); });
+    for (const [name, selector] of [['wrong-title', '#title'], ['wrong-product', '[aria-label="Line 1 description"]'], ['wrong-quantity', '[aria-label="Line 1 quantity"]'], ['wrong-unit', '[aria-label="Line 1 unit of measure"]']]) {
+      if (defect === name) await realPage.locator(selector).evaluate(input => { input.value = 'foreign'; });
+    }
+    if (defect === 'editable-line') await realPage.locator('[aria-label="Line 1 quantity"]').evaluate(input => input.removeAttribute('readonly'));
+    if (defect === 'wrong-heading') await realPage.locator('h1').evaluate(heading => { heading.textContent = 'Different workflow'; });
+    if (defect === 'duplicate-form') await realPage.locator('form').evaluate(form => form.after(form.cloneNode(true)));
+    if (defect === 'step2-no-prior-proof') { await realPage.getByRole('button', { name: 'Continue' }).click(); step = 'completion.funding-and-owned-files'; }
+    if (defect === 'step2-wrong-need') await realPage.locator('#need-description').evaluate(input => { input.value = 'foreign'; });
+    if (defect === 'step2-editable-need') await realPage.locator('#need-description').evaluate(input => input.removeAttribute('readonly'));
+    if (defect === 'step2-replaced-form') await realPage.locator('form').evaluate(form => form.replaceWith(form.cloneNode(true)));
+    if (defect === 'step3') step = 'completion.review-rfq-terms';
+    if (defect === 'unknown-step') step = 'completion.unknown';
+    const before = await readdir(root);
+    const evidence = await captureUiFailure({ m, c: defect === 'other-view' ? m.cases[1] : c, role: defect === 'other-actor' ? roles[0] : roles[1],
+      page: defect === 'other-page' ? new Proxy(page, {}) : page, step, attempt: root, canonical });
+    assert.equal(navigation, 0);
+    assert.equal(screenshotDispatched, false, defect);
+    assert(!JSON.stringify(evidence).includes('private')); assert(!JSON.stringify(evidence).includes(c.rationale));
+    if (defect.startsWith('owned-')) {
+      assert.equal(evidence.captureStatus, 'captured-owned-surface', defect);
+      assert.equal(evidence.screenshot.scope, `owned-canonical-form-${defect.slice(6)}`);
+      assert.equal(evidence.screenshot.masked, true);
+      assert.equal((await readFile(path.join(root, evidence.screenshot.ref))).subarray(1, 4).toString(), 'PNG');
+    } else { assert.equal(evidence.screenshot, null, defect); assert.deepEqual(await readdir(root), before, defect); }
+    await realPage.close();
+  }
+});
+
 test('named failure diagnostics run before close without replay; diagnostic failure preserves the original failure', async () => {
   for (const broken of [false, true]) {
     const m = manifest(), h = harness(m), order = [];
@@ -793,3 +1193,241 @@ test('generated prerequisite and readback SQL execute against a local schema fix
   await db.exec(cleanupInventorySql(m));
   assert.equal((await db.query('select count(*)::int as n from warehouse.products')).rows[0].n, 2, 'Discovery retained both products');
 });
+
+// RED baseline: runner 8487c6b2523f84e0b8631115a34db8e2225650120397cd2fc1782cf7730d0d43;
+// prior tests 7b92426268615e9de82812b444fdc230abdc7ae35134881042cf9896b1aa123b.
+// Isolated policy fixtures only; no retained live report is read or changed here.
+async function registeredEvidencePolicyFixture(t) {
+  const { PGlite } = await import('@electric-sql/pglite');
+  const db = new PGlite(); t.after(() => db.close());
+  const privacy = await readFile(new URL('../../supabase/migrations/20260815154702_procurement_finance_requester_privacy.sql', import.meta.url), 'utf8');
+  const visibility = await readFile(new URL('../../supabase/migrations/20260826170000_procurement_request_operational_visibility.sql', import.meta.url), 'utf8');
+  const policy = (name, table) => {
+    const matches = [...privacy.matchAll(new RegExp(`create policy ${name} on ${table.replaceAll('.', '\\.')}[\\s\\S]*?;`, 'g'))];
+    assert.equal(matches.length, 1); return matches[0][0];
+  };
+  const readAuthority = visibility.match(/create or replace function private\.can_read_procurement_request\(p_request_id text\)[\s\S]*?\$\$;/)[0];
+  await db.exec(`create schema auth; create schema core; create schema private; create schema procurement; create schema storage;
+    create role authenticated nologin;
+    create function auth.uid() returns uuid language sql as $$select nullif(current_setting('test.actor',true),'')::uuid$$;
+    create function core.has_live_cap(m text,c text) returns boolean language sql as $$select m='procurement' and c='create_request'$$;
+    create function storage.foldername(p text) returns text[] language sql as $$select (string_to_array(p,'/'))[1:array_length(string_to_array(p,'/'),1)-1]$$;
+    create table procurement.requests(id text primary key,requester_id uuid);
+    create table procurement.request_collaborators(request_id text,user_id uuid,revoked_at timestamptz);
+    create table procurement.request_attachments(id text primary key,request_id text references procurement.requests(id),storage_path text);
+    create table storage.objects(name text primary key,bucket_id text,owner_id text);
+    ${readAuthority}
+    alter table procurement.request_attachments enable row level security;
+    alter table storage.objects enable row level security;
+    ${policy('request_attachments_read', 'procurement.request_attachments')}
+    ${policy('procurement_requests_auth_read', 'storage.objects')}
+    ${policy('procurement_requests_auth_insert', 'storage.objects')}
+    grant usage on schema auth,core,private,procurement,storage to authenticated;
+    grant select on procurement.request_attachments to authenticated;
+    grant select,insert on storage.objects to authenticated;`);
+  const asActor = async (actorId, sql, values = []) => {
+    await db.query("select set_config('test.actor',$1,false)", [actorId]); await db.exec('set role authenticated');
+    try { return await db.query(sql, values); } finally { await db.exec('reset role'); }
+  };
+  return { db, asActor };
+}
+
+test('registered-evidence timing: actual Storage policy denies owner SELECT until an attachment is registered', async t => {
+  const { db, asActor } = await registeredEvidencePolicyFixture(t);
+  const m = manifest(), c = m.cases[0], requestId = `req_${ids[0]}`, u = uploadFixture(m, c, requestId, 0);
+  await asActor(ids[1], 'insert into storage.objects values($1,$2,$3)', [u.path, 'procurement-requests', ids[1]]);
+  const visible = actor => asActor(actor, 'select name from storage.objects where name=$1', [u.path]);
+  assert.deepEqual((await visible(ids[1])).rows, [], 'Owner insert is not owner read authority');
+  await db.query('insert into procurement.requests values($1,$2)', [requestId, ids[1]]);
+  assert.deepEqual((await visible(ids[1])).rows, [], 'Request alone does not register this object');
+  await db.query('insert into procurement.request_attachments values($1,$2,$3)', [u.id, requestId, u.path]);
+  assert.deepEqual((await visible(ids[1])).rows, [{ name: u.path }]);
+  assert.deepEqual((await visible(ids[0])).rows, [], 'Other actor does not inherit owner access');
+});
+
+test('registered-evidence timing: actual upload interceptor releases 200 without premature owner download or list', async t => {
+  const { asActor } = await registeredEvidencePolicyFixture(t);
+  const m = manifest(), c = m.cases[0], wire = await storageRequest(m, c), events = [];
+  const source = await actualSource('scripts/qa/wms-replenishment-signoff-live.mjs');
+  const call = sourceNode(source.tree, n => ts.isCallExpression(n) && n.expression.getText(source.tree) === 'context.route');
+  let downloads = 0, lists = 0, dispatched = 0, fulfilled = 0, aborted = 0;
+  const client = { storage: { from: () => ({ download: async objectPath => {
+    downloads++; const result = await asActor(ids[1], 'select name from storage.objects where name=$1', [objectPath]);
+    return result.rows.length ? { data: new Blob([syntheticPdf(m.runId, c.viewport, 'spec')]), error: null }
+      : { data: null, error: { name: 'StorageApiError', status: 400, statusCode: '404', message: 'Object not found' } };
+  } }) } };
+  const completion = { key: 'desktop1440:procurement_lead', busy: false, sent: false, binding: null,
+    hooks: { beforeUpload: async () => {}, uploaded: async () => {} } };
+  const handler = sourceEval('', `(${call.arguments[1].getText(source.tree)})`, {
+    assert, m, c, role: roles[1], key: completion.key, completion, token: 'test-only-token',
+    guard: replenishmentRunner.createGuardFailureLatch(), pendingRoutes: new Set(),
+    inspectStorageUpload, assertActor, actor: async role => proof(m, role), record: async event => events.push(copy(event)),
+    clients: { [roles[1]]: client }, BUCKET: 'procurement-requests', syntheticPdf,
+    completePrefixList: async () => { lists++; return []; },
+  });
+  await handler({ request: () => ({ method: () => wire.method, url: () => wire.url, headers: () => wire.headers, postDataBuffer: () => wire.bytes }),
+    fetch: async () => { dispatched++; const u = completion.binding;
+      const path = new URL(wire.url).pathname.split('/procurement-requests/')[1];
+      assert(u.requestId); await asActor(ids[1], 'insert into storage.objects values($1,$2,$3)', [path, 'procurement-requests', ids[1]]);
+      return { status: () => 200 }; },
+    fulfill: async () => { fulfilled++; }, abort: async () => { aborted++; },
+  });
+  assert.equal(dispatched, 1); assert.equal(downloads, 0, 'Private read must wait for canonical registration');
+  assert.equal(lists, 0); assert.equal(fulfilled, 1); assert.equal(aborted, 0);
+  assert.equal(events.filter(e => e.kind === 'storage-upload-response').length, 1);
+});
+
+function deferredEvidenceHarness(m) {
+  const h = harness(m), reads = [];
+  h.adapter.verifyEvidence = async (c, role, binding) => {
+    const s = h.states[c.viewport]; assert.equal(role, roles[1]);
+    assert.equal(s.rows.requests.length, 1); assert.equal(s.rows.attachments.length, 2);
+    assert.equal(s.rows.recommendations[0].status, 'handed_off');
+    assert.equal(s.rows.routeDecisions.length, 0, 'Byte proof must precede route confirmation');
+    assert.deepEqual(s.rows.attachments.map(a => a.storage_path).sort(), binding.uploads.map(u => u.path).sort());
+    reads.push(c.viewport);
+    return binding.uploads.map(u => ({ ...proofFixture(binding), path: u.path, downloadSha256: u.sha256, downloadSizeBytes: u.sizeBytes }));
+  };
+  return { ...h, reads };
+}
+
+test('registered-evidence timing: complete requires both owner byte proofs per view after persisted handoff', async () => {
+  const m = manifest(), h = deferredEvidenceHarness(m), report = newReport(m, h.adapter.kind);
+  await executeJourney(m, h.adapter, report);
+  assert.deepEqual(h.reads, ['desktop1440', 'mobile390'], 'All four objects require post-registration byte verification');
+  assert.equal(report.complete, true);
+  for (const c of m.cases) assert.equal(h.calls.filter(x => x[0] === c.viewport && x[2] === 'handoff').length, 1);
+});
+
+for (const defect of ['download-denied', 'wrong-bytes', 'duplicate-last', 'missing-file', 'extra-prefix', 'foreign-owner']) {
+  test(`registered-evidence timing: ${defect} blocks completion and route confirmation without replay`, async () => {
+    const m = manifest(), h = deferredEvidenceHarness(m), verify = h.adapter.verifyEvidence;
+    h.adapter.verifyEvidence = async (...args) => {
+      const result = await verify(...args);
+      if (defect === 'download-denied') throw new Error('Owner read unavailable');
+      if (defect === 'wrong-bytes') result[0].downloadSha256 = 'f'.repeat(64);
+      if (defect === 'duplicate-last') result[0] = copy(result[1]);
+      if (defect === 'missing-file') result.pop();
+      if (defect === 'extra-prefix') result[0].listedNames.push('unrelated.pdf');
+      if (defect === 'foreign-owner') result[0].actorId = ids[0];
+      return result;
+    };
+    const report = newReport(m, h.adapter.kind);
+    await assert.rejects(executeJourney(m, h.adapter, report));
+    assert.equal(report.complete, false); assert.equal(h.states.desktop1440.rows.storage.length, 2);
+    assert.equal(h.calls.filter(x => x[2] === 'handoff').length, 1);
+    assert(!h.calls.some(x => x[0] === 'mobile390' || x[2] === 'confirm-route'));
+  });
+}
+
+test('guard failure latch: first failure interrupts a pending response and prevents later dispatch', async () => {
+  assert.equal(typeof replenishmentRunner.createGuardFailureLatch, 'function');
+  const latch = replenishmentRunner.createGuardFailureLatch(), first = new Error('First fixed guard failure');
+  let dispatches = 0, started; const began = new Promise(resolve => { started = resolve; });
+  const waiting = latch.run(() => { dispatches++; started(); return new Promise(() => {}); });
+  const rejected = assert.rejects(waiting, error => error === first);
+  await began;
+  latch.fail(first); latch.fail(new Error('Later failure must not replace first'));
+  await rejected;
+  await assert.rejects(latch.run(() => { dispatches++; }), error => error === first);
+  assert.equal(dispatches, 1);
+});
+
+test('guard failure latch: click failure propagates without waiting for a response or retrying', async () => {
+  assert.equal(typeof replenishmentRunner.createGuardFailureLatch, 'function');
+  const latch = replenishmentRunner.createGuardFailureLatch(), first = new Error('Upload guard blocked');
+  let uploads = 0, handoffs = 0;
+  await assert.rejects(latch.run(async () => { uploads++; latch.fail(first); await new Promise(() => {}); }), error => error === first);
+  await assert.rejects(latch.run(() => { handoffs++; }), error => error === first);
+  assert.equal(uploads, 1); assert.equal(handoffs, 0);
+});
+
+test('guard failure latch: actual route rejects response wait before blocked-event persistence finishes', async () => {
+  const source = await actualSource('scripts/qa/wms-replenishment-signoff-live.mjs');
+  const call = sourceNode(source.tree, n => ts.isCallExpression(n) && n.expression.getText(source.tree) === 'context.route');
+  const guard = replenishmentRunner.createGuardFailureLatch(), pendingRoutes = new Set();
+  let releaseRecord, eventStarted, aborted = 0, dispatched = 0;
+  const recording = new Promise(resolve => { releaseRecord = resolve; });
+  const began = new Promise(resolve => { eventStarted = resolve; });
+  const callback = sourceEval('', `(${call.arguments[1].getText(source.tree)})`, {
+    assert, guard, pendingRoutes, completion: null,
+    record: async () => { eventStarted(); await recording; },
+  });
+  const waiting = guard.run(() => new Promise(() => {}));
+  const rejected = assert.rejects(waiting, /Unarmed Storage write/);
+  const route = () => ({ request: () => ({ method: () => 'POST', url: () => 'https://offline.invalid/storage/v1/object/procurement-requests/unknown' }),
+    continue: async () => { dispatched++; }, fetch: async () => { dispatched++; }, abort: async () => { aborted++; } });
+  const first = callback(route()); await began; await rejected;
+  const second = callback(route());
+  assert.equal(aborted, 0, 'Wait fails before logging/abort can finish'); assert.equal(dispatched, 0);
+  releaseRecord(); await Promise.all([first, second]);
+  assert.equal(aborted, 2); assert.equal(pendingRoutes.size, 0); assert.equal(dispatched, 0);
+});
+
+for (const defect of ['wrong-owner', 'wrong-size', 'extra-object']) test(`registered-evidence metadata: ${defect} stops after first upload without a handoff`, async () => {
+  const m = manifest(), h = harness(m), complete = h.adapter.complete;
+  h.adapter.complete = async (c, role, id, hooks) => complete(c, role, id, { ...hooks, uploaded: async (...args) => {
+    const s = h.states[c.viewport];
+    if (defect === 'wrong-owner') s.rows.storage[0].owner_id = ids[0];
+    if (defect === 'wrong-size') s.rows.storage[0].metadata.size++;
+    if (defect === 'extra-object') s.rows.storage.push({ ...s.rows.storage[0], id: ids[1], name: 'foreign' });
+    return hooks.uploaded(...args);
+  } });
+  const report = newReport(m, h.adapter.kind); await assert.rejects(executeJourney(m, h.adapter, report));
+  assert.equal(report.complete, false); assert.equal(h.states.desktop1440.rows.requests.length, 0);
+  assert(!h.calls.some(x => x[0] === 'mobile390' || x[2] === 'handoff'));
+});
+
+for (const defect of [null, 'changed-byte', 'truncated-byte', 'denied-read', 'partial-list', 'extra-object', 'changed-actor']) {
+  test(`registered-evidence bytes: ${defect ?? 'all four canonical files'} uses actual Blob bytes and exact full prefix`, async () => {
+    assert.equal(typeof replenishmentRunner.verifyRegisteredStorageEvidence, 'function');
+    const m = manifest(), allDownloads = [];
+    for (const c of m.cases) {
+      const requestId = `req_${ids[c.viewport === 'desktop1440' ? 0 : 1]}`;
+      const binding = { requestId, uploads: [0, 1].map(i => uploadFixture(m, c, requestId, i)), payload: null, route: null };
+      binding.payload = payloadFixture(m, c, binding);
+      const client = {
+        auth: { getUser: async () => ({ data: { user: { ...m.actors[roles[1]], id: defect === 'changed-actor' ? ids[0] : ids[1] } }, error: null }) },
+        storage: { from: bucket => {
+          assert.equal(bucket, 'procurement-requests');
+          return {
+            download: async objectPath => {
+              const index = binding.uploads.findIndex(u => u.path === objectPath); assert(index >= 0, 'No unrelated object read');
+              assert(!allDownloads.includes(objectPath), 'No automatic download retry'); allDownloads.push(objectPath);
+              if (defect === 'denied-read') return { data: null, error: { status: 400, statusCode: '404', name: 'StorageApiError', message: 'PRIVATE_SIGNED_TOKEN_CANARY' } };
+              let bytes = syntheticPdf(m.runId, c.viewport, c.documents[index].kind);
+              if (defect === 'changed-byte') { bytes = Buffer.from(bytes); bytes[50] ^= 1; }
+              if (defect === 'truncated-byte') bytes = bytes.subarray(0, bytes.length - 1);
+              return { data: new Blob([bytes], { type: 'application/pdf' }), error: null };
+            },
+            list: async (prefix, options) => {
+              assert.equal(prefix, `request/${requestId}`); assert.equal(options.offset, 0);
+              const data = binding.uploads.map((u, i) => ({ id: ids[i], name: u.path.split('/').at(-1) }));
+              if (defect === 'partial-list') data.pop();
+              if (defect === 'extra-object') data.push({ id: ids[0], name: 'unrelated.pdf' });
+              return { data, error: null };
+            },
+          };
+        } },
+      };
+      const run = () => replenishmentRunner.verifyRegisteredStorageEvidence(m, c, binding, client);
+      if (defect) {
+        await assert.rejects(run(), error => {
+          assert(!JSON.stringify({ message: error.message, details: error.safeDetails }).includes('PRIVATE_SIGNED_TOKEN_CANARY'));
+          if (defect === 'denied-read') assert.deepEqual(error.safeDetails, { category: 'STORAGE_OWNER_DOWNLOAD', bucket: 'procurement-requests',
+            path: binding.uploads[0].path, actorId: ids[1], status: 400, statusCode: 404, code: null, errorName: 'StorageApiError' });
+          return true;
+        });
+        break;
+      }
+      const proofs = await run(); assert.equal(proofs.length, 2);
+      assert.deepEqual(proofs.map(p => p.path).sort(), binding.uploads.map(u => u.path).sort());
+      for (const p of proofs) {
+        const u = binding.uploads.find(u => u.path === p.path);
+        assert.equal(p.downloadSha256, u.sha256); assert.equal(p.downloadSizeBytes, u.sizeBytes);
+        assert.deepEqual(p.listedNames.sort(), binding.uploads.map(u => u.path.split('/').at(-1)).sort());
+      }
+    }
+    if (!defect) assert.equal(allDownloads.length, 4);
+  });
+}

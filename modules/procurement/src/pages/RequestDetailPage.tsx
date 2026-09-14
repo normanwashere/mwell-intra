@@ -568,7 +568,7 @@ export function RequestDetailPage() {
           <div>
             <SectionTitle
               title="Competitive sourcing"
-              subtitle="Close the response window, document commercial and technical evidence, then record an explicit best-value recommendation before award."
+              subtitle="Preparation, responses, evaluation, and award follow the recorded sourcing stage."
             />
             <div className="min-w-0 border-t border-line py-3">
               <SourcingWorkspace

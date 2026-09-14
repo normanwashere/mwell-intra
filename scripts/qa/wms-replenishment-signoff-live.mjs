@@ -325,11 +325,83 @@ export async function inspectStorageUpload(m, c, role, request, token, binding) 
 }
 export function assertStorageProof(m, c, binding, proof) {
   sameKeys(proof, ['bucket', 'path', 'actorId', 'uploadStatus', 'downloadSha256', 'downloadSizeBytes', 'listedNames', 'source']);
-  const u = binding.uploads.at(-1); assert(u);
+  const matches = binding.uploads.filter(u => u.path === proof.path); assert.equal(matches.length, 1); const u = matches[0];
   assert.equal(proof.bucket, BUCKET); assert.equal(proof.path, u.path); assert.equal(proof.actorId, m.actors[ROLES[1]].id);
   assert.equal(proof.uploadStatus, 200); assert.equal(proof.downloadSha256, u.sha256); assert.equal(proof.downloadSizeBytes, u.sizeBytes);
   assert.deepEqual([...proof.listedNames].sort(), binding.uploads.map(u => u.path.split('/').at(-1)).sort());
   assert.equal(proof.source, 'authenticated-owner-sdk-download+complete-prefix-list');
+}
+function assertUploadReceipt(m, c, binding, proof) {
+  sameKeys(proof, ['bucket', 'path', 'actorId', 'uploadStatus', 'source']);
+  const u = binding.uploads.at(-1); assert(u);
+  assert.equal(proof.bucket, BUCKET); assert.equal(proof.path, u.path); assert.equal(proof.actorId, m.actors[ROLES[1]].id);
+  assert.equal(proof.uploadStatus, 200); assert.equal(proof.source, 'intercepted-browser-upload');
+}
+function assertRegisteredProofs(m, c, binding, proofs) {
+  validateBinding(m, c, binding); assert(binding.payload); assert.equal(binding.uploads.length, 2);
+  assert(Array.isArray(proofs)); assert.equal(proofs.length, 2);
+  assert.deepEqual(proofs.map(p => p.path).sort(), binding.uploads.map(u => u.path).sort(), 'Both distinct registered files require byte proof');
+  for (const proof of proofs) assertStorageProof(m, c, binding, proof);
+}
+function storageReadError(category, m, objectPath, error) {
+  const status = value => /^(?:[1-5][0-9]{2})$/.test(String(value)) ? Number(value) : null;
+  const code = ['NoSuchKey', 'AccessDenied', 'InvalidJWT', 'InvalidToken', 'NotFound'].includes(error?.code) ? error.code : null;
+  return Object.assign(new Error('Registered private evidence read failed; retain state, no retry'), {
+    safeDetails: { category, bucket: BUCKET, path: objectPath, actorId: m.actors[ROLES[1]].id,
+      status: status(error?.status), statusCode: status(error?.statusCode), code,
+      errorName: error?.name === 'StorageApiError' ? 'StorageApiError' : null },
+  });
+}
+async function completePrefixList(client, requestId, m) {
+  assert(validRequestId(requestId)); const names = [], prefix = `request/${requestId}`;
+  for (let offset = 0; offset <= 1000; offset += 100) {
+    let result;
+    try { result = await client.storage.from(BUCKET).list(prefix, { limit: 100, offset, sortBy: { column: 'name', order: 'asc' } }); }
+    catch (error) { throw storageReadError('STORAGE_PREFIX_LIST', m, prefix, error); }
+    if (result.error) throw storageReadError('STORAGE_PREFIX_LIST', m, prefix, result.error);
+    assert(Array.isArray(result.data), 'Complete authenticated prefix list required');
+    for (const row of result.data) { assert(UUID.test(row.id) && typeof row.name === 'string' && !row.name.includes('/')); names.push(row.name); }
+    if (result.data.length < 100) { assert.equal(new Set(names).size, names.length); return names; }
+  }
+  throw new Error('Prefix inventory exceeds bounded owned scope');
+}
+export async function verifyRegisteredStorageEvidence(m, c, binding, client) {
+  validateBinding(m, c, binding); assert(binding.payload); assert.equal(binding.uploads.length, 2);
+  const verifyUser = async () => {
+    let result;
+    try { result = await client.auth.getUser(); }
+    catch (error) { throw storageReadError('STORAGE_READER_IDENTITY', m, `request/${binding.requestId}`, error); }
+    assert(!result.error && result.data?.user?.id === m.actors[ROLES[1]].id, 'Registered evidence reader identity changed');
+  };
+  const proofs = [];
+  for (const u of binding.uploads) {
+    await verifyUser(); let result;
+    try { result = await client.storage.from(BUCKET).download(u.path); }
+    catch (error) { throw storageReadError('STORAGE_OWNER_DOWNLOAD', m, u.path, error); }
+    if (result.error || !result.data) throw storageReadError('STORAGE_OWNER_DOWNLOAD', m, u.path, result.error);
+    let bytes;
+    try { bytes = Buffer.from(await result.data.arrayBuffer()); }
+    catch (error) { throw storageReadError('STORAGE_BODY_READ', m, u.path, error); }
+    if (!bytes.equals(syntheticPdf(m.runId, c.viewport, u.kind))) throw Object.assign(new Error('Registered evidence bytes differ from the canonical fixture'), {
+      safeDetails: { category: 'STORAGE_BYTES', bucket: BUCKET, path: u.path, actorId: u.actorId,
+        expectedSha256: u.sha256, observedSha256: sha(bytes), expectedSizeBytes: u.sizeBytes, observedSizeBytes: bytes.length },
+    });
+    proofs.push({ bucket: BUCKET, path: u.path, actorId: u.actorId, uploadStatus: 200,
+      downloadSha256: sha(bytes), downloadSizeBytes: bytes.length, listedNames: [], source: 'authenticated-owner-sdk-download+complete-prefix-list' });
+  }
+  await verifyUser(); const names = await completePrefixList(client, binding.requestId, m); await verifyUser();
+  for (const proof of proofs) proof.listedNames = [...names];
+  assertRegisteredProofs(m, c, binding, proofs); return proofs;
+}
+export function createGuardFailureLatch() {
+  let first, reject;
+  const failed = new Promise((_, fail) => { reject = fail; }); failed.catch(() => {});
+  const throwIfFailed = () => { if (first) throw first; };
+  return {
+    fail(error) { if (!first) { first = error; reject(first); } return first; },
+    throwIfFailed,
+    async run(operation) { throwIfFailed(); return Promise.race([failed, Promise.resolve().then(() => { throwIfFailed(); return operation(); })]); },
+  };
 }
 export function reviewedReadRpc(schema, name, body, role) {
   const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -350,7 +422,38 @@ export function reviewedReadRpc(schema, name, body, role) {
     && (p.vendor_id === null || UUID.test(p.vendor_id)) && ['award', 'issue'].includes(p.phase);
   return false;
 }
-export function authorizeBrowserRequest(m, c, role, request, armed, token) {
+// This fresh fixture has no sourcing event. Dependent exception/variance reads
+// are not part of the deployed no-event loading path.
+const POST_ROUTE_READS = ['sourcing_workspace'];
+export function validPostRouteReadResponse(name, data, context) {
+  return name === 'sourcing_workspace' && context?.stage === 'route_confirmed' && validRequestId(context.requestId)
+    && data !== null && typeof data === 'object' && !Array.isArray(data)
+    && JSON.stringify(Object.keys(data).sort()) === JSON.stringify(['event', 'requestId'])
+    && data.requestId === context.requestId && data.event === null;
+}
+export function confirmedRouteReadContext(m, c, role, armed, status, data) {
+  assert.equal(role, ROLES[1]); assert.equal(status, 200);
+  assert.equal(armed?.key, `${c.viewport}:${role}`); assert.equal(armed?.rpc, 'confirm_route_decision'); assert.equal(armed?.consumed, true);
+  sameKeys(armed.payload, ['request_id', 'expected_route_version', 'requested_mode']);
+  assert(validRequestId(armed.payload.request_id)); assert.equal(armed.payload.expected_route_version, 0);
+  assert.equal(armed.payload.requested_mode, 'competitive_bidding');
+  assert(UUID.test(data?.id)); assert.equal(data.request_id, armed.payload.request_id); assert.equal(data.status, 'confirmed');
+  assert.equal(data.request_version, 1); assert.equal(data.confirmed_by, m.actors[role].id);
+  assert.equal(data.route?.status, 'derived'); assert.equal(data.route.request_id, data.request_id);
+  assert(m.database.policyProfiles.some(p => p.id === data.route.policy_profile_id));
+  return { key: armed.key, actorId: m.actors[role].id, requestId: data.request_id, stage: 'route_confirmed', decisionId: data.id, routeVersion: 1 };
+}
+export function browserRpcDiagnostic(request, context) {
+  const identifier = value => typeof value === 'string' && /^[a-z_][a-z0-9_]{0,62}$/i.test(value) ? value : null;
+  const keys = value => value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? Object.keys(value).slice(0, 20).map(key => identifier(key) ?? '[invalid-key]').sort() : null;
+  let rpc = null;
+  try { const url = new URL(request.url); if (url.pathname.startsWith('/rest/v1/rpc/')) rpc = identifier(url.pathname.slice('/rest/v1/rpc/'.length)); } catch { /* No raw URL in diagnostics. */ }
+  return { method: ['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method) ? request.method : null,
+    schema: identifier(request.headers?.['content-profile']), rpc, argumentKeys: keys(request.body), payloadKeys: keys(request.body?.payload),
+    requestIdMatches: Boolean(context?.requestId && request.body?.payload?.request_id === context.requestId) };
+}
+export function authorizeBrowserRequest(m, c, role, request, armed, token, confirmedRouteRead) {
   if (['GET', 'HEAD', 'OPTIONS'].includes(request.method)) return 'read';
   const url = new URL(request.url), api = `https://${m.project}.supabase.co`;
   assert.equal(url.origin, api, 'Non-UAT mutation blocked'); assert.equal(request.method, 'POST', 'Unreviewed request method');
@@ -362,6 +465,16 @@ export function authorizeBrowserRequest(m, c, role, request, armed, token) {
   }
   assert(url.pathname.startsWith('/rest/v1/rpc/'), 'Direct table or Storage write blocked');
   const schema = request.headers['content-profile'], name = url.pathname.split('/').at(-1);
+  if (POST_ROUTE_READS.includes(name)) {
+    assert.equal(schema, 'procurement'); assert.equal(role, ROLES[1]); assert.equal(url.search, '');
+    assert.equal(url.pathname, `/rest/v1/rpc/${name}`);
+    assert.equal(confirmedRouteRead?.key, `${c.viewport}:${role}`); assert.equal(confirmedRouteRead?.actorId, m.actors[role].id);
+    assert.equal(confirmedRouteRead?.stage, 'route_confirmed'); assert.equal(confirmedRouteRead?.routeVersion, 1);
+    assert(UUID.test(confirmedRouteRead?.decisionId)); assert(validRequestId(confirmedRouteRead?.requestId));
+    sameKeys(body, ['payload']); sameKeys(body.payload, ['request_id']); assert.equal(body.payload.request_id, confirmedRouteRead.requestId);
+    assert(typeof token === 'string' && token.length > 0 && request.headers.authorization === `Bearer ${token}`, 'Post-route read is not the verified sign-in session');
+    return 'post-route-read';
+  }
   if (reviewedReadRpc(schema, name, body, role)) return 'read';
   if (schema === 'learning' && ['resolve_assignments', 'evaluate_certifications'].includes(name)
     && body && typeof body === 'object' && !Array.isArray(body) && Object.keys(body).length === 0) return 'bootstrap';
@@ -546,9 +659,11 @@ export async function executeJourney(input, adapter, report = newReport(input, a
         uploaded: async (next, proof) => {
           validateBinding(m, c, next); assert.equal(next.requestId, evidenceBinding.requestId);
           assert.deepEqual(next.uploads.slice(0, -1), evidenceBinding.uploads); assert.equal(next.uploads.length, evidenceBinding.uploads.length + 1);
-          assertStorageProof(m, c, next, proof);
+          assertUploadReceipt(m, c, next, proof);
           evidenceBinding = structuredClone(next); stage = next.uploads.length === 2 ? 'uploads_ready' : 'uploading';
-          await record({ kind: 'verified-private-upload', view: c.viewport, binding: evidenceBinding, proof });
+          const snapshot = await read();
+          await record({ kind: 'private-upload-metadata-verified', view: c.viewport, binding: evidenceBinding, proof, snapshot,
+            byteReadback: 'deferred-until-canonical-registration' });
         },
         beforeHandoff: async next => {
           validateBinding(m, c, next); assert.deepEqual({ ...next, payload: null }, evidenceBinding);
@@ -563,6 +678,11 @@ export async function executeJourney(input, adapter, report = newReport(input, a
       assert(evidenceBinding?.payload && !completed.error && completed.data, 'Canonical completion was not verified; no replay');
       stage = 'handed_off'; const handed = await read();
       assert.deepEqual(completed.data, handed.rows.recommendations[0]); binding = reconcile(m, c.viewport, handed, stage, evidenceBinding);
+      await health(); await actor(ROLES[1]);
+      const evidenceProofs = await adapter.verifyEvidence(c, ROLES[1], structuredClone(evidenceBinding));
+      assertRegisteredProofs(m, c, evidenceBinding, evidenceProofs);
+      assert.deepEqual(await read(), handed, 'Registered evidence verification changed persisted state');
+      await record({ kind: 'registered-private-evidence-verified', view: c.viewport, binding: evidenceBinding, proofs: evidenceProofs });
       await capture(ROLES[1], stage, handed);
       await deny(ROLES[0], recommendationPayload(c), /already accepted or handed off/i);
       await deny(ROLES[1], decision('handoff'), /Accept the recommendation before handoff/);
@@ -588,10 +708,11 @@ export async function executeJourney(input, adapter, report = newReport(input, a
       report.negatives.push({ view: c.viewport, role: ROLES[1], actorId: m.actors[ROLES[1]].id, rpc: 'confirm_route_decision', payload: routePayload, message: staleMessage, snapshot: await read() });
       await record({ kind: 'negative-result', result: report.negatives.at(-1) });
       binding = reconcile(m, c.viewport, confirmed, stage, evidenceBinding);
-      report.bindings.push({ view: c.viewport, ...binding, evidence: evidenceBinding }); await record({ kind: 'binding', binding: report.bindings.at(-1) });
+      report.bindings.push({ view: c.viewport, ...binding, evidence: evidenceBinding, evidenceProofs }); await record({ kind: 'binding', binding: report.bindings.at(-1) });
     }
     for (const c of m.cases) {
-      const evidence = report.bindings.find(b => b.view === c.viewport).evidence;
+      const completed = report.bindings.find(b => b.view === c.viewport), evidence = completed.evidence;
+      assertRegisteredProofs(m, c, evidence, completed.evidenceProofs);
       const snapshot = await adapter.read(c, 'route_confirmed', evidence); reconcile(m, c.viewport, snapshot, 'route_confirmed', evidence);
       assert.deepEqual(snapshot, report.checks.find(row => row.view === c.viewport && row.stage === 'route_confirmed').readback, 'Completed viewport changed before final reconciliation');
       await record({ kind: 'final-readback', view: c.viewport, snapshot });
@@ -730,7 +851,7 @@ export async function fillRecommendationForm(dialog, c, step = () => {}) {
   step('recommend.fill-planning-days'); await dialog.getByLabel('Planning assumption (days)', { exact: true }).fill(String(c.planningDays));
   step('recommend.fill-rationale'); await dialog.getByRole('textbox', { name: 'Rationale', exact: true }).fill(c.rationale);
 }
-export async function fillCanonicalWizard(page, m, c, expect, step = () => {}) {
+export async function fillCanonicalWizard(page, m, c, expect, step = () => {}, canonical) {
   step('completion.explicit-classification');
   await expect(page.getByRole('heading', { name: 'Draft a purchase request', exact: true })).toBeVisible();
   await page.locator('input[name="category"][value="goods"]').check();
@@ -740,6 +861,7 @@ export async function fillCanonicalWizard(page, m, c, expect, step = () => {}) {
     const field = page.locator(`[aria-label="Line 1 ${label}"]:visible`); await expect(field).toHaveCount(1); await expect(field).toHaveValue(value); await expect(field).toHaveAttribute('readonly', '');
   }
   await page.locator('[aria-label="Line 1 unit price"]:visible').fill(String(c.completion.unitPrice));
+  await rememberCanonicalStep1({ m, c, page, canonical });
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
   step('completion.funding-and-owned-files');
   await page.locator('select#department').selectOption(c.completion.department);
@@ -748,8 +870,14 @@ export async function fillCanonicalWizard(page, m, c, expect, step = () => {}) {
   await page.locator('#neededBy').fill(c.completion.neededBy);
   await expect(page.locator('#need-description')).toHaveValue(c.rationale);
   await expect(page.locator('#need-description')).toHaveAttribute('readonly', '');
-  await page.locator('input[type="file"]').setInputFiles(c.documents.map(d => ({ name: d.filename, mimeType: d.mimeType, buffer: syntheticPdf(m.runId, c.viewport, d.kind) })));
-  for (const d of c.documents) await page.getByRole('combobox', { name: `Document type for ${d.filename}`, exact: true }).selectOption(d.kind);
+  for (const d of c.documents) {
+    step(`completion.add-${d.kind}-file`);
+    const picker = page.getByLabel('Add file', { exact: true });
+    await expect(picker).toHaveCount(1);
+    await picker.setInputFiles({ name: d.filename, mimeType: d.mimeType, buffer: syntheticPdf(m.runId, c.viewport, d.kind) });
+    const kind = page.getByRole('combobox', { name: `Document type for ${d.filename}`, exact: true });
+    await expect(kind).toHaveCount(1); await kind.selectOption(d.kind); await expect(kind).toHaveValue(d.kind);
+  }
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
   step('completion.review-rfq-terms');
   await expect(page.getByRole('heading', { name: 'RFQ requirements', exact: true })).toBeVisible();
@@ -769,33 +897,92 @@ export async function verifyDraftLine(page, c, expect) {
   }
 }
 
-export async function captureUiFailure({ m, c, role, page, step, attempt }) {
+const canonicalDiagnostics = new WeakMap();
+export function createCanonicalFormDiagnostic({ m, c, role, page, recommendationId }) {
+  assert.equal(role, ROLES[1]); assert(UUID.test(recommendationId)); assert.deepEqual(c, selected(m, c.viewport));
+  const token = Object.freeze({});
+  canonicalDiagnostics.set(token, { m, c, role, page, recommendationId, step1Form: null });
+  return token;
+}
+function canonicalContext({ m, c, role, page, canonical }) {
+  const context = canonicalDiagnostics.get(canonical);
+  if (!context || context.m !== m || context.c !== c || context.role !== role || context.page !== page) return null;
+  const expected = `${m.origin}/procurement/requests/new?replenishment=${context.recommendationId}`;
+  return page.url() === expected ? context : null;
+}
+async function ownedCanonicalForm(context, phase, pinned = null) {
+  const { page, c } = context;
+  const locator = page.locator('form').filter({ has: page.locator(phase === 'step1' ? '#title:visible' : '#need-description:visible') });
+  if (await locator.count() !== 1) return null;
+  const form = pinned ?? await locator.elementHandle();
+  if (!form || !await form.evaluate(element => element.isConnected) || !await form.isVisible()
+    || !await locator.evaluate((current, held) => current === held, form)) return null;
+  if (await page.locator('input[type="password"]').count()) return null;
+  const heading = page.getByRole('heading', { name: 'Draft a purchase request', exact: true });
+  if (await heading.count() !== 1 || !await heading.isVisible()) return null;
+  const matches = async (selector, value, readonly) => {
+    const fields = await form.$$(selector), field = fields[0];
+    return fields.length === 1 && await field.isVisible() && await field.inputValue() === value
+      && (!readonly || await field.getAttribute('readonly') !== null);
+  };
+  if (phase === 'step1') {
+    if (!await matches('#title', `Replenish ${c.productId}`, false)) return null;
+    for (const [label, value] of [['description', c.productId], ['quantity', String(c.quantity)], ['unit of measure', 'unit']]) {
+      if (!await matches(`[aria-label="Line 1 ${label}"]:visible`, value, true)) return null;
+    }
+  } else if (!context.step1Form || !await form.evaluate((element, prior) => element === prior, context.step1Form)
+    || !await matches('#need-description', c.rationale, true)) return null;
+  return form;
+}
+async function rememberCanonicalStep1({ m, c, page, canonical }) {
+  const context = canonicalContext({ m, c, page, role: ROLES[1], canonical });
+  if (!context) return;
+  // Diagnostic-only proof: never arm a command or stop the business flow on capture failure.
+  try { context.step1Form = await ownedCanonicalForm(context, 'step1'); }
+  catch { context.step1Form = null; }
+}
+
+export async function captureUiFailure({ m, c, role, page, step, attempt, canonical }) {
   const evidence = { step, view: c.viewport, actorId: m.actors[role].id, route: 'other', body: null, screenshot: null };
   try {
+    const context = canonicalContext({ m, c, role, page, canonical });
+    const phase = step === 'completion.explicit-classification' ? 'step1'
+      : ['completion.funding-and-owned-files', 'completion.add-spec-file', 'completion.add-budget-file'].includes(step) ? 'step2' : null;
     const url = new URL(page.url());
     if (url.origin === m.origin) evidence.route = url.pathname === '/login' ? 'login'
       : url.pathname === `/warehouse/inventory/${encodeURIComponent(c.productId)}` ? 'owned-inventory'
         : url.pathname === '/warehouse/procurement' ? 'warehouse-procurement' : 'other';
+    if (context && phase) evidence.route = 'owned-canonical-form';
     // Structural observations only: no body text, HTML, URL query, field values or credentials.
     evidence.body = await page.evaluate(() => ({ bodyPresent: !!document.body, readyState: document.readyState,
       passwordPresent: !!document.querySelector('input[type="password"]'), dialogCount: document.querySelectorAll('[role="dialog"]').length,
       inputCount: document.querySelectorAll('input,textarea').length }));
-    if (evidence.body.passwordPresent || step.startsWith('auth.') || !['owned-inventory', 'warehouse-procurement'].includes(evidence.route)) {
+    if (evidence.body.passwordPresent || step.startsWith('auth.') || !['owned-inventory', 'warehouse-procurement', 'owned-canonical-form'].includes(evidence.route)) {
       evidence.captureStatus = 'skipped-sensitive-or-unowned-page'; return evidence;
     }
     let scope;
-    if (evidence.route === 'owned-inventory') {
+    if (evidence.route === 'owned-canonical-form') {
+      scope = await ownedCanonicalForm(context, phase);
+      if (!scope) { evidence.captureStatus = 'skipped-unbound-form'; return evidence; }
+    } else if (evidence.route === 'owned-inventory') {
       scope = page.getByRole('dialog', { name: 'Recommend replenishment', exact: true });
       if (await scope.getByText(`${c.productName} - ${c.sku}`, { exact: true }).count() !== 1) {
         evidence.captureStatus = 'skipped-unbound-dialog'; return evidence;
       }
     } else scope = page.locator('section[aria-labelledby="replenishment-control-title"] .card')
       .filter({ has: page.getByText(c.productName, { exact: true }) });
-    if (await scope.count() !== 1 || !await scope.isVisible()) { evidence.captureStatus = 'skipped-unavailable-owned-surface'; return evidence; }
+    if ((evidence.route !== 'owned-canonical-form' && await scope.count() !== 1) || !await scope.isVisible()) {
+      evidence.captureStatus = 'skipped-unavailable-owned-surface'; return evidence;
+    }
+    if (evidence.route === 'owned-canonical-form' && (!await ownedCanonicalForm(context, phase, scope)
+      || !canonicalContext({ m, c, role, page, canonical }) || await page.locator('input[type="password"]').count())) {
+      evidence.captureStatus = 'skipped-changed-owned-form'; return evidence;
+    }
     const ref = `failure-${c.viewport}-${role}-${randomUUID()}.png`;
     await scope.screenshot({ path: path.join(attempt, ref), timeout: 5000, animations: 'disabled',
-      mask: [page.locator('input,textarea,[contenteditable],img,canvas,video,iframe')], maskColor: '#202020' });
-    evidence.screenshot = { ref, sha256: sha(await readFile(path.join(attempt, ref))), scope: evidence.route === 'owned-inventory' ? 'owned-recommendation-dialog' : 'owned-replenishment-card', masked: true };
+      mask: [page.locator('input,textarea,select,[contenteditable],img,canvas,video,iframe')], maskColor: '#202020' });
+    evidence.screenshot = { ref, sha256: sha(await readFile(path.join(attempt, ref))), scope: evidence.route === 'owned-canonical-form' ? `owned-canonical-form-${phase}`
+      : evidence.route === 'owned-inventory' ? 'owned-recommendation-dialog' : 'owned-replenishment-card', masked: true };
     evidence.captureStatus = 'captured-owned-surface';
   } catch { evidence.captureStatus = 'capture-unavailable'; }
   return evidence;
@@ -830,8 +1017,9 @@ async function liveAdapter(m, env, attempt, record, mode) {
   const execute = promisify(execFile), api = `https://${m.project}.supabase.co`;
   const clients = {}, pages = new Map(), contexts = [];
   const pageErrors = createPageErrorMonitor(record);
-  let browser, armed, guardError, activeUi, completion, sqlBusy = false, number = 0;
-  function step(name, page, c, role) { activeUi = { step: name, page, c, role }; }
+  const guard = createGuardFailureLatch(), pendingRoutes = new Set();
+  let browser, armed, activeUi, completion, sqlBusy = false, number = 0;
+  function step(name, page, c, role, canonical) { activeUi = { step: name, page, c, role, canonical }; }
   const cliRoot = mode === 'cli' ? await realpath(env.WMS_REPLENISHMENT_CLI_WORKDIR) : null;
   const mcpRead = mode === 'mcp' ? await createMcpReadback(m, attempt, { record }) : null;
   async function checkLink() {
@@ -840,8 +1028,8 @@ async function liveAdapter(m, env, attempt, record, mode) {
   if (mode === 'cli') await checkLink();
   const safeEnv = Object.fromEntries(Object.entries(env).filter(([key, value]) => /^(SYSTEMROOT|WINDIR|COMSPEC|PATH|PATHEXT|HOME|USERPROFILE|HOMEDRIVE|HOMEPATH|APPDATA|LOCALAPPDATA|TEMP|TMP|TMPDIR|USERNAME|COMPUTERNAME|OS)$/i.test(key) && typeof value === 'string'));
   async function read(c, stage, binding = null) {
-    assert(!guardError, guardError);
-    if (mcpRead) { const snapshot = await mcpRead(c, stage, binding); assert(!guardError, guardError); return snapshot; }
+    guard.throwIfFailed();
+    if (mcpRead) { const snapshot = await mcpRead(c, stage, binding); guard.throwIfFailed(); return snapshot; }
     assert(!sqlBusy, 'Concurrent linked CLI query refused'); sqlBusy = true;
     const sql = readbackSql(m, c.viewport, binding), ref = `query-${++number}-${sha(sql)}.sql`;
     try {
@@ -877,36 +1065,36 @@ async function liveAdapter(m, env, attempt, record, mode) {
     const key = `${c.viewport}:${role}`; if (pages.has(key)) return pages.get(key);
     browser ??= await chromium.launch();
     const context = await browser.newContext({ viewport: { width: c.width, height: c.height }, isMobile: c.viewport === 'mobile390', hasTouch: c.viewport === 'mobile390', serviceWorkers: 'block', reducedMotion: 'reduce' });
-    contexts.push(context); let token;
+    contexts.push(context); let token, confirmedRouteRead;
     await context.route('**/*', async route => {
       const request = route.request(); if (['GET', 'HEAD', 'OPTIONS'].includes(request.method())) return route.continue();
+      let settled, diagnostic; const pending = new Promise(resolve => { settled = resolve; }); pendingRoutes.add(pending);
       try {
+        guard.throwIfFailed();
         if (new URL(request.url()).pathname.startsWith('/storage/')) {
           assert(completion && completion.key === key && !completion.busy && !completion.sent, 'Unarmed Storage write');
           completion.busy = true;
           const candidate = await inspectStorageUpload(m, c, role, { method: request.method(), url: request.url(), headers: request.headers(), bytes: request.postDataBuffer() }, token, completion.binding);
           completion.binding ??= { requestId: candidate.requestId, uploads: [], payload: null, route: null };
           await completion.hooks.beforeUpload(structuredClone(completion.binding));
-          assertActor(m, role, await actor(role)); assert(!guardError, guardError);
+          assertActor(m, role, await actor(role)); guard.throwIfFailed();
           await record({ kind: 'storage-upload-intent', view: c.viewport, requestId: candidate.requestId, upload: candidate.upload, upsert: false });
-          // Fetch once under the route guard, verify durable bytes before releasing
-          // the response that lets the app proceed to its next upload/command.
+          guard.throwIfFailed();
+          // Owner SELECT requires registered attachments. Until canonical creation,
+          // preserve upload response and independent metadata proof, not byte-read credit.
           const response = await route.fetch({ maxRedirects: 0, maxRetries: 0, timeout: 30000 });
           await record({ kind: 'storage-upload-response', view: c.viewport, actorId: m.actors[role].id, path: candidate.upload.path,
             status: response.status(), source: 'intercepted-browser-upload', automaticRetry: false });
+          guard.throwIfFailed();
           assert.equal(response.status(), 200, 'Upload outcome uncertain or failed; retain evidence, never retry');
           completion.binding.uploads.push(candidate.upload);
-          const download = await clients[role].storage.from(BUCKET).download(candidate.upload.path);
-          assert(!download.error && download.data, 'Authenticated owner download failed');
-          const bytes = Buffer.from(await download.data.arrayBuffer());
-          assert.deepEqual(bytes, syntheticPdf(m.runId, c.viewport, candidate.upload.kind));
-          const names = await completePrefixList(clients[role], completion.binding.requestId);
-          const proof = { bucket: BUCKET, path: candidate.upload.path, actorId: m.actors[role].id, uploadStatus: response.status(), downloadSha256: sha(bytes),
-            downloadSizeBytes: bytes.length, listedNames: names, source: 'authenticated-owner-sdk-download+complete-prefix-list' };
+          const proof = { bucket: BUCKET, path: candidate.upload.path, actorId: m.actors[role].id, uploadStatus: response.status(), source: 'intercepted-browser-upload' };
           await completion.hooks.uploaded(structuredClone(completion.binding), proof);
-          completion.busy = false; return route.fulfill({ response });
+          guard.throwIfFailed();
+          completion.busy = false; return await route.fulfill({ response });
         }
         const body = request.postDataJSON(), schema = request.headers()['content-profile'], name = new URL(request.url()).pathname.split('/').at(-1);
+        diagnostic = browserRpcDiagnostic({ method: request.method(), url: request.url(), headers: request.headers(), body }, confirmedRouteRead);
         if (schema === 'procurement' && name === RPC && body?.payload?.action === 'handoff' && completion) {
           assert(completion.key === key && !completion.busy && !completion.sent);
           completion.sent = true;
@@ -914,18 +1102,53 @@ async function liveAdapter(m, env, attempt, record, mode) {
           assertCanonicalPayload(m, c, body.payload.request, completion.binding);
           completion.binding.payload = structuredClone(body.payload.request);
           await completion.hooks.beforeHandoff(structuredClone(completion.binding));
-          assert(!guardError, guardError);
+          guard.throwIfFailed();
           armed = { key, payload: structuredClone(body.payload), consumed: false };
         }
-        const kind = authorizeBrowserRequest(m, c, role, { method: request.method(), url: request.url(), headers: request.headers(), body }, armed, token);
-        if (kind === 'read' || kind === 'auth') return route.continue();
+        const kind = authorizeBrowserRequest(m, c, role, { method: request.method(), url: request.url(), headers: request.headers(), body }, armed, token, confirmedRouteRead);
+        if (kind === 'read' || kind === 'auth') return await route.continue();
+        if (kind === 'post-route-read') {
+          const response = await route.fetch({ maxRedirects: 0, maxRetries: 0, timeout: 30000 });
+          let data; try { data = await response.json(); } catch { data = undefined; }
+          const errorCode = typeof data?.code === 'string' && /^[A-Z0-9]{5}$/.test(data.code) ? data.code : null;
+          const responseMatches = validPostRouteReadResponse(name, data, confirmedRouteRead);
+          const details = { ...diagnostic, status: response.status(), errorCode, responseMatches };
+          const failure = response.status() !== 200 || !responseMatches || errorCode
+            ? Object.assign(new Error('Post-route read failed; no clean UI credit'), { safeDetails: details }) : null;
+          await record({ kind: 'post-route-read-response', view: c.viewport, actorId: m.actors[role].id, ...details });
+          // Deliver the real error before the failure latch can close the page.
+          // The confirmation checkpoint waits for pending read handlers below.
+          try { return await route.fulfill({ response }); }
+          finally { if (failure) guard.fail(failure); }
+        }
         if (kind === 'bootstrap') {
-          await record({ kind: 'own-learning-bootstrap', view: c.viewport, actorId: m.actors[role].id, schema, rpc: name, parameters: {} }); return route.continue();
+          await record({ kind: 'own-learning-bootstrap', view: c.viewport, actorId: m.actors[role].id, schema, rpc: name, parameters: {} }); guard.throwIfFailed(); return await route.continue();
         }
         armed.consumed = true;
         await record({ kind: 'browser-command', view: c.viewport, actorId: m.actors[role].id, schema, rpc: name, payload: body.payload });
-        return route.continue();
-      } catch (error) { guardError = error.message.split('\n')[0]; await record({ kind: 'blocked-browser-mutation', reason: guardError }); return route.abort('blockedbyclient'); }
+        guard.throwIfFailed();
+        if (name === 'confirm_route_decision') {
+          const response = await route.fetch({ maxRedirects: 0, maxRetries: 0, timeout: 30000 });
+          let data; try { data = await response.json(); } catch { data = undefined; }
+          await record({ kind: 'route-confirmation-response-boundary', view: c.viewport, actorId: m.actors[role].id,
+            status: response.status(), requestId: armed.payload.request_id, responseSha256: data === undefined ? null : sha(JSON.stringify(data)) });
+          let failure;
+          try { confirmedRouteRead = confirmedRouteReadContext(m, c, role, armed, response.status(), data); }
+          catch (error) { failure = error; }
+          guard.throwIfFailed();
+          try { return await route.fulfill({ response }); }
+          finally { if (failure) guard.fail(failure); }
+        }
+        return await route.continue();
+      } catch (error) {
+        if (!diagnostic) {
+          try { diagnostic = browserRpcDiagnostic({ method: request.method(), url: request.url(), headers: request.headers(), body: request.postDataJSON() }, confirmedRouteRead); } catch { /* Malformed bodies remain unrecorded. */ }
+        }
+        if (diagnostic) error.safeDetails = { ...error.safeDetails, request: diagnostic };
+        const first = guard.fail(error);
+        try { await record({ kind: 'blocked-browser-mutation', reason: first.message.split('\n')[0], ...(diagnostic ? { request: diagnostic } : {}), ...(first.safeDetails ? { details: first.safeDetails } : {}) }); }
+        finally { await route.abort('blockedbyclient').catch(() => {}); }
+      } finally { settled(); pendingRoutes.delete(pending); }
     });
     const page = await context.newPage(); pageErrors.attach(page, { view: c.viewport, actorId: m.actors[role].id }); page.setDefaultTimeout(30000);
     step('auth.navigate', page, c, role); await page.goto(`${m.origin}/login?redirect=%2Fwarehouse%2Finventory`);
@@ -941,7 +1164,7 @@ async function liveAdapter(m, env, attempt, record, mode) {
     const verified = await userWait; assert.equal(verified.status(), 200); assert.equal((await verified.json()).id, m.actors[role].id);
     assert.equal((await verified.request().allHeaders()).authorization, `Bearer ${token}`);
     await page.waitForURL(url => url.pathname !== '/login');
-    assert(!guardError, guardError); await record({ kind: 'browser-identity', view: c.viewport, actorId: m.actors[role].id, source: 'password-login+auth.getUser' });
+    guard.throwIfFailed(); await record({ kind: 'browser-identity', view: c.viewport, actorId: m.actors[role].id, source: 'password-login+auth.getUser' });
     pages.set(key, page); return page;
   }
   async function ownedCard(page, c) {
@@ -949,21 +1172,11 @@ async function liveAdapter(m, env, attempt, record, mode) {
     const card = section.locator('.card').filter({ has: page.getByText(c.productName, { exact: true }) });
     await expect(card).toHaveCount(1); return card;
   }
-  async function completePrefixList(client, requestId) {
-    assert(validRequestId(requestId)); const names = [];
-    for (let offset = 0; offset <= 1000; offset += 100) {
-      const result = await client.storage.from(BUCKET).list(`request/${requestId}`, { limit: 100, offset, sortBy: { column: 'name', order: 'asc' } });
-      assert(!result.error && Array.isArray(result.data), 'Complete authenticated prefix list required');
-      for (const row of result.data) { assert(UUID.test(row.id) && typeof row.name === 'string' && !row.name.includes('/')); names.push(row.name); }
-      if (result.data.length < 100) { assert.equal(new Set(names).size, names.length); return names; }
-    }
-    throw new Error('Prefix inventory exceeds bounded owned scope');
-  }
   return {
     kind: mode === 'mcp' ? 'ordinary-user-ui+trusted-parent-mediated-mcp' : 'ordinary-user-ui+independent-readonly-cli', record, read, actor,
     health: async () => { const r = await fetch(`${m.origin}/api/health`, { cache: 'no-store', signal: AbortSignal.timeout(20000) }); assert(r.ok, 'UAT health unavailable'); return r.json(); },
     command: async (c, role, action, payload) => {
-      const page = await pageFor(c, role); assert(!guardError, guardError); let button;
+      const page = await pageFor(c, role); guard.throwIfFailed(); let button;
       if (action === 'recommend') {
         step('recommend.navigate-product', page, c, role);
         await page.goto(`${m.origin}/warehouse/inventory/${encodeURIComponent(c.productId)}`);
@@ -984,12 +1197,12 @@ async function liveAdapter(m, env, attempt, record, mode) {
         await expect(card.getByText(action === 'accept' ? 'recommended' : 'accepted', { exact: true })).toBeVisible();
         button = card.getByRole('button', { name: action === 'accept' ? 'Accept' : 'Hand off to Procurement', exact: true });
       }
-      assert(!guardError, guardError); armed = { key: `${c.viewport}:${role}`, payload: structuredClone(payload), consumed: false };
+      guard.throwIfFailed(); armed = { key: `${c.viewport}:${role}`, payload: structuredClone(payload), consumed: false };
       const waiting = page.waitForResponse(r => r.request().method() === 'POST' && r.url() === `${api}/rest/v1/rpc/${RPC}`, { timeout: 600000 }); waiting.catch(() => {});
       try {
-        step(`${action}.submit`, page, c, role); await button.click();
-        step(`${action}.response`, page, c, role); const response = await waiting;
-        assert(!guardError, guardError); assert(armed.consumed, 'No exact UI command captured');
+        step(`${action}.submit`, page, c, role); await guard.run(() => button.click());
+        step(`${action}.response`, page, c, role); const response = await guard.run(() => waiting);
+        guard.throwIfFailed(); assert(armed.consumed, 'No exact UI command captured');
         const data = await response.json(); await record({ kind: 'browser-response', view: c.viewport, actorId: m.actors[role].id, action, status: response.status(), data });
         assert(response.ok(), 'UI RPC failed; inspect retained response, no retry');
         step(`${action}.verify-saved-status`, page, c, role);
@@ -1000,11 +1213,13 @@ async function liveAdapter(m, env, attempt, record, mode) {
     },
     complete: async (c, role, recommendationId, hooks) => {
       assert.equal(role, ROLES[1]); assert(!completion, 'No completion replay');
-      const page = await pageFor(c, role); step('completion.open-wizard', page, c, role);
+      const page = await pageFor(c, role);
+      const canonical = createCanonicalFormDiagnostic({ m, c, role, page, recommendationId });
+      step('completion.open-wizard', page, c, role, canonical);
       const card = await ownedCard(page, c), link = card.getByRole('link', { name: 'Complete Procurement request', exact: true });
       await expect(link).toHaveAttribute('href', `/procurement/requests/new?replenishment=${recommendationId}`); await link.click();
       await page.waitForURL(url => url.origin === m.origin && url.pathname === '/procurement/requests/new' && url.search === `?replenishment=${recommendationId}`);
-      await fillCanonicalWizard(page, m, c, expect, name => step(name, page, c, role));
+      await fillCanonicalWizard(page, m, c, expect, name => step(name, page, c, role, canonical), canonical);
       const ref = `${c.viewport}-canonical-wizard-before-upload.png`;
       const geometry = await captureCheckpointViewport(page, path.join(attempt, ref));
       await record({ kind: 'wizard-inputs-before-upload', view: c.viewport, actorId: m.actors[role].id, recommendationId,
@@ -1012,14 +1227,18 @@ async function liveAdapter(m, env, attempt, record, mode) {
       completion = { key: `${c.viewport}:${role}`, recommendationId, hooks, binding: null, busy: false, sent: false };
       const waiting = page.waitForResponse(r => r.request().method() === 'POST' && r.url() === `${api}/rest/v1/rpc/${RPC}`, { timeout: 600000 }); waiting.catch(() => {});
       try {
-        step('completion.submit-draft-only', page, c, role); await page.getByRole('button', { name: 'Create draft & complete handoff', exact: true }).click();
-        step('completion.canonical-response', page, c, role); const response = await waiting;
-        assert(!guardError, guardError); assert(completion.sent && armed?.consumed); const data = await response.json();
+        step('completion.submit-draft-only', page, c, role); await guard.run(() => page.getByRole('button', { name: 'Create draft & complete handoff', exact: true }).click());
+        step('completion.canonical-response', page, c, role); const response = await guard.run(() => waiting);
+        guard.throwIfFailed(); assert(completion.sent && armed?.consumed); const data = await response.json();
         await record({ kind: 'browser-response', view: c.viewport, actorId: m.actors[role].id, action: 'canonical-handoff', status: response.status(), data });
         assert(response.ok(), 'Canonical handoff failed; no retry'); assert.equal(data.procurement_request_id, completion.binding.requestId);
         await page.waitForURL(url => url.origin === m.origin && url.pathname === `/procurement/requests/${completion.binding.requestId}`);
         return { data, error: null };
       } finally { completion = undefined; armed = undefined; }
+    },
+    verifyEvidence: async (c, role, binding) => {
+      guard.throwIfFailed(); assert.equal(role, ROLES[1]); assertActor(m, role, await actor(role));
+      return guard.run(() => verifyRegisteredStorageEvidence(m, c, binding, clients[role]));
     },
     negative: async (c, role, payload, stage, binding) => {
       const s = await read(c, stage, binding), r = s.rows.recommendations[0]; assert(r && UUID.test(r.id));
@@ -1036,13 +1255,16 @@ async function liveAdapter(m, env, attempt, record, mode) {
       assert.equal(new URL(page.url()).pathname, `/procurement/requests/${payload.request_id}`);
       armed = { key: `${c.viewport}:${role}`, rpc: 'confirm_route_decision', payload: structuredClone(payload), consumed: false };
       const waiting = page.waitForResponse(r => r.request().method() === 'POST' && r.url() === `${api}/rest/v1/rpc/confirm_route_decision`); waiting.catch(() => {});
+      const sourcingRead = page.waitForResponse(r => r.request().method() === 'POST' && r.url() === `${api}/rest/v1/rpc/sourcing_workspace`, { timeout: 30000 }); sourcingRead.catch(() => {});
       try {
-        step('route.confirm-separately', page, c, role); await page.getByRole('button', { name: 'Confirm procurement route', exact: true }).click();
-        const response = await waiting; assert(!guardError, guardError); assert(armed.consumed); const data = await response.json();
+        step('route.confirm-separately', page, c, role); await guard.run(() => page.getByRole('button', { name: 'Confirm procurement route', exact: true }).click());
+        const response = await guard.run(() => waiting); guard.throwIfFailed(); assert(armed.consumed); const data = await response.json();
         await record({ kind: 'browser-response', view: c.viewport, actorId: m.actors[role].id, action: 'confirm-route', status: response.status(), data });
         assert(response.ok(), 'Route confirmation failed; do not replay');
-        step('route.verify-still-draft', page, c, role); await expect(page.getByLabel('Confirmed procurement route', { exact: true })).toBeVisible();
-        await expect(page.getByText('Draft', { exact: true }).first()).toBeVisible();
+        step('route.verify-still-draft', page, c, role); await guard.run(() => expect(page.getByLabel('Confirmed procurement route', { exact: true })).toBeVisible());
+        await guard.run(() => expect(page.getByText('Draft', { exact: true }).first()).toBeVisible());
+        step('route.verify-sourcing-read', page, c, role); await guard.run(() => sourcingRead);
+        await Promise.allSettled([...pendingRoutes]); guard.throwIfFailed();
         return { data, error: null };
       } finally { armed = undefined; }
     },
@@ -1065,7 +1287,7 @@ async function liveAdapter(m, env, attempt, record, mode) {
       await expect(page.getByText(/legacy request is missing its requirement classification/i)).toHaveCount(0);
       await expect(page.getByRole('button', { name: 'Confirm procurement route', exact: true })).toBeVisible();
       await expect(page.getByText('Draft', { exact: true }).first()).toBeVisible();
-      assert(!guardError, guardError);
+      guard.throwIfFailed();
       step('draft.ordinary-readback', page, c, role);
       const own = await clients[role].schema('procurement').from('requests').select('*').eq('id', request.id).single();
       assert(!own.error); assert.deepEqual(own.data, request, 'Ordinary requester read differs from independent draft');
@@ -1073,7 +1295,7 @@ async function liveAdapter(m, env, attempt, record, mode) {
       return { requestId: request.id, path: destination, actorId: m.actors[role].id };
     },
     capture: async (c, role, stage) => {
-      assert(!guardError, guardError); const page = await pageFor(c, role), ref = `${c.viewport}-${stage}.png`;
+      guard.throwIfFailed(); const page = await pageFor(c, role), ref = `${c.viewport}-${stage}.png`;
       step(`checkpoint.${stage}`, page, c, role);
       const geometry = await captureCheckpointViewport(page, path.join(attempt, ref));
       return { ref, sha256: sha(await readFile(path.join(attempt, ref))), ...geometry, actorId: m.actors[role].id, reviewed: false };
@@ -1084,7 +1306,7 @@ async function liveAdapter(m, env, attempt, record, mode) {
       await record({ kind: 'ui-failure-diagnostic', ...evidence, errorMessageSha256: sha(String(error.message)) }); return evidence;
     },
     close: async () => {
-      try { await browser?.close(); const summary = await pageErrors.finish(); assert(!guardError, guardError); return summary; }
+      try { await browser?.close(); await Promise.allSettled([...pendingRoutes]); const summary = await pageErrors.finish(); guard.throwIfFailed(); return summary; }
       finally { for (const client of Object.values(clients)) client.auth.stopAutoRefresh(); }
     },
   };
@@ -1117,11 +1339,13 @@ export async function run(folder, env = process.env, apply = false, mode = 'cli'
       'scripts/qa/live-e2e-scenarios.mjs', 'scripts/qa/wms-signoff-contract.mjs', 'modules/warehouse/src/components/InventoryRecommendationAction.tsx',
       'modules/warehouse/src/components/ReplenishmentControlPanel.tsx', 'modules/procurement/src/localStore.ts', 'modules/procurement/src/pages/RequestDetailPage.tsx',
       'modules/procurement/src/pages/CreateRequestPage.tsx', 'modules/procurement/src/replenishmentRequest.ts', 'modules/procurement/src/attachments.ts',
-      'modules/procurement/src/policyRoute.ts', 'modules/procurement/src/policyProfile.ts',
+      'modules/procurement/src/policyRoute.ts', 'modules/procurement/src/policyProfile.ts', 'modules/procurement/src/components/SourcingWorkspace.tsx',
       `supabase/migrations/${m.database.migrationVersion}_govern_replenishment_request_completion.sql`,
       'supabase/migrations/20260710041319_govern_procurement_attachments.sql', 'supabase/migrations/20260815154702_procurement_finance_requester_privacy.sql',
       'supabase/migrations/20260816223000_deduplicate_procurement_intake_collaborators.sql',
+      'supabase/migrations/20260804173000_insufficient_bid_exception_workflow.sql', 'supabase/migrations/20260816090000_security_database_launch_blocker_convergence.sql',
       'supabase/migrations/20260816183000_reconcile_launch_authority_and_learning.sql', 'supabase/migrations/20260822110000_mpic_procurement_policy_alignment.sql',
+      'supabase/migrations/20260914025434_restore_sourcing_evaluation_read_contract.sql',
       'supabase/migrations/20260911080134_restore_ownerless_commitment_readiness.sql', 'supabase/migrations/20260717143000_task3_receipt_authority_forward_convergence.sql',
       'supabase/migrations/20260804201000_fix_replenishment_procurement_handoff.sql',
       'supabase/migrations/20260813203240_task_1_database_authority_remediation.sql', 'supabase/migrations/20260913175711_align_replenishment_action_authority_and_snapshot.sql'];

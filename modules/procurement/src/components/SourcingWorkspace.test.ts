@@ -37,6 +37,40 @@ beforeEach(() => {
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
 
 describe('SourcingWorkspace', () => {
+  it.each([
+    [null, 'Prepare the sourcing plan and controlled package before inviting vendors and issuing it.'],
+    ['draft', 'Complete the plan and accredited vendor invitations, then issue the controlled package when the governed checks permit.'],
+    ['issued', 'Record vendor responses and equal communications while the response window is open. Close the window through the governed transition before evaluation.'],
+    ['response_closed', 'The response window is closed. Open evaluation when the governed checks permit, then document commercial and technical evidence.'],
+    ['evaluation', 'Review commercial and technical evidence and the explicit best-value recommendation. Any required independent review and the controlled award remain separate steps.'],
+    ['failed_bid', 'Use the failed-bid recovery controls for requote, extension, or an independently reviewed evaluation exception.'],
+    ['awarded', 'The sourcing award is recorded. Review the retained recommendation and award evidence.'],
+    ['cancelled', 'This sourcing event is cancelled. Review its retained history; do not continue its response or evaluation steps.'],
+  ])('shows only the current %s stage advice without dispatching a command', async (status, guidance) => {
+    const rpc = vi.fn(async (name: string) => ({ data: name === 'sourcing_workspace'
+      ? { requestId, event: status === null ? null : { ...event, status } } : null, error: null }));
+    await mount(rpc);
+    expect(host.querySelector('[aria-label="Sourcing stage guidance"]')?.textContent).toBe(guidance);
+    expect(rpc.mock.calls.map(call => call[0])).toEqual(status === null ? ['sourcing_workspace'] : ['sourcing_workspace', 'insufficient_bid_exception']);
+    if (status === 'draft') {
+      expect(host.textContent).toContain('Accredited invitees0');
+      const issue = [...host.querySelectorAll('button')].find(button => button.textContent === 'Issue controlled package');
+      expect(issue?.disabled).toBe(true);
+      expect([...host.querySelectorAll('button')].some(button => button.textContent === 'Close response window')).toBe(false);
+    }
+  });
+
+  it('does not invent stage advice while the read is pending or denied', async () => {
+    const read = deferred<{ data: null; error: { message: string } }>();
+    const rpc = vi.fn(() => read.promise);
+    await mount(rpc);
+    expect(host.querySelector('[aria-label="Sourcing stage guidance"]')).toBeNull();
+    await act(async () => read.resolve({ data: null, error: { message: 'Denied' } }));
+    expect(host.querySelector('[role="alert"]')).not.toBeNull();
+    expect(host.querySelector('[aria-label="Sourcing stage guidance"]')).toBeNull();
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps governed sourcing unavailable without a database client', () => {
     const html = renderToStaticMarkup(createElement(ToastProvider, {
       children: createElement(SourcingWorkspace, {

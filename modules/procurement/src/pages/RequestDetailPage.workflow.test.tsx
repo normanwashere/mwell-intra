@@ -69,3 +69,14 @@ it('shows read failure recovery without presenting stale request status as curre
   expect(html).toContain('href="/requests"');
   expect(html).not.toContain('Author purchase order');
 });
+
+it('keeps the competitive sourcing introduction stage-neutral until the sourcing state is loaded', () => {
+  request.compliance = { routeConfirmed: true } as ProcurementRequest['compliance'];
+  request.route = { procurementMode: 'competitive_bidding', solicitationType: 'rfq', governanceTier: 'standard' } as ProcurementRequest['route'];
+  const html = renderPage();
+  expect(html).toContain('Competitive sourcing');
+  expect(html).toContain('Preparation, responses, evaluation, and award follow the recorded sourcing stage.');
+  expect(html).not.toContain('Close the response window, document commercial and technical evidence');
+  expect(submit).not.toHaveBeenCalled();
+  expect(cancel).not.toHaveBeenCalled();
+});

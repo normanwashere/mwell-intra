@@ -6,6 +6,10 @@ In Procurement, a confirmed request may show sourcing as **Not started** until i
 
 Sourcing deadlines use the local time on your device. The deadline editor and saved summary should show the same local time; reopening and saving without changing the deadline must not move it. Check the date and time before issuing the package. If they disagree, stop and report the request number rather than adjusting the deadline to compensate.
 
+Prepared after the `05b2326` sourcing observation: guidance follows the recorded sourcing stage. **Not started** means prepare the plan; **draft** means complete the plan and accredited invitations before governed issue, not close the response window. Issued events handle responses and controlled closure; evaluation, any required independent review and award remain separate steps. Failed bids use recovery controls, while awarded or cancelled events retain their history. Retry an unavailable sourcing read before continuing. This copy correction does not enable actions and has not yet been live-verified.
+
+For the verified Procurement Admin version-2 curriculum, **Procurement / Procurement Admin** identifies the existing assignment and certificate context, including **Review Payment Readiness**. Follow your actual assigned requirement and current access checks; this label does not add authority, complete learning or certify payment release. An unrecognized curriculum or version must remain unidentified rather than be guessed from its name.
+
 ## Warehouse Access Recovery
 
 Returning to a browser tab should keep the open form while the app successfully rechecks the same user's access. **Checking warehouse access** means verification is still running. **Could not verify warehouse access** means the check did not finish: check your connection, then choose **Retry access**. Retry checks permissions only; it does not submit, approve or replay your work.

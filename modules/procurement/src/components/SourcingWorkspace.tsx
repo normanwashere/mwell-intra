@@ -82,6 +82,16 @@ function statusTone(status: SourcingEventStatus | undefined) {
   return 'slate' as const;
 }
 
+const sourcingStageGuidance: Record<SourcingEventStatus, string> = {
+  draft: 'Complete the plan and accredited vendor invitations, then issue the controlled package when the governed checks permit.',
+  issued: 'Record vendor responses and equal communications while the response window is open. Close the window through the governed transition before evaluation.',
+  response_closed: 'The response window is closed. Open evaluation when the governed checks permit, then document commercial and technical evidence.',
+  evaluation: 'Review commercial and technical evidence and the explicit best-value recommendation. Any required independent review and the controlled award remain separate steps.',
+  failed_bid: 'Use the failed-bid recovery controls for requote, extension, or an independently reviewed evaluation exception.',
+  awarded: 'The sourcing award is recorded. Review the retained recommendation and award evidence.',
+  cancelled: 'This sourcing event is cancelled. Review its retained history; do not continue its response or evaluation steps.',
+};
+
 export function SourcingWorkspace({ requestId, method, canManage, canApprove, client, vendors, onChanged }: {
   requestId: string; method: SourcingMethod; canManage: boolean; canApprove: boolean; client: RpcClient | null; vendors: ProcurementVendor[]; onChanged?: () => Promise<void>;
 }) {
@@ -182,7 +192,7 @@ export function SourcingWorkspace({ requestId, method, canManage, canApprove, cl
     <button type="button" className="btn-outline min-h-11" onClick={() => void load()}>Retry sourcing</button>
   </div>;
   return <section className="space-y-4" aria-label="Governed competitive sourcing">
-    <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-semibold text-ink">{method.toUpperCase()} competitive sourcing</h2><p className="max-w-2xl text-sm text-muted">Issue one controlled package, capture equal communications, and open only compliant responses. The server owns deadline, quorum, exception, and transition decisions.</p></div><Badge tone={statusTone(event?.status)}>{event?.status?.replaceAll('_', ' ') ?? 'Not started'}</Badge></div>
+    <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-semibold text-ink">{method.toUpperCase()} competitive sourcing</h2>{client && <p className="max-w-2xl text-sm text-muted" aria-label="Sourcing stage guidance">{event ? sourcingStageGuidance[event.status] : 'Prepare the sourcing plan and controlled package before inviting vendors and issuing it.'}</p>}<p className="max-w-2xl text-sm text-muted">The server owns deadline, quorum, exception, and transition decisions.</p></div><Badge tone={statusTone(event?.status)}>{event?.status?.replaceAll('_', ' ') ?? 'Not started'}</Badge></div>
     {!client && <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-ink">Connect to the live database to operate governed sourcing.</p>}
     {canManage && (!event || event.status === 'draft') && <section className="grid gap-3 border-t border-line pt-4 lg:grid-cols-[minmax(15rem,1fr)_10rem_12rem_auto] lg:items-end"><label className="block text-sm font-semibold text-ink">Submission deadline<input aria-label="Submission deadline" type="datetime-local" className="input mt-1.5" value={deadline} onChange={(e) => setDeadline(e.target.value)} /></label><label className="block text-sm font-semibold text-ink">Invite target<select aria-label="Invite target" className="input mt-1.5" value={invitationTarget} onChange={(e) => setInvitationTarget(Number(e.target.value))}><option value={3}>3 vendors</option><option value={4}>4 vendors</option></select></label><label className="block text-sm font-semibold text-ink">Package version<input aria-label="Package version" className="input mt-1.5" value={packageVersion} onChange={(e) => setPackageVersion(e.target.value)} placeholder="RFQ-2026.08-v1" /></label><button type="button" className="btn-primary min-h-11 w-full lg:w-auto" disabled={busy || !deadline || !packageVersion.trim() || !packageHash.trim()} onClick={() => void saveEvent()}><Icon name="check" className="h-4 w-4" />{event ? 'Save plan' : 'Create plan'}</button><label className="block text-sm font-semibold text-ink lg:col-span-3">Package SHA-256<input aria-label="Package SHA-256" className="input mt-1.5" value={packageHash} onChange={(e) => setPackageHash(e.target.value)} placeholder="Evidence digest" /></label><p className="text-xs text-muted lg:col-span-1">Issue requires {controls.inviteTargetMin} accredited invitees and at least {controls.bidWindowWorkingDays} working days. Source: {controlSources.inviteTargetMin ?? controlSources.bidWindowWorkingDays ?? 'request-bound policy profile'}.</p></section>}
     {event && <>

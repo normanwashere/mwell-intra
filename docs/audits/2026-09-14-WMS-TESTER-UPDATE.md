@@ -1,27 +1,25 @@
 # Warehouse Update - September 14
 
-UAT is on **c79fa8d**, checked at **05:55 UTC**. Please leave marked synthetic audit records and photos in place.
+At the latest deployment check, UAT is on **05b2326** (11:07 UTC). Please leave marked test records and photos in place.
 
 ## What's Live
 
-- **Finish review** returns completed receiving practice to the checklist without replaying a receipt.
-- Pricing stays read-only, with a permission-gated Product handoff, **Load more products**, unavailable incomplete bundles and corrected **markup** labels.
-- Pick-location cards use saved bin codes when the order has no source location.
-- Blind counts hide expected balances and variance clues before successful submission.
-- Pricing long names now wrap. The CI cleanup helper adds no ordinary-user permissions.
+- Onboarding's task chooser is easier to scan. Expand the role count when you need the full list. The supervisor header now shows the correct role.
+- Pricing loads all available products, wraps long names and clearly marks incomplete bundles as unavailable.
+- Pick-location cards show saved bin codes. Blind counts keep expected quantities and variance hints hidden before submission.
+- Receiving practice has a **Finish review** action. Its live terminal navigation still needs a fresh eligible learner test.
 
 ## What We Checked
 
-- **c79 desktop:** Pricing reached **368 of 368 products** without overflow or a remaining Load more button. **Two** bundles, Wellness Starter Kit and Doctor VIP Kit, show **Unavailable**; each is missing all three constituents.
-- **ec646b5 desktop:** the saved pick bin displayed correctly. Blind-count feedback stayed hidden before submission; those early inputs were cleared without uploads or submission.
-- **c79 desktop:** Logistics submitted a synthetic count. A separate supervisor opened its stored image, added a review note and approved. Stock changed **5 to 4**, with one **-1** movement. The counter's own-review action was unavailable; no direct backend denial probe was run.
-- The approved count source fits a measured **390 x 844** mobile view without horizontal overflow. That is a read-only review, not a mobile count transaction pass.
-- Earlier evidence retains all-seven learning completion and the Operations handoff's **7 to 5** balance, before this count adjustment. Records and synthetic images remain retained; no physical-count or cleanup claim.
+- Supervisor and combined-role onboarding layouts at desktop and mobile widths, including task search, selection and Back.
+- Sourcing opens with the correct 5:00 PM deadline in both views. Earlier unchanged Save/reload checks passed; invitations, evaluation and award were not tested in that check.
+- Logistics submitted a synthetic count and a different supervisor reviewed its image and approved it. Stock changed from **5 to 4**, once. Mobile review of the approved record also passed; this was not a physical count or mobile submission.
+- All **1,136 Warehouse regression tests** passed on the released source. CI194 preparation, including live onboarding, passed; the remaining certification stages are still running.
 
-## Still Being Tested
+## Next Update
 
-- Finish review's live return to the checklist remains unverified.
-- Compact task-audience text and the supervisor header-label correction are candidates, not deployed fixes.
-- **CI193 failed preparation** at a SQL source-pin test because of CRLF/LF differences. The strict correction is being reviewed; no green replacement run is claimed. SMTP and full certification remain outside these passes.
+Two fixes are prepared but not live yet: sourcing guidance that matches the event's actual stage, and the missing Procurement Admin label on payment-readiness learning. Both preserve existing permissions and workflow steps.
 
-[Release details](../releases/2026-09-14-RECEIVING-PRACTICE-CHECKPOINT.md) | [Evidence index](../../outputs/wms-signoff/sep14-isolated-onboarding-observation/index.html)
+Mobile replenishment completion, additional return branches, live **Finish review**, and full certification remain open. Automated tests do not replace real-user or device acceptance. **SMTP remains untouched.**
+
+[Release details](../releases/2026-09-14-RECEIVING-PRACTICE-CHECKPOINT.md) | [Screenshots and evidence](../../outputs/wms-signoff/sep14-isolated-onboarding-observation/DEPLOYMENT-UPDATE.html)

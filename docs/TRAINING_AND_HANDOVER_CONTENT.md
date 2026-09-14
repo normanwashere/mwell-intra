@@ -16,6 +16,10 @@ Include a separate sourcing-owner drill: create the plan once, reopen the same e
 
 In the sourcing-owner drill, compare the saved deadline summary with the editor using the device's local timezone. Reopen the event and save without changing the deadline; verify that the persisted instant did not move. A mismatch is a defect to report before package issue, not an instruction to compensate manually. Keep this UI verification separate from later invitation, evaluation and award evidence.
 
+Add a read-only stage-advice check for the correction prepared after `05b2326`: on a draft with zero invitations, verify preparation and invitation guidance rather than an instruction to close the response window. Compare later-state advice only against records actually at those stages; do not advance a retained fixture merely to demonstrate copy. Loading and denied reads must not suggest a next step, and guidance must not unlock disabled actions. Keep independent review, award and recorded business outcomes separate from this display check. Live verification of the prepared copy remains pending; no new screenshot or completion credit is assigned.
+
+For the verified Procurement Admin version-2 curriculum, compare the existing assignment and payment-review certificate labels with **Procurement / Procurement Admin**. Preserve the recorded snapshot and do not resume training or refresh authority merely to repair a display label. Demonstrate unknown-context handling separately without inventing a curriculum ID or broadening version recognition. This alias is presentation only: it neither completes learning nor grants access, and it is not evidence of payment release.
+
 ## Warehouse Access Recovery Handover
 
 Teach verification failure separately from confirmed permission denial. **Checking warehouse access** is a pending check. **Could not verify warehouse access** offers **Retry access** after checking the connection. Retry only re-reads current permissions; it never replays a receiving, approval or stock transaction. **No warehouse access** follows a completed check without the required access and should be escalated if unexpected.

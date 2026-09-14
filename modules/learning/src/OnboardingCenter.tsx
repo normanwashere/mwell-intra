@@ -105,6 +105,10 @@ function curriculumScope(
           (curriculumVersion === 1 ||
             (item.module === "warehouse" &&
               item.role === "marketing" &&
+              curriculumVersion === 2) ||
+            // Published payment-readiness addition verified on UAT, 2026-09-14.
+            (item.module === "procurement" &&
+              item.role === "admin" &&
               curriculumVersion === 2))) ||
         (item.module === "warehouse" &&
           item.role === "warehouse_operator" &&
