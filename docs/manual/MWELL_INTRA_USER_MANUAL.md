@@ -4,6 +4,8 @@ Onboarding opens with a compact **Choose a task** control, your progress and you
 
 In Procurement, a confirmed request may show sourcing as **Not started** until its plan is created. Once a sourcing event exists, reopen the same request to review its saved sourcing and evaluation records. Viewing that evidence does not authorize variance approval or award. If variance history is unavailable to your account, use the designated reviewer; do not treat missing review visibility as an empty history. A failed sourcing read offers Retry sourcing and should not be worked around by creating a duplicate request.
 
+Sourcing deadlines use the local time on your device. The deadline editor and saved summary should show the same local time; reopening and saving without changing the deadline must not move it. Check the date and time before issuing the package. If they disagree, stop and report the request number rather than adjusting the deadline to compensate.
+
 ## Warehouse Access Recovery
 
 Returning to a browser tab should keep the open form while the app successfully rechecks the same user's access. **Checking warehouse access** means verification is still running. **Could not verify warehouse access** means the check did not finish: check your connection, then choose **Retry access**. Retry checks permissions only; it does not submit, approve or replay your work.

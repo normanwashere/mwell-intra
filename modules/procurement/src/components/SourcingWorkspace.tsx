@@ -21,6 +21,13 @@ const strings = (value: Record<string, unknown>, keys: string[]) => keys.every(k
 const oneOf = (value: unknown, values: string[]) => typeof value === 'string' && values.includes(value);
 const rows = (value: unknown, valid: (row: Record<string, unknown>) => boolean) => Array.isArray(value) && value.every(row => record(row) && valid(row));
 
+function localDeadline(value: string) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) throw new Error('The sourcing deadline could not be verified.');
+  const pad = (part: number) => String(part).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 function isSourcingEvent(value: unknown): value is SourcingEvent {
   if (!record(value) || !text(value.id) || !oneOf(value.status, ['draft', 'issued', 'response_closed', 'failed_bid', 'evaluation', 'awarded', 'cancelled'])) return false;
   if (!strings(value, ['submissionDeadline', 'packageVersion', 'packageHash', 'failedBidReason', 'selectedVendorId', 'closureNote'])
@@ -128,7 +135,7 @@ export function SourcingWorkspace({ requestId, method, canManage, canApprove, cl
         || !optionalText(exception.price_reasonableness))) throw new Error('The current sourcing exception could not be verified.');
       const next = data.event;
       setEvent(next); setBidException(exception as BidException | null);
-      if (next?.submissionDeadline) setDeadline(next.submissionDeadline.slice(0, 16));
+      if (next?.submissionDeadline) setDeadline(localDeadline(next.submissionDeadline));
       if (next?.intendedResponses) setInvitationTarget(next.intendedResponses);
       if (next?.packageVersion) setPackageVersion(next.packageVersion);
       if (next?.packageHash) setPackageHash(next.packageHash);

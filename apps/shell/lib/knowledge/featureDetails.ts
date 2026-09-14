@@ -2964,7 +2964,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         control(
           "Confirm sourcing route",
-          "Records the officer-selected route and risk facts. A confirmed request can show sourcing as Not started until a plan exists. Reopen the same request to review saved sourcing and evaluation evidence; a failed read offers Retry sourcing. Viewing evidence does not grant independent variance-review or award authority. Restricted variance history is explicitly identified, not treated as no decisions.",
+          "Records the officer-selected route and risk facts. A confirmed request can show sourcing as Not started until a plan exists. Reopen the same request to review saved sourcing and evaluation evidence; a failed read offers Retry sourcing. Deadline entry and summary use your device's local time; reopening and saving an unchanged deadline must not shift it. Report any mismatch before issuing the package. Viewing evidence does not grant independent variance-review or award authority. Restricted variance history is explicitly identified, not treated as no decisions.",
           "The actor needs manage_rfp and current request data.",
           "The request stores a confirmed policy route.",
         ),

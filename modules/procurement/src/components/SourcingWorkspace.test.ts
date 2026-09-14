@@ -155,6 +155,24 @@ describe('SourcingWorkspace', () => {
     expect(host.textContent).toContain('Save plan'); expect(toast.error).not.toHaveBeenCalled();
   });
 
+  it.each(['2026-09-24T09:00:00Z', '2026-09-24T17:00:00+08:00', '2026-09-24T02:00:00-07:00'])(
+    'preserves the deadline instant when reopening and saving an existing plan: %s', async submissionDeadline => {
+      const savedEvent = { ...event, submissionDeadline, packageVersion: 'SPEC-v1', packageHash: 'a'.repeat(64) };
+      const rpc = vi.fn(async (name: string) => ({ data: name === 'sourcing_workspace'
+        ? { requestId, event: savedEvent } : null, error: null }));
+      await mount(rpc);
+      const date = new Date(submissionDeadline);
+      const pad = (value: number) => String(value).padStart(2, '0');
+      const localValue = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+      expect(host.querySelector<HTMLInputElement>('input[aria-label="Submission deadline"]')?.value).toBe(localValue);
+      const save = [...host.querySelectorAll('button')].find(button => button.textContent === 'Save plan')!;
+      expect(save.disabled).toBe(false);
+      await act(async () => save.click());
+      expect(rpc).toHaveBeenCalledWith('save_sourcing_event', { payload: { request_id: requestId,
+        submission_deadline: date.toISOString(), intended_responses: 3, package_version: 'SPEC-v1', package_hash: 'a'.repeat(64) } });
+      expect(toast.error).not.toHaveBeenCalled();
+    });
+
   it.each([{}, [], { id: 'exception-1', status: 'approved', justification: {} }])('rejects malformed exception without showing stale actions: %j', async data => {
     const rpc = vi.fn(async (name: string) => ({ data: name === 'sourcing_workspace' ? { requestId, event } : data, error: null }));
     await mount(rpc);

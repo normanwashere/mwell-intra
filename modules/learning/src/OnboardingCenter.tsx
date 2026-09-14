@@ -85,6 +85,7 @@ const publishedRoles = [
   "warehouse.marketing",
   "warehouse.operations",
   "warehouse.procurement",
+  "warehouse.warehouse_admin", // Published v1 verified on UAT, 2026-09-14.
   "warehouse.warehouse_supervisor",
   "core.vendor_portal",
 ];

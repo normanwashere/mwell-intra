@@ -10,6 +10,8 @@ Explain that emergency access may be requested only through approval; the eligib
 
 Include a separate sourcing-owner drill: create the plan once, reopen the same event before an award recommendation exists, and later verify persisted commercial and technical evaluation evidence. Confirm unrelated users remain denied, view-only users cannot record an award, and variance decisions still require the independent reviewer. Unavailable variance history must be explained as restricted visibility, never reported as an empty history. The sourcing read-contract migration must precede its UI deployment.
 
+In the sourcing-owner drill, compare the saved deadline summary with the editor using the device's local timezone. Reopen the event and save without changing the deadline; verify that the persisted instant did not move. A mismatch is a defect to report before package issue, not an instruction to compensate manually. Keep this UI verification separate from later invitation, evaluation and award evidence.
+
 ## Warehouse Access Recovery Handover
 
 Teach verification failure separately from confirmed permission denial. **Checking warehouse access** is a pending check. **Could not verify warehouse access** offers **Retry access** after checking the connection. Retry only re-reads current permissions; it never replays a receiving, approval or stock transaction. **No warehouse access** follows a completed check without the required access and should be escalated if unexpected.

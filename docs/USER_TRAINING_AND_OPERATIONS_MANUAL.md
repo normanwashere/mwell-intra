@@ -163,6 +163,8 @@ The onboarding task chooser starts closed. Your progress and next required actio
 
 For sourcing, reopen the original request after creating its plan. Its saved evaluation evidence should remain readable without requiring variance-review authority. Only the authorized independent reviewer can approve a variance. An unavailable variance history is not proof of no decisions. Retry a failed sourcing read; do not create another request or approve outside the workflow.
 
+Check that the sourcing deadline editor matches the saved summary in your device's local time. Reopening and saving an unchanged deadline must keep the original deadline. Stop and report a mismatch before issuing the package; do not compensate by manually shifting the time.
+
 Include an account with several scoped roles in onboarding rehearsal. Read each certification's module and role alongside its capability, status and validity. Similar names must remain separate when their authority differs. Historical curriculum context may be unavailable; escalate it rather than treating the label as an access change. A screenshot with all requirements already completed proves the completed view only, not a fresh orientation or assessment attempt.
 
 For vendors, the candidate evidence-responsibility review is training only. It must never be presented as a signature, legal acknowledgment, document upload, application submission, or accreditation decision. The new local exercise requires a reviewed versioned curriculum publication before trainers can claim it is available in live UAT.

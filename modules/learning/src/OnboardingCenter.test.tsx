@@ -794,6 +794,30 @@ describe("OnboardingCenter", () => {
 
   it.each([
     [
+      "internal.role.warehouse.warehouse_admin.capability-practice.v1.curriculum",
+      1,
+      "warehouse",
+      "Warehouse / Warehouse Administrator",
+    ],
+    [
+      "internal.role.warehouse.warehouse_admin.capability-practice.v1.curriculum",
+      2,
+      "warehouse",
+      "Warehouse / Role context unavailable",
+    ],
+    [
+      "vendor.role.warehouse.warehouse_admin.capability-practice.v1.curriculum",
+      1,
+      "warehouse",
+      "Warehouse / Role context unavailable",
+    ],
+    [
+      "internal.role.warehouse.warehouse_admin.capability-practice.v1.curriculum",
+      1,
+      "legal",
+      "Legal / Role context unavailable",
+    ],
+    [
       "internal.role.warehouse.marketing.capability-practice.v1.curriculum",
       1,
       "warehouse",
