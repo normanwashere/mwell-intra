@@ -88,9 +88,9 @@ export function PricingPage() {
       header: 'Product',
       primary: true,
       render: (r) => (
-        <span>
-          {r.product.name}{' '}
-          <span className="font-mono text-xs text-faint">{r.product.sku}</span>
+        <span className="block w-80 max-w-full min-w-0 whitespace-normal [overflow-wrap:anywhere]">
+          <span className="block">{r.product.name}</span>
+          <span className="mt-1 block font-mono text-xs text-faint">{r.product.sku}</span>
         </span>
       ),
     },

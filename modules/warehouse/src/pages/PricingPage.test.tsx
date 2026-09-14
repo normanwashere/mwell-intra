@@ -7,6 +7,31 @@ import { makeRepo, renderWithProviders } from '@/test/renderWithProviders';
 import { money } from '@/components/ui';
 
 describe('PricingPage', () => {
+  it('bounds long product names and SKUs without truncating their accessible text', async () => {
+    const user = userEvent.setup();
+    const seed = structuredClone(buildSeed());
+    const name = `SYNTHETIC-${'long-product-name-'.repeat(18)}final`;
+    const sku = `SKU${'0123456789ABCDEF'.repeat(20)}`;
+    seed.products = [{ ...seed.products[0]!, id: 'long-pricing-product', name, sku }];
+    renderWithProviders(<PricingPage />, { role: 'pricing', repo: makeRepo(seed) });
+    const table = await screen.findByLabelText('Pricing table');
+    for (const renderedName of screen.getAllByText(name)) {
+      // ProductSelect also contains the name; check the table and mobile cell renders.
+      if (renderedName.tagName === 'OPTION') continue;
+      const cell = renderedName.parentElement!;
+      expect(cell).toHaveClass('block', 'w-80', 'max-w-full', 'min-w-0', 'whitespace-normal', '[overflow-wrap:anywhere]');
+      expect(renderedName).toHaveClass('block');
+      expect(within(cell).getByText(sku)).toHaveClass('block', 'font-mono');
+      expect(cell.querySelector('.truncate, .line-clamp-1, .whitespace-nowrap')).toBeNull();
+      expect(renderedName).not.toHaveAttribute('aria-hidden', 'true');
+      expect(cell.textContent).toContain(name);
+      expect(cell.textContent).toContain(sku);
+    }
+    expect(screen.getAllByText(sku)).toHaveLength(2);
+    await user.click(within(table).getByText(name));
+    expect(await screen.findByRole('dialog', { name: 'Pricing governance' })).toBeInTheDocument();
+  });
+
   it('makes every product accessible through bounded load-more batches', async () => {
     const user = userEvent.setup();
     const seed = structuredClone(buildSeed());

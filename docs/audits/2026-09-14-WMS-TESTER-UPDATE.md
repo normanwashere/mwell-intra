@@ -1,28 +1,27 @@
 # Warehouse Update - September 14
 
-UAT is on **53e2599**, checked at 04:38 UTC. Here's what's ready and what we're still checking. Please leave marked synthetic audit records in place.
+UAT is on **ec646b5**, checked at **05:38 UTC**. Please leave marked synthetic audit records in place.
 
 ## What's Live
 
-- Clearer Returns/Quality summaries and forms that keep Close and Save within reach.
-- **Retry access**, authorized home-screen exports, and Procurement request completion after replenishment acceptance.
-- Receiving-practice checkpoints, clearer onboarding progress, corrected role labels and local-time sourcing deadlines.
+- **Finish review** returns completed receiving practice to the checklist without replaying a receipt.
+- Pricing stays read-only, with a permission-gated Product handoff, **Load more products**, unavailable incomplete bundles and corrected **markup** labels.
+- Pick-location cards use saved bin codes when the order has no source location.
+- Blind counts hide expected balances and variance clues before successful submission.
+- The reviewed service-role CI cleanup helper was applied. No ordinary-user permissions were added.
 
 ## What We Checked
 
-- All seven isolated accounts completed their assigned learning, including Multi **11/11** and fresh receiving practice checked in the database. Shared credit wasn't counted as another practice.
-- The synthetic Operations request passed approval, allocation, pick/pack, independent release and mobile receipt acknowledgement. Stock reconciled **7 to 5**. The packer's release action was withheld in the UI; no backend denial probe was run.
-- Desktop/mobile unchanged Save preserved the sourcing deadline: **09:00 UTC / 17:00 Singapore**, one draft, no invitations or responses.
-- These were controlled tests, not physical delivery. Completed handoff records and its synthetic receipt image remain retained.
+- On this build, entering a matching blind count of **5** hid expected quantity, variance and balanced feedback. Submit stayed disabled without evidence. No photo or count was submitted.
+- Pricing desktop reached **368 of 368 products**, with no Load more button left. The unauthorized Product link stayed hidden, owner guidance appeared, actual margin stayed **37%**, and all three incomplete bundles showed **Unavailable**.
+- Earlier builds retain all-seven learning completion and the synthetic Operations-to-Warehouse handoff, with stock **7 to 5**. Those are not fresh runs on this build; completed records and the synthetic receipt image remain retained.
+- Clean-source documentation checks passed. The final frozen card rerun passed **49 tests**; the earlier full Warehouse run had **1,134 passes and one changed-source failure**, not a clean full pass.
 
 ## Still Being Tested
 
-- **Finish review:** reviewed, not live yet. Confirmed receiving completion will return to the checklist without replaying a receipt. In-progress controls stay unchanged.
-- **Pricing:** reviewed, not live yet. Read-only price context hands off to Product only with permission. **Load more products** exposes later rows; incomplete bundles show **Unavailable**, not partial totals. Cost-based percentages say **markup**; actual margin is unchanged.
-- The reviewed pick-location fix is not live yet: show saved line-bin codes when the order has no source location, without changing allocation.
-- **Blind counts:** the evidence gate blocked submission in our live check; no count or photo was submitted. The pending fix hides balance/variance clues until successful submission, keeping evidence and serial checks intact.
-- CI 192 stopped on stale handbook HTML. Regeneration checks now pass, but skipped tests remain unproven. Vendor-test preflight, remaining journeys and real-user/device checks are still open. SMTP is outside this work.
-
-**Full WMS certification remains open.**
+- Finish review's live return to the checklist and the new card display still need verification.
+- Pricing's desktop screenshots exposed long-name table overflow; a separate fix is underway.
+- The viewport-switch tool did not resize the browser. **No new-build mobile pass is claimed.**
+- CI 192 remains latest and red after stale handbook HTML stopped later tests. Documentation is corrected, but vendor preflight, remaining journeys and full certification are still open. SMTP is outside this work.
 
 [Release details](../releases/2026-09-14-RECEIVING-PRACTICE-CHECKPOINT.md) | [Retained handoff evidence](../../outputs/wms-signoff/sep14-isolated-onboarding-observation/operations-multirole-handoff-live.json)
