@@ -264,7 +264,11 @@ test("controlled vendor cleanup uses the same exact run mailbox and refuses a sh
 
 test("UAT runs explicit browser and receipt-quality helper contracts after Chromium installation", async () => {
   const workflow = await readFile(new URL("../../.github/workflows/uat-live-certification.yml", import.meta.url), "utf8");
-  const installed = workflow.indexOf("Install Chromium for first-login certification");
+  const installed = workflow.indexOf("Install Chromium for browser-backed contracts and first-login certification");
+  const unit = workflow.indexOf("Run unit and contract tests");
+  const dependencies = workflow.indexOf("Install locked dependencies");
+  assert.ok(dependencies >= 0 && dependencies < installed && installed < unit,
+    "The Legal CSP browser test requires Chromium before workspace tests in a fresh checkout");
   const contract = workflow.indexOf("run: node --test scripts/qa/audit-disclosure.browser.test.mjs scripts/qa/quality-validation-workflow.browser.test.mjs");
   const orientation = workflow.indexOf("Complete first-login role orientations on desktop");
   assert.ok(installed >= 0 && contract > installed && orientation > contract);

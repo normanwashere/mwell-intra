@@ -70,6 +70,8 @@ jobs:
         run: pnpm lint
       - name: Typecheck all workspaces
         run: pnpm typecheck
+      - name: Install Chromium for browser-backed contracts and first-login certification
+        run: pnpm --filter @intra/shell exec playwright install --with-deps chromium
       - name: Run unit and contract tests
         # Avoid nested Turbo/Vitest pools competing on the shared runner.
         run: pnpm exec turbo run test --concurrency=1 -- --maxWorkers=2
@@ -128,8 +130,6 @@ jobs:
         run: pnpm verify:uat-policy-baseline
       - name: Wait for the exact commit to be deployed
         run: node scripts/qa/wait-for-uat-deployment.mjs
-      - name: Install Chromium for first-login certification
-        run: pnpm --filter @intra/shell exec playwright install --with-deps chromium
       - name: Verify browser audit visibility and readiness contracts
         run: node --test scripts/qa/audit-disclosure.browser.test.mjs scripts/qa/quality-validation-workflow.browser.test.mjs scripts/qa/route-evidence.browser.test.mjs scripts/qa/evidence-upload.browser.test.mjs scripts/qa/receipt-quality-probes.test.mjs scripts/qa/excess-save-outcome.browser.test.mjs scripts/qa/receiving-audit-evidence.test.mjs
       - name: Verify warehouse reference and home-link targets
