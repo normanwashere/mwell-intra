@@ -1836,6 +1836,18 @@ async function procurementCreateRequestWorkflow(page, marker) {
 async function legalInviteVendorWorkflow(page, marker) {
   if (vendorDeliveryConfigurationError)
     throw new Error(vendorDeliveryConfigurationError);
+  let creationClient = null;
+  let creationActorId = null;
+  async function verifyCreationActor() {
+    const { data, error } = await creationClient.auth.getUser();
+    const user = data?.user;
+    if (error || user?.email !== "intra.test.legal.lead@mwell.com.ph" || user?.role !== "authenticated"
+      || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(user?.id ?? "")
+      || (creationActorId !== null && user.id !== creationActorId)) {
+      throw new Error("Ordinary Legal creation identity verification failed; no automatic replay.");
+    }
+    return user.id;
+  }
   const unique = Date.now();
   const companyName = `${marker} Vendor`;
   const vendorEmail = vendorAuditEmail(marker);
@@ -1844,6 +1856,10 @@ async function legalInviteVendorWorkflow(page, marker) {
     timeout: 20_000,
   });
   await waitForMeaningfulRoute(page);
+  if (!requireVendorDelivery) {
+    creationClient = await vendorApplicationBrowserClient(page);
+    creationActorId = await verifyCreationActor();
+  }
   await page.getByLabel("Company name").fill(companyName);
   await page.getByLabel("Vendor contact email").fill(vendorEmail);
   await page.getByRole("button", { name: /continue/i }).click();
@@ -1878,11 +1894,12 @@ async function legalInviteVendorWorkflow(page, marker) {
       .schema("legal")
       .from("vendor_invites")
       .select(
-        "id,status,delivery_error,auth_user_id,expires_at,link_generation",
+        "id,status,delivery_error,auth_user_id,expires_at,link_generation,case_id,vendor_id,email,company_name,created_by_email",
       )
-      .eq("company_name", companyName);
+      .eq("company_name", companyName).limit(2);
     if (error) throw new Error(error.message);
-    return data?.[0] ?? null;
+    if (!Array.isArray(data) || data.length !== 1) throw new Error("Exact invite/case binding readback unavailable.");
+    return data[0];
   }
   let delivery = await readDelivery();
   if (
@@ -1919,6 +1936,7 @@ async function legalInviteVendorWorkflow(page, marker) {
     );
   }
   if (
+    requireVendorDelivery &&
     deliveryStatus === "sent" &&
     (!deliveryRows?.[0]?.auth_user_id ||
       !deliveryRows?.[0]?.expires_at ||
@@ -1927,6 +1945,35 @@ async function legalInviteVendorWorkflow(page, marker) {
     throw new Error(
       "Delivered vendor invitation is missing Auth identity, expiry, or generation evidence.",
     );
+  }
+  if (!requireVendorDelivery) {
+    const { data: cases, error: caseError } = await db.schema("legal").from("accreditation_cases")
+      .select("id,vendor_id,vendor_name,contact_email,invited_by_email,invited_by_user_id")
+      .eq("id", delivery.case_id).limit(2);
+    const savedCase = cases?.[0];
+    if (caseError || !Array.isArray(cases) || cases.length !== 1 || !delivery.id || !delivery.vendor_id
+      || savedCase.id !== delivery.case_id || savedCase.vendor_id !== delivery.vendor_id
+      || savedCase.vendor_name !== companyName || delivery.company_name !== companyName
+      || delivery.email !== vendorEmail || savedCase.contact_email !== vendorEmail
+      || delivery.created_by_email !== "intra.test.legal.lead@mwell.com.ph"
+      || savedCase.invited_by_email !== delivery.created_by_email
+      || savedCase.invited_by_user_id !== creationActorId
+      || new URL(page.url()).pathname !== `/legal/cases/${encodeURIComponent(delivery.case_id)}`) {
+      throw new Error("Exact invite/case binding readback mismatch.");
+    }
+    await verifyCreationActor();
+    return {
+      name: "legal vendor invite", invitationMode: "creation-only",
+      ok: (await caseHeading.isVisible()) && checkpoint.matched === 1 && inviteCheckpoint.matched === 1,
+      finalUrl: page.url().replace(baseUrl, ""), text: audit.text.slice(0, 260), checkpoint, inviteCheckpoint,
+      deliveryStatus, deliveryError: delivery.delivery_error ?? null,
+      deliveryLimitation: "The ordinary UI retains its existing provider attempt; email delivery and invitation acceptance are not certified.",
+      acceptanceNotExercised: true, acceptanceCheckpoint: null, replayStatus: null,
+      acceptanceEvidenceScreenshot: null, acceptanceUsedAuditToken: false,
+      creationLineage: { source: "ordinary-legal-ui", inviteId: delivery.id, caseId: savedCase.id,
+        vendorId: savedCase.vendor_id, actorId: savedCase.invited_by_user_id,
+        applicationFixtureIsSeparate: true },
+    };
   }
   let acceptanceCheckpoint = null;
   let replayStatus = null;
@@ -9269,7 +9316,7 @@ try {
               name: "legal vendor invite",
               scenarioId: "vendor-accreditation",
               run: (page) =>
-                runVendorDeliveryWorkflow
+                (!requireVendorDelivery || runVendorDeliveryWorkflow)
                   ? legalInviteVendorWorkflow(page, marker)
                   : legalInviteVendorInteractionWorkflow(page, marker),
             },

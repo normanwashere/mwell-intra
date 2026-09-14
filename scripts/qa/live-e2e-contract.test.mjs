@@ -16,14 +16,21 @@ import {
 } from "./live-e2e-scenarios.mjs";
 
 async function legalInviteFixture({ headingVisible = true, caseMatched = 1, inviteMatched = 1,
-  requireDelivery = false, delivery = { status: 'delivery_failed', delivery_error: 'email rate limit exceeded' } } = {}) {
+  requireDelivery = false, viewport = 'desktop-1440', caseOverrides = {}, inviteOverrides = {},
+  caseRowsCount = 1, inviteRowsCount = 1, caseReadError = false, inviteReadError = false,
+  authResults = [],
+  delivery = { status: 'delivery_failed', delivery_error: 'email rate limit exceeded' } } = {}) {
   const source = await readFile(new URL('./full-intra-live-e2e.mjs', import.meta.url), 'utf8');
   const start = source.indexOf('async function legalInviteVendorWorkflow(');
   const end = source.indexOf('async function legalInviteVendorInteractionWorkflow(', start);
   assert(start >= 0 && end > start);
-  const marker = 'QA-20260914-00000001-desktop-1440', companyName = `${marker} Vendor`;
+  const marker = `QA-20260914-00000001-${viewport}`, companyName = `${marker} Vendor`;
   const baseUrl = 'https://offline.invalid', finalUrl = `${baseUrl}/legal/cases/case_offline`;
-  let currentUrl = '', headingWaits = 0, reads = 0;
+  let currentUrl = '', headingWaits = 0, reads = 0, submitClicks = 0, authReads = 0;
+  const inviteRow = { id: 'invite_offline', case_id: 'case_offline', vendor_id: 'vendor_offline', email: 'offline@example.invalid',
+    company_name: companyName, created_by_email: 'intra.test.legal.lead@mwell.com.ph', ...delivery, ...inviteOverrides };
+  const caseRow = { id: 'case_offline', vendor_id: 'vendor_offline', vendor_name: companyName, contact_email: 'offline@example.invalid',
+    invited_by_email: 'intra.test.legal.lead@mwell.com.ph', invited_by_user_id: '10000000-0000-4000-8000-000000000001', ...caseOverrides };
   const page = {
     async goto(url) { currentUrl = url; }, url: () => currentUrl,
     getByLabel: () => ({ async fill() {} }),
@@ -34,7 +41,7 @@ async function legalInviteFixture({ headingVisible = true, caseMatched = 1, invi
           if (!headingVisible) throw Error('Exact case heading unavailable'); }, async isVisible() { return headingVisible; } };
       }
       assert.equal(role, 'button');
-      return { async click() { if (options.name.test('send invite & open case')) currentUrl = finalUrl; } };
+      return { async click() { if (options.name.test('send invite & open case')) { submitClicks++; currentUrl = finalUrl; } } };
     },
     async waitForURL(predicate) { assert(predicate(new URL(currentUrl))); },
     async waitForTimeout() { assert.fail('SMTP retry must not run when delivery certification is disabled'); },
@@ -42,15 +49,105 @@ async function legalInviteFixture({ headingVisible = true, caseMatched = 1, invi
   };
   const dependencies = {
     vendorDeliveryConfigurationError: null, vendorAuditEmail: () => 'offline@example.invalid', baseUrl,
+    vendorApplicationBrowserClient: async () => ({ auth: { getUser: async () => {
+      const result = authResults[authReads++] ?? { data: { user: { id: '10000000-0000-4000-8000-000000000001',
+        email: 'intra.test.legal.lead@mwell.com.ph', role: 'authenticated' } }, error: null };
+      if (result instanceof Error) throw result;
+      return result;
+    } } }),
     waitForMeaningfulRoute: async () => {},
     pageAudit: async () => ({ text: `${'Unrelated shell and notice text '.repeat(40)}${companyName}`.slice(0, 700) }),
     verifyCheckpoint: async ({ table }) => { reads++; return { matched: table === 'accreditation_cases' ? caseMatched : inviteMatched }; },
-    createAuditDatabaseClient: () => ({ schema: () => ({ from: () => ({ select: () => ({ eq: async () => ({ data: [delivery], error: null }) }) }) }) }),
+    createAuditDatabaseClient: () => ({ auth: { admin: { updateUserById() { assert.fail('No Auth writes'); } } }, schema: () => ({ from: table => {
+      assert.ok(['vendor_invites', 'accreditation_cases'].includes(table));
+      const query = { select() { return query; }, eq() { return query; }, limit() { return query; },
+        update() { assert.fail('No acceptance token writes'); },
+        then(resolve) { return Promise.resolve(resolve({
+          data: Array.from({ length: table === 'vendor_invites' ? inviteRowsCount : caseRowsCount }, () => table === 'vendor_invites' ? inviteRow : caseRow),
+          error: (table === 'vendor_invites' ? inviteReadError : caseReadError) ? { message: 'Exact invite/case binding read denied' } : null,
+        })); } };
+      return query;
+    } }) }),
     requireVendorDelivery: requireDelivery,
   };
   const run = new Function(...Object.keys(dependencies), `${source.slice(start, end)}; return legalInviteVendorWorkflow;`)(...Object.values(dependencies));
-  return { run: () => run(page, marker), headingWaits: () => headingWaits, reads: () => reads };
+  return { run: () => run(page, marker), headingWaits: () => headingWaits, reads: () => reads, submitClicks: () => submitClicks, authReads: () => authReads };
 }
+
+for (const viewport of ['desktop-1440', 'mobile-390']) {
+  for (const status of ['sent', 'delivery_failed']) test(`creation-only ${viewport}/${status} exits before retry, token or Auth writes`, async () => {
+    const h = await legalInviteFixture({ viewport, delivery: { status, auth_user_id: 'pending-auth', expires_at: '2026-10-01', link_generation: 1 } });
+    const result = await h.run();
+    assert.equal(result.ok, true);
+    assert.equal(h.submitClicks(), 1);
+    assert.equal(h.authReads(), 2);
+    assert.equal(result.invitationMode, 'creation-only');
+    assert.equal(result.acceptanceNotExercised, true);
+    assert.equal(result.acceptanceCheckpoint, null);
+    assert.equal(result.acceptanceUsedAuditToken, false);
+    assert.equal(result.replayStatus, null);
+    assert.equal(result.creationLineage.source, 'ordinary-legal-ui');
+    assert.equal(result.creationLineage.caseId, 'case_offline');
+    assert.equal(result.creationLineage.vendorId, 'vendor_offline');
+    assert.equal(result.creationLineage.inviteId, 'invite_offline');
+  });
+}
+
+for (const changes of [
+  { inviteOverrides: { case_id: 'foreign-case' } }, { inviteOverrides: { vendor_id: 'foreign-vendor' } },
+  { inviteOverrides: { email: 'foreign@example.invalid' } }, { caseOverrides: { vendor_name: 'Foreign name' } },
+  { caseOverrides: { invited_by_email: 'foreign@example.invalid' } }, { caseOverrides: { invited_by_user_id: null } },
+  { caseRowsCount: 0 }, { caseRowsCount: 2 }, { inviteRowsCount: 0 }, { inviteRowsCount: 2 },
+  { caseReadError: true }, { inviteReadError: true },
+  { caseOverrides: { invited_by_user_id: '20000000-0000-4000-8000-000000000002' } },
+]) test(`creation-only rejects mismatched invite/case lineage ${JSON.stringify(changes)}`, async () => {
+  await assert.rejects((await legalInviteFixture(changes)).run(), /invite.*case.*binding/i);
+});
+
+for (const stage of [0, 1]) {
+  for (const [name, result] of Object.entries({
+    wrongIdentity: { data: { user: { id: '20000000-0000-4000-8000-000000000002', email: 'foreign@example.invalid', role: 'authenticated' } } },
+    missingUser: { data: { user: null } },
+    rejected: { data: { user: null }, error: { message: 'denied' } },
+    changedSession: new Error('Vendor journey browser session changed; no automatic replay'),
+  })) test(`creation-only rejects ${name} at identity verification ${stage}`, async () => {
+    const authResults = []; authResults[stage] = result;
+    const h = await legalInviteFixture({ authResults });
+    await assert.rejects(h.run(), /identity|session/i);
+    assert.equal(h.submitClicks(), stage);
+  });
+}
+
+test('creation-only rejects changed authenticated UUID even with the same Legal email', async () => {
+  const h = await legalInviteFixture({ authResults: [undefined, { data: { user: {
+    id: '20000000-0000-4000-8000-000000000002', email: 'intra.test.legal.lead@mwell.com.ph', role: 'authenticated',
+  } } }] });
+  await assert.rejects(h.run(), /identity/i);
+  assert.equal(h.submitClicks(), 1);
+});
+
+test('creation-only sent state does not assert email delivery metadata or enter optional acceptance', async () => {
+  const h = await legalInviteFixture({ delivery: { status: 'sent' } });
+  assert.equal((await h.run()).acceptanceNotExercised, true);
+});
+
+test('explicit delivery certification retains the existing sent acceptance path', async () => {
+  const h = await legalInviteFixture({ requireDelivery: true,
+    delivery: { status: 'sent', auth_user_id: 'pending-auth', expires_at: '2026-10-01', link_generation: 1 } });
+  await assert.rejects(h.run(), /No acceptance token writes/);
+});
+
+test('actual invitation producer creates through UI in both viewports when delivery certification is disabled', async () => {
+  const source = await readFile(new URL('./full-intra-live-e2e.mjs', import.meta.url), 'utf8');
+  const expression = source.match(/name: "legal vendor invite",\s*scenarioId: "vendor-accreditation",\s*run: \(page\) =>\s*([\s\S]*?),\s*\},/)[1];
+  for (const runVendorDeliveryWorkflow of [false, true]) {
+    const calls = [];
+    const run = new Function('requireVendorDelivery', 'runVendorDeliveryWorkflow', 'legalInviteVendorWorkflow',
+      'legalInviteVendorInteractionWorkflow', 'marker', `return page => (${expression});`)(false, runVendorDeliveryWorkflow,
+      () => calls.push('created'), () => calls.push('surface-only'), 'owned-marker');
+    run({}); assert.deepEqual(calls, ['created']);
+  }
+});
 
 test('legal invite uses exact visible case heading, not a truncated audit preview, with SMTP excluded', async () => {
   const h = await legalInviteFixture(), result = await h.run();

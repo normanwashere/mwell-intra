@@ -627,12 +627,15 @@ export function recordedWorkflowScenarioEvidence(workflow, result) {
       || !checkpoint.actorId || !checkpoint.snapshotId || !Number.isInteger(checkpoint.version) || checkpoint.version < 1
       || !/^[a-f0-9]{64}$/.test(checkpoint.documentHash) || !Number.isInteger(checkpoint.documentCount) || checkpoint.documentCount < 1
       || (handoff && (!checkpoint.readerId || checkpoint.readerId === checkpoint.actorId))) return [];
-    return [evidence(workflow, 'vendor-accreditation', [handoff ? 'legal_compliance_lead' : 'vendor_representative'],
+    return [{ ...evidence(workflow, 'vendor-accreditation', [handoff ? 'legal_compliance_lead' : 'vendor_representative'],
       handoff ? ['handoff'] : ['authorized', ...(result.validationGuard === true ? ['validation'] : []),
         ...(result.replayCheckpoint?.replayed === true && result.replayCheckpoint.unchanged === true
           && result.replayCheckpoint.snapshotId === checkpoint.snapshotId && result.replayCheckpoint.version === checkpoint.version
           && /^[a-f0-9]{64}$/.test(result.replayCheckpoint.commandKeySha256) ? ['duplicate'] : [])],
-      [handoff ? 'legal-handoff' : 'application-readback'])];
+      [handoff ? 'legal-handoff' : 'application-readback']),
+      lineage: { leg: 'application-to-legal', caseId: checkpoint.caseId, vendorId: checkpoint.vendorId,
+        actorId: checkpoint.actorId, snapshotId: checkpoint.snapshotId, version: checkpoint.version,
+        documentHash: checkpoint.documentHash, ...(handoff ? { readerId: checkpoint.readerId } : {}) } }];
   }
   const registered = workflowScenarioEvidence(workflow);
   if (workflow !== "legal vendor invite") return registered;
@@ -640,6 +643,11 @@ export function recordedWorkflowScenarioEvidence(workflow, result) {
   const savedCase = result?.checkpoint?.matched === 1;
   const savedInvite = result?.inviteCheckpoint?.matched === 1;
   if (!savedCase || !savedInvite) return [];
+  if (result?.invitationMode === 'creation-only' && (result.acceptanceNotExercised !== true
+    || result.acceptanceCheckpoint !== null || result.acceptanceUsedAuditToken !== false || result.replayStatus !== null
+    || !['sent', 'delivery_failed'].includes(result.deliveryStatus)
+    || result.creationLineage?.source !== 'ordinary-legal-ui' || result.creationLineage.applicationFixtureIsSeparate !== true
+    || !['inviteId', 'caseId', 'vendorId', 'actorId'].every(key => typeof result.creationLineage[key] === 'string' && result.creationLineage[key].trim()))) return [];
   const accepted = result?.acceptanceCheckpoint?.matched === 1;
   return registered.map(item => ({
     ...item,
@@ -649,6 +657,7 @@ export function recordedWorkflowScenarioEvidence(workflow, result) {
     cases: accepted && result?.replayStatus === 409
       ? ["authorized", "duplicate"] : ["authorized"],
     checkpoints: ["invite-created", "case-visible"],
+    ...(result?.invitationMode === 'creation-only' ? { lineage: result.creationLineage } : {}),
   }));
 }
 
@@ -691,6 +700,7 @@ export function evaluateScenarioCoverage(
         coveredActors,
         coveredCases,
         coveredCheckpoints,
+        ...(scenario.id === 'vendor-accreditation' ? { lineages: evidenceRows.flatMap(item => item.lineage ? [item.lineage] : []) } : {}),
         missing: gaps,
         complete: Object.values(gaps).every((items) => items.length === 0),
       };
@@ -699,6 +709,10 @@ export function evaluateScenarioCoverage(
       perViewport.length > 0 && perViewport.every((item) => item.complete);
     return {
       id: scenario.id,
+      ...(scenario.id === 'vendor-accreditation' ? {
+        coverageSemantics: 'separate-governed-legs', continuousInvitationToApplicationProven: false,
+        limitation: 'Invitation creation and the separately provisioned application case cover distinct governed legs, not same-vendor invitation acceptance through application.',
+      } : {}),
       requiredViewports,
       perViewport,
       status: !perViewport.length ? "not-run" : complete ? "complete" : "incomplete",

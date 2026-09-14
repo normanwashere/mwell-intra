@@ -5,6 +5,32 @@ import { recordedWorkflowScenarioEvidence, evaluateScenarioCoverage } from './li
 const name = 'legal vendor invite';
 const saved = { ok: true, checkpoint: { matched: 1 }, inviteCheckpoint: { matched: 1 } };
 
+const creation = { ...saved, invitationMode: 'creation-only', acceptanceNotExercised: true,
+  acceptanceCheckpoint: null, acceptanceUsedAuditToken: false, replayStatus: null, deliveryStatus: 'sent',
+  creationLineage: { source: 'ordinary-legal-ui', caseId: 'invited-case', inviteId: 'new-invite', vendorId: 'new-vendor',
+    actorId: 'legal-actor', applicationFixtureIsSeparate: true } };
+test('creation-only evidence preserves its own lineage and rejects missing or contradictory provenance', () => {
+  const [row] = recordedWorkflowScenarioEvidence(name, creation);
+  assert.deepEqual(row.lineage, creation.creationLineage);
+  assert.deepEqual(row.checkpoints, ['invite-created', 'case-visible']);
+  for (const change of [{ creationLineage: null }, { acceptanceNotExercised: false }, { acceptanceUsedAuditToken: true },
+    { acceptanceCheckpoint: { matched: 1 } }, { replayStatus: 409 }, { deliveryStatus: 'pending_delivery' },
+    { creationLineage: { ...creation.creationLineage, source: 'service-fixture' } },
+    { creationLineage: { ...creation.creationLineage, caseId: '' } }]) {
+    assert.deepEqual(recordedWorkflowScenarioEvidence(name, { ...creation, ...change }), []);
+  }
+});
+
+test('vendor coverage reports separate governed legs and never transfers invite credit to another viewport', () => {
+  const row = { ...creation, viewport: 'desktop-1440', scenarioEvidence: recordedWorkflowScenarioEvidence(name, creation) };
+  const coverage = evaluateScenarioCoverage([row], ['desktop-1440', 'mobile-390']).find(item => item.id === 'vendor-accreditation');
+  assert.equal(coverage.coverageSemantics, 'separate-governed-legs');
+  assert.equal(coverage.continuousInvitationToApplicationProven, false);
+  assert.equal(coverage.complete, false);
+  assert.ok(coverage.perViewport[1].missing.checkpoints.includes('invite-created'));
+  assert.deepEqual(coverage.perViewport[0].lineages, [creation.creationLineage]);
+});
+
 test('form-only, failed and unverified invitations earn no transaction credit', () => {
   for (const result of [{ ok: true, interactionSurfaceOnly: true }, { ...saved, ok: false }, { ok: true },
     { ...saved, inviteCheckpoint: { matched: 0 } }, { ...saved, checkpoint: { matched: 2 } }]) {
@@ -42,6 +68,9 @@ test('only a verified signed application earns application-readback, not invite 
     replayCheckpoint: { replayed: true, snapshotId: application.snapshotId, version: application.version, unchanged: true, commandKeySha256: 'b'.repeat(64) } };
   const [row] = recordedWorkflowScenarioEvidence('vendor owned application submission', result);
   assert.deepEqual(row.checkpoints, ['application-readback']);
+  assert.equal(row.lineage.caseId, application.caseId);
+  assert.equal(row.lineage.vendorId, application.vendorId);
+  assert.equal(row.lineage.leg, 'application-to-legal');
   assert.deepEqual(row.actors, ['vendor_representative']);
   assert.deepEqual(row.cases, ['authorized', 'validation', 'duplicate']);
   for (const replayCheckpoint of [null, { ...result.replayCheckpoint, unchanged: false }, { ...result.replayCheckpoint, snapshotId: 'foreign' }]) {
