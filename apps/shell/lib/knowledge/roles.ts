@@ -1607,7 +1607,7 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
     rbacRole: "seller",
     label: "Event seller",
     module: "events",
-    purpose: "Candidate, pending deployment and governed learning publication: record your own event sales and giveaways under a named, time-limited event assignment.",
+    purpose: "Record your own event sales and giveaways under a named, time-limited event assignment after completing your required learning.",
     authority: {
       accessibleRoutes: ["/events", "/onboarding"],
       canDo: [
@@ -1621,7 +1621,7 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
       decisions: ["Choose the accurate sale or giveaway outcome for your own eligible event custody; Finance independently approves settlement."],
       upstreamRoleIds: ["events_coordinator", "warehouse_operator"],
       downstreamRoleIds: ["events_coordinator", "events_finance_reviewer"],
-      escalation: "For missing learning, request governed publication and assignment of internal.role.events.seller.custody-practice.v1, then complete your own challenge. For event scope or expiry, contact the certified event owner; do not request broad coordinator or administrator access.",
+      escalation: "Open Onboarding and follow your next required action; do not repeat a completed orientation. If learning is unavailable or missing, ask your administrator to check the published seller curriculum and your assignment, then complete your own challenge. For event scope or expiry, contact the certified event owner; do not request broad coordinator or administrator access.",
     },
   }),
   liveRole({

@@ -4,6 +4,10 @@ September 20 UAT update: the deployed experience improves open-work visibility, 
 
 The event workflow adds individually assigned sellers after release setup. Each seller records their own acknowledged stock; corrections retain the original record through a reversal. Returned watches pass Quality inspection and use a Product-approved recovery recipe. These controls do not automatically retire products, extend event access or enable old events. Follow the detailed [September 20 release guide](releases/2026-09-20-EXPERIENCE-REMEDIATION-CANDIDATE.md) for deployed status and outstanding live checks. The synthetic seller account exists but is not a completed real-user pilot. SMTP is unchanged.
 
+## Event Seller Practice
+
+The September 20 synthetic seller's orientation and six practice decisions were completed through live UAT, with saved checkpoint and certificate readback and completion retained on reload. Repeat the drill with real participants using their own accounts; this automated evidence does not count as their acceptance. An event owner must separately assign the seller before operational testing.
+
 ## Warehouse Access Recovery Drill
 
 With an authorized test account, open an unsaved warehouse form and switch browser tabs. A successful background access check should leave the form in place. Do not save during this navigation exercise.

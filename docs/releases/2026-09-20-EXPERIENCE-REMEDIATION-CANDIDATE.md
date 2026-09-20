@@ -66,6 +66,12 @@ Qualified returning users are directed toward their work, while assigned outstan
 
 ## Tester Checkpoints
 
+### Synthetic Seller Handover
+
+The seller's actual UI retest passed on deployed `f6b816d`: orientation plus all six seller practice decisions were saved, each requirement has exactly one attempt, and completion remained after reload. The normal learning evaluator issued one certificate scoped to this account, its seller role assignment and Marketing membership. Parent read-only audit checks verified all seven checkpoint records and their evidence hashes; the learner's raw audit-table restriction stayed in place. No direct completion/certificate insert was used. Desktop and mobile completion views were inspected. This is automated UAT evidence, not a human pilot or an event transaction certificate.
+
+The account is ready for an authorized event owner to assign it to a designated test event. It has no event, stock allocation, sale or giveaway yet. Completing training does not create any of those records or waive approval, release, acknowledgment or Finance review. The KB now lists the exact onboarding steps instead of saying publication is pending.
+
 - Reopen an older open request, search for it, open its link and return to the same filtered list.
 - Compare fulfillment summary and detail status, then check the correct next actor and eligible return path.
 - Check desktop and mobile views, including long references, expanded details, dialogs and alert filters.

@@ -26,7 +26,7 @@ export const ROLE_TASK_GUIDANCE: Readonly<
     },
     "Complete required onboarding and the event-seller-custody-v1 challenge before recording actual sales or zero-amount giveaways.": {
       kind: "written",
-      guidance: "Complete your assigned event-seller training and challenge, then return to Events. Enter the actual sale amount, or choose giveaway with a zero amount. Select the exact serials where required. Completing training does not assign stock or extend event access.",
+      guidance: "Open Onboarding, complete Role orientation if it is still required, then start Record your event sales and giveaways. Finish all six practice decisions and check that the requirement shows complete before returning to Events. Do not repeat a completed orientation. Enter the actual sale amount, or choose giveaway with a zero amount. Select the exact serials where required. Completing training does not assign stock, enable an event or extend event access.",
     },
     "Read back uncertain submissions, retry the same intent, and use your own attributable reversal for a correction.": {
       kind: "written",

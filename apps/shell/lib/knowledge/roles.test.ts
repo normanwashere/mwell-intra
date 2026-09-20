@@ -19,7 +19,8 @@ describe("knowledge role authority registry", () => {
     expect(new Set(guide.authority.capabilities)).toEqual(new Set(["view_event_custody", "record_event_outcome"]));
     expect(JSON.stringify(guide)).toMatch(/named.*event.*assignment/i);
     expect(JSON.stringify(guide)).toContain("event-seller-custody-v1");
-    expect(JSON.stringify(guide)).toMatch(/candidate.*pending deployment/i);
+    expect(guide.purpose).not.toMatch(/candidate|pending deployment/i);
+    expect(guide.authority.escalation).toContain("do not repeat a completed orientation");
   });
   it("maps scoped RBAC assignments to explicit handbook role IDs", () => {
     expect(
