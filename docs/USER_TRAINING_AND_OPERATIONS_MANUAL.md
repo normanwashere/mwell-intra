@@ -8,6 +8,8 @@ The event workflow adds individually assigned sellers after release setup. Each 
 
 The September 20 synthetic seller's orientation and six practice decisions were completed through live UAT, with saved checkpoint and certificate readback and completion retained on reload. Repeat the drill with real participants using their own accounts; this automated evidence does not count as their acceptance. An event owner must separately assign the seller before operational testing.
 
+Practice the waiting states as well: **No current event assignment** sends the seller to their event coordinator. **No stock is ready to record yet** means the coordinator should check the linked fulfillment order for Warehouse release and recipient acknowledgment. Keep recording disabled until eligible stock appears. The September 20 live drill reached a separate Warehouse approval and linked order with both requested products; a zero-stock allocation attempt was rejected without changing the order. Picking, release, acknowledgment and seller activity still need their own successful transaction evidence.
+
 ## Warehouse Access Recovery Drill
 
 With an authorized test account, open an unsaved warehouse form and switch browser tabs. A successful background access check should leave the form in place. Do not save during this navigation exercise.

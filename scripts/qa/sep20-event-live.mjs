@@ -6,6 +6,7 @@ import { mkdir,readFile,writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createManifest,validateManifest,assertExecutionGate,assertReleaseEvidence,smokeCommands,REQUIRED_MIGRATIONS } from './sep20-event-live-manifest.mjs';
+import { assertSellerPreflight } from './sep20-event-live-preflight.mjs';
 const root=fileURLToPath(new URL('../../',import.meta.url));
 const [command,output,commit,origin,date]=process.argv.slice(2);
 assert(['prepare','run'].includes(command),'Use prepare or explicitly authorized run');
@@ -51,9 +52,7 @@ if(command==='prepare'){
       const login=await client.auth.signInWithPassword({email:m.actors[actor],password:process.env.AUDIT_PASSWORD});assert(!login.error,`Login failed: ${actor}`);
       assert.equal(login.data.user.email,m.actors[actor]);clients[actor]=client;
       if(actor==='seller'){
-        const profile=checked(await client.schema('core').from('profiles').select('id,department_id,status').eq('id',login.data.user.id).single());
-        assert.equal(profile.department_id,m.departmentId);assert.equal(profile.status,'active');
-        const roles=checked(await client.schema('core').from('user_roles').select('module,role').eq('user_id',login.data.user.id));assert.deepEqual(roles,m.sellerRoles);
+        await assertSellerPreflight(client,m,login.data.user.id,today);
       }
     }
     for(const [actor,module,cap] of [['owner','events','create_event'],['owner','events','manage_events'],['owner','events','request_fulfillment'],['seller','events','view_event_custody'],['seller','events','record_event_outcome']]){

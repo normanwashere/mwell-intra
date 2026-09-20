@@ -23,17 +23,19 @@ const sources = await Promise.all(['ReturnsPage', 'FulfillmentPage'].map(async n
 
 // Render the actual page reference paragraph and generate its utilities with the shell preset.
 // This is a local layout fixture, not a live page or workflow certification.
-function renderReference(ast, destination, context) {
+function renderReference(ast, destination, context, component = 'Link') {
   const matches = [];
   function visit(node) {
-    if (ts.isJsxElement(node) && node.openingElement.tagName.getText(ast) === 'Link') {
-      const to = node.openingElement.attributes.properties.find(attribute => attribute.name?.getText(ast) === 'to');
-      if (to?.getText(ast).includes(destination)) matches.push(node);
+    const opening = ts.isJsxElement(node) ? node.openingElement : ts.isJsxSelfClosingElement(node) ? node : undefined;
+    if (opening?.tagName.getText(ast) === component) {
+      const attribute = opening.attributes.properties.find(attribute => attribute.name?.getText(ast) === (component === 'Link' ? 'to' : 'id'));
+      const expression = attribute?.initializer?.expression?.getText(ast);
+      if (component === 'Link' ? expression?.includes(destination) : expression === destination) matches.push(node);
     }
     ts.forEachChild(node, visit);
   }
   visit(ast);
-  assert.equal(matches.length, 1, `unique source link for ${destination}`);
+  assert.equal(matches.length, 1, `unique source ${component} reference for ${destination}`);
   let paragraph = matches[0].parent;
   while (paragraph && !(ts.isJsxElement(paragraph) && paragraph.openingElement.tagName.getText(ast) === 'p')) paragraph = paragraph.parent;
   assert.ok(paragraph, 'reference retains its real paragraph layout and wrapping');
@@ -44,20 +46,37 @@ function renderReference(ast, destination, context) {
   return renderToStaticMarkup(React.createElement(MemoryRouter, null, element));
 }
 
-function references(kind = 'mobile390') {
+function physicalReturnComponent(canOpenReturns) {
+  const declarations = sources[1].statements.filter(node => ts.isFunctionDeclaration(node) && node.name?.text === 'PhysicalReturnReference');
+  assert.equal(declarations.length, 1, 'unique source PhysicalReturnReference implementation');
+  const js = ts.transpileModule(`${declarations[0].getText(sources[1])}\nreturn PhysicalReturnReference;`, {
+    compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  return new Function('React', 'Link', 'useWarehouse', js)(React, Link, () => ({
+    canOpenRoute: route => {
+      assert.equal(route, 'returns', 'reference checks its destination read access');
+      return canOpenReturns;
+    },
+  }));
+}
+
+function references(kind = 'mobile390', { canOpenReturns = true, hasSourceRecords = true } = {}) {
   const short = kind === 'short';
   const desktop = kind === 'desktop1440';
+  const encoded = kind === 'encoded';
   const r = {
-    sourceOrderId: 'source-order',
-    returnCaseId: short ? 'c' : desktop ? 'fea31f02-fe3b-4cd9-bd65-8ea6b42e6ce7' : '3af625a8-7141-445a-9011-2b37e0b0ad8a',
+    sourceOrderId: encoded ? 'source/order ?#%' : 'source-order',
+    returnCaseId: short ? 'c' : encoded ? 'case/return ?#%' : desktop ? 'fea31f02-fe3b-4cd9-bd65-8ea6b42e6ce7' : '3af625a8-7141-445a-9011-2b37e0b0ad8a',
   };
-  const physical = { id: short ? 'r' : desktop ? 'ret-9653612b-bf28-48ae-81dc-faf310924e88' : 'ret-6b0eb97c-85ed-4943-a50d-0055c9bf4436' };
-  const data = { fulfillmentOrders: [{ id: r.sourceOrderId, externalReference: short ? 'X' : `WMS-ECOM-177f0c97-a6de-4ee4-82b1-37a09f4f5e37-${kind}` }], customerReturnCases: [{ id: r.returnCaseId }] };
+  const physical = { id: short ? 'r' : encoded ? 'ret/physical ?#%' : desktop ? 'ret-9653612b-bf28-48ae-81dc-faf310924e88' : 'ret-6b0eb97c-85ed-4943-a50d-0055c9bf4436' };
+  const externalReference = short ? 'X' : `WMS-ECOM-177f0c97-a6de-4ee4-82b1-37a09f4f5e37-${kind}`;
+  const data = { fulfillmentOrders: hasSourceRecords ? [{ id: r.sourceOrderId, externalReference }] : [], customerReturnCases: hasSourceRecords ? [{ id: r.returnCaseId }] : [] };
+  const PhysicalReturnReference = physicalReturnComponent(canOpenReturns);
   return [
-    { label: 'Original order', markup: renderReference(sources[0], 'encodeURIComponent(r.sourceOrderId)', { r, data }), href: '/fulfillment?tab=orders&order=source-order' },
-    { label: 'Customer case', markup: renderReference(sources[0], 'encodeURIComponent(r.returnCaseId)', { r, data }), href: `/fulfillment?tab=returns#return-case-${r.returnCaseId}` },
-    { label: 'Physical return', markup: renderReference(sources[1], 'encodeURIComponent(physical.id)', { physical }), href: `/returns#return-${physical.id}` },
-    { label: 'Order details physical return', markup: renderReference(sources[1], '/returns#return-${encodeURIComponent(record.id)}', { record: physical }), href: `/returns#return-${physical.id}` },
+    { label: 'Original order', markup: renderReference(sources[0], 'encodeURIComponent(r.sourceOrderId)', { r, data }), href: `/fulfillment?tab=orders&order=${encodeURIComponent(r.sourceOrderId)}`, unavailableReferences: [r.sourceOrderId, externalReference] },
+    { label: 'Customer case', markup: renderReference(sources[0], 'encodeURIComponent(r.returnCaseId)', { r, data }), href: `/fulfillment?tab=returns#return-case-${encodeURIComponent(r.returnCaseId)}`, unavailableReferences: [r.returnCaseId] },
+    { label: 'Physical return', markup: renderReference(sources[1], 'physical.id', { physical, PhysicalReturnReference }, 'PhysicalReturnReference'), href: `/returns#return-${encodeURIComponent(physical.id)}` },
+    { label: 'Order details physical return', markup: renderReference(sources[1], 'record.id', { record: physical, PhysicalReturnReference }, 'PhysicalReturnReference'), href: `/returns#return-${encodeURIComponent(physical.id)}` },
   ];
 }
 
@@ -67,7 +86,7 @@ after(async () => { await browser?.close(); });
 
 for (const width of [320, 360, 390, 768, 1280, 1440]) {
   test(`source-rendered return references have reachable 44px targets (${width})`, async () => {
-    const links = [...references(), ...references('desktop1440'), ...references('short')];
+    const links = [...references(), ...references('desktop1440'), ...references('short'), ...references('encoded')];
     const html = `<main><h1>Return reference targets</h1>${links.map(({ markup }, index) => `<section data-reference="${index}">${markup}</section>`).join('')}</main>`;
     const { css } = await postcss([tailwind({ ...config, content: [{ raw: html, extension: 'html' }] })]).process('@tailwind base; @tailwind utilities;', { from: undefined });
     const context = await browser.newContext({ viewport: { width, height: 900 } });
@@ -105,6 +124,34 @@ for (const width of [320, 360, 390, 768, 1280, 1440]) {
         await mkdir(process.env.WMS_RETURN_LINK_SCREENSHOTS, { recursive: true });
         await page.screenshot({ path: join(process.env.WMS_RETURN_LINK_SCREENSHOTS, `return-links-${width}.png`), fullPage: true });
       }
+    } finally { await context.close(); }
+  });
+
+  test(`source-rendered return references deny inaccessible destinations and hide unavailable sources (${width})`, async () => {
+    const denied = references('encoded', { canOpenReturns: false, hasSourceRecords: false });
+    const html = `<main>${denied.map(({ markup }, index) => `<section data-reference="${index}">${markup}</section>`).join('')}</main>`;
+    const { css } = await postcss([tailwind({ ...config, content: [{ raw: html, extension: 'html' }] })]).process('@tailwind base; @tailwind utilities;', { from: undefined });
+    const context = await browser.newContext({ viewport: { width, height: 900 } });
+    await context.route('**/*', route => route.abort());
+    const page = await context.newPage();
+    try {
+      await page.setContent(`<style>${css}\nmain{padding:16px}section{max-width:420px;padding:12px}</style>${html}`);
+      assert.equal(await page.locator('a, [role="link"]').count(), 0, 'denied destinations do not offer navigation');
+      for (let index = 0; index < denied.length; index += 1) {
+        const text = await page.locator(`[data-reference="${index}"]`).textContent();
+        if (denied[index].unavailableReferences) {
+          assert.ok(text.includes('Reference unavailable'));
+          for (const reference of denied[index].unavailableReferences) {
+            assert.equal(text.includes(reference), false, 'unavailable source identities do not leak');
+            assert.equal(html.includes(encodeURIComponent(reference)), false, 'unavailable source routes do not leak');
+          }
+        } else {
+          assert.ok(text.includes('ret/physical ?#%'), 'already-visible intake reference is retained');
+          assert.ok(text.includes('Warehouse returns team owns custody and inspection follow-up.'), 'denied route identifies the next owner');
+          assert.equal(html.includes(denied[index].href), false, 'denied physical return route is absent');
+        }
+      }
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     } finally { await context.close(); }
   });
 }

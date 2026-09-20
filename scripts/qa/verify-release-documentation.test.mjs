@@ -61,7 +61,7 @@ test("accepts operational releases with the complete documentation set", () => {
 });
 
 test("derives the certified legacy-route count and rejects any declared count drift", () => {
-  assert.equal(LEGACY_ROUTES.length, 480);
+  assert.equal(LEGACY_ROUTES.length, 483);
   const documents = Object.fromEntries(
     LEGACY_ROUTE_COUNT_DOCUMENTS.map(({ file }) => [
       file,
@@ -99,6 +99,19 @@ test("retains all four Warehouse recovery source links without inherited screens
     ["doc-technical-and-functional-specification-md", "warehouse-session-recovery-contract"],
     ["doc-user-training-and-operations-manual-md", "warehouse-access-recovery-drill"],
     ["doc-training-and-handover-content-md", "warehouse-access-recovery-handover"],
+  ];
+  for (const [article, heading] of expected) {
+    const routes = LEGACY_ROUTES.filter(route => route.legacyArticleId === article && route.legacyHeadingId === `${article}-${heading}`);
+    assert.equal(routes.length, 1);
+    assert.equal(routes[0].guideId, "source-references");
+  }
+});
+
+test("retains the three seller handover reference links without transaction certification credit", () => {
+  const expected = [
+    ["doc-releases-2026-09-20-experience-remediation-candidate-md", "synthetic-seller-handover"],
+    ["doc-training-and-handover-content-md", "september-20-seller-handover"],
+    ["doc-user-training-and-operations-manual-md", "event-seller-practice"],
   ];
   for (const [article, heading] of expected) {
     const routes = LEGACY_ROUTES.filter(route => route.legacyArticleId === article && route.legacyHeadingId === `${article}-${heading}`);

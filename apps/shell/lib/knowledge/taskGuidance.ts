@@ -22,7 +22,7 @@ export const ROLE_TASK_GUIDANCE: Readonly<
   events_seller: {
     "Confirm your own named, time-limited event assignment and acknowledged issued custody.": {
       kind: "written",
-      guidance: "Open Events with your own account. Confirm the event and assignment dates, then check its acknowledged custody. Ask the event owner about missing or expired assignments; never use another seller's login or unacknowledged stock.",
+      guidance: "Open Events with your own account. Confirm the event and assignment dates, then check its acknowledged custody. If no assignment appears, ask your event coordinator to check your named assignment and its dates. If no stock is ready, ask the coordinator to check the linked fulfillment order: Warehouse must release the stock and the recipient must acknowledge receipt first. Never use another seller's login or unacknowledged stock.",
     },
     "Complete required onboarding and the event-seller-custody-v1 challenge before recording actual sales or zero-amount giveaways.": {
       kind: "written",

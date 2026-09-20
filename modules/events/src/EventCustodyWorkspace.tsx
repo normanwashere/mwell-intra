@@ -74,7 +74,10 @@ export function EventCustodyWorkspace({ eventId, embedded = false }: { eventId?:
       {loading && <p role="status">Loading event custody...</p>}
       {!eventId && !loading && <ul className="divide-y divide-line">{events.map(event => <li key={event.id} className="py-3">
         <a className="flex min-h-11 items-center justify-between gap-3 font-semibold" href={`/events/${encodeURIComponent(event.id)}`}><span className="break-words">{event.name}</span><Icon name="chevron" className="h-4 w-4 shrink-0" /></a>
-      </li>)}{events.length === 0 && !error && <li className="py-3 text-sm text-muted">No current event assignment.</li>}</ul>}
+      </li>)}{events.length === 0 && !error && <li className="space-y-1 py-3 text-sm text-muted">
+        <p className="font-semibold text-ink">No current event assignment.</p>
+        <p>Ask your event coordinator to assign your account to the event. Only your active event assignments appear here.</p>
+      </li>}</ul>}
       {ledger && <>
         {!embedded && ledger.event_name && <h2 className="text-lg font-semibold">{ledger.event_name}</h2>}
         <dl className="grid grid-cols-3 gap-3 text-sm" aria-label="Recorded outcome totals">
@@ -105,6 +108,10 @@ export function EventCustodyWorkspace({ eventId, embedded = false }: { eventId?:
           <p className="break-words font-semibold">{row.product_id}</p>
           <p>Issued {row.issued_units}; sold {row.sold_units}; giveaways {row.giveaway_units}; returned {row.returned_units}; remaining {row.remaining_units}</p>
         </li>)}</ul>
+        {ledger.enabled && !isClosed && ledger.allocations.length === 0 && <div role="status" className="space-y-1 border-l-4 border-brand-500 bg-inset px-4 py-3 text-sm">
+          <p className="font-semibold">No stock is ready to record yet.</p>
+          <p>Warehouse must release the stock and the recipient must acknowledge receipt before it appears here. Ask your event coordinator to check the linked fulfillment order.</p>
+        </div>}
         {!mayRecord && userRoles.events?.includes('seller') && <p role="status" className="text-sm">Seller posting is locked. <a className="underline" href={`/onboarding?requirement=internal.role.events.seller.custody-practice.v1&next=${encodeURIComponent(`/events/${eventId}`)}`}>Open required learning</a></p>}
         {mayRecord && ledger.enabled && !isClosed && <form className="min-w-0 space-y-3" onSubmit={event => {
           event.preventDefault(); void command('record_event_outcome', reversal

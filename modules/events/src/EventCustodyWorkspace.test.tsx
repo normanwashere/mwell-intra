@@ -49,3 +49,33 @@ it('keeps owner activation disabled until explicit schema capability and learnin
   expect(await screen.findByRole('button', { name: 'Enable prospective custody' })).toBeDisabled();
   expect(screen.getByLabelText('Custody rollout prerequisites')).toHaveTextContent('Learning publication: pending');
 });
+
+it('names the event coordinator as the next contact when a seller has no assignment', async () => {
+  state.rpc.mockResolvedValue({ data: [], error: null });
+  render(<EventCustodyWorkspace />);
+  expect(await screen.findByText('No current event assignment.')).toBeInTheDocument();
+  expect(screen.getByText(/Ask your event coordinator to assign your account/)).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Record outcome' })).not.toBeInTheDocument();
+});
+
+it('explains the release and acknowledgment handoff without enabling a sale before stock exists', async () => {
+  state.rpc.mockResolvedValue({ data: { ...ledger(), allocations: [] }, error: null });
+  render(<EventCustodyWorkspace eventId="event-1" />);
+  expect(await screen.findByText('No stock is ready to record yet.')).toBeInTheDocument();
+  expect(screen.getByText(/Warehouse must release the stock and the recipient must acknowledge/)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Record outcome' })).toBeDisabled();
+  expect(state.rpc.mock.calls.every(([name]) => name === 'event_custody_ledger')).toBe(true);
+});
+
+it('does not describe a fully used or closed allocation as waiting for its first release', async () => {
+  state.rpc.mockResolvedValue({ data: { ...ledger(), allocations: [{ ...allocation, remaining_units: 0, eligible_serials: [] }] }, error: null });
+  const view = render(<EventCustodyWorkspace eventId="event-1" />);
+  await screen.findByLabelText('Issued allocation');
+  expect(screen.queryByText('No stock is ready to record yet.')).not.toBeInTheDocument();
+  view.unmount();
+  state.rpc.mockResolvedValue({ data: { ...ledger(), event_status: 'closed', allocations: [] }, error: null });
+  render(<EventCustodyWorkspace eventId="event-2" />);
+  await screen.findByLabelText('Recorded outcome totals');
+  expect(screen.queryByText('No stock is ready to record yet.')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Record outcome' })).not.toBeInTheDocument();
+});
