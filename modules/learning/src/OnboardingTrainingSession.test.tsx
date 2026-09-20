@@ -3,6 +3,7 @@ import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { OnboardingTrainingSession } from "./OnboardingTrainingSession";
 import { LEARNING_CATALOG } from "./catalog";
+import { evaluateSimulationChoice } from "./simulationChoiceAuthority.server";
 
 function anchor() {
   const element = document.createElement("section");
@@ -20,6 +21,36 @@ function anchor() {
 }
 
 describe("OnboardingTrainingSession", () => {
+  it("requires all six seller decisions without client checkpoint or certification shortcuts", async () => {
+    const target = anchor();
+    const simulation = LEARNING_CATALOG.simulations.find(item => item.id === "event-seller-custody-v1")!;
+    const onCheckpoint = vi.fn();
+    const onEvaluateChoice = vi.fn(async (input) => evaluateSimulationChoice(input));
+    render(<OnboardingTrainingSession
+      requirementTitle={simulation.title}
+      requiredCheckpointIds={simulation.checkpointIds}
+      assignmentRequirementId="named-seller-assignment"
+      attemptId="named-seller-attempt"
+      scenarioId={simulation.id}
+      launcherRef={createRef<HTMLElement>()}
+      onCheckpoint={onCheckpoint}
+      onEvaluateChoice={onEvaluateChoice}
+      onClose={vi.fn()}
+    />);
+    for (const step of simulation.embeddedSteps!) {
+      expect(await screen.findByRole("heading", { name: step.title })).toBeInTheDocument();
+      const rejected = step.choices!.find(choice => !evaluateSimulationChoice({ simulationId: simulation.id, checkpointId: step.checkpointId, choiceId: choice.id }).accepted)!;
+      fireEvent.click(screen.getByRole("button", { name: rejected.label }));
+      expect(await screen.findByRole("alert")).not.toBeEmptyDOMElement();
+      expect(screen.getByRole("heading", { name: step.title })).toBeInTheDocument();
+      const accepted = step.choices!.find(choice => choice.id !== rejected.id)!;
+      fireEvent.click(screen.getByRole("button", { name: accepted.label }));
+    }
+    expect(await screen.findByRole("heading", { name: "Guided practice complete" })).toBeInTheDocument();
+    expect(onEvaluateChoice).toHaveBeenCalledTimes(12);
+    expect(onCheckpoint).not.toHaveBeenCalled();
+    target.remove();
+  });
   it.each([2, 4])(
     "a fresh Operations Lead session ends after its %i assigned checkpoints",
     async (count) => {

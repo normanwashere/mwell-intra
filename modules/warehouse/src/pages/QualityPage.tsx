@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { tasksReturnPath } from '@/domain/taskNavigation';
 import type { InventoryHold, QualityInspectionSummary, VendorReturn } from '@intra/data-kit';
+import { qualityBatchGroup, type InspectQualityBatchInput } from '@intra/data-kit';
 import { useSession } from '@intra/auth';
 import { useWarehouse } from '@/app/store';
 import { WAREHOUSE_MUTATION_CAPABILITIES } from '@/app/authorization';
@@ -24,7 +25,8 @@ export function QualityPage() {
     loadQualityInspectionSummaries: loadQualityInspections,
     loadHolds,
     loadVendorReturns,
-    inspectQuality,
+    submitQualityInspection,
+    submitQualityBatch,
     releaseHold,
     createVendorReturn,
   } = useWarehouse();
@@ -35,6 +37,11 @@ export function QualityPage() {
   const [vendorReturns, setVendorReturns] = useState<VendorReturn[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPending, setSelectedPending] = useState<PendingInspection | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [batchOpen, setBatchOpen] = useState(false);
+  const [singlePending, setSinglePending] = useState(false);
+  const [batchPending, setBatchPending] = useState(false);
+  const inspectionPending = singlePending || batchPending;
   const [selectedHold, setSelectedHold] = useState<InventoryHold | null>(null);
   const [search, setSearch] = useState('');
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -96,10 +103,12 @@ export function QualityPage() {
     if (queueError) {
       setSelectedPending(null);
       setSelectedHold(null);
+      setSelectedIds([]);
+      setBatchOpen(false);
     }
   }, [queueError]);
   useEffect(() => {
-    if (!selectedSource || queueBlocked || openedSource.current === selectedSource) return;
+    if (!selectedSource || queueBlocked || inspectionPending || openedSource.current === selectedSource) return;
     openedSource.current = selectedSource;
     const item = pending.find(i => i.id === selectedSource);
     if (item) { setTab('pending'); if (can(WAREHOUSE_MUTATION_CAPABILITIES.inspectQuality)) setSelectedPending(item); else setSearch(selectedSource); return; }
@@ -110,15 +119,20 @@ export function QualityPage() {
     const inspection = inspections.find(i => i.id === selectedSource);
     if (inspection && inspection.disposition !== 'pending') setTab('completed');
     setSearch(selectedSource);
-  }, [selectedSource, queueBlocked, pending, holds, inspections, can]);
+  }, [selectedSource, queueBlocked, inspectionPending, pending, holds, inspections, can]);
 
   if (!data) return null;
   const productName = (productId: string) => data.products.find((product) => product.id === productId)?.name ?? productId;
   const matches = (...values: (string | undefined)[]) => values.join(' ').toLowerCase().includes(search.trim().toLowerCase());
   const shownPending = pending.filter(i => matches(i.id, i.sourceId, i.serialNumber, productName(i.productId)));
+  const selectedItems = pending.filter(item => selectedIds.includes(item.id));
+  const selectedGroup = selectedItems[0] ? qualityBatchGroup(selectedItems[0]) : null;
+  const toggleSelected = (item: PendingInspection) => setSelectedIds(ids => ids.includes(item.id)
+    ? ids.filter(id => id !== item.id)
+    : ids.length < 50 && (!selectedGroup || selectedGroup === qualityBatchGroup(item)) ? [...ids, item.id] : ids);
   const groups = new Map<string, PendingInspection[]>();
   for (const item of shownPending) {
-    const key = `${item.sourceType}:${item.sourceId}:${item.productId}`;
+    const key = qualityBatchGroup(item);
     groups.set(key, [...(groups.get(key) ?? []), item]);
   }
   const allActiveHolds = holds.filter((hold) =>
@@ -143,22 +157,25 @@ export function QualityPage() {
   const mayReviewHold = (hold: InventoryHold) =>
     holdMode(hold) === 'vendor_return' ? mayCreateVendorReturn : mayRelease;
 
-  const inspect = async (input: Parameters<typeof inspectQuality>[0]) => {
-    if (queueBlocked) return false;
-    const ok = await inspectQuality({
-      ...input,
-      ...(selectedPending?.procurementPoLineId
-        ? { procurementPoLineId: selectedPending.procurementPoLineId }
-        : {}),
-    });
-    if (ok) await reloadControls();
-    return ok;
+  const inspect = async (input: Parameters<typeof submitQualityInspection>[0]) => {
+    if (batchPending || (queueBlocked && !singlePending)) return {status:'rejected' as const,stage:'not-sent' as const,code:'QUEUE_NOT_READY',message:'Wait for the current inspection or refresh the Quality queue before starting another.'};
+    const result = await submitQualityInspection(input);
+    if (result.status === 'committed') await reloadControls();
+    return result;
   };
   const release = async (input: Parameters<typeof releaseHold>[0]) => {
     if (queueBlocked) return false;
     const ok = await releaseHold(input);
     if (ok) await reloadControls();
     return ok;
+  };
+  const inspectBatch = async (input: InspectQualityBatchInput) => {
+    // An uncertain command must be replayable even after the pending queue changes.
+    // Its pinned payload still passes the repository's authoritative checks.
+    if (singlePending || (!batchPending && (queueBlocked || selectedItems.length !== selectedIds.length))) return {status:'rejected' as const,stage:'not-sent' as const,code:'QUEUE_CHANGED',message:'The selection changed. Refresh the Quality queue and select the pending items again.'};
+    const result = await submitQualityBatch(input);
+    if (result.status === 'committed') { setSelectedIds([]); setBatchOpen(false); await reloadControls(); }
+    return result;
   };
   const createReturn = async (input: Parameters<typeof createVendorReturn>[0]) => {
     if (queueBlocked) return false;
@@ -215,6 +232,12 @@ export function QualityPage() {
         </label>
         {!queueBlocked && <p className="text-sm text-muted sm:py-3">{search.trim() ? `${count.shown} of ${count.total} ${count.label}` : `${count.total} ${count.label}`}</p>}
       </div>
+      {tab === 'pending' && mayInspect && selectedIds.length > 0 && !queueBlocked && <div className="flex flex-wrap items-center gap-3 border-y border-line bg-inset p-3" aria-label="Inspection selection">
+        <p className="mr-auto text-sm font-semibold">{selectedItems.length} selected</p>
+        <button type="button" className="btn-ghost min-h-11" disabled={inspectionPending} onClick={() => setSelectedIds([])}>Clear selection</button>
+        <button type="button" className="btn-primary min-h-11" disabled={inspectionPending || selectedItems.length !== selectedIds.length || !selectedItems.length} onClick={() => setBatchOpen(true)}>Review selected inspections</button>
+        {selectedItems.length !== selectedIds.length && <p role="status" className="w-full text-sm">{inspectionPending ? 'An inspection still needs confirmation. Review the unconfirmed inspection before selecting more items.' : 'Some selected items changed. Clear the selection and choose the remaining inspections.'}</p>}
+      </div>}
       {selectedSource && <div className="space-y-1 rounded-lg border border-line p-3 text-sm">
         <p className="break-all">Selected source: {selectedSource}</p>
         {!queueBlocked && !pending.some(i => i.id === selectedSource || i.sourceId === selectedSource)
@@ -230,14 +253,25 @@ export function QualityPage() {
           <ul className="space-y-3" aria-label="Pending inspections">
             {[...groups.entries()].map(([key, items]) => <li key={key}><details open={Boolean(search) || groups.size < 5} className="rounded-lg border border-line bg-surface">
               <summary className="cursor-pointer p-4 text-sm font-semibold">{productName(items[0]!.productId)} <span className="ml-2 font-normal text-muted">{items.length} inspection(s) · {items[0]!.recordedAt.slice(0, 10)}</span><span className="mt-1 block break-all text-xs font-normal text-muted">{items[0]!.sourceType} {items[0]!.sourceId}</span></summary>
+              <div className="flex flex-wrap items-center justify-between gap-2 border-y border-line bg-inset px-4 py-2 text-xs">
+                <span className="min-w-0 break-words">{[items[0]!.procurementPoLineId && `PO line ${items[0]!.procurementPoLineId}`, items[0]!.binId && `Bin ${items[0]!.binId}`, items[0]!.lotId && `Lot ${items[0]!.lotId}`].filter(Boolean).join(' / ') || 'General receiving area'}</span>
+                {mayInspect && <button type="button" className="btn-ghost min-h-11" disabled={inspectionPending} onClick={() => setSelectedIds(items.slice(0, 50).map(item => item.id))}>{items.length > 50 ? 'Select first 50' : 'Select group'}</button>}
+              </div>
               <ul className="divide-y divide-line">
             {items.map((item) => (
               <li key={item.id} className="grid gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-                <div className="min-w-0">
+                <div className="flex min-w-0 items-center gap-3">
+                  {mayInspect && <label className="flex min-h-11 min-w-11 shrink-0 items-center justify-center">
+                    <input type="checkbox" aria-label={`Select ${item.serialNumber ?? item.id}`} checked={selectedIds.includes(item.id)}
+                      disabled={inspectionPending || (!selectedIds.includes(item.id) && (selectedIds.length >= 50 || Boolean(selectedGroup && selectedGroup !== key)))}
+                      onChange={() => toggleSelected(item)} />
+                  </label>}
+                  <div className="min-w-0">
                   <p className="break-words text-sm font-semibold text-ink">{item.serialNumber ? `Serial ${item.serialNumber}` : productName(item.productId)}</p>
                   <p className="text-xs text-muted">{item.quantity} unit(s) · {item.recordedAt.slice(0, 10)}</p>
+                  </div>
                 </div>
-                {mayInspect && <button type="button" className="btn-primary btn-sm justify-center" onClick={() => setSelectedPending(item)}>Inspect</button>}
+                {mayInspect && <button type="button" className="btn-primary btn-sm min-h-11 justify-center" disabled={inspectionPending} onClick={() => setSelectedPending(item)}>Inspect</button>}
               </li>
             ))}
               </ul></details></li>)}
@@ -254,7 +288,7 @@ export function QualityPage() {
                   <p className="mt-1 text-sm text-muted">{hold.reason}</p>
                   <p className="mt-1 text-xs text-faint">Created by {hold.createdBy} · {hold.createdAt.slice(0, 10)}</p>
                 </div>
-                {mayReviewHold(hold) && <button type="button" className="btn-ghost btn-sm justify-center" onClick={() => setSelectedHold(hold)}>Review hold</button>}
+                {mayReviewHold(hold) && <button type="button" className="btn-ghost btn-sm justify-center" disabled={inspectionPending} onClick={() => setSelectedHold(hold)}>Review hold</button>}
               </li>
             ))}
           </ul>}
@@ -297,11 +331,23 @@ export function QualityPage() {
           productName: productName(selectedPending.productId),
           quantity: selectedPending.quantity,
           ...(selectedPending.binId ? { binId: selectedPending.binId } : {}),
+          ...(selectedPending.lotId ? { lotId: selectedPending.lotId } : {}),
+          ...(selectedPending.procurementPoLineId ? { procurementPoLineId: selectedPending.procurementPoLineId } : {}),
           ...(selectedPending.serialNumber ? { serialNumber: selectedPending.serialNumber } : {}),
         } : null}
         requiresEvidence={requiresEvidence}
         onOpenChange={(open) => { if (!open) setSelectedPending(null); }}
         onSubmit={inspect}
+        onPendingChange={setSinglePending}
+      />
+      <InspectionSheet
+        target={batchOpen && !queueBlocked && selectedItems[0] ? { ...selectedItems[0], productName: productName(selectedItems[0].productId) } : null}
+        batchTargets={batchOpen ? selectedItems.map(item => ({ ...item, productName: productName(item.productId) })) : undefined}
+        requiresEvidence
+        onOpenChange={setBatchOpen}
+        onSubmit={inspect}
+        onSubmitBatch={inspectBatch}
+        onPendingChange={setBatchPending}
       />
       <HoldReleaseSheet
         hold={queueBlocked ? null : selectedHold}

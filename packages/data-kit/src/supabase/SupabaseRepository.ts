@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { StockConversionRejectedError, validateStockConversion, type StockConversionCommand, type StockConversionResult, type StockConversionWorkspace } from "../domain/stockConversion";
 import { ReturnRejectedError } from "../returnOutcome";
+import { InspectionRejectedError } from "../inspectionOutcome";
 import type {
   Allocation,
   CycleCount,
@@ -22,6 +24,8 @@ import {
   type CreateVendorReturnInput,
   type DecideStockChangeInput,
   type InspectQualityInput,
+  type InspectQualityBatchInput,
+  validateQualityBatch,
   type InventoryHold,
   type InventoryPosition,
   type OperationRoute,
@@ -525,7 +529,10 @@ export class SupabaseRepository implements WarehouseControlRepository {
   }
 
   async inspectQuality(input: InspectQualityInput): Promise<QualityInspection> {
-    const response = await this.callRpc("inspect_quality", {
+    if (!/^[A-Za-z0-9_-]{12,128}$/.test(input.idempotencyKey)) {
+      throw new InspectionRejectedError('A valid idempotency key is required.', 'INSPECTION_INPUT_INVALID', 'not-sent');
+    }
+    const response = await this.callInspectionRpc("inspect_quality", {
       idempotency_key: input.idempotencyKey,
       source_type: input.sourceType,
       source_id: input.sourceId,
@@ -539,7 +546,56 @@ export class SupabaseRepository implements WarehouseControlRepository {
       reason: input.reason ?? null,
       evidence_urls: input.evidenceUrls ?? [],
     });
-    return rowToQualityInspection(response.inspection as never);
+    return this.inspectionConfirmation(response?.inspection);
+  }
+
+  async inspectQualityBatch(input: InspectQualityBatchInput): Promise<QualityInspection[]> {
+    try { validateQualityBatch(input); } catch (error) {
+      throw new InspectionRejectedError(error instanceof Error ? error.message : 'Invalid inspection batch.', 'INSPECTION_INPUT_INVALID', 'not-sent');
+    }
+    const response = await this.callInspectionRpc('inspect_quality_batch', {
+      idempotency_key: input.idempotencyKey, disposition: input.disposition,
+      reason: input.reason ?? null, evidence_urls: input.evidenceUrls,
+      items: input.items.map(item => ({
+        source_type: item.sourceType, source_id: item.sourceId, product_id: item.productId,
+        procurement_po_line_id: item.procurementPoLineId ?? null, bin_id: item.binId ?? null,
+        lot_id: item.lotId ?? null, serial_number: item.serialNumber ?? null, quantity: item.quantity,
+      })),
+    });
+    if (!Array.isArray(response?.inspections) || response.inspections.length !== input.items.length) {
+      throw new Error('The inspection confirmation is incomplete. Retry the same batch before starting another.');
+    }
+    const inspections = response.inspections.map(row => this.inspectionConfirmation(row));
+    if (new Set(inspections.map(row => row.id)).size !== inspections.length) {
+      throw new Error('The inspection confirmation is incomplete. Retry the same batch before starting another.');
+    }
+    return inspections;
+  }
+
+  private async callInspectionRpc(fn: 'inspect_quality' | 'inspect_quality_batch', payload: Record<string, unknown>): Promise<Row> {
+    const { data, error } = await this.db.rpc(fn, { payload });
+    if (error) {
+      // Only a returned SQL rejection proves rollback of this attempt. Throws stay uncertain.
+      if (["P0001", "23502", "23503", "23505", "23514", "22003", "22P02", "22023", "42501", "40001", "40P01"].includes(error.code)) {
+        throw new InspectionRejectedError(error.message, error.code);
+      }
+      throw Object.assign(new Error(error.message), { code: error.code });
+    }
+    return data as Row;
+  }
+
+  private inspectionConfirmation(raw: unknown): QualityInspection {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      throw new Error('The inspection confirmation is incomplete. Retry the original inspection.');
+    }
+    const row = rowToQualityInspection(raw as Row);
+    if ([row.id, row.sourceId, row.productId, row.inspectedBy, row.inspectedAt].some(value => typeof value !== 'string' || !value.trim())
+      || !['receipt', 'return'].includes(row.sourceType) || !Number.isSafeInteger(row.quantity) || row.quantity <= 0
+      || !['accepted', 'hold', 'damaged', 'vendor_return', 'unavailable'].includes(row.disposition)
+      || !Array.isArray(row.evidenceUrls) || row.evidenceUrls.some(value => typeof value !== 'string')) {
+      throw new Error('The inspection confirmation is incomplete. Retry the original inspection.');
+    }
+    return row;
   }
 
   async releaseHold(input: ReleaseHoldInput): Promise<InventoryHold> {
@@ -1900,6 +1956,23 @@ export class SupabaseRepository implements WarehouseControlRepository {
       product_approval_reference: input.productApprovalReference.trim(),
     });
     return rowToKitDefinition(row);
+  }
+
+  async loadStockConversionWorkspace(): Promise<StockConversionWorkspace> {
+    return await this.callRpc("stock_conversion_workspace", {}) as unknown as StockConversionWorkspace;
+  }
+
+  async executeStockConversion(input: StockConversionCommand): Promise<StockConversionResult> {
+    const errors = validateStockConversion(input);
+    if (errors.length) throw new Error(errors.join(" "));
+    const { data, error } = await this.db.rpc("execute_stock_conversion", { payload: { ...input } });
+    if (error) {
+      if (["P0001", "22P02", "23502", "23503", "23505", "23514", "42501"].includes(error.code)) {
+        throw new StockConversionRejectedError(error.message);
+      }
+      throw new Error(error.message);
+    }
+    return data as StockConversionResult;
   }
 
   async createReKitWorkOrder(input: CreateReKitWorkOrderInput) {

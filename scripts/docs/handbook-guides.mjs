@@ -1066,6 +1066,7 @@ function roleGuide(definition) {
 }
 
 const SOURCE_ROOT_HEADINGS = {
+  "sept20-experience-remediation-candidate": "September 20 Experience Update",
   "sept14-receiving-practice-checkpoint": "September 14 - Receiving Practice And Sourcing Recovery",
   "sept13-return-quality-display": "Return And Quality Display Update",
   "sept12-workspace-layout": "September 12 Workspace Layout Release",
@@ -1410,6 +1411,7 @@ function markdownHeadings(source) {
 }
 
 const LEGACY_TARGET_BY_SOURCE_ID = {
+  "sept20-experience-remediation-candidate": ["system", "source-references", "source-sept20-experience-remediation-candidate"],
   "sept14-receiving-practice-checkpoint": ["system", "source-references", "source-sept14-receiving-practice-checkpoint"],
   "sept13-return-quality-display": ["system", "source-references", "source-sept13-return-quality-display"],
   "sept12-workspace-layout": ["system", "source-references", "source-sept12-workspace-layout"],

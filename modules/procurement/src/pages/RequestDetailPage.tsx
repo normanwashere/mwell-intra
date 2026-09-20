@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { requestReturnPath } from '../requestList';
 import {
   Badge,
   Card,
@@ -126,7 +127,8 @@ export function RequestDetailPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { rows, submit, cancel, update, refresh, loading, error: readError } = useProcurementRequests();
+  const { rows, submit, cancel, update, refresh, loading, error: readError } = useProcurementRequests(id);
+  const returnPath = requestReturnPath(searchParams.toString());
   const { rows: pos, add: addPO } = usePurchaseOrders();
   const vendors = useProcurementVendors();
   const history = useApprovalHistory(id);
@@ -260,7 +262,7 @@ export function RequestDetailPage() {
     return events.sort((a, b) => b.at.localeCompare(a.at));
   }, [req, history, linkedPo]);
 
-  if (readError) return <div role="alert" className="space-y-3"><WorkflowSummary status="Request unavailable" owner="Request viewer" nextStep="Retry this request. Its current status and next responsibility are not verified." blocker={readError} tone="warning" /><button type="button" className="btn-outline" onClick={() => void refresh()}>Retry request</button><Link to="/requests" className="btn-ghost">Back to requests</Link></div>;
+  if (readError) return <div role="alert" className="space-y-3"><WorkflowSummary status="Request unavailable" owner="Request viewer" nextStep="Retry this request. Its current status and next responsibility are not verified." blocker={readError} tone="warning" /><button type="button" className="btn-outline" onClick={() => void refresh()}>Retry request</button><a href={returnPath} className="btn-ghost">Back to requests</a></div>;
   if (loading) {
     return (
       <div className="mx-auto max-w-4xl space-y-4">
@@ -277,9 +279,9 @@ export function RequestDetailPage() {
           title="Request not available"
           message="The request may not exist, or your account may not be authorized to view it."
           action={
-            <Link to="/requests" className="btn-primary">
+            <a href={returnPath} className="btn-primary">
               Back to requests
-            </Link>
+            </a>
           }
         />
       </div>
@@ -468,7 +470,7 @@ export function RequestDetailPage() {
             </p>
             <h1 className="mt-1 text-xl font-bold text-ink [overflow-wrap:anywhere]">{req.title}</h1>
           </div>
-          <a href="/procurement" className="btn-ghost btn-sm">Back to list</a>
+          <a href={returnPath} className="btn-ghost btn-sm">Back to list</a>
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <Badge tone={STATUS_TONE[req.status]}>{statusLabel(req.status)}</Badge>

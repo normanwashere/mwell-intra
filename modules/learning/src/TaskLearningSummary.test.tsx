@@ -16,6 +16,17 @@ const projection: TaskLearningProjection = {
   optional: [],
 };
 describe("TaskLearningSummary", () => {
+  it('promotes one next task requirement and keeps the remaining chain expandable', () => {
+    const requirement = { id: 'first', version: 1, audience: 'internal' as const, kind: 'orientation' as const, title: 'Safety orientation', mandatory: true, prerequisiteIds: [], capabilityOutcomes: [] };
+    render(<TaskLearningSummary task={task} projection={{ ...projection, neededNow: [requirement, { ...requirement, id: 'second', title: 'Receiving practice', prerequisiteIds: ['first'] }] }} />);
+    expect(screen.getByText('Safety orientation').closest('details')).toBeNull();
+    const remaining = screen.getByText('Receiving practice').closest('details');
+    expect(remaining).not.toBeNull();
+    expect(remaining).not.toHaveAttribute('open');
+    expect(screen.getByText('2 requirements remaining for this task')).toBeInTheDocument();
+    fireEvent.click(remaining!.querySelector('summary')!);
+    expect(remaining).toHaveAttribute('open');
+  });
   it("shows a compact task outcome and disclosures without promising access", () => {
     render(<TaskLearningSummary task={task} projection={projection} />);
     expect(

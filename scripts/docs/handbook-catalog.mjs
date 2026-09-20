@@ -14,6 +14,20 @@ export const HANDBOOK_TABS = Object.freeze([
 
 const CATALOG = [
   {
+    source: "docs/releases/2026-09-20-EXPERIENCE-REMEDIATION-CANDIDATE.md",
+    id: "sept20-experience-remediation-candidate",
+    title: "September 20 Experience Candidate",
+    primaryTab: "release",
+    relatedTabs: ["roles", "workflows", "security"],
+    contentType: "release-note",
+    audience: ["operator", "trainer", "release-reviewer"],
+    summary: "Candidate controls for finding work, batch inspection, named event sellers and approved watch recovery; deployment and verification remain separate.",
+    keywords: ["batch inspection", "event seller", "watch recovery", "search", "alerts", "candidate"],
+    sortOrder: -1,
+    collapse: "reference",
+    relatedSources: ["docs/manual/MWELL_INTRA_USER_MANUAL.md"],
+  },
+  {
     source: "docs/releases/2026-09-14-RECEIVING-PRACTICE-CHECKPOINT.md",
     id: "sept14-receiving-practice-checkpoint",
     title: "September 14 Receiving Practice",

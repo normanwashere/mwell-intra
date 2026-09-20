@@ -140,8 +140,8 @@ export const MODULE_GROUP_LABELS: Record<ModuleGroup, string> = {
 export const MODULES: ModuleDef[] = [
   {
     id: "dashboard",
-    label: "Dashboard",
-    shortLabel: "Home",
+    label: "Warehouse home",
+    shortLabel: "Warehouse home",
     path: "/",
     capabilities: ["view_dashboard"],
     description: "KPIs, alerts and utilization.",
@@ -215,6 +215,7 @@ export const MODULES: ModuleDef[] = [
       "reserve_allocate",
       "issue_items",
       "manage_returns",
+      "inspect_quality",
       "manage_products",
       "view_finance",
       "view_procurement",
@@ -329,6 +330,7 @@ export const MODULES: ModuleDef[] = [
     description: "Exports, definitions and metrics.",
     icon: "history",
     group: "analyze",
+    destination: "insights",
   },
   {
     id: "reports",
@@ -495,7 +497,7 @@ export function isWarehouseSupervisorRole(role: WarehouseUiRole): boolean {
 const OPERATOR_MODULES: ModuleDef[] = [
   {
     ...MODULES.find((module) => module.id === "dashboard")!,
-    label: "Home",
+    label: "Warehouse home",
     group: "operate",
   },
   {
@@ -605,6 +607,6 @@ export function warehouseDestinationForRoute(
   routeId: WarehouseRouteId,
 ): WarehouseDestination | undefined {
   if (routeId === "events" || routeId === "event-detail") return "events";
-  if (routeId === "reports") return "insights";
+  if (routeId === "data" || routeId === "reports") return "insights";
   return undefined;
 }

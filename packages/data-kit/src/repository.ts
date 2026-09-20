@@ -1,3 +1,4 @@
+import type { StockConversionCommand, StockConversionResult, StockConversionWorkspace } from "./domain/stockConversion";
 import type {
   Allocation,
   CycleCount,
@@ -28,6 +29,7 @@ import type {
   DecideStockChangeInput,
   CreateVendorReturnInput,
   InspectQualityInput,
+  InspectQualityBatchInput,
   InventoryHold,
   InventoryPosition,
   OperationRoute,
@@ -560,6 +562,8 @@ export interface WarehouseRepository {
   completeReKitWorkOrder(
     input: CompleteReKitWorkOrderInput,
   ): Promise<ReKitWorkOrder>;
+  loadStockConversionWorkspace(): Promise<StockConversionWorkspace>;
+  executeStockConversion(input: StockConversionCommand): Promise<StockConversionResult>;
 }
 
 /** W1 control extension implemented by live and memory adapters in Task 5. */
@@ -580,6 +584,7 @@ export interface WarehouseControlRepository extends WarehouseRepository {
     query: PageQuery,
   ): Promise<PageResult<InventoryPosition>>;
   inspectQuality(input: InspectQualityInput): Promise<QualityInspection>;
+  inspectQualityBatch(input: InspectQualityBatchInput): Promise<QualityInspection[]>;
   releaseHold(input: ReleaseHoldInput): Promise<InventoryHold>;
   createVendorReturn(input: CreateVendorReturnInput): Promise<VendorReturn>;
   updateOperationRoute(

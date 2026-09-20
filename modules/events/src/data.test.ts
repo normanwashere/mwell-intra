@@ -113,7 +113,7 @@ describe('event lifecycle rules', () => {
 
     await loadLiveEvents(client as never);
 
-    expect(filters).toContainEqual(['item_class', ['sellable_sku', 'merchandise']]);
+    expect(filters).toContainEqual(['item_class', ['sellable_sku', 'merchandise', 'event_material']]);
     expect(filters.some(([column]) => column === 'active')).toBe(false);
   });
 

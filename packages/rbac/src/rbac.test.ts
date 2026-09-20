@@ -361,7 +361,7 @@ describe('toRoleCapabilityRows() — DB seed shape', () => {
 describe('events and insights workspace matrices', () => {
   it('exposes the event lifecycle roles', () => {
     expect(listModuleRoles('events').sort()).toEqual(
-      ['admin', 'coordinator', 'finance_reviewer', 'requester', 'viewer'].sort(),
+      ['admin', 'coordinator', 'finance_reviewer', 'requester', 'seller', 'viewer'].sort(),
     );
     expect(hasCapInModule('events', 'requester', 'create_event')).toBe(true);
     expect(hasCapInModule('events', 'requester', 'close_event')).toBe(false);

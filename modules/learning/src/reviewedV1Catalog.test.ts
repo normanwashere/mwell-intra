@@ -250,9 +250,11 @@ describe("pinned v1 source metadata boundary, not DB-published coverage", () => 
     ]);
   });
 
-  it("retains 54 default requirements and 33 role curricula without version changes", () => {
-    expect(catalog.LEARNING_CATALOG.requirements).toHaveLength(54);
-    expect(catalog.ROLE_CURRICULA).toHaveLength(33);
+  it("retains the 54 reviewed requirements and 33 role curricula alongside the separate seller addition", () => {
+    expect(catalog.LEARNING_CATALOG.requirements.filter(item => item.id !== "internal.role.events.seller.custody-practice.v1")).toHaveLength(54);
+    expect(catalog.ROLE_CURRICULA.filter(item => item.id !== "internal.role.events.seller.v1")).toHaveLength(33);
+    expect(catalog.LEARNING_CATALOG.requirements).toHaveLength(55);
+    expect(catalog.ROLE_CURRICULA).toHaveLength(34);
     expect(
       catalog.LEARNING_CATALOG.requirements.every((item) => item.version === 1),
     ).toBe(true);

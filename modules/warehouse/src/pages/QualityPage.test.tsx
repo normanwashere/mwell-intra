@@ -26,6 +26,25 @@ async function repositoryWithPendingReceipt() {
 }
 
 describe("QualityPage", () => {
+  it('keeps batch selection within one exact source and does not save while reviewing', async () => {
+    const data = await makeRepo().getData();
+    data.receipts = []; data.returns = [];
+    const repo = new InMemoryRepository(data);
+    const receive = () => repo.receiveStock({ actor:'receiver', locationId:data.locations[0]!.id,
+      lines:[{productId:'shirt-l',quantity:3}], receiptException:{type:'non_po',reason:'Test receipt',evidenceUrls:['test/evidence.pdf']} });
+    await receive(); await receive();
+    const save = vi.spyOn(repo, 'inspectQualityBatch');
+    renderWithProviders(<QualityPage />, {repo,role:'warehouse_operator'});
+    const user = userEvent.setup();
+    const controls = await screen.findAllByRole('checkbox', {name:/^Select /});
+    expect(controls).toHaveLength(2);
+    await user.click(controls[0]!);
+    expect(controls[1]).toBeDisabled();
+    await user.click(screen.getByRole('button',{name:'Review selected inspections'}));
+    const dialog = await screen.findByRole('dialog',{name:'Review selected inspections'});
+    expect(within(dialog).getByRole('button',{name:'Submit 1 inspection'})).toBeDisabled();
+    expect(save).not.toHaveBeenCalled();
+  });
   it('shows conflicting inspection IDs as a retryable queue failure and recovers the exact source', async () => {
     const { repo, receipt } = await repositoryWithPendingReceipt();
     const row = {

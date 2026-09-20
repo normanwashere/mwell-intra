@@ -94,6 +94,44 @@ const snapshot = async db => (await db.query(`select
   (select jsonb_agg(t) from warehouse.receipts t) receipts,
   (select count(*) from core.activity_log) activity`)).rows;
 
+test('batch executes the retained PO custody dispatcher and independent hold trigger atomically', async () => {
+  const db = await database();
+  try {
+    await db.exec(fix);
+    await db.exec(`create schema storage;
+      create table storage.objects(bucket_id text,name text,owner_id text,owner uuid);
+      insert into storage.objects values('evidence','inspection/proof.png','${inspector}',null);
+      create table warehouse.command_log(id uuid primary key default gen_random_uuid(),actor_id uuid,command_name text,
+        idempotency_key text,payload_hash text,response jsonb,completed_at timestamptz,unique(actor_id,command_name,idempotency_key));
+      create function private.warehouse_payload_hash(jsonb) returns text language sql as $$ select md5($1::text) $$;`);
+    const commands = migration('20260710160000_warehouse_w1_quality_and_approval_rpcs.sql');
+    await db.exec(functionDefinition(commands,'private.begin_idempotent_command'));
+    await db.exec(functionDefinition(commands,'private.finish_idempotent_command'));
+    await db.exec(migration('20260920025455_atomic_quality_batch.sql'));
+    await seed(db);
+    await db.exec(`update warehouse.quality_inspections set quantity=1,serial_number='S1';
+      insert into warehouse.quality_inspections(source_type,source_id,product_id,procurement_po_line_id,
+        location_id,quantity,serial_number,disposition,reason,inspected_by,inspected_by_email)
+        values('receipt','receipt','product','line','location',1,'S2','pending','${pending}','${receiver}','receiver@test');
+      update warehouse.inventory_holds set quantity=1,serial_number='S1';
+      insert into warehouse.inventory_holds(inspection_id,product_id,location_id,quantity,serial_number,status,reason,created_by)
+        select id,product_id,location_id,1,'S2','active','${pending}','${receiver}' from warehouse.quality_inspections where serial_number='S2';`);
+    const item={source_type:'receipt',source_id:'receipt',product_id:'product',procurement_po_line_id:'line',quantity:1,serial_number:'S1'};
+    const payload={idempotency_key:'actual-custody-batch-001',disposition:'accepted',evidence_urls:['inspection/proof.png'],items:[item,{...item,serial_number:'S2'}]};
+    const batch = input => db.query('select warehouse.inspect_quality_batch($1::jsonb) result',[JSON.stringify(input)]);
+    const before=await snapshot(db);
+    await assert.rejects(batch({...payload,items:[item,{...item,serial_number:'MISSING'}]}));
+    assert.deepEqual(await snapshot(db),before,'a stale second item must roll back the first acceptance and hold release');
+    assert.equal((await db.query('select count(*)::int n from warehouse.command_log')).rows[0].n,0);
+    const result=await batch(payload);
+    assert.equal(result.rows[0].result.inspections.length,2);
+    assert.deepEqual(await batch(payload),result);
+    assert.equal((await db.query("select count(*)::int n from warehouse.inventory_holds where status='released' and released_by=$1",[inspector])).rows[0].n,2);
+    assert.equal((await db.query("select quality_status from warehouse.receipts")).rows[0].quality_status,'accepted');
+    assert.equal((await db.query('select count(*)::int n from core.activity_log')).rows[0].n,2);
+  } finally {await db.close();}
+});
+
 test('actual old trigger rejects v3 acceptance atomically; forward migration makes it succeed', async () => {
   const db = await database();
   try {

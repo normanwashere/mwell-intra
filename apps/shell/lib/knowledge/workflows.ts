@@ -203,7 +203,7 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
     "identity-and-access",
     "Identity and access",
     "Authenticate, resolve scoped access, correct assignments, and record denied access.",
-    ["core_staff_only", "platform_admin", "vendor_portal"],
+    ["core_staff_only", "platform_admin", "vendor_portal", "events_seller"],
     [
       process(
         "access-start",

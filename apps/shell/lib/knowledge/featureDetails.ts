@@ -2082,14 +2082,14 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         control(
           "Open inspection",
-          "Loads a pending receipt or return into the inspection sheet.",
-          "The item must still require inspection.",
-          "Checklist and disposition controls appear.",
+          "Loads a pending receipt or return into the inspection sheet. For a group, choose Select group (or Select first 50), then Review selected inspections. Review every selected serial before confirming that each item was inspected.",
+          "The item must still require inspection. A batch is limited to 50 pending entries from the same receipt or return, product, PO line, bin and lot. Do not group different inspection outcomes.",
+          "Checklist and disposition controls appear. A batch saves one inspection per selected entry in one transaction: if an entry is no longer eligible, none of the batch is saved. Selection alone never accepts stock.",
         ),
         control(
           "Attach inspection evidence",
           "Uploads a PNG, JPEG, WebP or GIF photo to private storage using your signed-in account. Wait for the preview before submitting the inspection.",
-          "Each photo must be at most 8 MB. Failed uploads do not satisfy required evidence; retry the failed file. Uploading does not submit the inspection.",
+          "Each photo must be at most 8 MB. Failed uploads do not satisfy required evidence; retry the failed file. Batch photos must be real private uploads owned by the inspector. Uploading does not submit the inspection.",
           "After submission, select Completed in Quality Control, find the product and source reference, and open that inspection's evidence thumbnail. Authorized reviewers can open attachments linked to readable records. Older inline attachments remain historical evidence, not newly uploaded files.",
         ),
         control(
@@ -3684,8 +3684,8 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
       controls: [
         control(
           "Needs your action / Waiting on someone else / Recently completed",
-          "Separates actionable assignments from your tracked request handovers. Tracking states cover only the request types and recent-record window shown on screen, not a complete history across every module.",
-          "Records remain scoped to your identity and existing permissions. Issued or released stock is not automatically treated as completed.",
+          "Separates actionable assignments from your tracked request handovers. Open purchase and stock requests are loaded separately from recently closed requests, so newer records do not hide older open handoffs. Use Load more where shown. This is not a complete history across every module.",
+          "Records remain scoped to your identity and existing permissions. Issued or released stock is not automatically treated as completed. The explicit UAT view distinguishes scenario data from load-test fixtures; it does not delete either or prove a scenario has passed.",
           "The selected view opens without changing a source transaction. A missing tracking source is shown as unavailable rather than zero work.",
         ),
         control(
@@ -3750,8 +3750,8 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         ),
         control(
           "View event",
-          "Opens dates, lifecycle, and fulfillment totals.",
-          "The event must remain in the caller's readable scope.",
+          "Opens dates, lifecycle, and fulfillment totals. Add each required product and quantity to one event stock request, then follow the existing approval and Warehouse fulfillment steps.",
+          "The event must remain in the caller's readable scope. Named seller recording requires the governed event-custody setup and current event-limited assignment; it is not enabled by sharing a Marketing account. The seller records only their own attributable sales, giveaways and reversals.",
           "The event detail view opens. In the September 11 UAT release, read Current status, Next responsibility, Next step and any Needs attention message for lifecycle, custody and reconciliation. The responsibility is a role-level handoff, not a person assignment or access grant. Event completion or settlement approval does not establish Finance close; unavailable data must be retried before action.",
         ),
         control(

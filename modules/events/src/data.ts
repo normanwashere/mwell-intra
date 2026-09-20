@@ -96,6 +96,7 @@ export function validateEventFulfillmentFields(
     minimumDate?: string;
     maximumDate?: string;
     itemClass?: string;
+    products?: EventsData['products'];
   } = {},
 ): Record<string, string> {
   const errors: Record<string, string> = {};
@@ -110,10 +111,22 @@ export function validateEventFulfillmentFields(
   } else if (options.maximumDate && input.requiredDate > options.maximumDate) {
     errors.requiredDate = "Required date cannot be after the event end date.";
   }
-  if (!input.productId) errors.productId = "Select a product.";
-  if (!Number.isInteger(input.quantity) || input.quantity < 1) {
-    errors.quantity = "Enter a positive whole-number quantity.";
-  }
+  const lines = input.lines ?? [{ productId: input.productId ?? '', quantity: input.quantity ?? 0 }];
+  if (lines.length < 1 || lines.length > 100) errors.lines = 'Provide between 1 and 100 stock lines.';
+  const seen = new Set<string>();
+  lines.forEach((line, index) => {
+    const field = (key: string) => input.lines ? `lines.${index}.${key}` : key;
+    if (!line.productId) errors[field('productId')] = 'Select a product.';
+    if (seen.has(line.productId)) errors[field('productId')] = 'This product is already included.';
+    seen.add(line.productId);
+    if (!Number.isSafeInteger(line.quantity) || line.quantity < 1 || line.quantity > 2147483647) {
+      errors[field('quantity')] = 'Enter a positive whole-number quantity.';
+    }
+    const itemClass = options.products?.find(product => product.id === line.productId)?.itemClass;
+    if (itemClass === 'merchandise' && input.expenseTreatment !== 'expense') {
+      errors.treatment = 'Merchandise must be treated as an expense.';
+    }
+  });
   if (
     options.itemClass === "merchandise" &&
     input.expenseTreatment !== "expense"
@@ -320,6 +333,14 @@ export async function manageLiveEvent(
   return mapEventRow((data ?? {}) as UnknownRow);
 }
 
+export async function quoteEventDemand(client: EventsClient, eventId: string, productIds: string[]): Promise<Record<string, number>> {
+  const { data, error } = await client.schema('warehouse').rpc('event_demand_availability', {
+    payload: { event_id: eventId, product_ids: productIds },
+  });
+  if (error) throw error;
+  return Object.fromEntries(((data ?? []) as UnknownRow[]).map(row => [text(row.product_id), count(row.eligible_quantity)]));
+}
+
 export async function requestEventFulfillment(
   client: EventsClient,
   input: EventFulfillmentRequest,
@@ -338,7 +359,7 @@ export async function requestEventFulfillment(
         cost_center: input.costCenter.trim(),
         required_date: input.requiredDate,
         expense_treatment: input.expenseTreatment,
-        lines: [{ productId: input.productId, quantity: input.quantity }],
+        lines: input.lines ?? [{ productId: input.productId, quantity: input.quantity }],
         idempotency_key: input.idempotencyKey,
       },
     });
@@ -449,7 +470,7 @@ export async function loadLiveEvents(
         .schema("warehouse")
         .from("products")
         .select("id,name,item_class")
-        .in("item_class", ["sellable_sku", "merchandise"])
+        .in("item_class", ["sellable_sku", "merchandise", "event_material"])
         .order("name", { ascending: true })
         .limit(1000),
       client

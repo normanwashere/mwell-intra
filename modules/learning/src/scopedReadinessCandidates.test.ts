@@ -17,8 +17,9 @@ it("pins stable-ID content and complete server feedback for independent review",
 
 it("preserves every existing simulation and all default requirements and curricula", () => {
   const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
-  expect(hash(LEARNING_CATALOG.simulations.filter(item => ![...SCOPED_READINESS_CANDIDATES, ...OPS_CUSTODY_CANDIDATES].some(candidate => candidate.id === item.id)))).toBe("c36ea6b318331e30c3ce63fdd0a0e7e5d452dfb2778f52742521b7449927892b");
-  expect(hash({ requirements: LEARNING_CATALOG.requirements, curricula: LEARNING_CATALOG.curricula, roleCurricula: LEARNING_CATALOG.roleCurricula, capabilityCoverageCurricula: LEARNING_CATALOG.capabilityCoverageCurricula })).toBe("c8b459261b7c5017fd8c304042007e6fd3c27286b0b69e5bfd41da2f1e20cc21");
+  // The separately tested seller addition must not rewrite the pinned catalog.
+  expect(hash(LEARNING_CATALOG.simulations.filter(item => item.id !== "event-seller-custody-v1" && ![...SCOPED_READINESS_CANDIDATES, ...OPS_CUSTODY_CANDIDATES].some(candidate => candidate.id === item.id)))).toBe("c36ea6b318331e30c3ce63fdd0a0e7e5d452dfb2778f52742521b7449927892b");
+  expect(hash({ requirements: LEARNING_CATALOG.requirements.filter(item => item.id !== "internal.role.events.seller.custody-practice.v1"), curricula: LEARNING_CATALOG.curricula, roleCurricula: LEARNING_CATALOG.roleCurricula.filter(item => item.id !== "internal.role.events.seller.v1"), capabilityCoverageCurricula: LEARNING_CATALOG.capabilityCoverageCurricula })).toBe("c8b459261b7c5017fd8c304042007e6fd3c27286b0b69e5bfd41da2f1e20cc21");
 });
 
 it.each(SCOPED_READINESS_CANDIDATES)("registers reviewed runtime content without assigning $id", async (simulation) => {

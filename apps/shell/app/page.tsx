@@ -147,8 +147,8 @@ export default function DashboardPage() {
         }
       />
 
-      <OnboardingStatusBand />
       <TaskStartLoader />
+      <OnboardingStatusBand />
 
       <section
         id="workspace-areas"

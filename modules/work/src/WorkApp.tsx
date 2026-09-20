@@ -5,6 +5,7 @@ import { FollowupQueue } from './FollowupQueue';
 
 import { useEffect, useState } from "react";
 import { useWorkTracking } from './tracking';
+import { classifyRecord, recordIsVisible, recordPurposeLabel, RECORD_VIEWS, type RecordVisibility } from '../../../packages/data-kit/src/domain/testFixtures';
 import { INITIAL_WORK_VIEW, readWorkView, searchWork, writeWorkView, type WorkViewState } from './workView';
 import { useSession } from "@intra/auth";
 import {
@@ -100,8 +101,13 @@ function EmployeeWorkApp({
   const scopedItems = data.items.filter((item) =>
     allowedSources.includes(item.source),
   );
-  const visible = searchWork(sortWorkItems(filterWorkItems(scopedItems, state.source)), state.search);
-  const matchingTracking = searchWork(tracking.items.filter(item => (state.source === 'all' || item.source === state.source) && !scopedItems.some(assignment => assignment.href === item.href)), state.search);
+  const recordView = state.records ?? 'all';
+  const visible = searchWork(sortWorkItems(filterWorkItems(scopedItems, state.source)), state.search).filter(item => {
+    const tracked = tracking.items.find(row => row.href === item.href);
+    return recordIsVisible(tracked?.classification ?? classifyRecord(item), recordView);
+  });
+  const scopedTracking = searchWork(tracking.items.filter(item => (state.source === 'all' || item.source === state.source) && !scopedItems.some(assignment => assignment.href === item.href)), state.search);
+  const matchingTracking = scopedTracking.filter(item => recordIsVisible(item.classification ?? classifyRecord(item), recordView));
   const tracked = matchingTracking.filter(item => item.bucket === state.view);
   const urgentCount = scopedItems.filter(
     (item) => item.priority !== "normal",
@@ -156,6 +162,15 @@ function EmployeeWorkApp({
         </label>
         <button type="button" className="btn-outline self-end" onClick={() => { void refresh(); void tracking.refresh(); }}><Icon name="rotate" className="h-4 w-4" />Refresh</button>
       </div>
+      <div className="flex flex-wrap items-end gap-3 border-b border-line pb-3">
+        <label className="min-w-0 text-sm font-medium text-muted">Records
+          <select aria-label="Record visibility" className="input mt-1 block max-w-full" value={recordView} onChange={event => update({ records: event.target.value as RecordVisibility })}>
+            {RECORD_VIEWS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </label>
+        {scopedTracking.length > matchingTracking.length && <p className="text-sm text-muted">{scopedTracking.length - matchingTracking.length} tracked records outside this record view.</p>}
+        {recordView === 'scenario-ready' && <p className="text-sm text-muted">Readiness is declared in fixture metadata; workflow checkpoints are not verified here.</p>}
+      </div>
       {state.view === 'action' && (!error && !tracking.loading && !tracking.errors.length && visible.length === 0 && tracked.length === 0 ? (
         <EmptyState
           icon="check"
@@ -207,7 +222,7 @@ function EmployeeWorkApp({
         {!tracking.loading && !tracking.errors.length && !tracked.length && <EmptyState icon="clipboard" title="No matching tracked requests" message="This view only covers the request types listed above. Other work may still be in progress." />}
         {tracked.length > 0 && <div className="hp-request-columns hidden lg:grid lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_auto]" aria-hidden="true"><span>Request / status</span><span>Responsible team / next step</span><span className="w-40">Record</span></div>}
         {tracked.map(item => <Card key={item.id} className="hp-request-row grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_auto]">
-          <div className="min-w-0"><Badge tone="slate">{item.source}</Badge><h2 className="mt-2 break-words font-semibold [overflow-wrap:anywhere]">{item.title}</h2><p className="mt-1 text-sm text-muted">{item.status}</p></div>
+          <div className="min-w-0"><Badge tone="slate">{item.source}</Badge>{item.classification && recordPurposeLabel(item.classification) && <Badge tone="amber">{recordPurposeLabel(item.classification)}</Badge>}<h2 className="mt-2 break-words font-semibold [overflow-wrap:anywhere]">{item.title}</h2><p className="mt-1 text-sm text-muted">{item.status}</p>{item.classification?.scenarioName && <p className="text-sm text-muted">{item.classification.scenarioName}: starts {item.classification.startingState}; next actor {item.classification.nextActor}.</p>}</div>
           <div className="min-w-0 text-sm"><p className="font-semibold">{item.owner}</p><p className="mt-1 break-words text-muted [overflow-wrap:anywhere]">{item.nextStep}</p></div>
           <a className="btn-outline justify-self-start self-center whitespace-nowrap lg:w-40" href={item.href} aria-label={`Open tracked request: ${item.title}`}>View request<Icon name="arrowRight" className="h-4 w-4" /></a>
         </Card>)}

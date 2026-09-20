@@ -102,6 +102,20 @@ export function OnboardingStatusBand() {
       ),
   ).size;
 
+  if (!loading && completed === required.length && pendingActions === 0) {
+    return (
+      <section aria-label="Role readiness" className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-y border-line py-2">
+        <p className="flex items-center gap-2 text-sm text-muted">
+          <Icon name="check" className="h-4 w-4 shrink-0 text-emerald-700 dark:text-emerald-300" />
+          {required.length ? `${completed} of ${required.length} required steps complete` : "No required learning assigned"}
+        </p>
+        <Link href={profile.kind === "vendor" ? "/vendor/onboarding" : "/onboarding"} className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-brand-700 dark:text-brand-300">
+          View learning history <Icon name="arrowRight" className="h-4 w-4" />
+        </Link>
+      </section>
+    );
+  }
+
   return (
     <section
       aria-label="Role readiness"

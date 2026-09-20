@@ -1116,8 +1116,9 @@ describe("PurchaseOrdersPage", () => {
       screen.queryByRole("button", { name: /new po/i }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: /open procurement requests/i }),
-    ).toHaveAttribute("href", "/procurement/requests");
+      screen.queryByRole("link", { name: /open procurement requests/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText(/Procurement owns requests and purchase orders/i)).toBeInTheDocument();
   });
 
   it("receives stock via the PO detail sheet (row is the target)", async () => {

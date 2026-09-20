@@ -70,7 +70,7 @@ export function orderWorkflowSummary(order: FulfillmentOrder, context: {
 
   // Only exact picked serials establish unavailable stock; product-level holds
   // are not loaded here and must not be inferred from unrelated inventory.
-  const unavailablePickedUnit = order.lines.some(line => line.pickedSerialNumbers.some(serial =>
+  const unavailablePickedUnit = order.lines.some(line => line.pickedSerialNumbers?.some(serial =>
     context.units?.some(unit => unit.productId === line.productId && unit.serialNumber === serial && ['pending_inspection', 'returned', 'vendor_return', 'lost'].includes(unit.status)),
   ));
   if (unavailablePickedUnit) return {

@@ -69,6 +69,22 @@ function makeLiveClient({
 }
 
 describe('WarehouseApp live repository wiring', () => {
+  it.each([
+    ['view_events', true], ['view_event_custody', true], ['record_event_outcome', false], ['', false],
+  ])('uses effective Events read capability %s without adding Warehouse roles', async (capability, allowed) => {
+    const client = makeLiveClient({ roles: ['marketing'], capabilities: ['view_dashboard', 'reserve_allocate'] });
+    vi.mocked(client.schema('core').rpc).mockResolvedValue({ data: {
+      roleCapabilities: { warehouse: ['view_dashboard', 'reserve_allocate'], events: ['view_events', 'view_event_custody'] },
+      userCapabilities: { warehouse: ['view_dashboard', 'reserve_allocate'], events: capability ? [capability] : [] },
+    }, error: null } as never);
+    render(<SessionProvider config={{ mode: 'supabase', client }}><WarehouseApp /></SessionProvider>);
+    await screen.findByTestId('warehouse-provider');
+    expect(providerProps).toHaveBeenLastCalledWith(expect.objectContaining({
+      destinationAccess: expect.objectContaining({ events: allowed }),
+      capabilities: ['view_dashboard', 'reserve_allocate'],
+    }));
+  });
+
   beforeEach(() => {
     providerProps.mockClear();
     window.history.replaceState(window.history.state, '', '/warehouse/');

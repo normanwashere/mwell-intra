@@ -16,6 +16,19 @@ function initials(name: string): string {
     .join('');
 }
 
+export function WorkspaceNavigation() {
+  return (
+    <nav aria-label="Workspace navigation" className="flex flex-wrap items-center gap-x-4 text-sm font-medium">
+      <a href="/" className="inline-flex min-h-11 items-center gap-2 text-muted hover:text-ink">
+        <Icon name="grid" className="h-4 w-4 shrink-0" /> All workspaces
+      </a>
+      <a href="/work" className="inline-flex min-h-11 items-center gap-2 text-muted hover:text-ink">
+        <Icon name="check" className="h-4 w-4 shrink-0" /> My Work
+      </a>
+    </nav>
+  );
+}
+
 /** Header account button: shows the signed-in profile and offers sign-out. */
 export function UserMenu() {
   const { role, roleLabel, roleDescription, setRole } = useWarehouse();
@@ -113,6 +126,7 @@ export function UserMenu() {
         }
       >
         <div className="space-y-4">
+          <WorkspaceNavigation />
           <div className="flex items-center gap-3">
             <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-brand-600 text-base font-bold text-white">
               {initials(name)}

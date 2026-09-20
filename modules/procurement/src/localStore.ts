@@ -141,13 +141,18 @@ function useLiveRows<T>(
   table: string,
   map: (row: LiveRow) => T,
   order?: { column: string; ascending?: boolean },
+  filter?: { column: string; value: string; maxRows: number },
 ): [T[], boolean, () => Promise<void>, string | undefined] {
   const { profile, userCapabilities } = useSession();
-  return useReadQuery(client, `${profile?.id}:${profile?.vendorId}:${JSON.stringify(userCapabilities)}:${schema}:${table}:${order?.column}:${order?.ascending}`, async () => {
-    let query = client!.schema(schema).from(table).select('*');
+  return useReadQuery(client, `${profile?.id}:${profile?.vendorId}:${JSON.stringify(userCapabilities)}:${schema}:${table}:${order?.column}:${order?.ascending}:${filter?.column}:${filter?.value}`, async () => {
+    let query = client!.schema(schema).from(table).select('*', filter ? { count: 'exact' } : {});
+    if (filter) query = query.eq(filter.column, filter.value).limit(filter.maxRows + 1);
     if (order) query = query.order(order.column, { ascending: order.ascending ?? false });
-    const { data, error } = await query;
+    const { data, error, count } = await query;
     if (error) throw new Error(error.message);
+    if (filter && (!Array.isArray(data) || count === null || count > filter.maxRows || data.length !== count)) {
+      throw new Error('Scoped request projection is incomplete.');
+    }
     return (data ?? []).map(map);
   });
 }
@@ -709,7 +714,7 @@ export interface ProcurementRequestsAPI {
   refresh: () => Promise<void>;
 }
 
-export function useProcurementRequests(): ProcurementRequestsAPI {
+export function useProcurementRequests(requestId?: string): ProcurementRequestsAPI {
   const live = useLiveClient();
   const session = useSession();
   const sessionRef = useRef(session);
@@ -727,6 +732,7 @@ export function useProcurementRequests(): ProcurementRequestsAPI {
     'requests',
     (row) => row,
     { column: 'created_at', ascending: false },
+    requestId !== undefined ? { column: 'id', value: requestId, maxRows: 1 } : undefined,
   );
   const [liveSteps, liveStepsLoading, refreshSteps, stepsError] = useLiveRows<
     ApprovalStep & { requestId: string }
@@ -736,6 +742,7 @@ export function useProcurementRequests(): ProcurementRequestsAPI {
     'approval_steps',
     (row) => ({ ...mapStep(row), requestId: row.request_id }),
     { column: 'step_order', ascending: true },
+    requestId !== undefined ? { column: 'request_id', value: requestId, maxRows: 100 } : undefined,
   );
   const liveRows = liveBaseRows.map((row) =>
     mapProcurementRequest(

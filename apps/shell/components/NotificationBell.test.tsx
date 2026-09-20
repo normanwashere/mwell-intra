@@ -39,7 +39,7 @@ describe("NotificationItem local rendered fixture", () => {
     const markup = renderToStaticMarkup(<NotificationResults rows={[]} initialFetch loadFailed refreshing={false}
       busyId={null} onMarkRead={vi.fn()} onRetry={vi.fn()} />);
     expect(markup).toContain('role="alert"');
-    expect(markup).toContain("Notifications are unavailable. Try again.");
+    expect(markup).toContain("Inbox is unavailable. Try again.");
     expect(markup).toContain("Retry");
     expect(markup).not.toContain("caught up");
     expect(notificationSummary(true, true, 0)).toBe("Unavailable");
@@ -48,7 +48,7 @@ describe("NotificationItem local rendered fixture", () => {
   it("preserves previously loaded rows with a stale warning and disables repeated Retry while pending", () => {
     const markup = renderToStaticMarkup(<NotificationResults rows={[row]} initialFetch loadFailed refreshing
       busyId={null} onMarkRead={vi.fn()} onRetry={vi.fn()} />);
-    expect(markup).toContain("Previously loaded alerts may be out of date.");
+    expect(markup).toContain("Previously loaded inbox items may be out of date.");
     expect(markup).toContain("Approval waiting on you");
     expect(markup).toContain("Retrying...");
     expect(markup).toContain('disabled=""');

@@ -25,6 +25,19 @@ describe('Notification panel interactions with simulated backend', () => {
     await act(async () => container.querySelector('button')!.click());
   });
   afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
+  it('names the suite inbox visibly and accessibly without treating opening as resolution', () => {
+    const trigger = container.querySelector('button')!;
+    expect(trigger.textContent).toContain('Inbox');
+    expect(trigger.querySelector('span:not([aria-hidden])')?.className).not.toMatch(/sr-only|hidden/);
+    expect(trigger.getAttribute('aria-label')).toBe('Inbox, 1 unread in the latest 10');
+    const dialog = document.querySelector('[role="dialog"]')!;
+    const heading = document.getElementById(dialog.getAttribute('aria-labelledby')!);
+    expect(heading?.textContent).toBe('Inbox');
+    expect(dialog.textContent).toContain('does not mark notifications as read');
+    expect(document.querySelector('[aria-label="Inbox filter"]')).not.toBeNull();
+    expect(document.querySelector('[aria-label="Refresh inbox"]')).not.toBeNull();
+    expect(backend.rpc).not.toHaveBeenCalled();
+  });
   it('opens an accessible dialog, filters unread, changes sort and only writes on explicit mark read', async () => {
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Older notifications are not included');
     expect(backend.rpc).not.toHaveBeenCalled();

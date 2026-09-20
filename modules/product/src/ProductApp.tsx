@@ -25,6 +25,7 @@ import {
 import { ReadinessEvidenceLink } from './ReadinessEvidenceLink';
 import { ReadinessWorkflowSummary } from './ReadinessWorkflowSummary';
 import { useProductWorkspace } from "./data";
+import { StockConversionRecipes } from "./StockConversionRecipes";
 import type { PriceProposal, ReadinessPackage } from "./types";
 
 type Decision = "approved" | "rejected";
@@ -251,6 +252,7 @@ export function ProductApp() {
       <nav aria-label="Product sections" className="flex flex-wrap gap-4 border-b border-line text-sm">
         <a href="#readiness-queue-title" className="inline-flex min-h-11 items-center underline">Readiness and handoffs</a>
         {viewPricing && <a href="#pricing-governance-title" className="inline-flex min-h-11 items-center underline">Pricing governance</a>}
+        {decideGoLive && <a href="#stock-conversion-recipes" className="inline-flex min-h-11 items-center underline">Stock conversion recipes</a>}
       </nav>
       {workspace.error && (
         <div
@@ -364,6 +366,8 @@ export function ProductApp() {
           )}
         </section>
       )}
+
+      {decideGoLive && <StockConversionRecipes />}
 
       <DecisionSheet
         open={Boolean(readinessDecision)}

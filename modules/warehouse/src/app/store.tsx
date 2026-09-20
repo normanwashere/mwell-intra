@@ -1,4 +1,5 @@
 "use client";
+import { StockConversionRejectedError, stockConversionCapability, type StockConversionCommand, type StockConversionWorkspace } from "@intra/data-kit";
 
 // WarehouseProvider — the React binding over the framework-agnostic data-kit
 // pipeline (spec §12 step 2, LLD §6/§7).
@@ -38,6 +39,7 @@ import {
   removeEntry as outboxRemove,
   DATA_STORAGE_KEY,
   ReturnRejectedError,
+  InspectionRejectedError,
 } from "@intra/data-kit";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
@@ -63,6 +65,8 @@ import type {
   DecideDepartmentStockRequestInput,
   DecideStockChangeInput,
   InspectQualityInput,
+  InspectQualityBatchInput,
+  InspectionOutcome,
   InventoryHold,
   InventoryPosition,
   IssueInput,
@@ -213,6 +217,8 @@ interface WarehouseContextValue {
   createKitDefinition: (
     input: Omit<CreateKitDefinitionInput, "actor">,
   ) => Promise<boolean>;
+  loadStockConversionWorkspace: () => Promise<StockConversionWorkspace>;
+  executeStockConversion: (input: StockConversionCommand) => Promise<boolean>;
   createReKitWorkOrder: (
     input: Omit<CreateReKitWorkOrderInput, "actor">,
   ) => Promise<boolean>;
@@ -236,6 +242,9 @@ interface WarehouseContextValue {
     query: PageQuery,
   ) => Promise<PageResult<InventoryPosition>>;
   inspectQuality: (input: InspectQualityInput) => Promise<boolean>;
+  inspectQualityBatch: (input: InspectQualityBatchInput) => Promise<boolean>;
+  submitQualityInspection: (input: InspectQualityInput) => Promise<InspectionOutcome>;
+  submitQualityBatch: (input: InspectQualityBatchInput) => Promise<InspectionOutcome>;
   releaseHold: (input: ReleaseHoldInput) => Promise<boolean>;
   createVendorReturn: (input: CreateVendorReturnInput) => Promise<boolean>;
   updateOperationRoute: (input: UpdateOperationRouteInput) => Promise<boolean>;
@@ -554,6 +563,44 @@ export function WarehouseProvider({
     [can, runAction, source, toast],
   );
 
+  const submitInspection = useCallback(async (execute: () => Promise<unknown>): Promise<InspectionOutcome> => {
+    const isActive = captureQueueScope();
+    if (!isActive()) {
+      return { status: 'rejected', stage: 'not-sent', code: 'INSPECTION_SCOPE_CHANGED', message: 'The inspection session changed. Refresh before submitting.' };
+    }
+    if (source === 'supabase' && !can(WAREHOUSE_MUTATION_CAPABILITIES.inspectQuality)) {
+      const message = 'Not authorized: warehouse.inspect_quality';
+      lastActionStatusRef.current = 'failed';
+      setLastActionStatus('failed');
+      toast.error(message);
+      return { status: 'rejected', stage: 'not-sent', code: 'INSPECTION_FORBIDDEN', message };
+    }
+    let outcome: InspectionOutcome;
+    try {
+      await execute();
+      outcome = { status: 'committed' };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'The inspection result could not be confirmed.';
+      outcome = error instanceof InspectionRejectedError
+        ? { status: 'rejected', code: error.code, stage: error.stage, message }
+        : { status: 'uncertain', message };
+    }
+    if (isActive()) {
+      const status = outcome.status === 'committed' ? 'committed' : 'failed';
+      lastActionStatusRef.current = status;
+      setLastActionStatus(status);
+      if (outcome.status !== 'committed') toast.error(outcome.message);
+      // Refresh is not part of the mutation result; a failed read cannot undo a confirmed commit.
+      for (const read of [refresh, refreshPending]) {
+        if (!isActive()) break;
+        try { await read(); } catch {
+          if (isActive()) toast.toast('Could not refresh warehouse data. The inspection result is unchanged.', 'info');
+        }
+      }
+    }
+    return outcome;
+  }, [captureQueueScope, source, can, toast, refresh, refreshPending]);
+
   const resetDemo = useCallback(() => {
     try {
       window.localStorage.removeItem(DATA_STORAGE_KEY);
@@ -805,6 +852,23 @@ export function WarehouseProvider({
       runAuthorizedAction("manage_products", "other", () =>
         repo.createKitDefinition({ ...input, actor }),
       ),
+    loadStockConversionWorkspace: () => repo.loadStockConversionWorkspace(),
+    executeStockConversion: async (input) => {
+      let rejection: StockConversionRejectedError | undefined;
+      const execute = async () => {
+        try { return await repo.executeStockConversion(input); }
+        catch (error) {
+          if (error instanceof StockConversionRejectedError) rejection = error;
+          throw error;
+        }
+      };
+      // Product authority is checked by the Product-gated RPC, not a Warehouse role.
+      const saved = input.action === "approve_recipe"
+        ? await runAction("other", execute)
+        : await runAuthorizedAction(stockConversionCapability(input.action), "other", execute);
+      if (rejection) throw rejection;
+      return saved;
+    },
     createReKitWorkOrder: (input) =>
       runAuthorizedAction(["manage_products", "manage_returns"], "other", () =>
         repo.createReKitWorkOrder({ ...input, actor }),
@@ -864,6 +928,14 @@ export function WarehouseProvider({
         "other",
         () => repo.releaseHold(input),
       ),
+    inspectQualityBatch: (input) =>
+      runAuthorizedAction(
+        WAREHOUSE_MUTATION_CAPABILITIES.inspectQuality,
+        "other",
+        () => repo.inspectQualityBatch(input),
+      ),
+    submitQualityInspection: (input) => submitInspection(() => repo.inspectQuality(input)),
+    submitQualityBatch: (input) => submitInspection(() => repo.inspectQualityBatch(input)),
     createVendorReturn: (input) =>
       runAuthorizedAction(
         WAREHOUSE_MUTATION_CAPABILITIES.createVendorReturn,

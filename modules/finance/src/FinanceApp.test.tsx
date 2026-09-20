@@ -167,9 +167,26 @@ describe("FinanceApp", () => {
     state.session = session({ core: ["staff"], warehouse: ["pricing"] });
     renderFinanceApp();
     expect(screen.getByText("Warehouse Finance")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /stock adjustment approvals/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/Finance or Warehouse Supervisor owns stock adjustment decisions/i)).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /prepare close entry/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it("uses current destination grants rather than Finance visibility or underlying role grants", () => {
+    state.session = { ...state.session, mode: 'supabase',
+      userCapabilities: { warehouse: ['view_finance'] },
+      roleCapabilities: { warehouse: ['view_finance', 'view_inventory', 'approve_stock_adjustment_finance'] } };
+    const view = renderFinanceApp();
+    expect(screen.queryByRole('link', { name: /stock adjustment approvals/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /warehouse inventory|review inventory value/i })).not.toBeInTheDocument();
+    state.session = { ...state.session, userCapabilities: { warehouse: ['view_finance', 'view_inventory', 'approve_stock_adjustment_finance'] } };
+    view.rerender(<ToastProvider><FinanceApp /></ToastProvider>);
+    expect(screen.getByRole('link', { name: /stock adjustment approvals/i })).toHaveAttribute('href', '/warehouse/approvals');
+    state.session = { ...state.session, userCapabilities: { warehouse: ['view_finance'] } };
+    view.rerender(<ToastProvider><FinanceApp /></ToastProvider>);
+    expect(screen.queryByRole('link', { name: /stock adjustment approvals/i })).not.toBeInTheDocument();
   });
 
   it("keeps a Warehouse-only Finance user in Warehouse-owned workflows", () => {

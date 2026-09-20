@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { act, screen, within } from "@testing-library/react";
+import { act, fireEvent, screen, within } from "@testing-library/react";
 import { _resetMemoryQueue, enqueue, markConflict } from '@intra/data-kit';
 import userEvent from "@testing-library/user-event";
 import { useLocation } from "react-router-dom";
@@ -12,6 +12,43 @@ function LocationProbe() {
 }
 
 describe("AppShell navigation", () => {
+  it('offers the same explicit workspace exits in the header, More, and Account', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<AppShell>content</AppShell>);
+    const nav = await screen.findByRole('navigation', { name: 'Workspace navigation' });
+    expect(within(nav).getAllByRole('link').map(link => [link.textContent?.trim(), link.getAttribute('href')]))
+      .toEqual([['All workspaces', '/'], ['My Work', '/work']]);
+    for (const [button, title] of [['More', 'All tools'], ['Account', 'Account']]) {
+      await user.click(screen.getByRole('button', { name: button! }));
+      const dialog = await screen.findByRole('dialog', { name: title! });
+      expect(within(dialog).getByRole('link', { name: 'All workspaces' })).toHaveAttribute('href', '/');
+      expect(within(dialog).getByRole('link', { name: 'My Work' })).toHaveAttribute('href', '/work');
+      await user.keyboard('{Escape}');
+    }
+  });
+
+  it('labels Alerts visibly and preserves the active count after filtering and viewing', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<AppShell><LocationProbe /></AppShell>, { role: 'warehouse_operator' });
+    const trigger = await screen.findByTitle('Warehouse alerts');
+    expect(within(trigger).getByText('Alerts')).toBeVisible();
+    await user.click(trigger);
+    const dialog = await screen.findByRole('dialog', { name: 'Warehouse alerts' });
+    expect(dialog).toHaveTextContent('Procurement to review replenishment');
+    const count = trigger.getAttribute('aria-label');
+    fireEvent.change(within(dialog).getByRole('searchbox', { name: 'Search alerts' }), { target: { value: 'no-such-sku' } });
+    expect(within(dialog).getByText('No alerts match these filters.')).toBeInTheDocument();
+    fireEvent.change(within(dialog).getByRole('searchbox', { name: 'Search alerts' }), { target: { value: '' } });
+    fireEvent.change(within(dialog).getByLabelText('Alert scope'), { target: { value: 'informational' } });
+    fireEvent.change(within(dialog).getByLabelText('Issue type'), { target: { value: 'shortage' } });
+    const group = within(dialog).getByText(/Stock shortages.*Procurement/).closest('summary')!;
+    fireEvent.click(group);
+    await user.click(within(dialog).getAllByRole('button', { name: /Procurement to review replenishment/i })[0]!);
+    expect(screen.getByRole('status', { name: 'Current route' })).toHaveTextContent('/inventory/');
+    expect(trigger).toHaveAttribute('aria-label', count);
+    await user.click(trigger);
+    expect(screen.getByRole('dialog', { name: 'Warehouse alerts' })).toHaveTextContent('not unread notifications');
+  });
   it('keeps the desktop home target spacious without increasing the brand row height', async () => {
     renderWithProviders(<AppShell>content</AppShell>);
     const home = await screen.findByRole('link', { name: 'Mwell Intra home' });
@@ -204,7 +241,7 @@ describe("AppShell navigation", () => {
       within(sidebar).queryByRole("link", { name: "Receiving" }),
     ).not.toBeInTheDocument();
     expect(
-      within(sidebar).getByRole("link", { name: "Home" }),
+      within(sidebar).getByRole("link", { name: "Warehouse home" }),
     ).toBeInTheDocument();
   });
 
@@ -239,7 +276,7 @@ describe("AppShell navigation", () => {
       within(mobile)
         .getAllByRole("link")
         .map((link) => link.textContent),
-    ).toEqual(["Home", "Scan", "Tasks", "Inventory"]);
+    ).toEqual(["Warehouse home", "Scan", "Tasks", "Inventory"]);
     expect(
       within(mobile).getByRole("button", { name: "More" }),
     ).toBeInTheDocument();

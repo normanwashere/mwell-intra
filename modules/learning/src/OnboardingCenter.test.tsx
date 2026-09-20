@@ -223,6 +223,54 @@ function renderCenter(overrides: Partial<LearningContextValue> = {}) {
 }
 
 describe("OnboardingCenter", () => {
+  it('shows the next requirement only once, alongside its task and remaining count', () => {
+    renderCenter();
+    expect(screen.getAllByText('Receive and inspect a serialized device').filter(item => !item.classList.contains('sr-only'))).toHaveLength(1);
+    expect(screen.getByText('Required for: Warehouse / Receive Stock')).toBeInTheDocument();
+    expect(screen.getByText('2 requirements remaining')).toBeInTheDocument();
+  });
+
+  it('separates the shell job persona from assigned modules and scoped action roles', () => {
+    render(<LearningContext.Provider value={value()}><OnboardingCenter jobPersona="Operations Associate" /></LearningContext.Provider>);
+    expect(screen.getByText('Job persona').nextElementSibling?.textContent).toBe('Operations Associate');
+    expect(screen.getByText('Assigned modules').nextElementSibling?.textContent).toBe('Warehouse');
+    expect(screen.getByRole('heading', { name: 'Required learning' })).toBeInTheDocument();
+    expect(screen.getByText('Warehouse / eCommerce / Operations').closest('details')).not.toHaveAttribute('open');
+  });
+  it('names the eligible operational task for the next requirement', () => {
+    render(<LearningContext.Provider value={value()}><OnboardingCenter availableTasks={[{ id: 'receive', title: 'Receive delivery', outcome: 'Inspect received units', actionCapabilities: [{ module: 'warehouse', capability: 'receive_stock' }] }]} /></LearningContext.Provider>);
+    expect(screen.getByText('Required for: Receive delivery')).toBeInTheDocument();
+  });
+  it("collapses shared completed history while retaining version and completion evidence", () => {
+    const { container } = renderCenter();
+    const history = screen.queryByText('Completed learning history')?.closest('details');
+    expect(history).toBeDefined();
+    expect(history).not.toHaveAttribute('open');
+    expect(within(history!).getAllByText('Warehouse safety orientation')).toHaveLength(1);
+    fireEvent.click(within(history!).getByText('Completed learning history'));
+    expect(history).toHaveAttribute('open');
+    expect(history?.textContent).toContain('Version 1');
+    expect(history?.querySelector('time')?.getAttribute('dateTime')).toBe('2026-08-12T09:00:00.000Z');
+    expect(container.querySelectorAll('[data-next-requirement]')).toHaveLength(1);
+    expect(screen.getByText('2 requirements remaining')).toBeInTheDocument();
+  });
+
+  it("keeps complete readiness compact without a progress panel or preparation CTA", () => {
+    render(<LearningContext.Provider value={value({ snapshot: { ...snapshot, lockedCapabilities: [], progress: snapshot.progress.map(item => ({ ...item, state: 'passed' })) } })}><OnboardingStatusBand /></LearningContext.Provider>);
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /View learning history/ })).toHaveAttribute('href', '/onboarding');
+    expect(screen.getByText(/3 of 3 required steps complete/)).toBeInTheDocument();
+  });
+
+  it("opens a completed requirement deep link inside history", () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    searchParams = new URLSearchParams('requirement=orientation');
+    renderCenter();
+    const history = screen.queryByText('Completed learning history')?.closest('details');
+    expect(history).toHaveAttribute('open');
+    expect(history?.querySelector('[aria-current="step"]')?.id).toBe('onboarding-requirement-orientation');
+  });
+
   it("puts the next required action before the optional workspace return", () => {
     renderCenter();
     expect(
@@ -270,7 +318,7 @@ describe("OnboardingCenter", () => {
     expect(all).not.toHaveAttribute("open");
     fireEvent.click(screen.getByText("All assigned learning"));
     expect(
-      screen.getByRole("heading", { name: "Your required steps" }),
+      screen.getByRole("heading", { name: "Required learning" }),
     ).toBeInTheDocument();
   });
 
@@ -339,7 +387,7 @@ describe("OnboardingCenter", () => {
       ).toBeInTheDocument();
       expect(
         screen.getAllByText("Assigned to: Product / Product Contributor"),
-      ).toHaveLength(2);
+      ).toHaveLength(1);
       expect(screen.queryByText("Product Owner")).not.toBeInTheDocument();
       session.userRoles = { warehouse: ["operations"] };
     },
@@ -1402,7 +1450,7 @@ describe("OnboardingStatusBand", () => {
       screen.getByRole("link", { name: "Continue to Procurement" }),
     ).toHaveAttribute("href", "/procurement");
     expect(
-      screen.getByText("Continue your authorized work"),
+      screen.getByText("Existing permissions and action requirements still apply."),
     ).toBeInTheDocument();
   });
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildNotifications } from "./notifications";
+import { buildNotifications, groupNotifications } from "./notifications";
 import type { WarehouseData } from "@/data/repository";
 import type { WarehouseRouteId } from "@/app/modules";
 
@@ -76,6 +76,42 @@ describe("buildNotifications", () => {
     (...routes: WarehouseRouteId[]) =>
     (route: WarehouseRouteId) =>
       routes.includes(route);
+
+  it("keeps informational shortages with their next owner without an implied reorder action", () => {
+    const d = data();
+    d.units = [];
+    const note = buildNotifications(d, allow('product-detail')).find(note => note.id === 'low-ring')!;
+    expect(note.detail).not.toMatch(/reorder now/i);
+    expect(note).toMatchObject({ issueType: 'shortage', owner: 'Procurement', actionable: false,
+      nextStep: 'Procurement to review replenishment', to: '/inventory/ring' });
+  });
+
+  it("separates current action authority from access to a summary", () => {
+    const routes = allow('product-detail', 'procurement', 'allocations');
+    const notes = buildNotifications(data(), routes, { canRecommendReplenishment: true, canIssueStock: false });
+    expect(notes.find(note => note.id === 'low-ring')).toMatchObject({ actionable: true,
+      owner: 'Warehouse planning', nextStep: 'Request replenishment', to: '/procurement?product=ring' });
+    expect(notes.find(note => note.id === 'reserved-a1')).toMatchObject({ actionable: false, owner: 'Warehouse operations' });
+    expect(buildNotifications(data(), allow('product-detail'), { canRecommendReplenishment: true })
+      .find(note => note.id === 'low-ring')?.actionable).toBe(false);
+  });
+
+  it("groups and filters hundreds of issues with reconciled counts, without mutating stock", () => {
+    const d = data();
+    d.products = Array.from({ length: 346 }, (_, i) => ({ ...d.products[0]!, id: `sku-${i}`, sku: `SKU-${i}`, name: `Device ${i}` }));
+    d.allocations = [];
+    const before = structuredClone(d);
+    const notes = buildNotifications(d, allow('product-detail'));
+    const groups = groupNotifications(notes);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toMatchObject({ issueType: 'shortage', owner: 'Procurement' });
+    expect(groups.reduce((total, group) => total + group.items.length, 0)).toBe(346);
+    expect(groupNotifications(notes, { search: 'SKU-345' })[0]?.items.map(note => note.id)).toEqual(['low-sku-345']);
+    expect(groupNotifications(notes, { scope: 'actionable' })).toEqual([]);
+    expect(groupNotifications(notes, { issueType: 'reservation' })).toEqual([]);
+    expect(d).toEqual(before);
+    expect(buildNotifications(d, allow('product-detail'))).toEqual(notes);
+  });
 
   it("flags low-stock SKUs and pending reservations", () => {
     const notes = buildNotifications(

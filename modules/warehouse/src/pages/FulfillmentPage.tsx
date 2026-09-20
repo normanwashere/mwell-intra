@@ -22,7 +22,7 @@ import type {
   StockLevel,
   StorageArea,
 } from "@intra/data-kit";
-import { normalizeSafeHttpsUrl } from "@intra/data-kit";
+import { classifyRecord, normalizeSafeHttpsUrl, readRecordVisibility, recordIsVisible, RECORD_VIEWS } from "@intra/data-kit";
 import { useWarehouse } from "@/app/store";
 import { receiptAcknowledgmentBlockReason } from "@/domain/fulfillmentAcknowledgment";
 import { FLOOR_WORK_PATH, isFloorWork, isReleasedFollowUp } from "@/domain/workQueues";
@@ -39,8 +39,11 @@ import { Icon } from "@/components/Icon";
 import { BarcodeScanner } from "@/components/camera/BarcodeScanner";
 import { EvidenceCapture } from "@/components/camera/EvidenceCapture";
 import { EvidenceGallery } from "@/components/EvidenceGallery";
+import { StockConversionPanel } from "@/components/StockConversionPanel";
 import { BulkOrderImportSheet } from "@/components/fulfillment/BulkOrderImportSheet";
 import { OrderIntakeSheet } from "@/components/fulfillment/OrderIntakeSheet";
+import { OrderReference, shortOrderReference } from "@/components/fulfillment/OrderReference";
+import { hasReturnableOrderCustody } from './fulfillmentReturnEligibility';
 import { downloadText } from "@/app/download";
 import { fulfillmentOrdersToCsv } from "@/domain/orderIntakeOptions";
 import { useSession } from "@/auth/session";
@@ -110,13 +113,14 @@ function requestDate(value: string, dateOnly = false) {
     : date.toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" });
 }
 
-type WorkspaceTab = "orders" | "requests" | "returns" | "kits";
+type WorkspaceTab = "orders" | "requests" | "returns" | "kits" | "conversion";
 
 const TABS: Array<{ id: WorkspaceTab; label: string; shortLabel: string }> = [
   { id: "orders", label: "Orders and events", shortLabel: "Demand" },
   { id: "requests", label: "Department requests", shortLabel: "Requests" },
   { id: "returns", label: "Return cases", shortLabel: "Returns" },
   { id: "kits", label: "Kits and re-kits", shortLabel: "Kits" },
+  { id: "conversion", label: "Stock conversion", shortLabel: "Convert" },
 ];
 
 const STATUS_TONE = {
@@ -192,9 +196,16 @@ function isFulfillmentProduct(
   ].includes(itemClass);
 }
 
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status, label }: { status: string; label?: string }) {
   const tone = STATUS_TONE[status as keyof typeof STATUS_TONE] ?? "slate";
-  return <Badge tone={tone}>{titleCase(status)}</Badge>;
+  return <Badge tone={tone}>{label ?? titleCase(status)}</Badge>;
+}
+
+function PhysicalReturnReference({ id }: { id: string }) {
+  const { canOpenRoute } = useWarehouse();
+  return canOpenRoute('returns')
+    ? <Link className="block min-h-11 min-w-11 w-fit max-w-full py-3 underline" to={`/returns#return-${encodeURIComponent(id)}`}>{id}</Link>
+    : <span className="block space-y-1 py-2"><span className="block break-all">{id}</span><span className="block text-muted">Physical intake recorded. Warehouse returns team owns custody and inspection follow-up.</span></span>;
 }
 
 function HandoffRail({
@@ -347,7 +358,23 @@ function matchesOrderStatus(order: FulfillmentOrder, filter: string) {
 }
 
 const ORDER_STATUSES = ['active', 'floor_work', 'all', 'pick_queue', 'received', 'allocated', 'picking', 'packing', 'ready', 'released', 'completed', 'cancelled'];
+const ORDER_STATUS_FILTERS: Array<{ value: FulfillmentOrder['status']; label: string }> = [
+  { value: 'received', label: 'Awaiting allocation' },
+  { value: 'allocated', label: 'Awaiting picking' },
+  { value: 'picking', label: 'Picking' },
+  { value: 'packing', label: 'Awaiting packing' },
+  { value: 'ready', label: 'Awaiting release' },
+  { value: 'released', label: 'Released follow-up' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'cancelled', label: 'Cancelled' },
+];
 const REQUEST_STATUSES = ['all', 'draft', 'pending_approval', 'approved', 'rejected', 'allocated', 'issued', 'closed', 'cancelled'];
+
+function ordersInRecordView(orders: FulfillmentOrder[], params: URLSearchParams) {
+  if (params.get('uat') !== '1') return orders;
+  const view = readRecordVisibility(params.get('records'));
+  return orders.filter(order => recordIsVisible(classifyRecord(order), view));
+}
 
 // Keep read-only navigation in history; action sheets and unsaved drafts stay local.
 function useFulfillmentNavigation() {
@@ -393,6 +420,7 @@ export function FulfillmentPage() {
   const canExecute = can("issue_items");
   const canIntakeReturn = can("submit_return_case");
   const canManageReturns = can("manage_returns");
+  const canReadConversion = canManageReturns || can("inspect_quality");
   const canReviewFinanceReturn = can("approve_stock_adjustment_finance");
   const canDefineKits =
     [
@@ -401,15 +429,13 @@ export function FulfillmentPage() {
       "warehouse_admin",
     ].includes(role) && can("manage_products");
   const isFloorOperator = role === "warehouse_operator";
-  const visibleTabs = isFloorOperator
-    ? TABS.filter(
-        (item) =>
-          item.id === "orders" ||
-          (item.id === "requests" && canRequestStock) ||
-          (item.id === "returns" &&
-            (canIntakeReturn || canManageReturns || canReviewFinanceReturn)),
-      )
-    : TABS;
+  const visibleTabs = TABS.filter((item) => {
+    if (item.id === 'conversion') return canReadConversion;
+    if (!isFloorOperator) return true;
+    return item.id === 'orders' ||
+      (item.id === 'requests' && canRequestStock) ||
+      (item.id === 'returns' && (canIntakeReturn || canManageReturns || canReviewFinanceReturn));
+  });
   const preferredTab: WorkspaceTab =
     role === "business_unit" || role === "marketing"
       ? "requests"
@@ -442,12 +468,12 @@ export function FulfillmentPage() {
   };
 
   return (
-    <div className="hierarchy-preview hp-fulfillment space-y-3 sm:space-y-5">
+    <div className="hierarchy-preview hp-fulfillment space-y-3 [&>.page-header-band]:!py-2">
       <PageHeader
         title={isFloorOperator ? "Pick & Pack" : "Fulfillment"}
         subtitle={
           isFloorOperator
-            ? "Allocation, pick, pack, and controlled release"
+            ? undefined
             : "One controlled queue from demand through warehouse release"
         }
         icon="list"
@@ -469,7 +495,7 @@ export function FulfillmentPage() {
 
       {visibleTabs.length > 1 && (
         <div
-          className={`grid ${visibleTabs.length === 3 ? 'grid-cols-3' : 'grid-cols-2'} gap-1 rounded-lg bg-inset p-1 sm:grid-cols-4`}
+          className="grid grid-flow-col auto-cols-[minmax(5.5rem,1fr)] gap-1 overflow-x-auto rounded-lg bg-inset p-1 sm:auto-cols-fr"
           role="tablist"
           aria-label="Fulfillment workspace"
         >
@@ -500,7 +526,7 @@ export function FulfillmentPage() {
                   aria-hidden="true"
                 >
                   {item.id === "orders"
-                    ? data.fulfillmentOrders.filter((order) =>
+                    ? ordersInRecordView(data.fulfillmentOrders, searchParams).filter((order) =>
                         matchesOrderStatus(order, "active"),
                       ).length
                     : data.departmentStockRequests.filter(
@@ -554,6 +580,7 @@ export function FulfillmentPage() {
           }
         />
       )}
+      {tab === "conversion" && canReadConversion && <StockConversionPanel />}
       {tab === "kits" && (
         <KitsWorkspace
           products={data.products}
@@ -621,9 +648,15 @@ function OrdersWorkspace({
   const { createFulfillmentOrder, advanceFulfillmentOrder } = warehouse;
   const { profile } = useSession();
   const { params: orderSearchParams, update: updateNavigation } = useFulfillmentNavigation();
+  const queueOrders = ordersInRecordView(orders, orderSearchParams);
+  const uatMode = orderSearchParams.get('uat') === '1';
+  const recordView = uatMode ? readRecordVisibility(orderSearchParams.get('records')) : 'all';
+  const loadOnlyCount = orders.filter(order => classifyRecord(order).purpose === 'load-only').length;
   const toast = useToast();
   const [createOpen, setCreateOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [density, setDensity] = useState('compact');
   const [workingId, setWorkingId] = useState<string>();
   const [pickOrder, setPickOrder] = useState<FulfillmentOrder>();
   const [packOrder, setPackOrder] = useState<FulfillmentOrder>();
@@ -648,7 +681,7 @@ function OrdersWorkspace({
   const requestedChannel = orderSearchParams.get("channel") ?? "all";
   const channelFilter = channelOptions.includes(requestedChannel) ? requestedChannel : "all";
   const setChannelFilter = (value: string) => updateNavigation({ channel: value });
-  const filteredOrders = orders.filter((order) => {
+  const filteredOrders = queueOrders.filter((order) => {
     const normalized = query.trim().toLowerCase();
     const matchesQuery =
       !normalized ||
@@ -683,7 +716,7 @@ function OrdersWorkspace({
   };
 
   return (
-    <section className="space-y-4" aria-labelledby="orders-title">
+    <section className="space-y-2" aria-labelledby="orders-title">
       <QueueCounters
         label="Order counters"
         compactMobile
@@ -696,7 +729,7 @@ function OrdersWorkspace({
           { id: "released", label: "Released follow-up" },
         ].map((counter) => ({
           ...counter,
-          count: orders.filter((order) => matchesOrderStatus(order, counter.id))
+          count: queueOrders.filter((order) => matchesOrderStatus(order, counter.id))
             .length,
         }))}
         selected={statusFilter === "floor_work" ? "active" : statusFilter}
@@ -705,7 +738,7 @@ function OrdersWorkspace({
         }}
       />
       <div className="flex flex-wrap items-center justify-between gap-2 sm:items-end">
-        <div className="min-w-0">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-4">
           <h2
             id="orders-title"
             className="sr-only font-display text-lg font-bold text-ink sm:not-sr-only"
@@ -714,11 +747,26 @@ function OrdersWorkspace({
           </h2>
           <Link to={FLOOR_WORK_PATH} className="inline-flex min-h-11 min-w-11 items-center text-sm text-brand-600 underline">Floor work</Link>
         </div>
+        {uatMode && <div className="order-last flex w-full items-center justify-between gap-2 text-xs sm:order-none sm:w-auto">
+          <span>{recordView === 'operational' ? `${loadOnlyCount} load-only fixture${loadOnlyCount === 1 ? '' : 's'} hidden` : `UAT: ${RECORD_VIEWS.find(view => view.value === recordView)?.label}`}</span>
+          {recordView !== 'all' && <button type="button" aria-label={`Show all records (${orders.length})`} title={`Show all records (${orders.length})`} className="btn-ghost min-h-11 shrink-0 px-2 text-xs" onClick={() => updateNavigation({ records: 'all' })}>All records ({orders.length})</button>}
+        </div>}
         {(
           <div className="flex flex-wrap items-center gap-2">
             <details className="relative">
               <summary className="min-h-11 cursor-pointer rounded-lg px-3 py-3 text-sm font-semibold text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500">Queue tools</summary>
               <div className="z-20 grid w-80 max-w-[calc(100vw-2rem)] gap-2 rounded-lg border border-line bg-surface p-2 shadow-e2 sm:absolute sm:right-0">
+                <Field label="Order density" htmlFor="fulfillment-density">
+                  <select id="fulfillment-density" className="input" value={density} onChange={event => setDensity(event.target.value)}>
+                    <option value="compact">Compact</option>
+                    <option value="comfortable">Comfortable</option>
+                  </select>
+                </Field>
+                {uatMode && <Field label="UAT record view" htmlFor="fulfillment-record-view">
+                  <select id="fulfillment-record-view" className="input" value={recordView} onChange={event => updateNavigation({ records: event.target.value })}>
+                    {RECORD_VIEWS.map(view => <option key={view.value} value={view.value}>{view.label}</option>)}
+                  </select>
+                </Field>}
                 {thirdPartyOrders.length > 0 && <p className="p-2 text-sm text-muted">Third-party event sales: <span className="font-semibold text-ink">{thirdPartySales}</span>. Finance owns settlement.</p>}
                 <details className="hp-guidance">
                   <summary>Department handoff</summary>
@@ -758,18 +806,18 @@ function OrdersWorkspace({
                 <button
                   type="button"
                   aria-label="New order / demand"
-                  className="btn-primary"
+                  title="New order / demand"
+                  className="btn-primary h-11 w-11 shrink-0 justify-center p-0 sm:w-auto sm:px-4"
                   onClick={() => setCreateOpen(true)}
                 >
                   <Icon name="plus" className="h-4 w-4" />
-                  <span className="sm:hidden">New demand</span>
                   <span className="hidden sm:inline">New order / demand</span>
                 </button>
             )}
           </div>
         )}
       </div>
-      <div className="hp-toolbar grid grid-cols-2 gap-2 border-y border-line py-3 md:grid-cols-[minmax(14rem,1fr)_12rem_12rem] [&>div:first-child]:col-span-2 md:[&>div:first-child]:col-span-1">
+      <div className="hp-toolbar grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2 border-y border-line py-2 md:grid-cols-[minmax(14rem,1fr)_minmax(24rem,1fr)]">
         <Field label="Search orders" htmlFor="fulfillment-search">
           <input
             id="fulfillment-search"
@@ -780,6 +828,10 @@ function OrdersWorkspace({
             onChange={(event) => setQuery(event.target.value)}
           />
         </Field>
+        <button type="button" className="btn-outline min-h-11 md:hidden" aria-expanded={filtersOpen} aria-controls="fulfillment-secondary-filters" onClick={() => setFiltersOpen(open => !open)}>
+          <Icon name="list" className="h-4 w-4" /> Filters
+        </button>
+        <div id="fulfillment-secondary-filters" className={`${filtersOpen ? 'grid' : 'hidden'} col-span-2 min-w-0 grid-cols-2 gap-2 md:col-span-1 md:grid`}>
         <Field label="Status" htmlFor="fulfillment-status-filter">
           <select
             id="fulfillment-status-filter"
@@ -787,22 +839,13 @@ function OrdersWorkspace({
             value={statusFilter}
             onChange={(event) => setStatusFilter(event.target.value)}
           >
-            <option value="active">Active work ({orders.filter((order) => matchesOrderStatus(order, 'active')).length})</option>
-            <option value="floor_work">Floor work ({orders.filter((order) => matchesOrderStatus(order, 'floor_work')).length})</option>
-            <option value="all">All statuses ({orders.length})</option>
-            <option value="pick_queue">Allocated and picking ({orders.filter((order) => matchesOrderStatus(order, 'pick_queue')).length})</option>
-            {[
-              "received",
-              "allocated",
-              "picking",
-              "packing",
-              "ready",
-              "released",
-              "completed",
-              "cancelled",
-            ].map((status) => (
-              <option key={status} value={status}>
-                {titleCase(status)} ({orders.filter((order) => matchesOrderStatus(order, status)).length})
+            <option value="active">Active work ({queueOrders.filter((order) => matchesOrderStatus(order, 'active')).length})</option>
+            <option value="floor_work">Floor work ({queueOrders.filter((order) => matchesOrderStatus(order, 'floor_work')).length})</option>
+            <option value="all">All statuses ({queueOrders.length})</option>
+            <option value="pick_queue">Allocated and picking ({queueOrders.filter((order) => matchesOrderStatus(order, 'pick_queue')).length})</option>
+            {ORDER_STATUS_FILTERS.map(({ value, label }) => (
+              <option key={value} value={value}>
+                {label} ({queueOrders.filter((order) => matchesOrderStatus(order, value)).length})
               </option>
             ))}
           </select>
@@ -822,6 +865,7 @@ function OrdersWorkspace({
             ))}
           </select>
         </Field>
+        </div>
       </div>
 
       {floorNotice && !filteredOrders.some((order) => order.id === floorNotice.orderId) && (
@@ -843,21 +887,22 @@ function OrdersWorkspace({
         />
       ) : (
         <ul
-          className={floorMode ? "space-y-3" : "grid gap-3 lg:grid-cols-2"}
+          className="divide-y divide-line border-y border-line"
+          data-density={density}
           aria-label="Fulfillment demand"
         >
           {filteredOrders.map((order) => (
             <li
               key={order.id}
               aria-label={`Order ${order.externalReference}`}
-              className="card min-w-0 p-4"
+              className={`grid min-w-0 items-start gap-2 px-2 py-2 text-sm xl:gap-3 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,0.85fr)_minmax(18rem,1.3fr)] ${density === 'comfortable' ? 'xl:py-5' : 'xl:py-2'}`}
             >
-              <div className="flex items-start justify-between gap-3">
+              <div className="contents min-w-0 xl:block">
                 <div className="min-w-0">
-                  <p className="break-words font-semibold text-ink">
-                    {order.externalReference}
-                  </p>
-                  <p className="mt-0.5 text-xs text-muted">
+                  <OrderReference reference={order.externalReference} orderId={order.id} />
+                </div>
+                <div className="order-3 min-w-0 xl:order-none">
+                  <p className="mt-0.5 text-sm text-muted">
                     {order.ecommerceChannel ?? titleCase(order.source)} ·{" "}
                     {order.lines.reduce((sum, line) => sum + line.quantity, 0)}{" "}
                     item(s)
@@ -870,61 +915,38 @@ function OrdersWorkspace({
                         : ""}
                     </p>
                   )}
-                  {order.grossSalesAmount !== undefined && (
-                    <p className="mt-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
-                      {new Intl.NumberFormat("en-PH", {
-                        style: "currency",
-                        currency: "PHP",
-                        currencyDisplay: "code",
-                      }).format(order.grossSalesAmount)}
-                    </p>
-                  )}
-                </div>
-                <div className="flex flex-col items-end gap-1">
-                  <StatusBadge status={order.status} />
-                  {order.deliveryMethod === "shipment" && (
-                    <StatusBadge
-                      status={order.shipmentStatus ?? "awaiting_dispatch"}
-                    />
-                  )}
+                  {order.grossSalesAmount !== undefined && <p className="mt-1 text-sm font-semibold text-emerald-700 dark:text-emerald-300">{formatPhp(order.grossSalesAmount)}</p>}
                 </div>
               </div>
-              <div className="mt-3 grid grid-cols-2 gap-2 rounded-lg bg-inset p-3 text-xs">
+              <div className="order-4 grid min-w-0 grid-cols-2 gap-2 text-sm xl:order-none xl:grid-cols-1 xl:gap-1">
                 <div>
-                  <span className="block text-faint">Pick location</span>
+                  <span className="block text-xs text-faint">Pick location</span>
                   <span className="font-medium text-ink [overflow-wrap:anywhere]">
                     {orderPickLocation(order, locations, storageAreas)}
                   </span>
                 </div>
                 <div>
-                  <span className="block text-faint">
-                    {order.deliveryMethod === "shipment"
-                      ? "Courier / waybill"
-                      : "Recipient / handover"}
-                  </span>
-                  <span className="font-medium text-ink">
-                    {order.deliveryMethod === "shipment" && order.courier
-                      ? `${order.courier} / ${order.waybillNumber}`
-                      : order.handoverRecipientName
-                        ? `${order.handoverRecipientName} / ${order.handoverReference}`
-                        : "Pending preparation"}
+                  <span className="block text-xs text-faint">Destination</span>
+                  <span className="block truncate font-medium text-ink" title={order.deliveryAddress ? `${order.deliveryAddress.addressLine}, ${order.deliveryAddress.city}, ${order.deliveryAddress.province}` : order.requestingDepartment ?? order.handoverRecipientName}>
+                    {order.deliveryAddress ? `${order.deliveryAddress.city}, ${order.deliveryAddress.province}` : order.requestingDepartment ?? order.handoverRecipientName ?? 'Not provided'}
                   </span>
                 </div>
               </div>
-              {order.lines.some((line) => line.bundleSetCodes?.length) && (
-                <p className="mt-3 text-xs text-muted">
-                  Bundle sets:{" "}
-                  {order.lines
-                    .flatMap((line) => line.bundleSetCodes ?? [])
-                    .join(", ")}
-                </p>
-              )}
+              <div className="order-1 flex min-w-0 flex-wrap items-center gap-2 xl:order-none xl:flex-col xl:items-start">
+                <StatusBadge status={order.status} label={orderWorkflowSummary(order, { actorIds, units }).status} />
+                <time className="text-xs text-muted" dateTime={order.createdAt} title={requestDate(order.createdAt)}>
+                  {Number.isFinite(Date.parse(order.createdAt)) ? `${Math.max(0, Math.floor((Date.now() - Date.parse(order.createdAt)) / 86_400_000))}d old` : 'Age unavailable'}
+                </time>
+              </div>
+              <div className="order-2 flex min-w-0 flex-wrap items-center gap-2 xl:order-none">
               <button
                 type="button"
-                className="btn-ghost mt-3 w-full justify-between sm:w-auto"
+                aria-label="View order details"
+                title="View order details"
+                className="btn-ghost h-11 w-11 shrink-0 justify-center p-0"
                 onClick={() => setDetailOrder(order)}
               >
-                View order details
+                <span className="sr-only">View order details</span>
                 <Icon name="chevron" className="h-4 w-4" />
               </button>
               {floorNotice?.orderId === order.id && (
@@ -936,7 +958,7 @@ function OrdersWorkspace({
                 !["released", "completed", "cancelled"].includes(
                   order.status,
                 ) && (
-                  <div className="mt-4 flex flex-wrap gap-2">
+                  <div className="contents">
                     {order.status === "received" && (
                       <>
                         <ActionButton
@@ -945,13 +967,6 @@ function OrdersWorkspace({
                         >
                           Allocate stock
                         </ActionButton>
-                        <button
-                          type="button"
-                          className="btn-outline flex-1 sm:flex-none"
-                          onClick={() => setBackorderOrder(order)}
-                        >
-                          Split backorder
-                        </button>
                       </>
                     )}
                     {order.status === "allocated" && (
@@ -989,13 +1004,17 @@ function OrdersWorkspace({
                             : "Release handover"}
                         </ActionButton>
                       ))}
-                    <button
-                      type="button"
-                      className="btn-outline flex-1 sm:flex-none"
-                      onClick={() => setCancelOrder(order)}
-                    >
-                      Cancel
-                    </button>
+                    <details className="relative ml-auto" onKeyDown={event => {
+                      if (event.key === 'Escape') { event.currentTarget.open = false; event.currentTarget.querySelector('summary')?.focus(); }
+                    }}>
+                      <summary aria-label="More order actions" title="More order actions" className="btn-ghost grid h-11 w-11 cursor-pointer list-none place-items-center p-0 [&::-webkit-details-marker]:hidden">
+                        <span className="sr-only">More order actions</span><Icon name="dots" className="h-4 w-4" />
+                      </summary>
+                      <div className="absolute right-0 z-20 grid w-48 gap-1 rounded-md border border-line bg-surface p-2 shadow-e2">
+                        {order.status === 'received' && <button type="button" className="btn-outline min-h-11" onClick={() => setBackorderOrder(order)}>Split backorder</button>}
+                        <button type="button" className="btn-outline min-h-11" onClick={() => setCancelOrder(order)}>Cancel</button>
+                      </div>
+                    </details>
                   </div>
                 )}
               {order.status === "released" &&
@@ -1031,6 +1050,7 @@ function OrdersWorkspace({
                   Delivery exception: {order.deliveryFailureReason}
                 </p>
               )}
+              </div>
             </li>
           ))}
         </ul>
@@ -1129,7 +1149,7 @@ function OrderDetailsSheet({
   showCommercial: boolean;
   onClose: () => void;
 }) {
-  const { data, actor, identityId, can } = useWarehouse();
+  const { data, actor, identityId, can, canOpenRoute } = useWarehouse();
   if (!order) return null;
   const request = data?.departmentStockRequests.find(item => item.fulfillmentOrderId === order.id);
   const internal = order.source === 'department_request';
@@ -1157,7 +1177,7 @@ function OrderDetailsSheet({
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      title={`Order details / ${order.externalReference}`}
+      title={`Order details / ${shortOrderReference(order.externalReference)}`}
       description="Fulfillment record, controlled customer details, and shipment history."
       size="record"
     >
@@ -1166,7 +1186,7 @@ function OrderDetailsSheet({
           {order.status === 'released' && order.deliveryMethod === 'shipment' ? 'Review shipment timeline' : 'Review order lines'}
         </a>
         <RecordCopyActions reference={order.externalReference} href={`/warehouse/fulfillment?tab=orders&order=${encodeURIComponent(order.id)}`} />
-        {can('manage_returns') && <Link className="inline-flex min-h-11 items-center gap-2 text-sm underline" to={`/returns?sourceOrderId=${encodeURIComponent(order.id)}`}>
+        {can('manage_returns') && canOpenRoute('returns') && hasReturnableOrderCustody(order, data) && <Link className="inline-flex min-h-11 items-center gap-2 text-sm underline" to={`/returns?sourceOrderId=${encodeURIComponent(order.id)}`}>
           <Icon name="rotate" /> Receive physical return
         </Link>}
       </WorkflowSummary>
@@ -1174,12 +1194,13 @@ function OrderDetailsSheet({
         {data?.returns.some(record => record.sourceOrderId === order.id) && <section aria-label="Physical returns" className="space-y-2 text-sm">
           <h3 className="font-semibold">Physical returns</h3>
           {data.returns.filter(record => record.sourceOrderId === order.id).map(record => <p key={record.id} className="break-all">
-            <Link className="block min-h-11 min-w-11 w-fit max-w-full py-3 underline" to={`/returns#return-${encodeURIComponent(record.id)}`}>{record.id}</Link>
+            <PhysicalReturnReference id={record.id} />
           </p>)}
         </section>}
         <section aria-label="Operational summary" className="space-y-2 text-sm [overflow-wrap:anywhere]">
           <h3 className="font-semibold text-ink">Order summary</h3>
-          <p className="font-semibold text-ink">{titleCase(order.status)} / {order.externalReference}</p>
+          <p className="font-semibold text-ink">{orderWorkflowSummary(order, { actorIds: [actor, identityId], units: data?.units }).status}</p>
+          <OrderReference reference={order.externalReference} orderId={order.id} />
           <ul>{order.lines.map((line) => <li key={line.productId}>{line.quantity} x {products.find((product) => product.id === line.productId)?.name ?? line.productId}</li>)}</ul>
           <p className="break-words">Destination: {address ? `${address.addressLine}, ${address.city}, ${address.province} ${address.postalCode}` : order.requestingDepartment ?? "Not provided"}</p>
           {order.deliveryMethod === "shipment" && <p className="break-words">{order.courier ?? "Courier not provided"} / {order.waybillNumber ?? "Waybill not provided"}</p>}
@@ -1209,7 +1230,7 @@ function OrderDetailsSheet({
           <div>
             <dt className="text-xs text-faint">Current status</dt>
             <dd className="mt-1 font-semibold text-ink">
-              {titleCase(order.status)}
+              {orderWorkflowSummary(order, { actorIds: [actor, identityId], units: data?.units }).status}
             </dd>
           </div>
           {order.campaignName && (
@@ -1433,8 +1454,9 @@ function OrderDetailsSheet({
                       Picked from {bin.label ?? bin.code}
                     </p>
                   )}
-                  <p className="mt-2 text-sm text-muted">Picked: {line.pickedQuantity} of {line.quantity}</p>
-                  {line.pickedSerialNumbers.length > 0 && <details className="mt-2 text-sm"><summary className="cursor-pointer font-medium">Picked serials ({line.pickedSerialNumbers.length})</summary><ul className="mt-2 grid gap-1 break-all sm:grid-cols-2">{line.pickedSerialNumbers.map(serial => <li key={serial}>{serial}</li>)}</ul></details>}
+              <p className="mt-2 text-sm text-muted">Picked: {line.pickedQuantity} of {line.quantity}</p>
+              {!!line.bundleSetCodes?.length && <p className="mt-2 break-words text-sm text-muted">Bundle sets: {line.bundleSetCodes.join(', ')}</p>}
+                  {(line.pickedSerialNumbers?.length ?? 0) > 0 && <details className="mt-2 text-sm"><summary className="cursor-pointer font-medium">Picked serials ({line.pickedSerialNumbers.length})</summary><ul className="mt-2 grid gap-1 break-all sm:grid-cols-2">{line.pickedSerialNumbers.map(serial => <li key={serial}>{serial}</li>)}</ul></details>}
                   {showCommercial && line.unitPrice !== undefined && (
                     <p className="mt-2 text-xs text-muted">
                       Unit price PHP {line.unitPrice.toLocaleString("en-PH")} ·
@@ -1599,7 +1621,7 @@ function ActionButton({
   return (
     <button
       type="button"
-      className="btn-primary flex-1 sm:flex-none"
+      className="btn-primary min-h-11 flex-1 sm:flex-none"
       disabled={busy}
       onClick={onClick}
     >
@@ -3574,6 +3596,7 @@ function ReturnsWorkspace({
     closeCustomerReturnCase,
     data,
     can,
+    canOpenRoute,
   } = useWarehouse();
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<CustomerReturnCase>();
@@ -3653,13 +3676,13 @@ function ReturnsWorkspace({
                 Resolution: {titleCase(record.resolution)}
               </p>
               <div className="mt-3 flex flex-wrap items-center gap-3">
-              {can('manage_returns') && record.sourceOrderId && orders.some(order => order.id === record.sourceOrderId) && (
+              {can('manage_returns') && canOpenRoute('returns') && record.sourceOrderId && hasReturnableOrderCustody(orders.find(order => order.id === record.sourceOrderId), data, record) && (
                 <Link className="inline-flex min-h-11 items-center gap-2 text-sm underline" to={`/returns?sourceOrderId=${encodeURIComponent(record.sourceOrderId)}&returnCaseId=${encodeURIComponent(record.id)}`}>
                   <Icon name="rotate" /> Receive physical return
                 </Link>
               )}
               {data?.returns.filter(physical => physical.returnCaseId === record.id).map(physical => <p key={physical.id} className="basis-full break-all text-sm">
-                Physical return: <Link className="block min-h-11 min-w-11 w-fit max-w-full py-3 underline" to={`/returns#return-${encodeURIComponent(physical.id)}`}>{physical.id}</Link>
+                Physical return: <PhysicalReturnReference id={physical.id} />
               </p>)}
               {resolutionMode !== "read_only" &&
                 !["resolved", "closed"].includes(record.status) && (
@@ -3844,7 +3867,7 @@ function CreateReturnSheet({
               className="rounded-lg bg-emerald-500/10 px-3 py-2 text-sm font-medium text-emerald-800 dark:text-emerald-200"
             >
               Release found: {matchedOrder.externalReference} (
-              {titleCase(matchedOrder.status)})
+              {orderWorkflowSummary(matchedOrder).status})
             </p>
           ) : serial ? (
             <p
@@ -3870,7 +3893,7 @@ function CreateReturnSheet({
             <option value="">No release order matched</option>
             {eligibleOrders.map((order) => (
               <option key={order.id} value={order.id}>
-                {order.externalReference} / {titleCase(order.status)}
+                {order.externalReference} / {orderWorkflowSummary(order).status}
               </option>
             ))}
           </select>

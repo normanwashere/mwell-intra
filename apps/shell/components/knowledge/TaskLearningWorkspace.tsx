@@ -2,11 +2,14 @@
 
 import { useSearchParams, usePathname } from "next/navigation";
 import { useEffect, useRef } from 'react';
+import { useSession } from '@intra/auth';
+import { resolvePersonaPresentation } from '@shell/lib/personaPresentation';
 import { OnboardingCenter, taskRequirementIds, taskSelectionQuery, useOptionalLearning } from "@intra/learning";
 import { TaskStart } from "./TaskStart";
 import { useAvailableTasks } from "./TaskStartLoader";
 
 export function TaskLearningWorkspace({ audience = "internal" }: { audience?: "internal" | "vendor" }) {
+  const { profile, userRoles } = useSession();
   const tasks = useAvailableTasks();
   const params = useSearchParams();
   const pathname = usePathname();
@@ -36,7 +39,7 @@ export function TaskLearningWorkspace({ audience = "internal" }: { audience?: "i
         <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-muted">{selectedTask ? 'Change task' : 'Choose a task'}</summary>
         {chooser}
       </details>
-      <OnboardingCenter audience={audience} selectedTask={selectedTask} />
+      <OnboardingCenter audience={audience} selectedTask={selectedTask} availableTasks={tasks} jobPersona={profile ? resolvePersonaPresentation(profile, userRoles).title : undefined} />
     </div>
   );
 }

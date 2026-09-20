@@ -31,12 +31,20 @@ function clientFor(read: (source: string, owner: string) => Promise<Reply>) {
     schema(source: string) {
       return { from(table: string) {
         const call = { source, table, columns: '', ownerColumn: '', owner: '', orders: [] as [string, unknown][], limit: 0 };
-        calls.push(call);
+        let closed = false, after = '';
         const query = {
+          or() { return query; },
+          in() { closed = true; return query; },
+          gt(_column: string, value: string) { after = value; return query; },
           select(columns: string) { call.columns = columns; return query; },
           eq(column: string, owner: string) { call.ownerColumn = column; call.owner = owner; return query; },
           order(column: string, options: unknown) { call.orders.push([column, options]); return query; },
-          limit(limit: number) { call.limit = limit; return read(source, call.owner); },
+          limit(limit: number) {
+            call.limit = limit;
+            if (closed || after) return Promise.resolve(ok());
+            calls.push(call);
+            return read(source, call.owner);
+          },
         };
         return query;
       } };
@@ -64,16 +72,17 @@ beforeEach(() => {
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
 
 describe('useWorkTracking read boundary', () => {
-  it('uses only narrow owner-scoped reads with timestamp ordering, ID ties and caps', async () => {
+  it('uses only narrow owner-scoped open reads with stable ID cursors and bounded pages', async () => {
     const client = clientFor(async () => ok(record('own'), record('foreign', 'other')));
     auth.session.supabaseClient = client;
     await render();
     expect(latest.items.map(item => item.id)).toEqual(['procurement:own', 'warehouse:own']);
     expect(client.calls).toEqual([
-      { source: 'procurement', table: 'requests', columns: 'id,title,status,requester_id,created_at,updated_at', ownerColumn: 'requester_id', owner: 'actor-a', orders: [['updated_at', { ascending: false, nullsFirst: false }], ['id', { ascending: false }]], limit: 100 },
-      { source: 'warehouse', table: 'department_stock_requests', columns: 'id,purpose,status,requested_by,requested_at', ownerColumn: 'requested_by', owner: 'actor-a', orders: [['requested_at', { ascending: false, nullsFirst: false }], ['id', { ascending: false }]], limit: 100 },
+      { source: 'procurement', table: 'requests', columns: 'id,title,description,compliance,status,requester_id,created_at,updated_at', ownerColumn: 'requester_id', owner: 'actor-a', orders: [['id', { ascending: true }]], limit: 100 },
+      { source: 'warehouse', table: 'department_stock_requests', columns: 'id,purpose,lines,status,requested_by,requested_at', ownerColumn: 'requested_by', owner: 'actor-a', orders: [['id', { ascending: true }]], limit: 100 },
     ]);
-    expect(latest.coverage).toBe('Your latest 100 purchase requests by last update and latest 100 stock requests by request date. Closed, rejected, or cancelled requests are not proof of delivery or payment. Other modules are not included.');
+    expect(latest.coverage).toContain('All your open purchase requests and stock requests');
+    expect(latest.coverage).toContain('latest 100 closed');
     expect(latest.errors).toEqual([]);
     expect(latest.loading).toBe(false);
   });
@@ -84,7 +93,7 @@ describe('useWorkTracking read boundary', () => {
     await render(['warehouse', 'finance', 'warehouse']);
     expect(client.calls.map(call => call.source)).toEqual(['warehouse']);
     expect(latest.items.map(item => item.source)).toEqual(['warehouse']);
-    expect(latest.coverage).toContain('Your latest 100 stock requests by request date.');
+    expect(latest.coverage).toContain('All your open stock requests');
     expect(latest.coverage).not.toContain('purchase requests');
     await render(['finance', 'legal']);
     expect(latest.items).toEqual([]);

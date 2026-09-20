@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { clsx } from "clsx";
 import { Logo } from "./Logo";
 import { Icon, type IconName } from "./Icon";
-import { UserMenu } from "./UserMenu";
+import { UserMenu, WorkspaceNavigation } from "./UserMenu";
 import { useWarehouse } from "@/app/store";
 import {
   MODULE_GROUP_LABELS,
@@ -12,7 +12,7 @@ import {
   primaryModulesForWarehouseAccess,
   type ModuleGroup,
 } from "@/app/modules";
-import { buildNotifications } from "@/app/notifications";
+import { buildNotifications, groupNotifications, type NotificationFilter } from "@/app/notifications";
 import { Sheet, useToast, PageTransition } from "./ui";
 import { ThemeToggle } from "./ThemeToggle";
 import { ContextualHelpLink, DesktopNavigationToggle, useDesktopNavigation } from "@intra/ui";
@@ -200,6 +200,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const [moreOpen, setMoreOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [alertFilter, setAlertFilter] = useState<NotificationFilter>({});
   const [conflictsOpen, setConflictsOpen] = useState(false);
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -240,9 +241,15 @@ export function AppShell({ children }: { children: ReactNode }) {
   };
 
   const notifications = useMemo(
-    () => (data ? buildNotifications(data, canOpenRoute) : []),
-    [canOpenRoute, data],
+    () => (data ? buildNotifications(data, canOpenRoute, {
+      canRecommendReplenishment: source === 'supabase' && can('recommend_replenishment'),
+      canIssueStock: can('issue_items'),
+    }) : []),
+    [can, canOpenRoute, data, source],
   );
+  const alertGroups = groupNotifications(notifications, alertFilter);
+  const filteredAlertCount = alertGroups.reduce((count, group) => count + group.items.length, 0);
+  const actionableAlertCount = notifications.filter(alert => alert.actionable).length;
 
   const primary = primaryModulesForWarehouseAccess(
     source,
@@ -475,9 +482,10 @@ export function AppShell({ children }: { children: ReactNode }) {
                 onClick={() => setNotifOpen(true)}
                 aria-label={`Warehouse alerts (${notifications.length} active)`}
                 title="Warehouse alerts"
-                className="relative grid h-11 w-11 place-items-center rounded-full text-muted transition hover:bg-inset hover:text-ink"
+                className="relative flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-md text-muted transition hover:bg-inset hover:text-ink"
               >
-                <Icon name="bell" />
+                <Icon name="bell" className="h-4 w-4" />
+                <span className="text-[0.6rem] font-semibold">Alerts</span>
                 {notifications.length > 0 && (
                   <span className="absolute right-1 top-1 grid h-5 min-w-5 place-items-center rounded-full bg-rose-700 px-1 text-[0.65rem] font-bold leading-none text-white">
                     {notifications.length}
@@ -486,6 +494,9 @@ export function AppShell({ children }: { children: ReactNode }) {
               </button>
               <UserMenu />
             </div>
+          </div>
+          <div className="border-t border-line px-4 sm:px-6">
+            <WorkspaceNavigation />
           </div>
         </header>
 
@@ -622,20 +633,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </li>
           <li>
-            <a
-              href="/"
-              className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium text-muted hover:bg-inset hover:text-ink"
-            >
-              <span className="grid h-9 w-9 place-items-center rounded-lg bg-inset text-brand-700 dark:text-brand-300">
-                <Icon name="grid" />
-              </span>
-              <span className="min-w-0">
-                <span className="block">Mwell Intra home</span>
-                <span className="block truncate text-xs text-faint">
-                  All modules
-                </span>
-              </span>
-            </a>
+            <WorkspaceNavigation />
           </li>
           {remainingModules.map((m) => (
             <li key={m.id}>
@@ -689,13 +687,50 @@ export function AppShell({ children }: { children: ReactNode }) {
         description={`${notifications.length} active warehouse issues, not unread notifications. Highest priority first; alerts remain until the underlying issue is resolved.`}
         side="right"
       >
+        <div className="mb-4 space-y-3 border-b border-line pb-4">
+          <label className="block text-xs font-medium text-muted">
+            Search alerts
+            <input type="search" className="input mt-1 w-full" value={alertFilter.search ?? ''}
+              onChange={event => setAlertFilter(current => ({ ...current, search: event.target.value }))} />
+          </label>
+          <div className="grid grid-cols-1 gap-3">
+            <label className="block min-w-0 text-xs font-medium text-muted">
+              Alert scope
+              <select className="input mt-1 w-full" value={alertFilter.scope ?? 'all'}
+                onChange={event => setAlertFilter(current => ({ ...current, scope: event.target.value as NotificationFilter['scope'] }))}>
+                <option value="all">All active ({notifications.length})</option>
+                <option value="actionable">Actionable ({actionableAlertCount})</option>
+                <option value="informational">Informational ({notifications.length - actionableAlertCount})</option>
+              </select>
+            </label>
+            <label className="block min-w-0 text-xs font-medium text-muted">
+              Issue type
+              <select className="input mt-1 w-full" value={alertFilter.issueType ?? 'all'}
+                onChange={event => setAlertFilter(current => ({ ...current, issueType: event.target.value as NotificationFilter['issueType'] }))}>
+                <option value="all">All issue types</option>
+                <option value="shortage">Stock shortages</option>
+                <option value="reservation">Reservations</option>
+              </select>
+            </label>
+          </div>
+          <p role="status" className="text-xs text-muted">{filteredAlertCount} of {notifications.length} active issues</p>
+        </div>
         {notifications.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted">
             You're all caught up.
           </p>
+        ) : alertGroups.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted">No alerts match these filters.</p>
         ) : (
-          <ul className="space-y-2" aria-label="Alerts">
-            {notifications.map((n) => {
+          <div className="space-y-3">
+          {alertGroups.map(group => (
+          <details key={`${group.id}:${alertFilter.search ?? ''}:${alertFilter.scope ?? 'all'}:${alertFilter.issueType ?? 'all'}`}
+            open={Boolean(alertFilter.search?.trim()) || undefined} className="border-b border-line pb-3">
+            <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-ink [overflow-wrap:anywhere]">
+              {group.issueType === 'shortage' ? 'Stock shortages' : 'Reservations'} / {group.owner} ({group.items.length})
+            </summary>
+          <ul className="space-y-2" aria-label={`${group.issueType} alerts for ${group.owner}`}>
+            {group.items.map((n) => {
               const inner = (
                 <>
                   <span
@@ -713,6 +748,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-ink [overflow-wrap:anywhere]">{n.title}</p>
                     <p className="text-xs text-muted [overflow-wrap:anywhere]">{n.detail}</p>
+                    <p className="mt-1 text-xs font-medium text-muted [overflow-wrap:anywhere]">{n.nextStep}</p>
                   </div>
                 </>
               );
@@ -739,6 +775,9 @@ export function AppShell({ children }: { children: ReactNode }) {
               );
             })}
           </ul>
+          </details>
+          ))}
+          </div>
         )}
       </Sheet>
 
@@ -868,7 +907,7 @@ function BottomLink({
       end={to === "/"}
       className={({ isActive }) =>
         clsx(
-          "flex min-h-16 flex-col items-center justify-center gap-0.5 px-2 py-2.5 text-[0.65rem] font-medium transition",
+          "flex min-h-16 flex-col items-center justify-center gap-0.5 px-0.5 py-2.5 text-[0.65rem] font-medium transition",
           isActive ? "text-brand-600 dark:text-brand-300" : "text-faint",
         )
       }
@@ -892,7 +931,7 @@ function BottomLink({
               </span>
             )}
           </span>
-          <span className="truncate">{label}</span>
+          <span className="flex min-h-7 max-w-full items-center text-center leading-tight [overflow-wrap:anywhere]">{label}</span>
         </>
       )}
     </NavLink>

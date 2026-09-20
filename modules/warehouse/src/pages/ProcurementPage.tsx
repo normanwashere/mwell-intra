@@ -1,4 +1,6 @@
 import { useWarehouse } from "@/app/store";
+import { useCan } from "@intra/auth";
+import { useSearchParams } from "react-router-dom";
 import { toStockState } from "@/data/repository";
 import { availableForProduct, lowStockProducts } from "@/domain/stock";
 import {
@@ -35,6 +37,10 @@ interface ReorderRow {
 
 export function ProcurementPage() {
   const { data } = useWarehouse();
+  const canReadProcurement = useCan('procurement', 'view_dashboard');
+  const canCreateRequest = useCan('procurement', 'create_request');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const productId = searchParams.get('product') ?? '';
   if (!data) return null;
   const state = toStockState(data);
   const low = lowStockProducts(state);
@@ -73,6 +79,7 @@ export function ProcurementPage() {
     );
 
   const atRiskCount = reorderRows.filter((r) => r.atRisk).length;
+  const scopedRows = productId ? reorderRows.filter(row => row.product.id === productId) : reorderRows;
   const openPOs = data.purchaseOrders.filter(
     (po) => po.status !== "received" && po.status !== "cancelled",
   ).length;
@@ -80,7 +87,7 @@ export function ProcurementPage() {
   const cover = (r: ReorderRow) =>
     r.daysOfCover === Infinity ? "∞" : `${Math.round(r.daysOfCover)}d`;
 
-  const replenishmentCandidates: ReplenishmentCandidate[] = reorderRows.map(
+  const replenishmentCandidates: ReplenishmentCandidate[] = scopedRows.map(
     (row) => ({
       productId: row.product.id,
       productName: row.product.name,
@@ -183,14 +190,27 @@ export function ProcurementPage() {
         </StaggerItem>
       </StaggerGrid>
 
-      <ReplenishmentControlPanel candidates={replenishmentCandidates} />
+      <label className="block text-sm font-medium text-muted">
+        Replenishment product
+        <select className="input mt-1 w-full" value={productId} onChange={event => {
+          const next = new URLSearchParams(searchParams);
+          if (event.target.value) next.set('product', event.target.value);
+          else next.delete('product');
+          setSearchParams(next);
+        }}>
+          <option value="">All products</option>
+          {productId && !data.products.some(product => product.id === productId) && <option value={productId}>Unavailable product</option>}
+          {data.products.map(product => <option key={product.id} value={product.id}>{product.sku} - {product.name}</option>)}
+        </select>
+      </label>
+      <ReplenishmentControlPanel candidates={replenishmentCandidates} productId={productId} />
 
       <Card>
         <SectionTitle
           title="Reorder worklist"
           subtitle="At-risk first; cover = days until stockout"
           action={
-            reorderRows.length > 0 ? (
+            reorderRows.length > 0 && canReadProcurement && canCreateRequest ? (
               <a
                 href="/procurement/requests/new"
                 className="btn-primary btn-sm"
@@ -200,12 +220,15 @@ export function ProcurementPage() {
             ) : undefined
           }
         />
-        {reorderRows.length === 0 ? (
+        {reorderRows.length > 0 && !(canReadProcurement && canCreateRequest) && (
+          <p className="mb-3 text-sm text-muted">Procurement owns request creation. Share the SKU and required quantity with Procurement; approved orders return to the Warehouse receiving queue.</p>
+        )}
+        {scopedRows.length === 0 ? (
           <EmptyState icon="check" title="Nothing to reorder" />
         ) : (
           <DataTable
             columns={columns}
-            rows={reorderRows}
+            rows={scopedRows}
             keyOf={(r) => r.product.id}
             ariaLabel="Reorder worklist"
           />

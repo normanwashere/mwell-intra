@@ -4,7 +4,7 @@ import { inboundQueue, isReceivableInbound } from "@/domain/workQueues";
 import { resolveProductScan } from "@/domain/productScan";
 import { deliveryToday, validateActualDeliveryDate } from "@intra/data-kit";
 import { Link, useSearchParams } from "react-router-dom";
-import { useSession } from "@intra/auth";
+import { useCan, useSession } from "@intra/auth";
 import { CertifiedAction } from "@intra/learning";
 import { can as roleCan } from "@intra/rbac";
 import { useWarehouse } from "@/app/store";
@@ -159,6 +159,7 @@ export function PurchaseOrdersPage() {
     };
   }, []);
   const canManagePOs = can("view_procurement");
+  const canReadProcurement = useCan('procurement', 'view_dashboard');
   // The legacy cancellation grant is SQL-only; it is not Warehouse read authority.
   const canCancelPO = canManagePOs && (mode === "supabase"
     ? roleCapabilities?.procurement?.includes("cancel_purchase_order") === true
@@ -1129,13 +1130,17 @@ export function PurchaseOrdersPage() {
             : "Receive incoming supplier orders"
         }
         action={
-          canManagePOs ? (
+          canReadProcurement ? (
             <a href="/procurement/requests" className="btn-primary btn-sm">
               <Icon name="cart" className="h-4 w-4" /> Open Procurement requests
             </a>
           ) : undefined
         }
       />
+
+      {!canReadProcurement && (
+        <p className="border-y border-line py-3 text-sm text-muted">Procurement owns requests and purchase orders. Approved orders appear in this receiving queue; contact Procurement with the PO reference for sourcing or request updates.</p>
+      )}
 
       <div className="flex flex-col gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -1200,7 +1205,7 @@ export function PurchaseOrdersPage() {
               : "This is the PO checking and receiving queue. When Procurement issues an approved PO, select it here before accepting the supplier delivery."
           }
           action={
-            canManagePOs ? (
+            canReadProcurement ? (
               <a href="/procurement/requests" className="btn-primary">
                 <Icon name="cart" className="h-4 w-4" /> Open Procurement
                 requests

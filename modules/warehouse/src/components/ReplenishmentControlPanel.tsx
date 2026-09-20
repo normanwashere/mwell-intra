@@ -47,8 +47,10 @@ function text(value: unknown): string {
 
 export function ReplenishmentControlPanel({
   candidates,
+  productId,
 }: {
   candidates: ReplenishmentCandidate[];
+  productId?: string;
 }) {
   const { mode, supabaseClient, profile, loading, userCapabilities } = useSession();
   const live = mode === "supabase" ? supabaseClient : null;
@@ -56,15 +58,19 @@ export function ReplenishmentControlPanel({
     userCapabilities?.warehouse?.includes("recommend_replenishment") === true;
   const canManage = !!live && !loading && profile !== null &&
     userCapabilities?.procurement?.includes("manage_replenishment") === true;
-  const canComplete = canManage && userCapabilities?.procurement?.includes("create_request") === true;
+  const canReadProcurement = !!live && !loading && profile !== null &&
+    userCapabilities?.procurement?.includes("view_dashboard") === true;
+  const canComplete = canReadProcurement && canManage && userCapabilities?.procurement?.includes("create_request") === true;
   const toast = useToast();
   const [rows, setRows] = useState<SavedRecommendation[]>([]);
+  const scopedRows = productId ? rows.filter(row => row.productId === productId) : rows;
   const [workingId, setWorkingId] = useState<string>();
   const visibleCandidates = useMemo(
     () =>
       sortReplenishmentCandidates(
         candidates.filter(
           (candidate) =>
+            (!productId || candidate.productId === productId) &&
             !rows.some(
               (row) =>
                 row.productId === candidate.productId &&
@@ -72,7 +78,7 @@ export function ReplenishmentControlPanel({
             ),
         ),
       ),
-    [candidates, rows],
+    [candidates, rows, productId],
   );
 
   const refresh = useCallback(async () => {
@@ -183,17 +189,17 @@ export function ReplenishmentControlPanel({
           Save the recommendation, accept it, hand it to Procurement, then link
           the order outcome.
         </p>
-        {(visibleCandidates.length > 0 || rows.length > 0) && (
+        {(visibleCandidates.length > 0 || scopedRows.length > 0) && (
           <div className="mt-2 flex flex-wrap gap-2">
             <Badge tone="rose">
               {visibleCandidates.filter((candidate) => candidate.stockoutRisk === 'critical').length} critical
             </Badge>
             <Badge tone="slate">{visibleCandidates.length} new</Badge>
-            <Badge tone="brand">{rows.filter((row) => !['ordered', 'dismissed'].includes(row.status)).length} in progress</Badge>
+            <Badge tone="brand">{scopedRows.filter((row) => !['ordered', 'dismissed'].includes(row.status)).length} in progress</Badge>
           </div>
         )}
       </div>
-      {rows.length === 0 && candidates.length === 0 ? (
+      {scopedRows.length === 0 && visibleCandidates.length === 0 ? (
         <EmptyState icon="check" title="No replenishment demand" />
       ) : (
         <div className="space-y-2">
@@ -234,7 +240,7 @@ export function ReplenishmentControlPanel({
                 </div>
               </Card>
             ))}
-          {rows.map((record) => (
+          {scopedRows.map((record) => (
             <Card key={record.id} className="space-y-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -281,21 +287,21 @@ export function ReplenishmentControlPanel({
                     </button>
                   )
                 )}
-                {record.procurementRequestId && (
+                {record.procurementRequestId && canReadProcurement && (
                   <a
                     className="btn-outline btn-sm"
                     href={
-                      "/procurement/requests/" + record.procurementRequestId
+                      "/procurement/requests/" + encodeURIComponent(record.procurementRequestId)
                     }
                   >
                     Open Procurement request
                   </a>
                 )}
-                {record.purchaseOrderId && (
+                {record.purchaseOrderId && canReadProcurement && (
                   <a
                     className="btn-primary btn-sm"
                     href={
-                      "/procurement/purchase-orders/" + record.purchaseOrderId
+                      "/procurement/purchase-orders/" + encodeURIComponent(record.purchaseOrderId)
                     }
                   >
                     Open purchase order
@@ -312,6 +318,13 @@ export function ReplenishmentControlPanel({
                   </button>
                 )}
               </div>
+              {!canReadProcurement && (record.procurementRequestId || record.purchaseOrderId) && (
+                <p className="text-sm text-muted [overflow-wrap:anywhere]">
+                  Procurement owns the linked request and order. Handoff: {record.status}.
+                  {record.procurementRequestId && ` Request: ${record.procurementRequestId}.`}
+                  {record.purchaseOrderId && ` Order: ${record.purchaseOrderId}.`}
+                </p>
+              )}
             </Card>
           ))}
         </div>

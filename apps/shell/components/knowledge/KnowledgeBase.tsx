@@ -514,6 +514,7 @@ export function KnowledgeBase({ content }: { content: KnowledgeContent }) {
       mode={mode}
       module={module}
       roleId={roleId}
+      scope={params.get("scope") === "all" ? "all" : "mine"}
       availability={availability}
       resultLimit={resultLimit}
       recommendedRoleIds={recommendedRoleIds}

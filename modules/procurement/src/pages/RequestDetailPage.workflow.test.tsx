@@ -31,8 +31,8 @@ beforeEach(() => {
   submit.mockClear(); cancel.mockClear();
   request = { id: 'request-kept', title: 'Request record', status: 'draft', category: 'goods', lines: [], attachments: [], createdAt: '2026-09-01T00:00:00Z' } as unknown as ProcurementRequest;
 });
-function renderPage() {
-  return renderToStaticMarkup(<MemoryRouter initialEntries={['/requests/request-kept']}><Routes><Route path="/requests/:id" element={<RequestDetailPage />} /></Routes></MemoryRouter>);
+function renderPage(search = '') {
+  return renderToStaticMarkup(<MemoryRouter initialEntries={['/requests/request-kept' + search]}><Routes><Route path="/requests/:id" element={<RequestDetailPage />} /></Routes></MemoryRouter>);
 }
 it.each([
   ['draft', 'Procurement / requester'],
@@ -66,8 +66,14 @@ it('shows read failure recovery without presenting stale request status as curre
   expect(html).toContain('Request unavailable');
   expect(html).toContain('Request read failed');
   expect(html).toContain('Retry request');
-  expect(html).toContain('href="/requests"');
+  expect(html).toContain('href="/procurement"');
   expect(html).not.toContain('Author purchase order');
+});
+it.each([undefined, 'Read failed'])('keeps whitelisted list filters on the back link when read error is %s', failure => {
+  readError = failure;
+  const html = renderPage('?fromFilter=approved&fromQ=0001&fromShown=100&fromOwner=mine&returnTo=https://evil.test');
+  expect(html).toContain('href="/procurement?filter=approved&amp;q=0001&amp;owner=mine&amp;shown=100"');
+  expect(html).not.toContain('evil.test');
 });
 
 it('keeps the competitive sourcing introduction stage-neutral until the sourcing state is loaded', () => {

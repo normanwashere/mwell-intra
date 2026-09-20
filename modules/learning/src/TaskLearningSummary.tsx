@@ -106,7 +106,14 @@ export function TaskLearningSummary({
             Needed for this task
           </h3>
           {projection.neededNow.length ? (
-            list(projection.neededNow)
+            <>
+              <p className="mt-1 text-xs text-muted">{projection.neededNow.length} {projection.neededNow.length === 1 ? 'requirement' : 'requirements'} remaining for this task</p>
+              {list(projection.neededNow.slice(0, 1))}
+              {projection.neededNow.length > 1 && <details className="border-t border-line">
+                <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-ink">Remaining task requirements ({projection.neededNow.length - 1})</summary>
+                {list(projection.neededNow.slice(1))}
+              </details>}
+            </>
           ) : (
             <p className="mt-2 text-sm text-muted">
               No outstanding learning is identified for this task. Role

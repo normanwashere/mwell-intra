@@ -8,16 +8,34 @@ import {
   primaryModulesForWarehouseAccess,
   primaryModulesForRole,
   warehouseRolePresentation,
+  warehouseDestinationForRoute,
 } from "./modules";
 import { ROLE_LIST } from "@/auth/roles";
+import { canOpenWarehouseRoute } from './authorization';
 
 describe("warehouse navigation metadata", () => {
+  it("gates Data & Reports against Insights just like the reports redirect", () => {
+    const visible = modulesForWarehouseAccess("supabase", "warehouse_admin", () => true, () => false);
+    expect(visible.map(module => module.id)).not.toContain("data");
+    expect(warehouseDestinationForRoute("data")).toBe("insights");
+    expect(canOpenWarehouseRoute('data', () => true, () => false)).toBe(false);
+    expect(modulesForWarehouseAccess("supabase", "warehouse_admin", () => true, () => true)
+      .map(module => module.id)).toContain("data");
+  });
+
+  it("names the module home unambiguously in every primary navigation", () => {
+    for (const role of [...ROLE_LIST.map(role => role.id), "warehouse_operator"] as const) {
+      const home = primaryModulesForRole(role).find(module => module.id === "dashboard")!;
+      expect(home.label).toBe("Warehouse home");
+      expect(home.shortLabel).toBe("Warehouse home");
+    }
+  });
   it("gives the canonical Operator routine floor flows plus recovery tools", () => {
     expect(
       modulesForRole("warehouse_operator").map((module) => module.label),
     ).toEqual(
       expect.arrayContaining([
-      "Home",
+      "Warehouse home",
       "Receive and inspect",
       "Put away",
       "Pick & Pack",
@@ -132,7 +150,7 @@ describe("warehouse navigation metadata", () => {
       (capability) => capabilities.has(capability),
     );
     expect(visible.map((module) => module.label)).toEqual([
-      "Home",
+      "Warehouse home",
       "Receive and inspect",
       "Put away",
       "Pick & Pack",
@@ -148,7 +166,7 @@ describe("warehouse navigation metadata", () => {
         "warehouse_operator",
         (capability) => capabilities.has(capability),
       ).map((module) => module.label),
-    ).toEqual(["Home", "Receive and inspect", "Put away", "Pick & Pack"]);
+    ).toEqual(["Warehouse home", "Receive and inspect", "Put away", "Pick & Pack"]);
   });
 
   it("hides cross-module destinations when their destination capability is absent", () => {

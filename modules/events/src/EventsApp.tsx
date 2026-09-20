@@ -20,8 +20,10 @@ import {
 } from "@intra/ui";
 import { EVENT_LEARNING_TASKS, eventCapabilityAllowed, eventRequestHref } from './capabilities';
 import { EventWorkflowSummary } from './EventWorkflowSummary';
+import { EventCustodyWorkspace } from './EventCustodyWorkspace';
 import {
   eventReconciliationHandoff,
+  quoteEventDemand,
   useEventsData,
   validateEventDraftFields,
   validateEventFulfillmentFields,
@@ -70,14 +72,14 @@ function focusFirstInvalidField(
   if (target) window.setTimeout(() => document.getElementById(target)?.focus());
 }
 
-export function EventsApp({
+function EventsManagementApp({
   eventId,
   openCreate = false,
 }: {
   eventId?: string;
   openCreate?: boolean;
 }) {
-  const { profile, userRoles, mode, userCapabilities, roleCapabilities, loading: sessionLoading } = useSession();
+  const { profile, userRoles, mode, supabaseClient, userCapabilities, roleCapabilities, loading: sessionLoading } = useSession();
   const allowed = (cap: Parameters<typeof eventCapabilityAllowed>[1]) => eventCapabilityAllowed(userRoles, cap, mode, userCapabilities?.events);
   const {
     data,
@@ -152,6 +154,8 @@ export function EventsApp({
   const [fulfillmentErrors, setFulfillmentErrors] = useState<
     Record<string, string>
   >({});
+  const fulfillmentIntent = useRef<{ fingerprint: string; key: string } | null>(null);
+  const fulfillmentSaving = useRef(false);
   const reconciliationAccounted = reconciliationDraft.soldUnits + reconciliationDraft.giveawayUnits + reconciliationDraft.returnedUnits + reconciliationDraft.lostUnits + reconciliationDraft.damagedUnits + reconciliationDraft.rekitUnits;
   const [fulfillment, setFulfillment] = useState({
     department: "marketing",
@@ -159,9 +163,19 @@ export function EventsApp({
     costCenter: "",
     requiredDate: "",
     treatment: "expense" as "expense" | "custody" | "sale",
-    productId: "",
-    quantity: 1,
+    lines: [{ productId: '', quantity: 1 }],
   });
+  const [availability, setAvailability] = useState<Record<string, number> | null>(null);
+  const requestedProducts = JSON.stringify(fulfillment.lines.map(line => line.productId).filter(Boolean));
+  useEffect(() => {
+    setAvailability(null);
+    if (!fulfillmentOpen || !eventId || !supabaseClient || mode !== 'supabase') return;
+    let cancelled = false;
+    void quoteEventDemand(supabaseClient, eventId, JSON.parse(requestedProducts) as string[])
+      .then(result => { if (!cancelled) setAvailability(result); })
+      .catch(() => { if (!cancelled) setAvailability(null); });
+    return () => { cancelled = true; };
+  }, [eventId, profile?.id, fulfillmentOpen, requestedProducts, supabaseClient, mode]);
 
   const summary = useMemo(
     () => ({
@@ -313,7 +327,11 @@ export function EventsApp({
   };
 
   const submitFulfillment = async () => {
-    if (!selectedEvent) return;
+    if (!selectedEvent || !mayRequest || saving || fulfillmentSaving.current) return;
+    const fingerprint = JSON.stringify({ eventId: selectedEvent.id, ...fulfillment });
+    if (fulfillmentIntent.current?.fingerprint !== fingerprint) {
+      fulfillmentIntent.current = { fingerprint, key: globalThis.crypto.randomUUID() };
+    }
     const request = {
       eventId: selectedEvent.id,
       requestingDepartment: fulfillment.department,
@@ -321,18 +339,13 @@ export function EventsApp({
       costCenter: fulfillment.costCenter,
       requiredDate: fulfillment.requiredDate,
       expenseTreatment: fulfillment.treatment,
-      productId: fulfillment.productId,
-      quantity: fulfillment.quantity,
-      idempotencyKey:
-        globalThis.crypto?.randomUUID?.() ?? `event-request-${Date.now()}`,
+      lines: fulfillment.lines,
+      idempotencyKey: fulfillmentIntent.current.key,
     };
-    const selectedProduct = data.products?.find(
-      (product) => product.id === fulfillment.productId,
-    );
     const validation = validateEventFulfillmentFields(request, {
       minimumDate: today,
       maximumDate: selectedEvent.endDate,
-      itemClass: selectedProduct?.itemClass,
+      products: data.products,
     });
     setFulfillmentErrors(validation);
     if (Object.keys(validation).length > 0) {
@@ -341,15 +354,17 @@ export function EventsApp({
         ["purpose", "event-request-purpose"],
         ["costCenter", "event-request-cost"],
         ["requiredDate", "event-request-date"],
-        ["productId", "event-request-product"],
-        ["quantity", "event-request-quantity"],
+        ...fulfillment.lines.flatMap((_, index): [string, string][] => [
+          [`lines.${index}.productId`, `event-request-product-${index}`],
+          [`lines.${index}.quantity`, `event-request-quantity-${index}`],
+        ]),
         ["treatment", "event-request-treatment"],
       ]);
       return;
     }
     setSaving(true);
+    fulfillmentSaving.current = true;
     try {
-      if (!mayRequest || saving) return;
       const handoff = await requestFulfillment(request);
       if (handoff?.id) setLastHandoff(handoff);
       toast.success(
@@ -358,6 +373,7 @@ export function EventsApp({
           : "Warehouse stock request sent for approval.",
       );
       setFulfillmentOpen(false);
+      fulfillmentIntent.current = null;
     } catch (cause) {
       toast.error(
         cause instanceof Error
@@ -365,6 +381,7 @@ export function EventsApp({
           : "The stock request could not be sent.",
       );
     } finally {
+      fulfillmentSaving.current = false;
       setSaving(false);
     }
   };
@@ -513,8 +530,8 @@ export function EventsApp({
                     ...current,
                     department: defaultDepartment?.code ?? "",
                     costCenter: defaultCostCenter?.code ?? "",
-                    productId:
-                      current.productId || data.products?.[0]?.id || "",
+                    lines: current.lines.map((line, index) => index === 0 && !line.productId
+                      ? { ...line, productId: data.products?.[0]?.id ?? '' } : line),
                     requiredDate:
                       current.requiredDate ||
                       (selectedEvent.startDate >= today
@@ -763,6 +780,7 @@ export function EventsApp({
           </div>
         </Card>
 
+        {mode === 'supabase' && (mayManage || mayApproveReconciliation) && <EventCustodyWorkspace key={`${profile.id}:${selectedEvent.id}`} eventId={selectedEvent.id} embedded />}
         <Sheet
           open={reconciliationOpen && (reconciliationAction === 'approve' ? mayApproveReconciliation : mayManage)}
           onOpenChange={setReconciliationOpen}
@@ -1220,62 +1238,46 @@ export function EventsApp({
                 />
               </Field>
             </div>
-            <Field
-              label="Product"
-              htmlFor="event-request-product"
-              error={fulfillmentErrors.productId}
-            >
-              <select
-                id="event-request-product"
-                className="input"
-                aria-invalid={Boolean(fulfillmentErrors.productId)}
-                value={fulfillment.productId}
-                onChange={(event) => {
-                  setFulfillment((current) => ({
-                    ...current,
-                    productId: event.target.value,
-                  }));
-                  setFulfillmentErrors((current) => ({
-                    ...current,
-                    productId: "",
-                    treatment: "",
-                  }));
-                }}
-              >
-                <option value="">Select a product</option>
-                {(data.products ?? []).map((product) => (
-                  <option key={product.id} value={product.id}>
-                    {product.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field
-                label="Quantity"
-                htmlFor="event-request-quantity"
-                error={fulfillmentErrors.quantity}
-              >
-                <input
-                  id="event-request-quantity"
-                  type="number"
-                  min="1"
-                  step="1"
-                  className="input"
-                  aria-invalid={Boolean(fulfillmentErrors.quantity)}
-                  value={fulfillment.quantity}
-                  onChange={(event) => {
-                    setFulfillment((current) => ({
-                      ...current,
-                      quantity: Number(event.target.value),
-                    }));
-                    setFulfillmentErrors((current) => ({
-                      ...current,
-                      quantity: "",
-                    }));
-                  }}
-                />
-              </Field>
+            <fieldset disabled={saving} className="min-w-0 space-y-4">
+              <legend className="text-sm font-semibold">Stock lines</legend>
+              {fulfillmentErrors.lines && <p role="alert" className="text-sm text-rose-700">{fulfillmentErrors.lines}</p>}
+              {fulfillment.lines.map((line, index) => <div key={index} className="min-w-0 space-y-2 border-b border-line pb-3">
+                <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_2.75rem] items-end gap-2 sm:grid-cols-[minmax(0,1fr)_6rem_2.75rem]">
+                  <div className="col-span-2 min-w-0 sm:col-span-1">
+                  <Field label={`Product ${index + 1}`} htmlFor={`event-request-product-${index}`} error={fulfillmentErrors[`lines.${index}.productId`]}>
+                    <select id={`event-request-product-${index}`} className="input min-w-0" value={line.productId}
+                      aria-invalid={Boolean(fulfillmentErrors[`lines.${index}.productId`])}
+                      onChange={event => {
+                        setFulfillment(current => ({ ...current, lines: current.lines.map((row, i) => i === index ? { ...row, productId: event.target.value } : row) }));
+                        setFulfillmentErrors({});
+                      }}>
+                      <option value="">Select a product</option>
+                      {(data.products ?? []).map(product => <option key={product.id} value={product.id}
+                        disabled={fulfillment.lines.some((other, i) => i !== index && other.productId === product.id)}>{product.name}</option>)}
+                    </select>
+                  </Field>
+                  </div>
+                  <Field label={`Quantity ${index + 1}`} htmlFor={`event-request-quantity-${index}`} error={fulfillmentErrors[`lines.${index}.quantity`]}>
+                    <input id={`event-request-quantity-${index}`} type="number" min="1" max="2147483647" step="1" className="input" value={line.quantity}
+                      aria-invalid={Boolean(fulfillmentErrors[`lines.${index}.quantity`])}
+                      onChange={event => {
+                        setFulfillment(current => ({ ...current, lines: current.lines.map((row, i) => i === index ? { ...row, quantity: Number(event.target.value) } : row) }));
+                        setFulfillmentErrors({});
+                      }} />
+                  </Field>
+                  <button type="button" className="btn-ghost h-11 w-11 p-0" title={`Remove product ${index + 1}`} aria-label={`Remove product ${index + 1}`}
+                    disabled={fulfillment.lines.length === 1} onClick={() => {
+                      setFulfillment(current => ({ ...current, lines: current.lines.filter((_, i) => i !== index) })); setFulfillmentErrors({});
+                    }}><Icon name="x" className="h-4 w-4" /></button>
+                </div>
+                <p className="text-xs text-muted">Requested: {line.quantity || 0}; eligible: {availability?.[line.productId] ?? 'unconfirmed'}; shortage: {availability?.[line.productId] == null ? 'unconfirmed' : Math.max(0, line.quantity - availability[line.productId]!)}; {fulfillment.treatment}; next: Approval reviewer</p>
+              </div>)}
+              <button type="button" className="btn-outline" disabled={fulfillment.lines.length >= 100}
+                onClick={() => setFulfillment(current => ({ ...current, lines: [...current.lines, { productId: '', quantity: 1 }] }))}>
+                <Icon name="plus" className="h-4 w-4" /> Add product
+              </button>
+            </fieldset>
+            <div>
               <Field
                 label="Cost treatment"
                 htmlFor="event-request-treatment"
@@ -1550,4 +1552,11 @@ export function EventsApp({
       </Sheet>
     </div>
   );
+}
+
+export function EventsApp(props: { eventId?: string; openCreate?: boolean }) {
+  const session = useSession();
+  const scopedSeller = eventCapabilityAllowed(session.userRoles, 'view_event_custody', session.mode, session.userCapabilities?.events)
+    && !eventCapabilityAllowed(session.userRoles, 'view_events', session.mode, session.userCapabilities?.events);
+  return scopedSeller ? <EventCustodyWorkspace key={`${session.profile?.id}:${props.eventId}`} eventId={props.eventId} /> : <EventsManagementApp {...props} />;
 }

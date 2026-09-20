@@ -183,10 +183,10 @@ export function NotificationBell() {
   const ariaLabel = disabled
     ? mode === 'supabase'
       ? ENABLE_NOTIFICATIONS
-        ? 'Notifications (sign in to view)'
-        : 'Notifications are not available in this environment'
-      : 'Notifications unavailable in demo mode'
-    : `Notifications${unread > 0 ? `, ${unread} unread in the latest ${MAX_ROWS}` : ''}`;
+        ? 'Inbox (sign in to view)'
+        : 'Inbox is not available in this environment'
+      : 'Inbox unavailable in demo mode'
+    : `Inbox${unread > 0 ? `, ${unread} unread in the latest ${MAX_ROWS}` : ''}`;
 
   return (
     <div className="relative">
@@ -203,24 +203,25 @@ export function NotificationBell() {
         disabled={disabled}
         title={ariaLabel}
         className={cx(
-          'relative grid h-11 w-11 place-items-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface',
+          'relative flex h-11 w-11 shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface',
           disabled
             ? 'cursor-not-allowed text-faint/50'
             : 'text-muted hover:bg-inset hover:text-ink',
         )}
       >
-        <Icon name="bell" />
+        <Icon name="bell" className="h-4 w-4" />
+        <span className="text-[10px] font-semibold leading-3">Inbox</span>
         {!disabled && unread > 0 && (
           <span
             aria-hidden
-            className="absolute right-1 top-1 grid h-5 min-w-5 place-items-center rounded-full bg-rose-700 px-1 text-[0.65rem] font-bold leading-none text-white shadow-e1"
+            className="absolute right-0 top-0 grid h-4 min-w-4 place-items-center rounded-full bg-rose-700 px-1 text-[0.65rem] font-bold leading-none text-white shadow-e1"
           >
             {unread > 9 ? '9+' : unread}
           </span>
         )}
       </button>
 
-      <Sheet open={open && !disabled} onOpenChange={setOpen} side="right" title="Notifications"
+      <Sheet open={open && !disabled} onOpenChange={setOpen} side="right" title="Inbox"
         description={`Latest ${MAX_ROWS} notifications you have access to. Older notifications are not included in this count.`}>
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
             <div className="min-w-0">
@@ -242,7 +243,7 @@ export function NotificationBell() {
           </div>
 
           <div className="grid grid-cols-[1fr_auto] items-end gap-3 border-b border-line py-3 text-sm">
-            <div role="group" aria-label="Notification filter" className="flex gap-1">
+            <div role="group" aria-label="Inbox filter" className="flex gap-1">
               {[false, true].map(value => <button key={String(value)} type="button" aria-pressed={unreadOnly === value}
                 className={cx('min-h-11 rounded-md px-3 font-semibold', unreadOnly === value ? 'bg-inset text-ink ring-1 ring-line' : 'text-muted')}
                 onClick={() => setUnreadOnly(value)}>{value ? 'Unread' : 'All'}</button>)}
@@ -252,7 +253,7 @@ export function NotificationBell() {
                 <option value="unread">Unread first</option><option value="newest">Newest first</option>
               </select>
             </label>
-            <button type="button" className="btn-ghost col-start-2 row-start-1 min-h-11 min-w-11" title="Refresh notifications" aria-label="Refresh notifications"
+            <button type="button" className="btn-ghost col-start-2 row-start-1 min-h-11 min-w-11" title="Refresh inbox" aria-label="Refresh inbox"
               disabled={refreshing || busyId !== null} onClick={() => setRetryVersion(version => version + 1)}><Icon name="rotate" /></button>
           </div>
           {readError && <p role="alert" className="border-b border-line py-3 text-sm text-rose-800 dark:text-rose-300">{readError}</p>}
@@ -294,8 +295,8 @@ export function NotificationResults({ rows, initialFetch, loadFailed, refreshing
       {loadFailed && (
         <div role="alert" className="space-y-2 border-b border-line px-4 py-3 text-sm text-muted">
           <p>{rows.length > 0
-            ? 'Notifications could not be refreshed. Previously loaded alerts may be out of date.'
-            : 'Notifications are unavailable. Try again.'}</p>
+            ? 'Inbox could not be refreshed. Previously loaded inbox items may be out of date.'
+            : 'Inbox is unavailable. Try again.'}</p>
           <button type="button" disabled={refreshing} onClick={onRetry}
             className="btn-ghost min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere]">
             <Icon name="rotate" className="h-4 w-4 shrink-0" />

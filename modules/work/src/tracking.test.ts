@@ -51,14 +51,20 @@ describe('owner-only tracking projection', () => {
     expect(warehouse.updatedAt).toBeUndefined();
   });
 
-  it('sorts newest first with stable ID ties, rejects invalid timestamps, and enforces the source cap', () => {
+  it('sorts newest first with stable ID ties without dropping cursor-loaded open rows', () => {
     const rows = Array.from({ length: TRACKING_LIMIT + 5 }, (_, i) => row('draft', { id: String(i).padStart(3, '0') }));
     const projected = projectTrackingRows('procurement', rows, 'actor');
-    expect(projected).toHaveLength(TRACKING_LIMIT);
+    expect(projected).toHaveLength(TRACKING_LIMIT + 5);
     expect(projected[0]!.id).toBe('procurement:104');
     const sorted = projectTrackingRows('procurement', [row('draft', { id: 'old', updated_at: 'bad' }), row('draft', { id: 'new' })], 'actor');
     expect(sorted.map(item => item.id)).toEqual(['procurement:new', 'procurement:old']);
     expect(sorted[1]!.updatedAt).toBeUndefined();
+  });
+
+  it('keeps three older approved requests reachable behind 120 newer drafts', () => {
+    const rows = Array.from({ length: 120 }, (_, i) => row('draft', { id: `draft-${i}` }));
+    rows.push(...Array.from({ length: 3 }, (_, i) => row('approved', { id: `august-${i}`, updated_at: '2026-08-24T00:00:00Z' })));
+    expect(projectTrackingRows('procurement', rows, 'actor').filter(item => item.bucket === 'waiting')).toHaveLength(3);
   });
 
   it.each(['procurement', 'warehouse'] as const)('puts %s drafts and unknown states in own action, not waiting on another person', source => {

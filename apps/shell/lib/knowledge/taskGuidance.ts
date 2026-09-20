@@ -19,6 +19,20 @@ export const ROLE_TASK_GUIDANCE: Readonly<
       id: "my-work",
     },
   },
+  events_seller: {
+    "Confirm your own named, time-limited event assignment and acknowledged issued custody.": {
+      kind: "written",
+      guidance: "Open Events with your own account. Confirm the event and assignment dates, then check its acknowledged custody. Ask the event owner about missing or expired assignments; never use another seller's login or unacknowledged stock.",
+    },
+    "Complete required onboarding and the event-seller-custody-v1 challenge before recording actual sales or zero-amount giveaways.": {
+      kind: "written",
+      guidance: "Complete your assigned event-seller training and challenge, then return to Events. Enter the actual sale amount, or choose giveaway with a zero amount. Select the exact serials where required. Completing training does not assign stock or extend event access.",
+    },
+    "Read back uncertain submissions, retry the same intent, and use your own attributable reversal for a correction.": {
+      kind: "written",
+      guidance: "Check your saved event entries before resubmitting. Retry an uncertain entry with the same reference and details. Reverse your own incorrect entry instead of erasing it, and hand the correction to independent Finance. If the event or assignment is closed, ask the event owner for the authorized correction path.",
+    },
+  },
   platform_admin: {
     "Review identity, role-scope, and access-correction requests.": {
       kind: "feature",

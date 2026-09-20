@@ -424,6 +424,17 @@ const ROLE_OPERATING_DETAILS: Record<string, RoleOperatingDetails> = {
       ),
     ],
   },
+  events_seller: {
+    dailyTasks: [
+      "Confirm your own named, time-limited event assignment and acknowledged issued custody.",
+      "Complete required onboarding and the event-seller-custody-v1 challenge before recording actual sales or zero-amount giveaways.",
+      "Read back uncertain submissions, retry the same intent, and use your own attributable reversal for a correction.",
+    ],
+    responsibilityStages: [
+      stage("Verify seller readiness", "Check your named account, event assignment validity, required learning, and eligible serials or remaining quantity.", "Only your authorized event custody is eligible for an outcome."),
+      stage("Record and reconcile", "Record actual amounts and references once; reconcile unused custody and hand off authoritative records to independent Finance.", "Sales, giveaways, returns, and corrections remain attributable without duplicate warehouse movements."),
+    ],
+  },
   events_requester: {
     dailyTasks: [
       "Create complete event intent with dates and purpose.",
@@ -1588,6 +1599,29 @@ export const LIVE_KNOWLEDGE_ROLES: KnowledgeRole[] = [
       ],
       escalation:
         "Escalate a material legal, privacy, security, or policy-control issue to the accountable Legal authority and platform administrator with the case and audit references.",
+    },
+  }),
+  liveRole({
+    id: "events_seller",
+    rbacModule: "events",
+    rbacRole: "seller",
+    label: "Event seller",
+    module: "events",
+    purpose: "Candidate, pending deployment and governed learning publication: record your own event sales and giveaways under a named, time-limited event assignment.",
+    authority: {
+      accessibleRoutes: ["/events", "/onboarding"],
+      canDo: [
+        "View authorized event custody and record your own actual outcomes only after required certification and an active event-limited seller assignment.",
+        "Retry an uncertain original intent and reverse your own eligible outcome with a reason before posting a correction.",
+      ],
+      cannotDo: [
+        "Do not use shared accounts, another event, expired assignments, unavailable serials, or quantities beyond acknowledged custody.",
+        "Do not manage event assignments, issue stock again, overwrite outcomes, reverse another seller's entry, approve settlement, or close unreconciled custody.",
+      ],
+      decisions: ["Choose the accurate sale or giveaway outcome for your own eligible event custody; Finance independently approves settlement."],
+      upstreamRoleIds: ["events_coordinator", "warehouse_operator"],
+      downstreamRoleIds: ["events_coordinator", "events_finance_reviewer"],
+      escalation: "For missing learning, request governed publication and assignment of internal.role.events.seller.custody-practice.v1, then complete your own challenge. For event scope or expiry, contact the certified event owner; do not request broad coordinator or administrator access.",
     },
   }),
   liveRole({

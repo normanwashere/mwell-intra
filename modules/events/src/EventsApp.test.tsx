@@ -107,6 +107,23 @@ function renderEvent() {
 }
 
 describe("event reconciliation handoff", () => {
+  it('routes the narrow seller to custody without requiring broad Events access or local bookkeeping', () => {
+    state.session = session({ events: ['seller'] });
+    renderEvent();
+    expect(screen.getByRole('heading', { name: 'Event sales' })).toBeInTheDocument();
+    expect(screen.getByText('A connected account is required to record event outcomes.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Request warehouse stock' })).not.toBeInTheDocument();
+  });
+  it('adds and removes products within one event stock request', () => {
+    state.session = session({ events: ['coordinator'] });
+    renderEvent();
+    fireEvent.click(screen.getByRole('button', { name: 'Request warehouse stock' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add product' }));
+    expect(screen.getByLabelText('Product 1')).toBeInTheDocument();
+    expect(screen.getByLabelText('Product 2')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove product 2' }));
+    expect(screen.queryByLabelText('Product 2')).not.toBeInTheDocument();
+  });
   beforeEach(() => {
     state.reconciliationStatus = "draft";
     state.readError = null;

@@ -36,9 +36,16 @@ const controls = () => [screen.getByRole("button", { name: "Save +5" }), screen.
   ...screen.getAllByRole("button", { name: "Dismiss" })] as const;
 
 describe("Replenishment effective action authority", () => {
+  it('scopes saved handoffs to the product opened from an alert', async () => {
+    render(<ToastProvider><ReplenishmentControlPanel candidates={candidates} productId="linked-product" /></ToastProvider>);
+    expect(await screen.findByText('linked-product')).toBeInTheDocument();
+    expect(screen.queryByText('saved-product')).not.toBeInTheDocument();
+    expect(screen.queryByText('accepted-product')).not.toBeInTheDocument();
+    expect(screen.queryByText('New merchandise')).not.toBeInTheDocument();
+  });
   it.each([
     {},
-    { warehouse: ["view_procurement"], procurement: ["view"] },
+    { warehouse: ["view_procurement"], procurement: ["view_dashboard"] },
     { warehouse: ["manage_replenishment"], procurement: ["recommend_replenishment"] },
   ] satisfies UserCapabilities[])("retains read-only rows and links but denies writes for %j", async userCapabilities => {
     session.userCapabilities = userCapabilities;
@@ -47,8 +54,14 @@ describe("Replenishment effective action authority", () => {
     render(ui());
     await screen.findByText("saved-product");
     expect(screen.getByText("New merchandise")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open Procurement request" })).toHaveAttribute("href", "/procurement/requests/request-1");
-    expect(screen.getByRole("link", { name: "Open purchase order" })).toHaveAttribute("href", "/procurement/purchase-orders/po-1");
+    if (userCapabilities.procurement?.includes('view_dashboard')) {
+      expect(screen.getByRole("link", { name: "Open Procurement request" })).toHaveAttribute("href", "/procurement/requests/request-1");
+      expect(screen.getByRole("link", { name: "Open purchase order" })).toHaveAttribute("href", "/procurement/purchase-orders/po-1");
+    } else {
+      expect(screen.queryByRole("link", { name: "Open Procurement request" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "Open purchase order" })).not.toBeInTheDocument();
+      expect(screen.getByText(/Procurement owns the linked request and order/i)).toBeInTheDocument();
+    }
     for (const button of controls()) { expect(button).toBeDisabled(); fireEvent.click(button); }
     expect(rpc).not.toHaveBeenCalled();
     expect(schema).toHaveBeenCalledWith("procurement");
@@ -99,6 +112,9 @@ describe("Replenishment effective action authority", () => {
     expect(screen.getByRole('button', { name: 'Accept' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Complete Procurement request' })).toBeDisabled();
     session = { ...session, userCapabilities: { procurement: ['manage_replenishment', 'create_request'] } };
+    rerender(ui());
+    expect(screen.queryByRole('link', { name: 'Complete Procurement request' })).not.toBeInTheDocument();
+    session = { ...session, userCapabilities: { procurement: ['view_dashboard', 'manage_replenishment', 'create_request'] } };
     rerender(ui());
     expect(screen.getByRole('link', { name: 'Complete Procurement request' })).toHaveAttribute('href', '/procurement/requests/new?replenishment=rec-2');
     expect(rpc).not.toHaveBeenCalled();

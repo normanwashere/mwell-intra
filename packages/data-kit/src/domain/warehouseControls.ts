@@ -179,6 +179,38 @@ export interface InspectQualityInput {
   evidenceUrls?: string[];
 }
 
+export type QualityBatchItem = Omit<InspectQualityInput, 'idempotencyKey' | 'disposition' | 'reason' | 'evidenceUrls'>;
+export interface InspectQualityBatchInput {
+  idempotencyKey: string;
+  items: QualityBatchItem[];
+  disposition: InspectQualityInput['disposition'];
+  reason?: string;
+  evidenceUrls: string[];
+}
+
+export function qualityBatchGroup(item: QualityBatchItem): string {
+  return JSON.stringify([item.sourceType, item.sourceId, item.productId,
+    item.procurementPoLineId || null, item.binId || null, item.lotId || null]);
+}
+
+export function validateQualityBatch(input: InspectQualityBatchInput): void {
+  if (!/^[A-Za-z0-9_-]{12,100}$/.test(input.idempotencyKey)) throw new Error('A valid batch retry key is required.');
+  if (!input.items.length || input.items.length > 50) throw new Error('Select between 1 and 50 inspections.');
+  if (!['accepted', 'damaged', 'hold', 'vendor_return', 'unavailable'].includes(input.disposition)) throw new Error('Choose an inspection result.');
+  if (!input.evidenceUrls.length || input.evidenceUrls.length > 20 || input.evidenceUrls.some(url => !url.trim())) throw new Error('Attach inspection evidence for this batch.');
+  if (input.disposition !== 'accepted' && !input.reason?.trim()) throw new Error('Add a reason for this inspection result.');
+  const group = qualityBatchGroup(input.items[0]!);
+  const seen = new Set<string>();
+  for (const item of input.items) {
+    if (qualityBatchGroup(item) !== group) throw new Error('Select items from the same source, product, PO line, bin and lot.');
+    if (!['receipt', 'return'].includes(item.sourceType) || !item.sourceId || !item.productId) throw new Error('The inspection source is missing. Refresh the queue.');
+    const serial = item.serialNumber?.trim().toUpperCase() || '';
+    if (!Number.isSafeInteger(item.quantity) || item.quantity <= 0 || (serial && item.quantity !== 1)) throw new Error('Each serial must have a quantity of one. Bulk quantities must be positive whole numbers.');
+    if (seen.has(serial)) throw new Error('The same inspection was selected more than once.');
+    seen.add(serial);
+  }
+}
+
 export interface ReleaseHoldInput {
   idempotencyKey: string;
   holdId: string;

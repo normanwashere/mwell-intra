@@ -17,6 +17,29 @@ describe('complete control queues', () => {
 });
 
 describe('inspection line identity', () => {
+  it('retains known receipt lot and pending serial custody in legacy projections', async () => {
+    const data = await makeRepo().getData();
+    data.returns = [];
+    data.lots = [{ id:'lot-A',productId:'shirt-l',lotCode:'LOT-A',unitCost:1,receivedAt:'2026-09-20' }];
+    data.units = [{id:'unit-S1',serialNumber:'S1',productId:'shirt-l',locationId:'main',binId:'bin-A',lotId:'lot-A',status:'pending_inspection'}];
+    data.receipts = [{id:'receipt',locationId:'main',actor:'receiver',createdAt:'2026-09-20',lines:[
+      {productId:'shirt-l',quantity:1,serialNumbers:['S1'],procurementLineId:'P1'},
+      {productId:'shirt-l',quantity:3,lotCode:'LOT-A',binId:'bin-A',procurementLineId:'P2'},
+    ]}];
+    expect(pendingQualityWork(data,[])).toMatchObject([
+      {serialNumber:'S1',lotId:'lot-A',binId:'bin-A',procurementPoLineId:'P1'},
+      {lotId:'lot-A',binId:'bin-A',procurementPoLineId:'P2'},
+    ]);
+    expect(pendingQualityWork(data,[{...inspection({quantity:3,procurementPoLineId:'P2',binId:'bin-A'}),lotId:'lot-B'}])).toHaveLength(2);
+  });
+  it('preserves provisional lot identity and rejects conflicting duplicate lot rows', async () => {
+    const data = await makeRepo().getData();
+    data.receipts = []; data.returns = [];
+    const row = { id: 'lot-inspection', sourceType: 'receipt' as const, sourceId: 'receipt', productId: 'shirt-l',
+      quantity: 3, lotId: 'lot-A', disposition: 'pending' as const, inspectedAt: '2026-09-20', inspectedBy: 'receiver', evidenceUrls: [] };
+    expect(pendingQualityWork(data, [row])).toMatchObject([{ lotId: 'lot-A' }]);
+    expect(() => pendingQualityWork(data, [row, { ...row, lotId: 'lot-B' }])).toThrow(/Conflicting/);
+  });
   const inspection = (overrides: Partial<QualityInspection> = {}): QualityInspection => ({
     id: 'inspection', sourceType: 'receipt', sourceId: 'receipt', productId: 'shirt-l', quantity: 5,
     disposition: 'accepted', inspectedAt: '2026-09-01T00:00:00Z', evidenceUrls: [], inspectedBy: 'other', ...overrides,

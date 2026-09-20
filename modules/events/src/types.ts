@@ -42,8 +42,9 @@ export interface EventFulfillmentRequest {
   costCenter: string;
   requiredDate: string;
   expenseTreatment: "expense" | "custody" | "sale";
-  productId: string;
-  quantity: number;
+  lines?: Array<{ productId: string; quantity: number }>;
+  productId?: string;
+  quantity?: number;
   idempotencyKey: string;
 }
 

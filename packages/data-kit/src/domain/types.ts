@@ -105,6 +105,7 @@ export type UnitStatus =
   | "allocated"
   | "issued"
   | "pending_inspection"
+  | "conversion_pending"
   | "returned"
   | "vendor_return"
   | "lost";
@@ -148,7 +149,12 @@ export type MovementType =
   | "fulfillment_release"
   | "packaging_consumption"
   | "department_issue"
-  | "re_kit";
+  | "re_kit"
+  | "stock_conversion_out"
+  | "stock_conversion_in"
+  | "stock_conversion_packaging_consumed"
+  | "stock_conversion_packaging_recovered"
+  | "stock_conversion_packaging_discarded";
 
 /** Immutable ledger entry — the audit trail backbone. */
 export interface Movement {

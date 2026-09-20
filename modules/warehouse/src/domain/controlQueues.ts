@@ -23,6 +23,7 @@ export interface PendingInspection {
   productId: string;
   quantity: number;
   binId?: string;
+  lotId?: string;
   recordedAt: string;
   procurementPoLineId?: string;
   serialNumber?: string;
@@ -34,7 +35,7 @@ export function pendingQualityWork(data: WarehouseData, inspections: QualityInsp
   const unique = new Map<string, QualityInspection>();
   const identity = (i: QualityInspection) => JSON.stringify([
     i.sourceType, i.sourceId, i.productId, i.quantity, i.disposition,
-    i.procurementPoLineId ?? null, i.serialNumber ?? null, i.binId ?? null, i.inspectedAt,
+    i.procurementPoLineId ?? null, i.serialNumber ?? null, i.binId ?? null, i.lotId ?? null, i.inspectedAt,
   ]);
   for (const inspection of inspections) {
     const previous = unique.get(inspection.id);
@@ -48,7 +49,7 @@ export function pendingQualityWork(data: WarehouseData, inspections: QualityInsp
     || a.id.localeCompare(b.id));
   const pending: PendingInspection[] = ordered.filter(i => i.disposition === 'pending').map(i => ({
     id: i.id, sourceType: i.sourceType, sourceId: i.sourceId, productId: i.productId,
-    quantity: i.quantity, binId: i.binId, serialNumber: i.serialNumber,
+    quantity: i.quantity, binId: i.binId, lotId: i.lotId, serialNumber: i.serialNumber,
     procurementPoLineId: i.procurementPoLineId, recordedAt: i.inspectedAt,
   }));
   // Legacy receipts do not all have a line ID. Consume each inspection quantity
@@ -65,10 +66,18 @@ export function pendingQualityWork(data: WarehouseData, inspections: QualityInsp
     return outstanding;
   };
   for (const receipt of data.receipts) {
-    const slots = receipt.lines.flatMap<{ line: typeof receipt.lines[number]; index: number; serialNumber: string | undefined; quantity: number }>((line, index) => {
+    const slots = receipt.lines.flatMap<{ line: typeof receipt.lines[number]; index: number; serialNumber: string | undefined; quantity: number; lotId?: string; binId?: string }>((line, index) => {
       const serials = [...new Set(line.serialNumbers ?? [])].sort();
-      return serials.length && serials.length === line.quantity ? serials.map(serialNumber => ({ line, index, serialNumber, quantity: 1 }))
-        : [{ line, index, serialNumber: undefined, quantity: line.quantity }];
+      const lots = line.lotCode ? data.lots.filter(lot => lot.productId === line.productId && lot.lotCode === line.lotCode) : [];
+      if (lots.length > 1) throw new Error('This receipt matches more than one lot. Ask Warehouse to confirm its lot before inspecting.');
+      const lotId = lots[0]?.id;
+      return serials.length && serials.length === line.quantity ? serials.map(serialNumber => {
+        const unit = data.units.find(candidate => candidate.productId === line.productId
+          && candidate.serialNumber.trim().toUpperCase() === serialNumber.trim().toUpperCase()
+          && candidate.locationId === receipt.locationId && candidate.status === 'pending_inspection'
+          && (!line.binId || candidate.binId === line.binId));
+        return { line, index, serialNumber, quantity:1, lotId:lotId ?? unit?.lotId, binId:line.binId ?? unit?.binId };
+      }) : [{ line, index, serialNumber:undefined, quantity:line.quantity, lotId, binId:line.binId }];
     });
     // Exact identifiers get first claim on custody. Legacy rows can consume
     // repeated equivalent lines, but never choose among distinct identities.
@@ -77,10 +86,11 @@ export function pendingQualityWork(data: WarehouseData, inspections: QualityInsp
         && slot.line.productId === inspection.productId
         && (!inspection.procurementPoLineId || slot.line.procurementLineId === inspection.procurementPoLineId)
         && (!inspection.serialNumber || slot.serialNumber?.trim().toUpperCase() === inspection.serialNumber.trim().toUpperCase())
+        && (!inspection.lotId || !slot.lotId || inspection.lotId === slot.lotId)
         && (!inspection.binId || slot.line.binId === inspection.binId
           || (!slot.line.binId && Boolean(inspection.procurementPoLineId || inspection.serialNumber))));
       const identities = new Set(candidates.map(slot => JSON.stringify([
-        slot.line.procurementLineId ?? null, slot.line.binId ?? null, slot.serialNumber ?? null,
+        slot.line.procurementLineId ?? null, slot.line.binId ?? null, slot.serialNumber ?? null, slot.lotId ?? null,
       ])));
       if (identities.size !== 1) continue;
       for (const slot of candidates) {
@@ -92,16 +102,20 @@ export function pendingQualityWork(data: WarehouseData, inspections: QualityInsp
     for (const slot of slots) if (slot.quantity > 0) pending.push({
       id: `${receipt.id}-${slot.line.productId}-${slot.index}${slot.serialNumber ? `-${slot.serialNumber}` : ''}`,
       sourceType: 'receipt', sourceId: receipt.id, productId: slot.line.productId, quantity: slot.quantity,
-      binId: slot.line.binId, serialNumber: slot.serialNumber,
+      binId: slot.binId, lotId: slot.lotId, serialNumber: slot.serialNumber,
       procurementPoLineId: slot.line.procurementLineId, recordedAt: receipt.createdAt,
     });
   }
   for (const returned of data.returns) returned.lines.forEach((line, index) => {
+    const unit = line.serialNumber ? data.units.find(candidate => candidate.productId === line.productId
+      && candidate.serialNumber.trim().toUpperCase() === line.serialNumber!.trim().toUpperCase()
+      && candidate.status === 'pending_inspection' && candidate.locationId === line.locationId
+      && (!line.binId || candidate.binId === line.binId)) : undefined;
     const quantity = consume(line.quantity, i => i.sourceType === 'return' && i.sourceId === returned.id
       && i.productId === line.productId && (i.binId ?? null) === (line.binId ?? null)
       && (i.serialNumber ?? null) === (line.serialNumber ?? null));
     if (quantity > 0) pending.push({ id: `${returned.id}-${line.productId}-${index}`, sourceType: 'return',
-      sourceId: returned.id, productId: line.productId, quantity, binId: line.binId,
+      sourceId: returned.id, productId: line.productId, quantity, binId: line.binId ?? unit?.binId, lotId: unit?.lotId,
       serialNumber: line.serialNumber, recordedAt: returned.createdAt });
   });
   return pending.sort((a, b) => a.recordedAt.localeCompare(b.recordedAt) || a.id.localeCompare(b.id));

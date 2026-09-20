@@ -27,5 +27,6 @@ it('keeps an unavailable request deep link in place and gives the user a recover
   expect(source).not.toContain('if (!req) return <Navigate to="/" replace />');
   expect(source).toContain('title="Request not available"');
   expect(source).toContain('The request may not exist, or your account may not be authorized to view it.');
-  expect(source).toContain('to="/requests"');
+  expect(source).toContain('href={returnPath}');
+  expect(source).toContain('requestReturnPath(searchParams.toString())');
 });

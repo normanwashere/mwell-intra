@@ -12,6 +12,15 @@ import {
 } from "./roles";
 
 describe("knowledge role authority registry", () => {
+  it("explains the named event seller's limited scope and required challenge", () => {
+    expect(knowledgeRoleIdsForAssignments({ events: ["seller"] })).toEqual(["events_seller"]);
+    const guide = knowledgeRoleForRbac("events", "seller")!;
+    expect(guide.label).toBe("Event seller");
+    expect(new Set(guide.authority.capabilities)).toEqual(new Set(["view_event_custody", "record_event_outcome"]));
+    expect(JSON.stringify(guide)).toMatch(/named.*event.*assignment/i);
+    expect(JSON.stringify(guide)).toContain("event-seller-custody-v1");
+    expect(JSON.stringify(guide)).toMatch(/candidate.*pending deployment/i);
+  });
   it("maps scoped RBAC assignments to explicit handbook role IDs", () => {
     expect(
       knowledgeRoleIdsForAssignments({

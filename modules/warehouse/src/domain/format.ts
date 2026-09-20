@@ -24,6 +24,11 @@ export const MOVEMENT_TYPE_LABELS: Record<MovementType, string> = {
   packaging_consumption: "Packaging consumption",
   department_issue: "Department issue",
   re_kit: "Re-kit",
+  stock_conversion_out: "Conversion source",
+  stock_conversion_in: "Conversion output",
+  stock_conversion_packaging_consumed: "Conversion packaging consumed",
+  stock_conversion_packaging_recovered: "Conversion packaging recovered",
+  stock_conversion_packaging_discarded: "Conversion packaging discarded",
 };
 
 /** Human label for a movement type (never a raw slug). */
@@ -39,9 +44,11 @@ const OUTBOUND: ReadonlySet<MovementType> = new Set([
   "fulfillment_release",
   "packaging_consumption",
   "department_issue",
+  "stock_conversion_out",
+  "stock_conversion_packaging_consumed",
 ]);
 /** Inbound movement types — stock coming back / arriving. */
-const INBOUND: ReadonlySet<MovementType> = new Set(["receipt", "return"]);
+const INBOUND: ReadonlySet<MovementType> = new Set(["receipt", "return", "stock_conversion_in", "stock_conversion_packaging_recovered"]);
 
 /**
  * Direction-signed quantity for a movement. Issues are outbound and render
@@ -53,7 +60,7 @@ export function signedQuantity(type: MovementType, quantity: number): string {
   const abs = Math.abs(quantity);
   if (OUTBOUND.has(type)) return `\u2212${abs}`;
   if (INBOUND.has(type)) return `+${abs}`;
-  if (type === "transfer") return `${abs}`;
+  if (type === "transfer" || type === "stock_conversion_packaging_discarded") return `${abs}`;
   // adjustment / cycle_count: the stored quantity is a delta and keeps its sign.
   if (quantity < 0) return `\u2212${abs}`;
   if (quantity > 0) return `+${abs}`;

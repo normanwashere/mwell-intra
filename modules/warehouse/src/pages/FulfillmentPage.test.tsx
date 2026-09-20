@@ -86,8 +86,14 @@ describe("FulfillmentPage", () => {
     const list = await screen.findByRole('list', { name: 'Customer return cases' });
     if (allowed) expect(within(list).getByRole('link', { name: 'Receive physical return' })).toHaveAttribute('href', '/returns?sourceOrderId=source-order&returnCaseId=customer-case');
     else expect(within(list).queryByRole('link', { name: 'Receive physical return' })).not.toBeInTheDocument();
-    expect(within(list).getByRole('link', { name: 'physical-return' })).toHaveAttribute('href', '/returns#return-physical-return');
-    expect(within(list).getByRole('link', { name: 'physical-return' })).toHaveClass('block', 'min-h-11', 'min-w-11', 'max-w-full');
+    if (role === 'finance') {
+      expect(within(list).queryByRole('link', { name: 'physical-return' })).not.toBeInTheDocument();
+      expect(within(list).getByText('physical-return')).toBeInTheDocument();
+      expect(list).toHaveTextContent('Warehouse returns team');
+    } else {
+      expect(within(list).getByRole('link', { name: 'physical-return' })).toHaveAttribute('href', '/returns#return-physical-return');
+      expect(within(list).getByRole('link', { name: 'physical-return' })).toHaveClass('block', 'min-h-11', 'min-w-11', 'max-w-full');
+    }
   });
 
   it('shows original-order physical return action and linked history without requiring completion', async () => {
@@ -567,13 +573,13 @@ describe("FulfillmentPage", () => {
     expect(screen.getAllByText("Picking").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Packing").length).toBeGreaterThan(0);
     const order = await screen.findByRole("listitem", { name: /SHOP-2201/i });
-    expect(within(order).getByText("Received")).toBeInTheDocument();
+    expect(within(order).getByText("Awaiting allocation")).toBeInTheDocument();
     await user.click(
       within(order).getByRole("button", { name: "Allocate stock" }),
     );
 
     await waitFor(() => {
-      expect(within(order).getByText("Allocated")).toBeInTheDocument();
+      expect(within(order).getByText("Awaiting picking")).toBeInTheDocument();
     });
     expect(
       within(order).getByRole("button", { name: "Start picking" }),

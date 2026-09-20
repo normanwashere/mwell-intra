@@ -1,3 +1,4 @@
+import type { StockConversionCommand, StockConversionResult, StockConversionWorkspace } from "./domain/stockConversion";
 import type {
   Allocation,
   CycleCount,
@@ -14,6 +15,7 @@ import type {
   WarehouseEvent,
 } from "./domain/types";
 import { ReturnRejectedError } from "./returnOutcome";
+import { InspectionRejectedError } from "./inspectionOutcome";
 import { validateActualDeliveryDate } from "./domain/deliveryDate";
 import {
   uncommittedAvailable,
@@ -82,6 +84,10 @@ import {
   type DecideStockChangeInput,
   type CreateVendorReturnInput,
   type InspectQualityInput,
+  type InspectQualityBatchInput,
+  type QualityBatchItem,
+  qualityBatchGroup,
+  validateQualityBatch,
   type InventoryHold,
   type InventoryPosition,
   type OperationRoute,
@@ -129,6 +135,13 @@ export interface InMemoryOptions {
   storage?: Pick<Storage, "getItem" | "setItem"> | null;
   now?: () => string;
   id?: (prefix: string) => string;
+}
+
+interface PersistedQualityState {
+  inspections: QualityInspection[];
+  holds: InventoryHold[];
+  exceptions: WarehouseException[];
+  commandResponses: [string, { payload: string; response: unknown }][];
 }
 
 export class InMemoryRepository implements WarehouseControlRepository {
@@ -180,8 +193,10 @@ export class InMemoryRepository implements WarehouseControlRepository {
     const {
       reservationCommandResponses: savedReservations = [],
       returnCommandResponses: savedReturns = [],
+      qualityControlState: savedQuality,
       ...source
     } = (persisted ?? clone(initial ?? buildSeed())) as WarehouseData & {
+      qualityControlState?: PersistedQualityState;
       reservationCommandResponses?: [
         string,
         { payload: string; response: ReserveBatchResult },
@@ -191,7 +206,10 @@ export class InMemoryRepository implements WarehouseControlRepository {
         { payload: string; response: ReturnRecord },
       ][];
     };
-    for (const [key, response] of [...savedReservations, ...savedReturns])
+    this.qualityInspections = savedQuality?.inspections ?? [];
+    this.holds = savedQuality?.holds ?? [];
+    this.exceptions = savedQuality?.exceptions ?? [];
+    for (const [key, response] of [...savedReservations, ...savedReturns, ...(savedQuality?.commandResponses ?? [])])
       this.commandResponses.set(key, response);
     this.data = {
       ...source,
@@ -234,6 +252,13 @@ export class InMemoryRepository implements WarehouseControlRepository {
           returnCommandResponses: [...this.commandResponses].filter(([key]) =>
             key.startsWith("record_return:"),
           ),
+          qualityControlState: {
+            inspections: this.qualityInspections,
+            holds: this.holds,
+            exceptions: this.exceptions,
+            commandResponses: [...this.commandResponses].filter(([key]) =>
+              key.startsWith("inspect_quality:") || key.startsWith("inspect_quality_batch:")),
+          } satisfies PersistedQualityState,
         }),
       );
     } catch (err) {
@@ -1722,7 +1747,7 @@ export class InMemoryRepository implements WarehouseControlRepository {
       .filter(matches)
       .reduce((sum, line) => sum + line.quantity, 0);
     if (available < input.quantity) {
-      throw new Error("Pending return line is not available for inspection.");
+      throw new InspectionRejectedError("Pending return line is not available for inspection.", "INSPECTION_VALIDATION_FAILED");
     }
 
     let remaining = input.quantity;
@@ -1810,6 +1835,116 @@ export class InMemoryRepository implements WarehouseControlRepository {
   }
 
   async inspectQuality(input: InspectQualityInput): Promise<QualityInspection> {
+    this.validateInspectionRetry('inspect_quality', input);
+    return this.qualityTransaction(() => this.inspectQualityCommand(input));
+  }
+
+  async inspectQualityBatch(input: InspectQualityBatchInput): Promise<QualityInspection[]> {
+    try { validateQualityBatch(input); } catch (error) {
+      throw new InspectionRejectedError(error instanceof Error ? error.message : 'Invalid inspection batch.', 'INSPECTION_INPUT_INVALID', 'not-sent');
+    }
+    this.validateInspectionRetry('inspect_quality_batch', input);
+    return this.qualityTransaction(() => this.idempotent('inspect_quality_batch', input.idempotencyKey, input, () =>
+      input.items.map((item, index) => {
+        const custody = this.qualityBatchCustody(item);
+        return this.inspectQualityCommand({ ...custody.item,
+          idempotencyKey: `qb-${input.idempotencyKey}-${index}`, disposition: input.disposition,
+          reason: input.reason, evidenceUrls: input.evidenceUrls }, custody);
+      })));
+  }
+
+  private validateInspectionRetry(command: string, input: InspectQualityInput | InspectQualityBatchInput): void {
+    if (!/^[A-Za-z0-9_-]{12,128}$/.test(input.idempotencyKey)) {
+      throw new InspectionRejectedError('A valid idempotency key is required.', 'INSPECTION_INPUT_INVALID', 'not-sent');
+    }
+    const previous = this.commandResponses.get(`${command}:${input.idempotencyKey}`);
+    if (previous && previous.payload !== JSON.stringify(input)) {
+      throw new InspectionRejectedError('Idempotency key was reused with a different payload.', 'INSPECTION_INPUT_INVALID', 'not-sent');
+    }
+  }
+
+  private qualityTransaction<T>(execute: () => T): T {
+    const before = { data: clone(this.data), inspections: clone(this.qualityInspections),
+      holds: clone(this.holds), exceptions: clone(this.exceptions), commands: new Map(this.commandResponses) };
+    const storage = this.storage;
+    this.storage = null;
+    try {
+      const results = execute();
+      // Persist stock, quality evidence and both child and root retry receipts together.
+      this.storage = storage;
+      this.persist(true);
+      return results;
+    } catch (error) {
+      this.data = before.data;
+      this.qualityInspections = before.inspections;
+      this.holds = before.holds;
+      this.exceptions = before.exceptions;
+      this.commandResponses = before.commands;
+      throw error;
+    } finally {
+      this.storage = storage;
+    }
+  }
+
+  private qualityBatchCustody(item: QualityBatchItem): { item: QualityBatchItem; locationId: string; stock?: StockLevel } {
+    const fail = (): never => { throw new InspectionRejectedError("Inspection custody no longer matches the source line, bin, lot and serial. Refresh the queue.", "INSPECTION_VALIDATION_FAILED"); };
+    const same = (left?: string, right?: string) => (left || undefined) === (right || undefined);
+    const product = this.data.products.find(row => row.id === item.productId);
+    if (!product) return fail();
+    if (item.lotId) {
+      const lots = this.data.lots.filter(row => row.id === item.lotId);
+      if (lots.length !== 1 || lots[0]!.productId !== item.productId) return fail();
+    }
+    const serial = item.serialNumber ? normalizeSerialIdentity(item.serialNumber) : undefined;
+    if (product.serialized ? !serial : Boolean(serial)) return fail();
+    const receipt = item.sourceType === 'receipt' ? this.data.receipts.find(row => row.id === item.sourceId) : undefined;
+    const returned = item.sourceType === 'return' ? this.data.returns.find(row => row.id === item.sourceId) : undefined;
+    if (!receipt && !returned) return fail();
+    if (receipt?.procurementPoId && !item.procurementPoLineId) return fail();
+    const receiptLines = receipt?.lines.filter(line => line.productId === item.productId
+      && same(line.procurementLineId, item.procurementPoLineId) && same(line.binId, item.binId)
+      && (!serial || line.serialNumbers?.some(value => normalizeSerialIdentity(value) === serial))) ?? [];
+    const returnLines = returned?.lines.filter(line => line.productId === item.productId
+      && !item.procurementPoLineId && same(line.binId, item.binId) && line.disposition === 'quarantine'
+      && same(line.serialNumber ? normalizeSerialIdentity(line.serialNumber) : undefined, serial)) ?? [];
+    if (receipt ? receiptLines.length !== 1 : returnLines.length !== 1) return fail();
+    const receiptLine = receiptLines[0];
+    const returnLine = returnLines[0];
+    const locationId = receipt?.locationId ?? returnLine?.locationId;
+    if (!locationId) return fail();
+    if (serial && receiptLine) {
+      const sourceSerials = receiptLine.serialNumbers?.map(normalizeSerialIdentity) ?? [];
+      if (sourceSerials.length !== receiptLine.quantity || new Set(sourceSerials).size !== sourceSerials.length) return fail();
+    }
+    const inspected = this.qualityInspections.filter(row => row.disposition !== 'pending'
+      && qualityBatchGroup(row) === qualityBatchGroup(item)
+      && (!serial || normalizeSerialIdentity(row.serialNumber ?? '') === serial))
+      .reduce((sum, row) => sum + row.quantity, 0);
+    // Return lines are reduced/split by disposition; receipts retain their original quantity.
+    const available = receiptLine ? (serial ? 1 : receiptLine.quantity) - inspected : returnLine!.quantity;
+    if (item.quantity > available) return fail();
+    if (serial) {
+      const units = this.data.units.filter(unit => unit.productId === item.productId && normalizeSerialIdentity(unit.serialNumber) === serial);
+      const unit = units[0];
+      if (units.length !== 1 || !unit || unit.status !== 'pending_inspection' || unit.locationId !== locationId
+        || !same(unit.binId, item.binId) || !same(unit.lotId, item.lotId)) return fail();
+      if (receiptLine?.lotCode && !this.data.lots.some(lot => lot.id === unit.lotId && lot.productId === item.productId && lot.lotCode === receiptLine.lotCode)) return fail();
+      return { item: { ...item, serialNumber: unit.serialNumber }, locationId };
+    }
+    const sourceLots = receiptLine?.lotCode
+      ? this.data.lots.filter(lot => lot.productId === item.productId && lot.lotCode === receiptLine.lotCode).map(lot => lot.id)
+      : this.data.movements.filter(movement => movement.reference === item.sourceId && movement.type === item.sourceType
+        && movement.productId === item.productId && movement.toLocationId === locationId && same(movement.toBinId, item.binId)).map(movement => movement.lotId);
+    const lots = new Set(sourceLots);
+    if (lots.size > 1 || (sourceLots.length ? !same(sourceLots[0], item.lotId) : Boolean(item.lotId) || Boolean(receiptLine?.lotCode))) return fail();
+    const stocks = this.data.stockLevels.filter(row => row.productId === item.productId && row.locationId === locationId
+      && same(row.binId, item.binId) && same(row.lotId, item.lotId));
+    const stock = stocks[0];
+    if (stocks.length !== 1 || !stock || stock.quantity < item.quantity || (stock.unavailable ?? 0) < item.quantity) return fail();
+    return { item, locationId, stock };
+  }
+
+  private inspectQualityCommand(input: InspectQualityInput, custody?: { locationId: string; stock?: StockLevel }): QualityInspection {
     return this.idempotent(
       "inspect_quality",
       input.idempotencyKey,
@@ -1823,18 +1958,18 @@ export class InMemoryRepository implements WarehouseControlRepository {
           input.sourceType === "return"
             ? this.data.returns.find((row) => row.id === input.sourceId)
             : undefined;
-        if (!receipt && !returned) throw new Error("Quality source not found.");
+        if (!receipt && !returned) throw new InspectionRejectedError("Quality source not found.", "INSPECTION_VALIDATION_FAILED");
         if (input.procurementPoLineId) {
           const exactLines = receipt?.lines.filter(line =>
             line.productId === input.productId && line.procurementLineId === input.procurementPoLineId,
           ) ?? [];
-          if (!exactLines.length) throw new Error("Inspection procurement line does not belong to the receipt product.");
+          if (!exactLines.length) throw new InspectionRejectedError("Inspection procurement line does not belong to the receipt product.", "INSPECTION_VALIDATION_FAILED");
           const inspectedLineQuantity = this.qualityInspections.filter(inspection =>
             inspection.sourceType === "receipt" && inspection.sourceId === input.sourceId
             && inspection.productId === input.productId && inspection.procurementPoLineId === input.procurementPoLineId,
           ).reduce((sum, inspection) => sum + inspection.quantity, 0);
           if (input.quantity > exactLines.reduce((sum, line) => sum + line.quantity, 0) - inspectedLineQuantity) {
-            throw new Error("Inspection quantity exceeds the procurement line quantity.");
+            throw new InspectionRejectedError("Inspection quantity exceeds the procurement line quantity.", "INSPECTION_VALIDATION_FAILED");
           }
         }
         const lines = receipt?.lines ?? returned?.lines ?? [];
@@ -1853,17 +1988,18 @@ export class InMemoryRepository implements WarehouseControlRepository {
           input.quantity <= 0 ||
           input.quantity > sourceQuantity - alreadyInspected
         ) {
-          throw new Error("Inspection quantity exceeds the source quantity.");
+          throw new InspectionRejectedError("Inspection quantity exceeds the source quantity.", "INSPECTION_VALIDATION_FAILED");
         }
         if (input.disposition !== "accepted" && !input.reason?.trim()) {
-          throw new Error("A reason is required for non-accepted stock.");
+          throw new InspectionRejectedError("A reason is required for non-accepted stock.", "INSPECTION_VALIDATION_FAILED");
         }
         const locationId =
+          custody?.locationId ??
           receipt?.locationId ??
           returned?.lines.find((line) => line.productId === input.productId)
             ?.locationId;
         if (!locationId)
-          throw new Error("Inspection location cannot be resolved.");
+          throw new InspectionRejectedError("Inspection location cannot be resolved.", "INSPECTION_VALIDATION_FAILED");
         const inspection: QualityInspection = {
           id: this.newId("qi"),
           sourceType: input.sourceType,
@@ -1883,7 +2019,7 @@ export class InMemoryRepository implements WarehouseControlRepository {
         const product = this.data.products.find(
           (row) => row.id === input.productId,
         );
-        if (!product) throw new Error("Inspection product not found.");
+        if (!product) throw new InspectionRejectedError("Inspection product not found.", "INSPECTION_VALIDATION_FAILED");
         const sourceBinId =
           input.binId ??
           receipt?.lines.find((line) => line.productId === input.productId)
@@ -1905,22 +2041,20 @@ export class InMemoryRepository implements WarehouseControlRepository {
                 (sourceBinId === undefined || unit.binId === sourceBinId),
             );
             if (candidates.length < input.quantity) {
-              throw new Error(
-                "Pending serialized stock is not available for inspection.",
-              );
+              throw new InspectionRejectedError("Pending serialized stock is not available for inspection.", "INSPECTION_VALIDATION_FAILED");
             }
             for (const unit of candidates.slice(0, input.quantity)) {
               unit.status = "in_stock";
             }
           } else {
-            const level = this.stockRow(
+            const level = custody?.stock ?? this.stockRow(
               input.productId,
               locationId,
               sourceBinId,
               false,
             );
             if (!level || (level.unavailable ?? 0) < input.quantity) {
-              throw new Error("Pending stock is not available for inspection.");
+              throw new InspectionRejectedError("Pending stock is not available for inspection.", "INSPECTION_VALIDATION_FAILED");
             }
             level.unavailable = (level.unavailable ?? 0) - input.quantity;
           }
@@ -1932,15 +2066,13 @@ export class InMemoryRepository implements WarehouseControlRepository {
               sourceBinId,
             );
             if (candidates.length < input.quantity) {
-              throw new Error(
-                "Pending serialized stock is not available for inspection.",
-              );
+              throw new InspectionRejectedError("Pending serialized stock is not available for inspection.", "INSPECTION_VALIDATION_FAILED");
             }
             for (const unit of candidates.slice(0, input.quantity)) {
               unit.status = "lost";
             }
           } else {
-            const level = this.stockRow(
+            const level = custody?.stock ?? this.stockRow(
               input.productId,
               locationId,
               sourceBinId,
@@ -1951,7 +2083,7 @@ export class InMemoryRepository implements WarehouseControlRepository {
               level.quantity < input.quantity ||
               (level.unavailable ?? 0) < input.quantity
             ) {
-              throw new Error("Pending stock is not available for inspection.");
+              throw new InspectionRejectedError("Pending stock is not available for inspection.", "INSPECTION_VALIDATION_FAILED");
             }
             level.quantity -= input.quantity;
             level.unavailable = (level.unavailable ?? 0) - input.quantity;
@@ -1964,22 +2096,20 @@ export class InMemoryRepository implements WarehouseControlRepository {
               sourceBinId,
             );
             if (candidates.length < input.quantity) {
-              throw new Error(
-                "Pending serialized stock is not available for inspection.",
-              );
+              throw new InspectionRejectedError("Pending serialized stock is not available for inspection.", "INSPECTION_VALIDATION_FAILED");
             }
             for (const unit of candidates.slice(0, input.quantity)) {
               unit.status = "returned";
             }
           } else {
-            const level = this.stockRow(
+            const level = custody?.stock ?? this.stockRow(
               input.productId,
               locationId,
               sourceBinId,
               false,
             );
             if (!level || level.quantity < input.quantity) {
-              throw new Error("Pending stock is not available for inspection.");
+              throw new InspectionRejectedError("Pending stock is not available for inspection.", "INSPECTION_VALIDATION_FAILED");
             }
           }
         }
@@ -3778,6 +3908,14 @@ export class InMemoryRepository implements WarehouseControlRepository {
     this.data.kitDefinitions.push(created);
     this.persist();
     return clone(created);
+  }
+
+  async loadStockConversionWorkspace(): Promise<StockConversionWorkspace> {
+    throw new Error("Stock conversion requires the governed live service; it is unavailable in demo mode.");
+  }
+
+  async executeStockConversion(_input: StockConversionCommand): Promise<StockConversionResult> {
+    throw new Error("Stock conversion requires the governed live service; no demo stock was changed.");
   }
 
   async createReKitWorkOrder(

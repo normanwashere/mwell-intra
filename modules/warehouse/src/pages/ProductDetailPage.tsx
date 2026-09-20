@@ -42,6 +42,7 @@ const UNIT_TONE: Record<UnitStatus, Tone> = {
   allocated: 'amber',
   issued: 'brand',
   pending_inspection: 'amber',
+  conversion_pending: 'amber',
   returned: 'slate',
   vendor_return: 'rose',
   lost: 'rose',

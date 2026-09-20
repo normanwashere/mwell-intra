@@ -9,6 +9,7 @@ export { PENDING_ROLE_TRAINING_COVERAGE } from "./reviewedV1Training";
 import { OPERATING_PERSONA_IDS } from "./personas";
 import { SCOPED_READINESS_CANDIDATES } from "./scopedReadinessCandidates";
 import { OPS_CUSTODY_CANDIDATES } from "./opsCustodyCandidates";
+import { EVENT_SELLER_CURRICULUM, EVENT_SELLER_REQUIREMENT, EVENT_SELLER_SIMULATION } from "./eventSellerTraining";
 import type {
   CurriculumDefinition,
   LearningCapability,
@@ -55,6 +56,7 @@ export const ROLE_PERSONAS: Readonly<Record<string, string>> = {
   "legal:compliance": "legal_compliance_lead",
   "legal:admin": "legal_compliance_lead",
   "events:requester": "general_employee",
+  "events:seller": "general_employee",
   "events:coordinator": "marketing_events_lead",
   "events:viewer": "leadership_insights",
   "events:finance_reviewer": "finance_controller",
@@ -831,6 +833,7 @@ const unassignedCapabilityRequirements =
   });
 
 const requirements: readonly RequirementDefinition[] = [
+  EVENT_SELLER_REQUIREMENT,
   ...baselineRequirements,
   ...vendorJourneyRequirements,
   ...warehouseReceivingRequirements,
@@ -872,7 +875,7 @@ const curricula: readonly CurriculumDefinition[] = OPERATING_PERSONA_IDS.map(
 );
 
 export const ROLE_CURRICULA: readonly RoleCurriculumDefinition[] =
-  roleDefinitions
+  [EVENT_SELLER_CURRICULUM, ...roleDefinitions
     .filter(
       (roleDefinition) =>
         !CONTEXT_ONLY_ROLES.has(
@@ -916,7 +919,7 @@ export const ROLE_CURRICULA: readonly RoleCurriculumDefinition[] =
             : []),
         ],
       };
-    });
+    })];
 
 export const CAPABILITY_COVERAGE_CURRICULA: readonly CurriculumDefinition[] =
   unassignedCapabilityRequirements.map((requirement) => ({
@@ -972,6 +975,7 @@ const rolePractices = OPERATING_PERSONA_IDS.map((personaId) => {
 });
 
 const simulations: readonly SimulationDefinition[] = [
+  EVENT_SELLER_SIMULATION,
   ...SCOPED_READINESS_CANDIDATES,
   ...OPS_CUSTODY_CANDIDATES,
   ...orientationSimulations,
@@ -1016,6 +1020,14 @@ export function simulationForRequirement(
   requirement: RequirementDefinition,
 ): SimulationDefinition | undefined {
   if (!requirement.simulationId) return undefined;
+  if (requirement.simulationId === EVENT_SELLER_SIMULATION.id && (
+    requirement.id !== EVENT_SELLER_REQUIREMENT.id ||
+    requirement.version !== EVENT_SELLER_REQUIREMENT.version ||
+    requirement.audience !== EVENT_SELLER_REQUIREMENT.audience ||
+    requirement.kind !== EVENT_SELLER_REQUIREMENT.kind ||
+    requirement.capabilityOutcomes.length !== 1 ||
+    !requirement.capabilityOutcomes.some(outcome => outcome.module === "events" && outcome.capability === "record_event_outcome")
+  )) return undefined;
   const scoped = [...SCOPED_READINESS_CANDIDATES, ...OPS_CUSTODY_CANDIDATES].find((item) => item.id === requirement.simulationId);
   if (scoped && (requirement.audience !== scoped.audience || requirement.kind !== "scenario")) return undefined;
   if (

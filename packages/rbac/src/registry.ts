@@ -165,6 +165,8 @@ export const CAPABILITY_CLASSIFICATIONS: readonly CapabilityClassification[] = [
   mutationCapability('legal', 'manage_doa'),
   mutationCapability('legal', 'admin'),
   readCapability('events', 'view_events'),
+  readCapability('events', 'view_event_custody'),
+  mutationCapability('events', 'record_event_outcome'),
   mutationCapability('events', 'create_event'),
   mutationCapability('events', 'manage_events'),
   mutationCapability('events', 'request_fulfillment'),

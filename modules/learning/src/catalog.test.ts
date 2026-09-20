@@ -241,7 +241,7 @@ describe("learning catalog", () => {
 
   it("maps mutation-bearing requirements only to supported practices or assessments", () => {
     const supportedSimulationIds = new Set(
-      LEARNING_CATALOG.rolePractices.map((practice) => practice.simulation.id),
+      [...LEARNING_CATALOG.rolePractices.map((practice) => practice.simulation.id), "event-seller-custody-v1"],
     );
 
     for (const requirement of LEARNING_CATALOG.requirements) {

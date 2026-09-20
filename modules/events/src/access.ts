@@ -1,7 +1,7 @@
 import { can, type UserRoles } from '@intra/rbac';
 
 export function canAccessEvents(userRoles: Partial<UserRoles>): boolean {
-  return can(userRoles, 'events', 'view_events');
+  return can(userRoles, 'events', 'view_events') || can(userRoles, 'events', 'view_event_custody');
 }
 
 export function canCreateEvents(userRoles: Partial<UserRoles>): boolean {

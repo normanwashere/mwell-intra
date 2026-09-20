@@ -8,6 +8,7 @@ import { taskSelectionQuery } from '../../../../modules/learning/src/taskSelecti
 
 const tasks: TaskDefinition[] = Array.from({ length: 6 }, (_, i) => ({ id: `task-${i}`, title: `Task ${i}`, outcome: 'Review assigned work', actionHref: '/product', audience: 'internal', actionCapabilities: [], priority: i, roleIds: ['core_staff_only'], module: 'product', moduleLabel: 'Product', aliases: [], personaIds: [], featureId: 'product', guideHref: '/knowledge', availability: 'live' }));
 vi.mock('./TaskStartLoader', () => ({ useAvailableTasks: () => tasks }));
+vi.mock('@intra/auth', () => ({ useSession: () => ({ profile: { id: 'operator', kind: 'employee', name: 'Operator' }, userRoles: { warehouse: ['warehouse_operator'] } }) }));
 vi.mock('next/navigation', () => ({
   usePathname: () => '/onboarding',
   useSearchParams: () => new URLSearchParams(useSyncExternalStore(callback => { window.addEventListener('popstate', callback); return () => window.removeEventListener('popstate', callback); }, () => window.location.search)),

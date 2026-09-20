@@ -25,6 +25,9 @@ export function FinanceApp() {
   const warehouseFinance = useCan('warehouse', 'view_finance');
   const procurementFinance = useCan('procurement', 'view_finance');
   const mayManageClose = useCan('warehouse', 'manage_finance_close');
+  const mayReadInventory = useCan('warehouse', 'view_inventory');
+  const mayApproveStock = useCan('warehouse', 'approve_stock_adjustment');
+  const mayApproveStockFinance = useCan('warehouse', 'approve_stock_adjustment_finance');
   const { data, loading, error, refresh, retrySource, retryingSources = {}, manageCloseEntry, openCloseEvidence, isDemo, searchSources, loadEvidenceOptions } =
     useFinanceData();
 
@@ -92,11 +95,11 @@ export function FinanceApp() {
             <HeroChipButton href="/procurement/purchase-orders" icon="cart">
               Open purchase orders
             </HeroChipButton>
-          ) : (
+          ) : mayReadInventory ? (
             <HeroChipButton href="/warehouse/inventory" icon="box">
               Review inventory value
             </HeroChipButton>
-          )
+          ) : undefined
         }
         accessory={
           <div className="flex min-w-0 flex-wrap gap-1.5">
@@ -171,7 +174,7 @@ export function FinanceApp() {
                 <Icon name="arrowRight" className="h-4 w-4" />
               </a>
             )}
-            {warehouseFinance && (
+            {mayReadInventory && (
               <a
                 href="/warehouse/inventory"
                 className="btn-ghost justify-between"
@@ -180,7 +183,7 @@ export function FinanceApp() {
                 <Icon name="arrowRight" className="h-4 w-4" />
               </a>
             )}
-            {warehouseFinance && (
+            {mayApproveStock || mayApproveStockFinance ? (
               <a
                 href="/warehouse/approvals"
                 className="btn-ghost justify-between"
@@ -188,7 +191,9 @@ export function FinanceApp() {
                 Stock adjustment approvals{" "}
                 <Icon name="arrowRight" className="h-4 w-4" />
               </a>
-            )}
+            ) : warehouseFinance ? (
+              <p className="py-2 text-sm text-muted">Finance or Warehouse Supervisor owns stock adjustment decisions. No adjustment decision access in this session.</p>
+            ) : null}
           </div>
         </div>
       </div>

@@ -1,5 +1,9 @@
 # Mwell Intra Standalone Operating Handbook
 
+## September 20 Candidate Preview
+
+The [September 20 experience update](../releases/2026-09-20-EXPERIENCE-REMEDIATION-CANDIDATE.md) covers the revised work lists, warehouse navigation, batch inspection and event-seller/recovery approach. These changes are being verified locally; this handbook does not claim they are deployed on UAT. Read the candidate status before following a new control that is not yet present in your environment.
+
 Onboarding opens with a compact **Choose a task** control, your progress and your next required action. Select **Start**, **Resume** or **Try again** beside the requirement title. Expand **Choose a task** (or **Change task**) to find another task, then scroll the page through the results. For shared tasks, expand **Available to** and the role count to see the full audience. **Continue to My Work** remains available before all learning is finished; actions that require certification still wait for their assigned learning. Shared multi-role requirements, prerequisites and approvals are unchanged.
 
 In Procurement, a confirmed request may show sourcing as **Not started** until its plan is created. Once a sourcing event exists, reopen the same request to review its saved sourcing and evaluation records. Viewing that evidence does not authorize variance approval or award. If variance history is unavailable to your account, use the designated reviewer; do not treat missing review visibility as an empty history. A failed sourcing read offers Retry sourcing and should not be worked around by creating a duplicate request.

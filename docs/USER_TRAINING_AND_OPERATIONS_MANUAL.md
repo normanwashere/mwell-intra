@@ -1,5 +1,9 @@
 # User Training And Operations Manual
 
+September 20 update: the candidate improves open-work visibility, request search, Warehouse navigation, alerts, desktop order density and mobile actions without removing approval or stock-control steps. Completed learning can be collapsed; outstanding requirements still apply. For batch Quality inspection, select compatible records, inspect every item, review all serials and quantities, and attach your own photos. A rejected batch saves none of its results. If confirmation is lost, reopen the unconfirmed inspection and retry the same details instead of creating another attempt.
+
+The event workflow adds individually assigned sellers after release setup. Each seller records their own acknowledged stock; corrections retain the original record through a reversal. Returned watches pass Quality inspection and use a Product-approved recovery recipe. These controls do not automatically retire products, extend event access or enable old events. Follow the detailed [September 20 candidate guide](releases/2026-09-20-EXPERIENCE-REMEDIATION-CANDIDATE.md); the deployment receipt, not this preparation note, confirms what is live. SMTP is unchanged.
+
 ## Warehouse Access Recovery Drill
 
 With an authorized test account, open an unsaved warehouse form and switch browser tabs. A successful background access check should leave the form in place. Do not save during this navigation exercise.

@@ -17,6 +17,7 @@ export * from "./domain/products";
 export * from "./domain/storage";
 export * from "./domain/warehouseControls";
 export * from "./domain/wms";
+export * from "./domain/stockConversion";
 export * from "./domain/imports";
 export * from "./domain/metrics";
 export * from "./domain/urlSafety";
@@ -51,3 +52,7 @@ export * from "./runAction";
 //     is the host's responsibility — pass the client to `createRepository` or use
 //     `createSupabaseWarehouseRepository(client)` directly. ---
 export * from "./supabase";
+export { classifyRecord, recordIsVisible, recordPurposeLabel, readRecordVisibility, RECORD_VIEWS } from './domain/testFixtures';
+export type { RecordClassification, RecordPurpose, RecordVisibility } from './domain/testFixtures';
+export { InspectionRejectedError } from './inspectionOutcome';
+export type { InspectionOutcome } from './inspectionOutcome';

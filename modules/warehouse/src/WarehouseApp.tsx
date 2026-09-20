@@ -123,7 +123,8 @@ export function WarehouseApp({ basename = '/warehouse' }: WarehouseAppProps) {
       ? rolePresentation.description
       : `Warehouse role: ${rolePresentation.label}. ${rolePresentation.description}`;
   const destinationAccess = {
-    events: mode !== 'supabase' || (userCapabilities?.events ?? []).includes('view_events'),
+    events: mode !== 'supabase' || (userCapabilities?.events ?? []).some(capability =>
+      capability === 'view_events' || capability === 'view_event_custody'),
     insights: mode !== 'supabase' || (userCapabilities?.insights ?? []).includes('view_warehouse'),
   };
 

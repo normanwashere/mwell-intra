@@ -202,7 +202,7 @@ function RequirementAction({
       <Button
         size="sm"
         iconRight={unavailableReason ? undefined : "arrowRight"}
-        className="w-full sm:w-auto"
+        className="min-h-11 w-full sm:w-auto"
         disabled={Boolean(unavailableReason)}
         onClick={(event) => onResume(event.currentTarget)}
       >
@@ -232,9 +232,13 @@ function OnboardingLoading() {
 export function OnboardingCenter({
   audience = "internal",
   selectedTask,
+  jobPersona,
+  availableTasks = [],
 }: {
   audience?: "internal" | "vendor";
   selectedTask?: SelectedLearningTask;
+  jobPersona?: string;
+  availableTasks?: readonly SelectedLearningTask[];
 }) {
   const { profile, userRoles, loading: sessionLoading } = useSession();
   const assignedScopes = Object.entries(MODULES).flatMap(([moduleId, module]) =>
@@ -603,6 +607,7 @@ export function OnboardingCenter({
       "not_started";
     return (
       !["passed", "waived", "needs_support", "expired"].includes(state) &&
+      requirement.mandatory &&
       !unavailableReasonFor(requirement)
     );
   });
@@ -616,6 +621,10 @@ export function OnboardingCenter({
             part.replace(/[-_]/, "").toUpperCase(),
           ) ?? "your workspace")
     : null;
+  const nextTask = next ? availableTasks.find(task =>
+    projectTaskLearning(snapshot, audience, task.actionCapabilities, stale || loading || Boolean(error))
+      .neededNow.some(item => sharedCompletionKey(item) === sharedCompletionKey(next)),
+  ) : undefined;
   const activeCertifications = snapshot.certifications.filter(
     (item) =>
       !item.revokedAt &&
@@ -734,25 +743,20 @@ export function OnboardingCenter({
             {profile.name}
           </p>
         )}
-        {!selectedTask && (
-          <p className="mt-2 max-w-3xl text-sm text-muted">
-            Continue your authorized work while you learn. Only actions with
-            required learning wait for completion; your permissions still apply.
-          </p>
-        )}
-        <div
-          className={
-            selectedTask
-              ? "mt-2 flex flex-wrap gap-2"
-              : "mt-4 flex flex-wrap gap-2"
-          }
-        >
+        <dl className="mt-2 flex flex-wrap gap-x-6 gap-y-2 text-sm">
+          <div><dt className="text-xs text-muted">Job persona</dt><dd className="font-semibold text-ink">{jobPersona ?? profile?.title ?? (audience === "vendor" ? "Vendor Representative" : "Employee")}</dd></div>
+          <div><dt className="text-xs text-muted">Assigned modules</dt><dd className="font-semibold text-ink">{[...new Set(assignedScopes.map(scope => MODULES[scope.moduleId as keyof typeof MODULES].label))].join(', ') || 'None assigned'}</dd></div>
+        </dl>
+        <details className="mt-1">
+          <summary className="min-h-11 cursor-pointer content-center text-xs font-semibold text-muted">Action roles</summary>
+          <div className="flex flex-wrap gap-2 pb-2">
           {assignedScopes.map((scope) => (
             <Badge key={`${scope.moduleId}:${scope.roleId}`} tone="brand">
               {scope.label}
             </Badge>
           ))}
-        </div>
+          </div>
+        </details>
       </header>
 
       {stale && (
@@ -836,18 +840,18 @@ export function OnboardingCenter({
         />
       )}
 
-      <section className="border-b border-line py-5">
+      <section className="border-b border-line py-3">
         {selectedTask && (
           <p className="mb-2 text-xs font-semibold text-muted">
             All assigned mandatory learning
           </p>
         )}
-        <OnboardingProgress
+        {view.completed === view.required.length ? <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">{view.completed} of {view.required.length} required steps complete</p> : <OnboardingProgress
           completed={view.completed}
           total={view.required.length}
-        />
+        />}
         {next && !selectedTask && (
-          <div className="mt-5 flex flex-col gap-3 border-l-4 border-brand-500 bg-brand-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div data-next-requirement id={`onboarding-requirement-${encodeURIComponent(next.id)}`} tabIndex={-1} aria-current={requestedRequirementId === next.id ? 'step' : undefined} className="mt-3 flex flex-col gap-3 border-l-4 border-brand-500 bg-brand-500/5 p-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase text-brand-700 dark:text-brand-300">
                 Next required action
@@ -860,8 +864,10 @@ export function OnboardingCenter({
               </p>
               <p className="mt-1 text-sm text-muted">
                 {KIND_LABEL[next.kind]} |{" "}
-                {next.mandatory ? "Required" : "Optional"}
+                {next.mandatory ? "Required" : "Optional"} | Version {next.version}
               </p>
+              <p className="mt-1 text-sm text-muted">{view.required.length - view.completed} {view.required.length - view.completed === 1 ? 'requirement' : 'requirements'} remaining</p>
+              {(nextTask || next.capabilityOutcomes.length > 0) && <p className="mt-1 text-xs text-muted">Required for: {nextTask?.title ?? next.capabilityOutcomes.map(item => `${MODULES[item.module].label} / ${capabilityLabel(item.capability)}`).join('; ')}</p>}
             </div>
             <RequirementAction
               requirement={next}
@@ -894,13 +900,7 @@ export function OnboardingCenter({
               <p className="text-xs font-semibold uppercase text-emerald-700 dark:text-emerald-300">
                 Workspace access
               </p>
-              <p className="mt-1 font-display text-base font-bold text-ink">
-                Continue your authorized work
-              </p>
-              <p className="mt-1 text-sm text-muted">
-                You can return before finishing this checklist. Requirements
-                still apply to their specific actions.
-              </p>
+              <p className="mt-1 text-sm text-muted">Existing permissions and action requirements still apply.</p>
             </div>
             <a
               href={returnPath}
@@ -937,15 +937,21 @@ export function OnboardingCenter({
                 tabIndex={-1}
                 className="font-display text-lg font-bold text-ink outline-none"
               >
-                Your required steps
+                Required learning
               </h2>
               <p className="text-sm text-muted">
                 Assigned learning across your roles. Matching requirements
                 appear once; prerequisites apply only where required.
               </p>
             </div>
+            {[false, true].map(completed => {
+              const items = view.requirements.filter(item => (selectedTask || item.id !== next?.id) && ['passed', 'waived'].includes(view.progress.get(sharedCompletionKey(item))?.state ?? '') === completed);
+              if (!items.length) return null;
+              const Group = completed ? 'details' : 'div';
+              return <Group key={`${completed}:${requestedRequirementId ?? ''}`} open={completed ? items.some(item => item.id === requestedRequirementId) : undefined}>
+                {completed && <summary className="min-h-11 cursor-pointer content-center border-t border-line py-3 text-sm font-semibold text-ink"><span>Completed learning history</span> <span className="text-muted">({items.length})</span></summary>}
             <ol className="border-t border-line">
-              {view.requirements.map((requirement, index) => {
+              {items.map((requirement, index) => {
                 const progress = view.progress.get(
                   sharedCompletionKey(requirement),
                 );
@@ -995,6 +1001,7 @@ export function OnboardingCenter({
                           ? ` | ${progress?.attemptCount ?? 0} of ${requirement.maxAttempts} attempts used`
                           : ""}
                       </p>
+                      {progress?.completedAt && <p className="mt-1 text-xs text-muted">Completed <time dateTime={progress.completedAt}>{new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(progress.completedAt))}</time></p>}
                     </div>
                     {requirement.id === next?.id && !selectedTask ? (
                       <span className="text-sm font-semibold text-brand-700 dark:text-brand-300">
@@ -1018,6 +1025,8 @@ export function OnboardingCenter({
                 );
               })}
             </ol>
+              </Group>;
+            })}
           </section>
 
           <aside
@@ -1058,10 +1067,10 @@ export function OnboardingCenter({
               )}
             </section>
 
-            <section className="mt-6 border-t border-line pt-6">
-              <h2 className="font-display text-base font-bold text-ink">
+            <details className="mt-4 border-t border-line" open={inactiveCertifications.length > 0}>
+              <summary className="min-h-11 cursor-pointer content-center py-3 font-display text-base font-bold text-ink">
                 Certifications
-              </h2>
+              </summary>
               {activeCertifications.length > 0 ? (
                 <ul className="mt-3 space-y-3">
                   {activeCertifications.map((certification) => (
@@ -1127,7 +1136,7 @@ export function OnboardingCenter({
                   ))}
                 </ul>
               )}
-            </section>
+            </details>
           </aside>
         </div>
       </ChecklistContainer>

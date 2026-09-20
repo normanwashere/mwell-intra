@@ -1,5 +1,6 @@
 import { SCOPED_READINESS_CANDIDATE_RULES } from "./scopedReadinessCandidateAuthority.server";
 import { OPS_CUSTODY_CANDIDATE_RULES } from "./opsCustodyCandidateAuthority.server";
+import { EVENT_SELLER_CHOICE_RULES } from "./eventSellerTrainingAuthority.server";
 
 export interface SimulationChoiceAuthorityInput {
   simulationId: string;
@@ -21,6 +22,7 @@ const rule = (
 ): ChoiceRule => ({ acceptedChoiceId, rejectedFeedback });
 
 const CHOICE_RULES: Readonly<Record<string, ChoiceRule>> = {
+  ...EVENT_SELLER_CHOICE_RULES,
   ...SCOPED_READINESS_CANDIDATE_RULES,
   ...OPS_CUSTODY_CANDIDATE_RULES,
   "platform-access-governance-v1:review-access-scope": rule("verify-role", {

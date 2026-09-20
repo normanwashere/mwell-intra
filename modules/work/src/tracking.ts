@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSession } from '@intra/auth';
 import type { WorkSource } from './types';
+import { classifyRecord, type RecordClassification } from '../../../packages/data-kit/src/domain/testFixtures';
 
 export interface TrackingItem {
   id: string;
@@ -15,6 +16,7 @@ export interface TrackingItem {
   nextStep: string;
   bucket: 'action' | 'waiting' | 'completed';
   updatedAt?: string;
+  classification?: RecordClassification;
 }
 
 type TrackingSource = 'procurement' | 'warehouse';
@@ -30,12 +32,12 @@ const SOURCES: readonly TrackingSource[] = ['procurement', 'warehouse'];
 const READS = {
   procurement: {
     table: 'requests', owner: 'requester_id', newest: 'updated_at',
-    columns: 'id,title,status,requester_id,created_at,updated_at',
+    columns: 'id,title,description,compliance,status,requester_id,created_at,updated_at',
     label: 'Procurement requests',
   },
   warehouse: {
     table: 'department_stock_requests', owner: 'requested_by', newest: 'requested_at',
-    columns: 'id,purpose,status,requested_by,requested_at',
+    columns: 'id,purpose,lines,status,requested_by,requested_at',
     label: 'Warehouse department stock requests',
   },
 } as const;
@@ -90,7 +92,6 @@ export function projectTrackingRows(source: TrackingSource, rows: readonly unkno
     if (!id || row[contract.owner] !== actorId) return [];
     return [{ row, id, newest: Date.parse(date(row[contract.newest]) ?? '') || 0 }];
   }).sort((a, b) => b.newest - a.newest || b.id.localeCompare(a.id))
-    .slice(0, TRACKING_LIMIT)
     .map(({ row, id }) => ({
       id: `${source}:${id}`, source,
       title: text(source === 'procurement' ? row.title : row.purpose) || READS[source].label,
@@ -98,20 +99,42 @@ export function projectTrackingRows(source: TrackingSource, rows: readonly unkno
         ? `/procurement/requests/${encodeURIComponent(id)}`
         : `/warehouse/fulfillment?tab=requests&request=${encodeURIComponent(id)}`,
       ...workflow(source, text(row.status)),
+      classification: classifyRecord(row),
       // Warehouse requests have no last-updated field. Do not relabel requested_at.
       ...(source === 'procurement' ? { updatedAt: date(row.updated_at) } : {}),
     }));
 }
 
-async function readSource(client: Client, source: TrackingSource, actorId: string): Promise<Result> {
+export async function readTrackingSource(client: Client, source: TrackingSource, actorId: string, accepts = () => true): Promise<Result> {
   const contract = READS[source];
+  const closed = source === 'procurement' ? ['rejected', 'cancelled'] : ['rejected', 'cancelled', 'closed'];
   try {
+    const rows: unknown[] = [];
+    let after = '';
+    // Immutable IDs keep updates from shifting an offset window. Only open work is exhausted.
+    while (accepts()) {
+      let query = client.schema(source).from(contract.table).select(contract.columns).eq(contract.owner, actorId)
+        .or(`status.is.null,status.not.in.(${closed.join(',')})`).order('id', { ascending: true });
+      if (after) query = query.gt('id', after);
+      const { data, error } = await query.limit(TRACKING_LIMIT);
+      if (error || !Array.isArray(data)) throw new Error('Tracking read failed');
+      if (!accepts()) return { items: [], errors: [] };
+      rows.push(...data);
+      if (!data.length) break;
+      const last = data[data.length - 1] as unknown;
+      const next = text(last && typeof last === 'object' ? (last as Row).id : undefined);
+      if (!next || (after && next <= after)) throw new Error('Tracking cursor did not advance');
+      after = next;
+      // Continue to an empty page, even when a server-side cap is smaller than ours.
+    }
+    if (!accepts()) return { items: [], errors: [] };
     const { data, error } = await client.schema(source).from(contract.table)
-      .select(contract.columns).eq(contract.owner, actorId)
+      .select(contract.columns).eq(contract.owner, actorId).in('status', closed)
       .order(contract.newest, { ascending: false, nullsFirst: false })
       .order('id', { ascending: false }).limit(TRACKING_LIMIT);
-    if (error || (data !== null && !Array.isArray(data))) throw new Error('Tracking read failed');
-    return { items: projectTrackingRows(source, data ?? [], actorId), errors: [] };
+    if (error || !Array.isArray(data)) throw new Error('Tracking read failed');
+    const unique = new Map(projectTrackingRows(source, [...rows, ...data], actorId).map(item => [item.id, item]));
+    return { items: [...unique.values()], errors: [] };
   } catch {
     // Database exception text may contain record details; expose only source context.
     return { items: [], errors: [`${contract.label} tracking unavailable. Refresh to retry or open the source module.`] };
@@ -122,9 +145,10 @@ function coverageFor(sources: readonly TrackingSource[], mode: string) {
   if (mode === 'memory') return 'Memory mode: no tracking history is loaded.';
   if (!sources.length) return 'No supported tracking sources are enabled. Other modules are not included.';
   const scope = sources.map(source => source === 'procurement'
-    ? `latest ${TRACKING_LIMIT} purchase requests by last update`
-    : `latest ${TRACKING_LIMIT} stock requests by request date`).join(' and ');
-  return `Your ${scope}. Closed, rejected, or cancelled requests are not proof of delivery or payment. Other modules are not included.`;
+    ? 'purchase requests'
+    : 'stock requests').join(' and ');
+  const dates = sources.map(source => source === 'procurement' ? 'purchase requests by last update' : 'stock requests by request date').join('; ');
+  return `All your open ${scope}, plus up to the latest ${TRACKING_LIMIT} closed requests per source (${dates}). Counts follow the selected module, search and record view; completed counts cover this recent window only. Assigned work is a separate window of up to 500 items. Closed, rejected, or cancelled requests are not proof of delivery or payment. Other modules and leadership follow-ups are not included in these counts.`;
 }
 
 export function useWorkTracking(allowedSources: readonly WorkSource[]): {
@@ -160,7 +184,7 @@ export function useWorkTracking(allowedSources: readonly WorkSource[]): {
       setState({ scope, items: [], errors: ['Tracking unavailable: authenticated data client is not ready.'], loading: false });
       return;
     }
-    const results = await Promise.all(scope.sources.map(source => readSource(scope.client!, source, scope.actorId)));
+    const results = await Promise.all(scope.sources.map(source => readTrackingSource(scope.client!, source, scope.actorId, accepts)));
     if (!accepts()) return;
     setState({ scope, items: results.flatMap(result => result.items), errors: results.flatMap(result => result.errors), loading: false });
   }, [scope, canRead]);

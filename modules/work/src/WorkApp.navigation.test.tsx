@@ -12,6 +12,7 @@ vi.mock('./tracking', () => ({ useWorkTracking: () => ({loading:false,errors:sta
   {id:'draft',source:'procurement',title:'Draft PR-2',status:'Draft',owner:'You',nextStep:'Submit',bucket:'action',href:'/procurement/requests/pr-2'},
   {id:'wait',source:'warehouse',title:'Ring request',status:'Approved',owner:'Warehouse',nextStep:'Picking',bucket:'waiting',href:'/warehouse/fulfillment?tab=requests&request=wait'},
   {id:'done',source:'warehouse',title:'Closed request',status:'Closed',owner:'Requester',nextStep:'Review evidence',bucket:'completed',href:'/warehouse/fulfillment?tab=requests&request=done'},
+  {id:'load',source:'procurement',title:'Volume-only request',status:'Draft',owner:'Requester',nextStep:'Submit',bucket:'action',href:'/procurement/requests/load',classification:{purpose:'load-only'}},
 ]}) }));
 let host: HTMLDivElement, root: Root;
 beforeEach(() => {
@@ -50,4 +51,15 @@ it('clamps a source outside the current module scope and restores the search', a
   expect(host.querySelector('select')?.value).toBe('all');
   expect(host.querySelector('input')?.value).toBe('Ring');
   expect(host.textContent).toContain('Ring request');
+});
+it('hides only classified load fixtures in explicit UAT mode and restores them through the record selector', async () => {
+  window.history.replaceState(null, '', '/work?uat=1');
+  await render();
+  expect(host.textContent).not.toContain('Volume-only request');
+  expect(host.textContent).toContain('Draft PR-2');
+  const select = host.querySelector<HTMLSelectElement>('select[aria-label="Record visibility"]');
+  expect(select).not.toBeNull();
+  await act(async () => { select!.value = 'all'; select!.dispatchEvent(new Event('change', { bubbles: true })); });
+  expect(host.textContent).toContain('Volume-only request');
+  expect(window.location.search).toContain('records=all');
 });
