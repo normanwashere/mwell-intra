@@ -1,4 +1,4 @@
-import { finishGuidedDialog, ASSESSMENT_ANSWERS, waitForAssessmentResult } from './orientation-driver.mjs';
+import { finishGuidedDialog, ASSESSMENT_ANSWERS, waitForAssessmentResult, waitForOrientationState, assertCurriculumComplete } from './orientation-driver.mjs';
 import { createRequire } from "node:module";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -198,31 +198,6 @@ async function completeRemainingRequirements(page) {
   return completedNow;
 }
 
-async function assertCurriculumComplete(page, persona) {
-  const readiness = await page.locator("body").innerText();
-  const match = readiness.match(/(\d+)\s+of\s+(\d+)\s+required steps complete/i);
-  assert(match, `${persona.role} did not expose a verifiable readiness total.`);
-  assert(
-    match[1] === match[2],
-    `${persona.role} curriculum remains incomplete (${match[1]} of ${match[2]}).`,
-  );
-}
-
-async function waitForOrientationState(page) {
-  await page.waitForFunction(
-    () => {
-      const text = document.body.innerText.toLowerCase();
-      return (
-        /start .+ orientation/.test(text) ||
-        /orientation\s+complete/.test(text) ||
-        text.includes("no onboarding assigned yet")
-      );
-    },
-    undefined,
-    { timeout: 15_000 },
-  );
-}
-
 async function auditInternalOrientation(page, persona) {
   await page.goto(`${baseUrl}/onboarding?next=%2Fwork`, {
     waitUntil: "domcontentloaded",
@@ -245,7 +220,7 @@ async function auditInternalOrientation(page, persona) {
     completedNow += await completeRemainingRequirements(page);
   }
 
-  await assertCurriculumComplete(page, persona);
+  const progress = await assertCurriculumComplete(page, persona);
 
   const continueLink = page.getByRole("link", { name: "Continue to My Work" });
   await continueLink.waitFor({ state: "visible", timeout: 15_000 });
@@ -265,7 +240,7 @@ async function auditInternalOrientation(page, persona) {
     !new URL(page.url()).pathname.startsWith("/onboarding"),
     `${persona.role} remained trapped in onboarding after completion.`,
   );
-  return { completedNow, destination: "/work" };
+  return { completedNow, progress, destination: "/work" };
 }
 
 async function auditVendorOrientation(page, persona) {
@@ -301,7 +276,7 @@ async function auditVendorOrientation(page, persona) {
     !outstandingOrientation,
     "Vendor role orientation remains incomplete after the bounded journey.",
   );
-  await assertCurriculumComplete(page, persona);
+  const progress = await assertCurriculumComplete(page, persona);
   await page.screenshot({
     path: path.join(
       evidenceDir,
@@ -311,7 +286,7 @@ async function auditVendorOrientation(page, persona) {
     quality: 78,
     fullPage: true,
   });
-  return { completedNow, destination: "/vendor/onboarding" };
+  return { completedNow, progress, destination: "/vendor/onboarding" };
 }
 
 await mkdir(evidenceDir, { recursive: true });

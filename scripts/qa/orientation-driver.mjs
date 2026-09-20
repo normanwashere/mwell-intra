@@ -13,6 +13,42 @@ export const ASSESSMENT_ANSWERS = new Map([
   }),
 ]);
 
+export async function waitForOrientationState(page, { timeout = 15_000 } = {}) {
+  const state = await page.waitForFunction(() => {
+    const visible = element => element.getClientRects().length > 0;
+    const heading = [...document.querySelectorAll('h1')].find(visible)?.textContent.trim();
+    if (!['Role onboarding', 'Vendor onboarding'].includes(heading)) return false;
+    const alerts = [...document.querySelectorAll('[role="alert"]')].filter(visible)
+      .map(element => element.innerText.trim()).filter(Boolean);
+    if (alerts.length) return { error: `Learning status is not verified: ${alerts.join(' | ')}` };
+    const text = document.body.innerText;
+    if (text.includes('No onboarding assigned yet')) return { error: 'Expected role learning is not assigned.' };
+    if (![...document.querySelectorAll('h2')].some(element => visible(element) && element.textContent.trim() === 'Required learning')) return false;
+    // Completed rows can be collapsed; the visible server-derived total remains authoritative.
+    const totals = [...text.matchAll(/\b(\d+)\s+of\s+(\d+)\s+required steps? complete\b/gi)];
+    if (!totals.length) return false;
+    const completed = Number(totals[0][1]);
+    const total = Number(totals[0][2]);
+    if (!Number.isSafeInteger(completed) || !Number.isSafeInteger(total) || total < 1 || completed > total ||
+      totals.some(match => Number(match[1]) !== completed || Number(match[2]) !== total)) {
+      return { error: 'Required learning totals are missing or inconsistent.' };
+    }
+    return { completed, total };
+  }, undefined, { timeout });
+  try {
+    const result = await state.jsonValue();
+    assert(!result.error, result.error);
+    return result;
+  } finally { await state.dispose(); }
+}
+
+export async function assertCurriculumComplete(page, persona, timeout = 15_000) {
+  const progress = await waitForOrientationState(page, { timeout });
+  assert.equal(progress.completed, progress.total,
+    `${persona.role} curriculum remains incomplete (${progress.completed} of ${progress.total}).`);
+  return progress;
+}
+
 async function waitForAdvance(page, heading, timeout) {
   await page.waitForFunction(previous => {
     const title = document.querySelector('#training-coach-title');

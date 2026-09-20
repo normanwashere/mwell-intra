@@ -1,11 +1,60 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { after, before, test } from 'node:test';
-import { finishGuidedDialog, ASSESSMENT_ANSWERS, waitForAssessmentResult, receivingAction } from './orientation-driver.mjs';
+import { readFile } from 'node:fs/promises';
+import { finishGuidedDialog, ASSESSMENT_ANSWERS, waitForAssessmentResult, receivingAction, waitForOrientationState, assertCurriculumComplete } from './orientation-driver.mjs';
 const { chromium } = createRequire(new URL('../../apps/shell/package.json', import.meta.url))('@playwright/test');
+const runnerSource = await readFile(new URL('./complete-uat-role-orientations.mjs', import.meta.url), 'utf8');
 let browser;
 before(async () => { browser = await chromium.launch(); });
 after(async () => { await browser.close(); });
+
+test('the live runner uses the tested readiness and completion helpers', () => {
+  assert.match(runnerSource, /import \{[^}]*waitForOrientationState, assertCurriculumComplete[^}]*\} from '.\/orientation-driver.mjs'/);
+  assert.doesNotMatch(runnerSource, /function (waitForOrientationState|assertCurriculumComplete)\(/);
+});
+
+const completedView = title => `<h1>${title}</h1><section><p>7 of 7 required steps complete</p><a href="/work">Continue to My Work</a></section><h2>Required learning</h2><details><summary>Completed learning history (7)</summary><ol><li id="onboarding-requirement-role"><h3>Role orientation</h3><span>Complete</span></li></ol></details>`;
+for (const title of ['Role onboarding', 'Vendor onboarding']) {
+  test(`recognizes current completed ${title} with collapsed history without restarting training`, async () => {
+    const page = await browser.newPage();
+    try {
+      await page.setContent(completedView(title));
+      assert.equal(await page.getByText('Role orientation', { exact: true }).isVisible(), false);
+      await waitForOrientationState(page, { timeout: 250 });
+      await assertCurriculumComplete(page, { role: 'test-role' }, 250);
+      assert.equal(await page.locator('details').getAttribute('open'), null);
+    } finally { await page.close(); }
+  });
+}
+
+test('loads partial and singular-step summaries but never credits incomplete required learning', async () => {
+  const page = await browser.newPage();
+  try {
+    for (const total of [1, 3]) {
+      await page.setContent(`<h1>Role onboarding</h1><p>0 of ${total} required ${total === 1 ? 'step' : 'steps'} complete</p><h2>Required learning</h2><p>Role orientation</p><button aria-label="Start Role orientation">Start</button>`);
+      await waitForOrientationState(page, { timeout: 250 });
+      await assert.rejects(assertCurriculumComplete(page, { role: 'test-role' }, 250), /incomplete/);
+    }
+  } finally { await page.close(); }
+});
+
+test('rejects stale totals, empty assignments, impossible counts and loading-only pages', async () => {
+  const page = await browser.newPage();
+  try {
+    for (const html of [
+      completedView('Role onboarding') + '<div role="alert">Learning status may be out of date</div>',
+      '<h1>Role onboarding</h1><h2>No onboarding assigned yet</h2>',
+      '<h1>Role onboarding</h1><h2>Required learning</h2><p>0 of 0 required steps complete</p>',
+      '<h1>Role onboarding</h1><h2>Required learning</h2><p>4 of 3 required steps complete</p>',
+      '<h1>Role onboarding</h1><p>Loading assigned learning...</p>',
+      '<h1>Role onboarding</h1><h2>Required learning</h2><p hidden>7 of 7 required steps complete</p>',
+    ]) {
+      await page.setContent(html);
+      await assert.rejects(assertCurriculumComplete(page, { role: 'test-role' }, 250));
+    }
+  } finally { await page.close(); }
+});
 
 test('waits for a rejected choice to settle before choosing the next, without waiting for absent alerts', async () => {
   const page = await browser.newPage();
