@@ -234,6 +234,30 @@ test("prepare runs only reviewed Sep05 SQL suites before persona provisioning", 
   assert.match(prepare, /timeout-minutes: 60\b/);
 });
 
+test('Sep20 safety contracts run without live seller provisioning or SMTP', async () => {
+  const workflow = await readFile(new URL('../../.github/workflows/uat-live-certification.yml', import.meta.url), 'utf8');
+  const prepare = workflow.split('\n  prepare:')[1].split('\n  routes:')[0];
+  const stepName = 'Verify Sep20 event custody and warehouse access contracts';
+  const step = prepare.split(`      - name: ${stepName}\n`)[1]?.split('      - name:')[0];
+  assert.ok(step);
+  assert.doesNotMatch(step, /continue-on-error|--apply|--allow-cli-credential|\bSMTP\b|\|\||\*/);
+  const command = step.replace(/^        run: \|\n/, '').replace(/\\\r?\n/g, ' ').trim().split(/\s+/);
+  assert.deepEqual(command, [
+    'node', '--test', '--test-concurrency=1',
+    'scripts/verify-quality-batch.pglite.test.mjs',
+    'scripts/verify-stock-conversion.pglite.test.mjs',
+    'scripts/verify-warehouse-raw-read-policy.pglite.test.mjs',
+    'modules/events/tests/custody.pglite.test.mjs',
+    'modules/learning/tests/eventSellerLearningReadiness.pglite.test.mjs',
+    'modules/procurement/request-list-privacy.pglite.test.mjs',
+    'scripts/sep20-seller-learning.test.mjs',
+    'scripts/sep20-seller-learning-live.test.mjs',
+    'scripts/qa/sep20-event-live.test.mjs',
+    'scripts/qa/sep20-seller-user-provision.test.mjs',
+  ]);
+  assert.ok(prepare.indexOf(stepName) < prepare.indexOf('Reconcile guarded UAT personas'));
+});
+
 test('route concurrency is isolated and the full strict audit follows the critical gate', async () => {
   const workflow = await readFile(new URL('../../.github/workflows/uat-live-certification.yml', import.meta.url), 'utf8');
   const routes = workflow.split('\n  routes:')[1].split('\n  transactions:')[0];

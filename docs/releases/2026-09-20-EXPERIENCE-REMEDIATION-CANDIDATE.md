@@ -46,6 +46,8 @@ The agreed approach is one named account per seller, limited to assigned events.
 
 The new custody controls are prospective and disabled until an authorized event owner enables them before the first issue. An administrator must assign the narrow seller role and the required learning must be published and completed. Existing historical stock is not silently assigned to a seller or reconstructed from matching product names.
 
+The UAT test seller is a synthetic Marketing employee with the seller role only. Marketing membership supports the normal training assignment; it does not grant Warehouse, Procurement, event-management or Finance authority. Warehouse data access is checked by the database as well as the screen. The seller sees assigned event work through the scoped Events interface.
+
 Sellers record their own sales and giveaways against acknowledged event custody, with the exact serials where required. The app checks remaining quantities and duplicate references. Corrections use a linked reversal; they do not erase the original entry. Finance reviews the event records independently.
 
 Unsold watches return through the original event custody and Quality inspection. A Product-approved recovery recipe then controls conversion back to the base watch. The original serial is preserved, packaging is accounted for explicitly, and the conversion needs its separate preparation, independent Quality approval and execution. Bags remain separate unless the approved recipe explicitly includes them. Do not delete or rename a variant to make its balance disappear.
@@ -54,7 +56,7 @@ Product approves recipes in Product > Stock conversion recipes. Warehouse operat
 
 The event cannot be cancelled while released stock still awaits acknowledgment, and settlement cannot replace missing stock with invented return or loss quantities. Complete physical handovers and recorded returns first. Submitted or approved settlement prevents new demand from changing its reconciled balance. Post-event corrections and variant SKU retirement remain undecided; the candidate keeps existing product lifecycle rules and strict assignment dates.
 
-These are candidate workflows. Migration, activation, learning publication, native concurrent-transaction testing and saved UAT transaction evidence remain release checks. A screenshot or local simulated account is not a completed live seller pilot.
+These are candidate workflows. Native PostgreSQL concurrency and role-isolation checks have passed in an isolated fixture environment, including competing transactions and actual scoped seller RPCs. Complete UAT migration, activation, learning publication and saved live transaction evidence remain separate release checks. A screenshot or local simulated account is not a completed live seller pilot.
 
 ## Learning And Help
 

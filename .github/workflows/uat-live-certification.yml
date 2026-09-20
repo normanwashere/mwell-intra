@@ -102,6 +102,19 @@ jobs:
         run: node --test scripts/verify-governed-po-receipt-breakdown.pglite.test.mjs
       - name: Verify assigned training version checkpoint projection
         run: node --test scripts/verify-assigned-training-checkpoints.pglite.test.mjs
+      - name: Verify Sep20 event custody and warehouse access contracts
+        run: |
+          node --test --test-concurrency=1 \
+            scripts/verify-quality-batch.pglite.test.mjs \
+            scripts/verify-stock-conversion.pglite.test.mjs \
+            scripts/verify-warehouse-raw-read-policy.pglite.test.mjs \
+            modules/events/tests/custody.pglite.test.mjs \
+            modules/learning/tests/eventSellerLearningReadiness.pglite.test.mjs \
+            modules/procurement/request-list-privacy.pglite.test.mjs \
+            scripts/sep20-seller-learning.test.mjs \
+            scripts/sep20-seller-learning-live.test.mjs \
+            scripts/qa/sep20-event-live.test.mjs \
+            scripts/qa/sep20-seller-user-provision.test.mjs
       - name: Build all workspaces
         run: pnpm build
       - name: Analyze source with CodeQL

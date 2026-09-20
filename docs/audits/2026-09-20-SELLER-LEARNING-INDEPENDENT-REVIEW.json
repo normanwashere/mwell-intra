@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "reviewMode": "automated",
+  "humanReviewClaimed": false,
+  "verdict": "approved",
+  "scope": "seller_learning_content_and_inactive_publication",
+  "projectRef": "kkoitlvydytdhlpxhuah",
+  "authorAgentId": "01a0bcb5-67ef-7811-96d4-39d167567d5c",
+  "reviewerAgentId": "01a0bcb5-6471-7442-9235-6c15b76b4548",
+  "manifestSha256": "ca72812fdf0f8afd6ebeff738fa2b6a500978b776f77eb25af229896c118ab35",
+  "contentSha256": "fc6883b6cd487abea677825f2274655d31f83e9b9da3e1672a17f8e8c215fdab",
+  "rulesSha256": "2e17e6ae8de8bbd01e08f6f5e18c6b67087b8223ff550e98b4f3302067bbd535",
+  "reviewedAt": "2026-09-20T08:15:05.732Z",
+  "userAuthorizationReference": "intra MVP 01a0b4fc-57b0-7351-84ee-b8baeb3a422c: Sep20 user-authorized rollout excluding SMTP; separate AI review; existing UAT audit custodians only; synthetic seller only after isolation proof",
+  "findings": [
+    "Independently read all six checkpoint instructions, scenarios, choices and server-only accepted/rejected rules. Named current assignment, eligible acknowledged custody, actual sale versus zero-amount giveaway, same-intent retry, attributable own-entry reversal, and independent Finance settlement are internally consistent with reviewed prospective custody SQL.",
+    "Orientation is mandatory before the six-checkpoint seller scenario; max attempts is three; the only capability outcome is events.record_event_outcome. Training does not grant view_events, Warehouse custody, settlement approval, event management, or permission to record another seller's outcome.",
+    "Independently recomputed manifest, content and rules SHA-256 values. Exact manifest retains the original base revision and explicitly states working-tree hash binding, not deployment proof. UAT read-only query confirms the pinned published/effective orientation digest b881e643dd9fda267b2be683d483e4d7, active employee audit custodians, current owner platform-admin assignment, and zero seller role mappings.",
+    "Independently read render-only publication helper. Each stage requires a fresh full-row baseline fingerprint, immutable IDs and graph, exact prior lifecycle state, pinned orientation and no seller role mapping. Approval stages require this separate AI artifact; committed stages additionally require a parent-authored exact-state/exact-SQL execution approval. Default SQL rolls back. The helper does not write accounts, role assignments, attempts, checkpoints or certifications.",
+    "Independent local tests: seller training and scoped readiness 14/14 pass; publication helper 4/4 pass, including real local lifecycle/graph constraints, rollback, exact staged publication, no activation, replay and changed graph/attribution/custodian rejection. These are local fixtures, not live learner completion or native concurrent publication proof.",
+    "Existing UAT PlatformAdmin and LegalCompliance UUIDs are audit foreign-key custodians only. Neither is represented as a human reviewer. This actual independent review was performed by the distinct reviewer agent identified above.",
+    "No content/publication-manifest blocker remains in the reviewed snapshot. Activation remains withheld pending applied and verified raw-table capability isolation, native seller RPC tests, a legitimate Marketing employee membership without extra roles, staged publication/mapping approval, and an actual effective learner journey. No departmentless exception, certification SQL, SMTP, deployment or automatic promotion is authorized by this artifact."
+  ],
+  "activationApproved": false
+}
