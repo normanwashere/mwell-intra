@@ -1279,22 +1279,42 @@ async function auditKeyboardAndHotspots(page) {
       const attempts = [];
       let recheck;
       try {
-        // Async home sections can move the target after scrolling but before
-        // hit testing. Re-center only on observed movement, never waive a hit.
+        // Nested scroll containers can settle on different paint frames.
+        // Observe consecutive stable frames before re-centering, which would
+        // restart that adjustment. A sampled hit alone never waives movement.
         for (let attempt = 0; attempt < 3; attempt += 1) {
           element.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
-          const beforePaint = element.getBoundingClientRect().toJSON();
-          await nextPaint();
-          await nextPaint();
-          recheck = probe(element);
-          const layoutShifted = ["left", "top", "width", "height"].some(
-            (key) => Math.abs(beforePaint[key] - recheck.diagnostics.rect[key]) > 0.5,
-          );
-          attempts.push({ beforePaint, ...recheck.diagnostics, layoutShifted });
-          if (!layoutShifted) break;
+          let previous = probe(element).diagnostics;
+          const beforePaint = previous.rect;
+          let stableFrames = 0;
+          let layoutShifted = false;
+          let settleFrameCount = 0;
+          for (let frame = 0; frame < 8; frame += 1) {
+            await nextPaint();
+            recheck = probe(element);
+            const current = recheck.diagnostics;
+            const shifted = ["left", "top", "width", "height"].some(
+              (key) => Math.abs(previous.rect[key] - current.rect[key]) > 0.5,
+            ) || ["left", "top"].some(
+              (key) => Math.abs(previous.scroll[key] - current.scroll[key]) > 0.5,
+            ) || previous.scrollContainers.length !== current.scrollContainers.length
+              || previous.scrollContainers.some((container, index) =>
+                ["left", "top"].some((key) => Math.abs(container[key] - current.scrollContainers[index][key]) > 0.5),
+              );
+            layoutShifted ||= shifted;
+            stableFrames = shifted ? 0 : stableFrames + 1;
+            settleFrameCount += 1;
+            previous = current;
+            if (stableFrames >= 2) break;
+          }
+          const settled = stableFrames >= 2;
+          attempts.push({ beforePaint, ...recheck.diagnostics, layoutShifted, settled, settleFrameCount });
+          if (settled && (recheck.reachable || !layoutShifted)) break;
           if (attempt === 2) {
             recheck.reachable = false;
-            recheck.diagnostics.reason = "unstable-layout";
+            if (!settled || recheck.diagnostics.reason === "no-visible-samples") {
+              recheck.diagnostics.reason = "unstable-layout";
+            }
           }
         }
       } finally {
@@ -7572,7 +7592,7 @@ async function eventsCoordinatorReadbackWorkflow(page, state) {
     .getByLabel("Business purpose")
     .fill(state.fulfillmentPurpose);
   await requestDialog.getByLabel("Cost center").selectOption("CC-4100");
-  const product = requestDialog.getByLabel("Product");
+  const product = requestDialog.getByRole("combobox", { name: "Product 1", exact: true });
   if (!(await product.inputValue()))
     throw new Error("Events handoff has no eligible Warehouse product.");
   await requestDialog

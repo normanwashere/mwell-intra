@@ -9,6 +9,22 @@ const release=m=>({runId:m.runId,project:m.project,commit:m.commit,verifiedAt:'2
   evidenceReference:'read-only-catalog.json',fixtureEvidenceReference:'new-products.json',sellerUiEvidenceReference:'actual-seller-ui.json',
     migrations:hashes,installedDefinitionsVerified:true,rawRlsVerified:true,learningPublishedApproved:true,sellerLearningCompleted:true,sellerUiVerified:true,newSyntheticProductsOnly:true});
 
+test('a separately approved new date uses new dated identities without relabelling September 20 evidence',()=>{
+  const original=make();
+  assert.equal(original.prefix,`sep20-evt-${original.runId}`);
+  assert.equal(original.eventName,`Synthetic Sep20 event ${original.runId}`);
+  const next=createManifest({...original,date:'2026-09-21'});
+  validateManifest(next);
+  assert.equal(next.prefix,`uat-evt-20260921-${next.runId}`);
+  assert.equal(next.eventName,`Synthetic UAT event 2026-09-21 ${next.runId.slice(0,8)}`);
+  assert.notEqual(next.eventId,original.eventId);
+  assert(next.lines.every(line=>!original.lines.some(old=>old.productId===line.productId)));
+  assert.deepEqual(next.actors,original.actors);
+  assert.equal(smokeCommands(next)[0].payload.event.end_date,'2026-09-21');
+  assert.equal(smokeCommands(next)[3].payload.required_date,'2026-09-21');
+  assert.throws(()=>validateManifest({...next,eventId:original.eventId}));
+});
+
 test('seller profile preflight must not select the nonexistent profiles.department_id column',async()=>{
   const source=await readFile(new URL('./sep20-event-live.mjs',import.meta.url),'utf8');
   assert.doesNotMatch(source,/from\('profiles'\)\.select\('[^']*department_id/);

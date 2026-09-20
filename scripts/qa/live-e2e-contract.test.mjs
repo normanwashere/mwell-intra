@@ -1230,7 +1230,10 @@ test("interaction reachability rechecks blocked controls without hiding real fix
     source,
     /element\.scrollIntoView\(\{ block: "center", inline: "center", behavior: "instant" \}\)/,
   );
-  assert.match(source, /await nextPaint\(\);\s*await nextPaint\(\);/);
+  assert.match(source, /for \(let frame = 0; frame < 8; frame \+= 1\) \{\s*await nextPaint\(\);/);
+  assert.match(source, /stableFrames = shifted \? 0 : stableFrames \+ 1/);
+  assert.match(source, /const settled = stableFrames >= 2/);
+  assert.match(source, /if \(settled && \(recheck\.reachable \|\| !layoutShifted\)\) break/);
   assert.match(
     source,
     /container\.element\.scrollTo\(\{ left: container\.left, top: container\.top, behavior: "instant" \}\)/,

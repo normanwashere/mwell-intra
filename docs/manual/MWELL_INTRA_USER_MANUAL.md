@@ -1,5 +1,11 @@
 # Mwell Intra Standalone Operating Handbook
 
+## September 21 Follow-Up
+
+Vendors: open your own application, upload each required document, and check that the file appears under the correct requirement. You do not need a Legal reviewer role to upload. Uploading is not submission or approval; complete the remaining application steps and any assigned submission training before submitting. If access is still denied, share the case number and requirement with the support team. Do not create a duplicate application or use another person's account.
+
+Reusable event watch variants stay active; Product decides when to retire them. Returned watches still require inspection and a Product-approved recovery recipe. A separate September 21 synthetic event uses the existing test seller, with a new approved three-watch/two-material request. Stock has not been received, allocated or released for this event. Approval is not a completed seller journey. September 20 records, strict event dates and SMTP are unchanged.
+
 ## September 20 UAT Update
 
 The [September 20 experience update](../releases/2026-09-20-EXPERIENCE-REMEDIATION-CANDIDATE.md) covers the revised work lists, warehouse navigation, batch inspection and event-seller/recovery approach deployed to UAT at `bc5b398`. Required database updates and seller learning publication are installed. The follow-up corrects the new seller's first-login learning display without granting completion or wider permissions. Full transaction certification remains open; read the release status for what has actually been checked. SMTP is unchanged.

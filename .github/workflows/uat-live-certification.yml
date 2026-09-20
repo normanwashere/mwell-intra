@@ -96,6 +96,8 @@ jobs:
         run: node --test --test-concurrency=1 scripts/verify-department-request-names.pglite.test.mjs scripts/verify-replacement-delivery.pglite.test.mjs scripts/verify-authority-plan-performance.pglite.test.mjs
       - name: Verify vendor training authority and recorded journey evidence
         run: node --test scripts/verify-vendor-certification-scope.pglite.test.mjs scripts/qa/recorded-vendor-evidence.test.mjs scripts/qa/controlled-po-acknowledgement.test.mjs scripts/qa/role-api-performance.test.mjs
+      - name: Verify vendor document upload ownership and current authority
+        run: node --test scripts/verify-vendor-document-upload-authorization.pglite.test.mjs scripts/qa/sep21-variant-policy.test.mjs
       - name: Verify quality summary evidence and caller authorization
         run: node --test scripts/verify-quality-queue-evidence.pglite.test.mjs
       - name: Verify governed receiving delivery-date and quantity contracts
@@ -145,7 +147,7 @@ jobs:
       - name: Wait for the exact commit to be deployed
         run: node scripts/qa/wait-for-uat-deployment.mjs
       - name: Verify browser audit visibility and readiness contracts
-        run: node --test scripts/qa/audit-disclosure.browser.test.mjs scripts/qa/quality-validation-workflow.browser.test.mjs scripts/qa/route-evidence.browser.test.mjs scripts/qa/evidence-upload.browser.test.mjs scripts/qa/receipt-quality-probes.test.mjs scripts/qa/excess-save-outcome.browser.test.mjs scripts/qa/receiving-audit-evidence.test.mjs
+        run: node --test scripts/qa/audit-disclosure.browser.test.mjs scripts/qa/event-demand-selector.browser.test.mjs scripts/qa/quality-validation-workflow.browser.test.mjs scripts/qa/route-evidence.browser.test.mjs scripts/qa/evidence-upload.browser.test.mjs scripts/qa/receipt-quality-probes.test.mjs scripts/qa/excess-save-outcome.browser.test.mjs scripts/qa/receiving-audit-evidence.test.mjs
       - name: Verify warehouse reference and home-link targets
         run: node --test scripts/qa/return-links.browser.test.mjs scripts/qa/warehouse-brand-target.browser.test.mjs
       - name: Verify fresh-account onboarding driver regressions

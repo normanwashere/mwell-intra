@@ -280,6 +280,93 @@ test("hotspot scroll and restoration are instant even with smooth nested scrolli
   }, 390);
 });
 
+const nestedHotspotFixture = `<style>html{overflow-anchor:none}body{margin:0;min-height:1800px}main{margin-top:80px;height:680px;overflow:auto;overflow-anchor:none}#settling-target{display:block;width:300px;height:44px;min-height:44px;padding:0}</style><button>Start</button><div style="height:1000px"></div><a id="settling-target" href="#settled">Inspect receipt</a><div style="height:1000px"></div>`;
+
+async function installNestedScrollSettlement(page, { overlay = false, continuous = false, movingLayout = false } = {}) {
+  await page.evaluate(({ overlay, continuous, movingLayout }) => {
+    const target = document.querySelector('#settling-target');
+    const container = document.querySelector('main');
+    const nativeScroll = target.scrollIntoView.bind(target);
+    window.settlementScrollAttempts = 0;
+    window.settlementFrames = 0;
+    target.scrollIntoView = options => {
+      nativeScroll(options);
+      window.settlementScrollAttempts += 1;
+      const delta = window.settlementScrollAttempts % 2 ? 4 : -4;
+      requestAnimationFrame(() => {
+        // Match CI202: main and window each adjust by 4px after centering.
+        // Re-centering restarts that adjustment; merely waiting lets it settle.
+        container.scrollTop += delta;
+        window.scrollBy({ top: delta, behavior: 'instant' });
+        if (overlay && !document.querySelector('#settlement-overlay')) {
+          const blocker = document.createElement('div');
+          blocker.id = 'settlement-overlay';
+          blocker.setAttribute('aria-label', 'Blocking overlay');
+          blocker.style.cssText = 'position:fixed;inset:0;z-index:9999;background:white';
+          document.body.append(blocker);
+        }
+      });
+      if (continuous && !window.settlementFrames) {
+        const shift = () => {
+          window.settlementFrames += 1;
+          if (movingLayout) target.style.transform = `translateY(${window.settlementFrames % 2 ? 8 : -8}px)`;
+          else container.scrollTop += window.settlementFrames % 2 ? 4 : -4;
+          requestAnimationFrame(shift);
+        };
+        requestAnimationFrame(shift);
+      }
+    };
+  }, { overlay, continuous, movingLayout });
+}
+
+for (const width of [360, 390]) {
+  test(`nested mobile scroll settles without restarting its 8px adjustment (${width})`, async () => {
+    await fixture(nestedHotspotFixture, async page => {
+      await page.setViewportSize({ width, height: 844 });
+      await installNestedScrollSettlement(page);
+      const result = await helpers.auditKeyboardAndHotspots(page);
+      assert.deepEqual(result.interceptedTargets.map(item => ({ id: item.targetIdentity.id, reason: item.recheckProbe.reason })), []);
+      assert.equal(await page.evaluate(() => window.settlementScrollAttempts), 1, 'wait for stability before trying another center');
+      assert.equal(await page.locator('main').evaluate(element => element.scrollTop), 0);
+      assert.equal(await page.evaluate(() => scrollY), 0);
+      assert.deepEqual(result.undersizedTargets, []);
+      await page.locator('#settling-target').click();
+      assert.equal(await page.evaluate(() => location.hash), '#settled');
+    }, width);
+  });
+}
+
+test('nested mobile settling never excuses a persistent overlay', async () => {
+  await fixture(nestedHotspotFixture, async page => {
+    await installNestedScrollSettlement(page, { overlay: true });
+    const result = await helpers.auditKeyboardAndHotspots(page);
+    const failure = result.interceptedTargets.find(item => item.targetIdentity.id === 'settling-target');
+    assert.ok(failure);
+    assert.equal(failure.recheckProbe.reason, 'blocked');
+    assert.equal(failure.blocker, 'Blocking overlay');
+    assert.ok(failure.recheckProbe.samples.every(sample => !sample.activatesTarget));
+    assert.equal(await page.locator('main').evaluate(element => element.scrollTop), 0);
+    assert.equal(await page.evaluate(() => scrollY), 0);
+  }, 390);
+});
+
+for (const movingLayout of [false, true]) {
+  test(`reachable mobile target that keeps ${movingLayout ? 'changing layout' : 'scrolling'} still fails`, async () => {
+    await fixture(nestedHotspotFixture, async page => {
+      await installNestedScrollSettlement(page, { continuous: true, movingLayout });
+      const result = await helpers.auditKeyboardAndHotspots(page);
+      const failure = result.interceptedTargets.find(item => item.targetIdentity.id === 'settling-target');
+      assert.ok(failure, 'a sampled hit does not waive continuous movement');
+      assert.equal(failure.recheckProbe.reason, 'unstable-layout');
+      assert.equal(failure.recheckProbe.attempts.length, 3);
+      assert.ok(failure.recheckProbe.attempts.every(attempt => attempt.settled === false && attempt.settleFrameCount === 8));
+      assert.equal(failure.recheckProbe.samples.length, 9, 'continuous movement remains visible and hit-testable');
+      assert.ok(failure.recheckProbe.samples.every(sample => sample.activatesTarget));
+      assert.equal(await page.evaluate(() => window.settlementScrollAttempts), 3);
+    }, 390);
+  });
+}
+
 test("semantic route readiness waits for delayed quality hydration, not merely its heading", async () => {
   await fixture(`<p id="loading">Loading quality controls...</p>`, async page => {
     const initial = await helpers.routeReadinessSnapshot(page);

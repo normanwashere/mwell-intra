@@ -13,10 +13,11 @@ export const REQUIRED_MIGRATIONS = [
 const roles = { owner:'marketing_events_lead', operator:'operations_associate', reviewer:'operations_lead', product:'product_owner', finance:'finance_controller' };
 const actors = () => ({ ...Object.fromEntries(Object.entries(roles).map(([key,role])=>[key,CURRENT_LIVE_ROLES.find(p=>p.role===role).email])), seller:'intra.seller.uat.sep20@mwell.com.ph' });
 export function createManifest({runId=randomUUID(),date,commit,origin}) {
-  const prefix=`sep20-evt-${runId}`;
+  const historical=date==='2026-09-20';
+  const prefix=historical?`sep20-evt-${runId}`:`uat-evt-${date?.replaceAll('-','')}-${runId}`;
   return { version:1,runId,project:PROJECT,commit,origin,date,prefix,
     scope:'First smoke: new event, explicit custody activation/assignment, one new two-line demand only. NOT procurement, allocation, issue, seller outcome, return, recovery, Finance settlement, UI signoff or full-chain proof.',
-    actors:actors(),eventId:`${prefix}-event`,eventName:`Synthetic Sep20 event ${runId}`,
+    actors:actors(),eventId:`${prefix}-event`,eventName:historical?`Synthetic Sep20 event ${runId}`:`Synthetic UAT event ${date} ${runId.slice(0,8)}`,
     sourceLocationId:`${prefix}-source`,sourceBinId:`${prefix}-source-bin`,returnLocationId:`${prefix}-returns`,returnBinId:`${prefix}-return-bin`,
     serials:[1,2,3].map(i=>`${prefix.toUpperCase()}-SERIAL-${i}`),
     lines:[{productId:`${prefix}-device`,quantity:3},{productId:`${prefix}-material`,quantity:2}],

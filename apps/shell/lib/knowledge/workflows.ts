@@ -643,7 +643,7 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
         "action",
         "Submit the accreditation application",
         ["vendor_portal"],
-        "Provide entity, ownership, risk, data-handling, documentary, and technology information. Save the working copy against its retained draft version, review required declarations, capture a fresh signature and submit. A draft conflict requires reviewing the latest saved content before reapplying changes, not blindly retrying a stale save.",
+        "Provide entity, ownership, risk, data-handling, documentary, and technology information. Upload required documents in your own application; you do not need a Legal reviewer role to upload. Check that each file appears under the correct requirement. Uploading a file does not submit or approve the application. Save the working copy against its retained draft version, review required declarations, capture a fresh signature and submit. A draft conflict requires reviewing the latest saved content before reapplying changes, not blindly retrying a stale save.",
       ),
       decision(
         "vendor-evidence",
@@ -1323,7 +1323,7 @@ export const KNOWLEDGE_FLOWS: KnowledgeFlow[] = [
         "action",
         "Restock accepted returns",
         ["warehouse_operations"],
-        "Move reusable stock into a valid bin and preserve the return and inspection references.",
+        "Move reusable stock into a valid bin and preserve the return and inspection references. Returned event watches require inspection and a Product-approved recovery recipe before conversion to the base watch. Reusable event watch variants stay active; Product decides when to retire them. Recovery does not retire the variant SKU or remove its history.",
       ),
       process(
         "return-variance",

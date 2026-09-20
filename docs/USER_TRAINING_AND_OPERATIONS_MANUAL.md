@@ -1,8 +1,12 @@
 # User Training And Operations Manual
 
+## September 21 Vendor Upload Check
+
+Open your own vendor application and upload a document against its matching requirement. You do not need a Legal reviewer role to upload. Confirm the saved filename, then continue the remaining requirements. Uploading does not submit or approve the application: declarations, signature, required submission training and independent Legal review still apply. If access is denied, report the case number and requirement; do not create another application or borrow an account. The upload permission correction is installed on UAT; full Storage-to-Legal certification is recorded separately.
+
 September 20 UAT update: the deployed experience improves open-work visibility, request search, Warehouse navigation, alerts, desktop order density and mobile actions without removing approval or stock-control steps. Completed learning can be collapsed; outstanding requirements still apply. For batch Quality inspection, select compatible records, inspect every item, review all serials and quantities, and attach your own photos. A rejected batch saves none of its results. If confirmation is lost, reopen the unconfirmed inspection and retry the same details instead of creating another attempt.
 
-The event workflow adds individually assigned sellers after release setup. Each seller records their own acknowledged stock; corrections retain the original record through a reversal. Returned watches pass Quality inspection and use a Product-approved recovery recipe. These controls do not automatically retire products, extend event access or enable old events. Follow the detailed [September 20 release guide](releases/2026-09-20-EXPERIENCE-REMEDIATION-CANDIDATE.md) for deployed status and outstanding live checks. The synthetic seller account exists but is not a completed real-user pilot. SMTP is unchanged.
+The event workflow adds individually assigned sellers after release setup. Each seller records their own acknowledged stock; corrections retain the original record through a reversal. Returned watches pass Quality inspection and use a Product-approved recovery recipe. Reusable event watch variants stay active; Product decides when to retire them. Recovering a watch to its base product does not retire the variant SKU or erase its history. These controls do not extend event access or enable old events. Follow the detailed [September 20 release guide](releases/2026-09-20-EXPERIENCE-REMEDIATION-CANDIDATE.md) for deployed status and outstanding live checks. The synthetic seller account exists but is not a completed real-user pilot. SMTP is unchanged.
 
 ## Event Seller Practice
 
