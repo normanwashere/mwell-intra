@@ -18,7 +18,12 @@ export function authorizeOnboardingRequest(request, state) {
   }
   if (['GET', 'HEAD'].includes(method)) {
     assert(!u.pathname.startsWith('/rest/v1/rpc/'), 'GET RPC not permitted');
-    if (u.origin === TARGET.origin) assert(!u.pathname.startsWith('/api/') || u.pathname === '/api/health', 'Unreviewed app API read');
+    if (u.origin === TARGET.origin) {
+      const contextualHelp = u.pathname === '/api/knowledge/context' && u.searchParams.size === 1
+        && u.searchParams.get('path') === '/onboarding';
+      const taskSuggestions = u.pathname === '/api/knowledge/tasks' && !u.search;
+      assert(!u.pathname.startsWith('/api/') || u.pathname === '/api/health' || contextualHelp || taskSuggestions, `Unreviewed app API read: ${u.pathname}`);
+    }
     else assert(u.pathname === '/auth/v1/user' || u.pathname.startsWith('/rest/v1/') || u.pathname.startsWith('/storage/v1/object/'), 'Unreviewed backend read');
     return 'read';
   }

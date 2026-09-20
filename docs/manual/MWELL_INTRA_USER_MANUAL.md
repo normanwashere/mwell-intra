@@ -1,8 +1,8 @@
 # Mwell Intra Standalone Operating Handbook
 
-## September 20 Candidate Preview
+## September 20 UAT Update
 
-The [September 20 experience update](../releases/2026-09-20-EXPERIENCE-REMEDIATION-CANDIDATE.md) covers the revised work lists, warehouse navigation, batch inspection and event-seller/recovery approach. These changes are being verified locally; this handbook does not claim they are deployed on UAT. Read the candidate status before following a new control that is not yet present in your environment.
+The [September 20 experience update](../releases/2026-09-20-EXPERIENCE-REMEDIATION-CANDIDATE.md) covers the revised work lists, warehouse navigation, batch inspection and event-seller/recovery approach deployed to UAT at `bc5b398`. Required database updates and seller learning publication are installed. The follow-up corrects the new seller's first-login learning display without granting completion or wider permissions. Full transaction certification remains open; read the release status for what has actually been checked. SMTP is unchanged.
 
 Onboarding opens with a compact **Choose a task** control, your progress and your next required action. Select **Start**, **Resume** or **Try again** beside the requirement title. Expand **Choose a task** (or **Change task**) to find another task, then scroll the page through the results. For shared tasks, expand **Available to** and the role count to see the full audience. **Continue to My Work** remains available before all learning is finished; actions that require certification still wait for their assigned learning. Shared multi-role requirements, prerequisites and approvals are unchanged.
 

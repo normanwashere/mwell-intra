@@ -19,6 +19,7 @@ import type {
   SupportRequestInput,
 } from "./types";
 import { MODULE_LIST } from "@intra/rbac";
+import { EVENT_SELLER_CURRICULUM } from "./eventSellerTraining";
 import { requirementsShareCompletion } from "./requirementIdentity";
 
 export interface LearningRepository {
@@ -208,13 +209,25 @@ function parseRequirement(value: unknown): RequirementDefinition {
   };
 }
 
-function parseCurriculum(value: unknown): CurriculumDefinition {
+function parseCurriculum(
+  value: unknown,
+  source: EffectiveCurriculum["source"],
+): CurriculumDefinition {
   if (!isRecord(value))
     throw new Error("Learning service returned invalid curriculum.");
+  // Older snapshot SQL omits the new seller persona; recover only its exact catalog identity.
+  const sellerPersona =
+    value.personaId == null &&
+    source === "role" &&
+    value.id === EVENT_SELLER_CURRICULUM.id &&
+    value.version === EVENT_SELLER_CURRICULUM.version &&
+    value.audience === EVENT_SELLER_CURRICULUM.audience;
   return {
     id: requiredString(value, "id"),
     version: requiredNumber(value, "version"),
-    personaId: requiredString(value, "personaId"),
+    personaId: sellerPersona
+      ? EVENT_SELLER_CURRICULUM.personaId
+      : requiredString(value, "personaId"),
     audience: requiredEnum(value, "audience", audiences),
     requirementIds: requiredArray(value, "requirementIds").map((item) => {
       if (typeof item !== "string")
@@ -229,7 +242,7 @@ function parseEffectiveCurriculum(value: unknown): EffectiveCurriculum {
     throw new Error("Learning service returned invalid effective curriculum.");
   const source = requiredEnum(value, "source", curriculumSources);
   return {
-    curriculum: parseCurriculum(value.curriculum),
+    curriculum: parseCurriculum(value.curriculum, source),
     requirements: requiredArray(value, "requirements").map(parseRequirement),
     source,
   };

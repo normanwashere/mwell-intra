@@ -5,7 +5,7 @@ import { MANIFEST } from './sep20-seller-learning-manifest.mjs';
 import { manifestSha256 } from './sep20-seller-learning.mjs';
 import { EVENT_SELLER_REQUIREMENT } from '../modules/learning/src/eventSellerTraining.ts';
 import { TARGET, authorizeOnboardingRequest, verifyCheckpointEvents } from './sep20-seller-learning-ui.mjs';
-import { validateSellerRun, verifySellerIdentity, planSellerTraining, verifySellerCompletion, runnerSource } from './sep20-seller-learning-live.mjs';
+import { validateSellerRun, verifySellerIdentity, verifyUnstartedSeller, planSellerTraining, verifySellerCompletion, runnerSource } from './sep20-seller-learning-live.mjs';
 
 const id = '00000000-0000-4000-8000-000000000001';
 const email = 'intra.seller.uat.sep20@mwell.com.ph';
@@ -65,6 +65,32 @@ test('normal authenticated seller must not carry core staff or any other action 
     assert.throws(() => verifySellerIdentity({ ...user, app_metadata: { ...user.app_metadata, roles } }, { id, email }));
   }
   assert.throws(() => verifySellerIdentity({ ...user, id: MANIFEST.ownerId }, { id, email }));
+});
+
+test('onboarding permits only its reviewed contextual help read', () => {
+  const state = { actor: { id, email }, token: 'fixture-token', phase: 'onboarding', stopped: false, armed: null };
+  const request = { url: `${TARGET.origin}/api/knowledge/context?path=%2Fonboarding`, method: 'GET', headers: {} };
+  assert.equal(authorizeOnboardingRequest(request, state), 'read');
+  assert.equal(authorizeOnboardingRequest({ ...request, url: `${TARGET.origin}/api/knowledge/tasks` }, state), 'read');
+  assert.throws(() => authorizeOnboardingRequest({ ...request, url: `${TARGET.origin}/api/knowledge/tasks?demoProfile=admin` }, state));
+  for (const url of [`${TARGET.origin}/api/admin/audit`, `${TARGET.origin}/api/knowledge/context?article=foreign`,
+    `${TARGET.origin}/api/knowledge/context?path=%2Fwarehouse`, `${TARGET.origin}/api/knowledge/context?path=%2Fonboarding&extra=1`]) {
+    assert.throws(() => authorizeOnboardingRequest({ ...request, url }, state));
+  }
+  assert.throws(() => authorizeOnboardingRequest({ ...request, method: 'POST', body: {} }, state));
+});
+
+test('a materialized assignment is not an attempted or completed learning session', () => {
+  const s = snapshot();
+  assert.equal(verifyUnstartedSeller(s), true);
+  s.progress = s.curricula[0].requirements.map(r => ({ requirementId: r.id, requirementVersion: 1,
+    state: 'not_started', attemptCount: 0, activeAttempt: null, completedAt: null }));
+  assert.equal(verifyUnstartedSeller(s), true);
+  for (const patch of [{ state: 'passed' }, { attemptCount: 1 }, { activeAttempt: { id } },
+    { completedAt: new Date().toISOString() }, { requirementVersion: 2 }, { requirementId: 'foreign' }]) {
+    const v = structuredClone(s); Object.assign(v.progress[0], patch); assert.throws(() => verifyUnstartedSeller(v));
+  }
+  assert.throws(() => verifyUnstartedSeller({ ...s, certifications: [{ id }] }));
 });
 
 test('only exact assigned orientation and six reviewed seller decisions are executable', () => {

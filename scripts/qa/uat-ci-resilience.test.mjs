@@ -247,6 +247,7 @@ test('Sep20 safety contracts run without live seller provisioning or SMTP', asyn
     'scripts/verify-quality-batch.pglite.test.mjs',
     'scripts/verify-stock-conversion.pglite.test.mjs',
     'scripts/verify-warehouse-raw-read-policy.pglite.test.mjs',
+    'scripts/verify-event-ledger-effective-read.pglite.test.mjs',
     'modules/events/tests/custody.pglite.test.mjs',
     'modules/learning/tests/eventSellerLearningReadiness.pglite.test.mjs',
     'modules/procurement/request-list-privacy.pglite.test.mjs',

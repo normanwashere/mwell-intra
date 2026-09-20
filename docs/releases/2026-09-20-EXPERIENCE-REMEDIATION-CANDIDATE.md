@@ -1,6 +1,6 @@
 # September 20 Experience Update
 
-Status: local candidate checks complete; live validation remains open. This is not a UAT deployment notice. Existing approvals, stock controls and required learning still apply. SMTP and the reporting API are unchanged.
+Status: deployed to UAT at `bc5b39849bf33662bfefac7b365ad64ce71a968a` on September 20, 2026. The five migration bundle and the subsequent Finance ledger authority correction are installed. Existing approvals, stock controls and required learning still apply. SMTP and the reporting API are unchanged. Deployment is not full certification: the automated pipeline and the complete seller-to-Finance transaction journey still need successful evidence.
 
 ## Finding Your Work
 
@@ -18,7 +18,7 @@ A physical-return shortcut is only offered for eligible released custody and to 
 
 ## Inspecting Several Items
 
-The candidate adds a batch option to Quality Control. Its database migration must be installed before it can save on UAT.
+Quality Control now includes a batch option on UAT, with its database migration installed. Desktop and mobile selection/review were checked without submitting existing tester inspections. Successful and rejected live submissions remain distinct transaction checks.
 
 1. Expand the receipt or return group and select the items you actually checked. A selection is limited to 50 inspection records from the same source, product, PO line, bin and lot.
 2. Choose Review selected inspections. Check the list and quantities. Every serial remains a separate item; a bulk quantity is not permission to sample just part of it.
@@ -56,7 +56,9 @@ Product approves recipes in Product > Stock conversion recipes. Warehouse operat
 
 The event cannot be cancelled while released stock still awaits acknowledgment, and settlement cannot replace missing stock with invented return or loss quantities. Complete physical handovers and recorded returns first. Submitted or approved settlement prevents new demand from changing its reconciled balance. Post-event corrections and variant SKU retirement remain undecided; the candidate keeps existing product lifecycle rules and strict assignment dates.
 
-These are candidate workflows. Native PostgreSQL concurrency and role-isolation checks have passed in an isolated fixture environment, including competing transactions and actual scoped seller RPCs. Complete UAT migration, activation, learning publication and saved live transaction evidence remain separate release checks. A screenshot or local simulated account is not a completed live seller pilot.
+Native PostgreSQL concurrency and role-isolation checks passed in an isolated fixture environment, including competing transactions and actual scoped seller RPCs. UAT migrations, seller learning publication and the seller curriculum mapping are now installed. The synthetic seller `intra.seller.uat.sep20@mwell.com.ph` was created without email delivery, with the seller role only and Marketing member scope. Its first-login test found a learning-page parsing error. This follow-up accepts a blank legacy persona label only for the exact published internal seller role curriculum v1; it preserves assigned learning, attempts, locks and certificate checks. The actual UI completion retest is recorded separately, not inferred from this correction. No event, stock allocation, sale or giveaway is credited by the parser fix. A screenshot or an automated account is not a human seller pilot.
+
+The first CI run stopped on a real Finance ledger permission check. The correction now uses current effective authority instead of the raw role capability. The deployed database verification reports zero raw authority boundaries, no missing objects and no missing grants. The full CI rerun must still pass; do not count skipped downstream checks as successful.
 
 ## Learning And Help
 
@@ -71,4 +73,4 @@ Qualified returning users are directed toward their work, while assigned outstan
 - After release setup, test two different sellers, a seller assigned to another event, duplicate references, sold-versus-returned serial conflicts, a correction and Finance readback.
 - Complete approved watch conversion and recovery with exact serial and packaging balances. Preserve all test evidence and report the record numbers.
 
-Verification results and any remaining gaps are recorded separately in the September 20 remediation ledger. Do not treat this candidate guide as a statement that UAT has been upgraded.
+Five existing roles were checked on live UAT at desktop and mobile widths, producing 44 screenshots with no recorded page errors, horizontal overflow or automated accessibility findings. This read-only screen check is not an all-role transaction certificate. Verification results and remaining gaps are recorded separately in the September 20 remediation ledger.

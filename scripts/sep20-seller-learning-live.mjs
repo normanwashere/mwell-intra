@@ -58,6 +58,18 @@ export function verifySellerIdentity(user, actor) {
   return true;
 }
 
+export function verifyUnstartedSeller(snapshot) {
+  assert(Array.isArray(snapshot?.progress) && Array.isArray(snapshot.certifications)
+    && snapshot.certifications.length === 0, 'Uncertified synthetic learner required');
+  const progress = snapshot.progress;
+  assert(progress.length === 0 || progress.length === 2, 'Unexpected assigned progress');
+  if (progress.length) assert.deepEqual(progress.map(p => p.requirementId).sort(), [orientation, seller.id].sort());
+  for (const item of progress) assert(item.requirementVersion === 1 && item.state === 'not_started'
+    && item.attemptCount === 0 && !item.activeAttempt && !item.completedAt,
+  'Only unstarted assigned requirements may proceed; no attempt replay');
+  return true;
+}
+
 export function planSellerTraining(snapshot) {
   assert(snapshot?.curricula?.length === 1, 'Only the exact seller curriculum may be assigned');
   const item = snapshot.curricula[0];
@@ -213,7 +225,7 @@ export async function runSellerLearning({ env = process.env, approval, chromium,
           state.token = data.access_token;
           report.ownScope = await readOwnScope();
           report.beforeBootstrap = await readSnapshot();
-          assert(report.beforeBootstrap.snapshot.progress.length === 0 && report.beforeBootstrap.snapshot.certifications.length === 0, 'Fresh synthetic learner required; no replay');
+          verifyUnstartedSeller(report.beforeBootstrap.snapshot);
           state.phase = 'onboarding'; await persist();
         }
         if (category === 'command') {

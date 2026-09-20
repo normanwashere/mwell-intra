@@ -6,6 +6,10 @@ import {
 } from "./repository";
 import type { MemoryLearningRepositoryOptions } from "./repository";
 import * as publicApi from "./index";
+import {
+  EVENT_SELLER_CURRICULUM,
+  EVENT_SELLER_REQUIREMENT,
+} from "./eventSellerTraining";
 import type {
   AssessmentSubmission,
   Certification,
@@ -187,6 +191,105 @@ const snapshotWithSimulationPassed = (): LearningSnapshot => {
 };
 
 describe("SupabaseLearningRepository", () => {
+  const sellerSnapshot = (personaId: unknown = null) => {
+    const orientationId = EVENT_SELLER_REQUIREMENT.prerequisiteIds[0]!;
+    return {
+      curricula: [{
+        curriculum: { ...EVENT_SELLER_CURRICULUM, personaId },
+        requirements: [
+          { ...orientation, id: orientationId },
+          EVENT_SELLER_REQUIREMENT,
+        ],
+        source: "role",
+      }],
+      progress: [
+        progress("ar-seller-orientation", orientationId, "not_started"),
+        progress("ar-seller-practice", EVENT_SELLER_REQUIREMENT.id, "not_started"),
+      ],
+      certifications: [],
+      lockedCapabilities: [{
+        capability: { module: "events", capability: "record_event_outcome" },
+        reason: "missing_certification",
+        requirementIds: [orientationId, EVENT_SELLER_REQUIREMENT.id],
+        canRequestEmergencyException: false,
+      }],
+      refreshedAt: now,
+    };
+  };
+
+  it("parses the published seller v1 null persona without changing learning evidence or locks", async () => {
+    const data = sellerSnapshot();
+    const rpc = vi.fn(async () => ({ data, error: null }));
+    const repository = new SupabaseLearningRepository({ schema: () => ({ rpc }) });
+
+    const parsed = await repository.snapshot();
+    expect(parsed.curricula[0]!.curriculum.personaId).toBe("general_employee");
+    expect(parsed.curricula[0]!.curriculum.requirementIds).toEqual(data.curricula[0]!.curriculum.requirementIds);
+    expect(parsed.curricula[0]!.requirements).toEqual(data.curricula[0]!.requirements);
+    expect(parsed.progress).toEqual(data.progress);
+    expect(parsed.certifications).toEqual([]);
+    expect(parsed.lockedCapabilities).toEqual(data.lockedCapabilities);
+    expect(data.curricula[0]!.curriculum.personaId).toBeNull();
+    expect(rpc.mock.calls).toEqual([["my_learning_snapshot"]]);
+  });
+
+  it.each([false, true])("keeps persona and readiness per curriculum for a multi-role seller (seller first: %s)", async (sellerFirst) => {
+    const sellerData = sellerSnapshot();
+    const other = snapshotWithAssessmentPassed();
+    const data = {
+      ...sellerData,
+      curricula: sellerFirst
+        ? [...sellerData.curricula, ...other.curricula]
+        : [...other.curricula, ...sellerData.curricula],
+      progress: [...sellerData.progress, ...other.progress],
+      certifications: [issuedCertification],
+    };
+    const rpc = vi.fn(async () => ({ data, error: null }));
+    const repository = new SupabaseLearningRepository({ schema: () => ({ rpc }) });
+
+    const parsed = await repository.snapshot();
+    expect(parsed.curricula.find(item => item.curriculum.id === EVENT_SELLER_CURRICULUM.id)?.curriculum.personaId).toBe("general_employee");
+    expect(parsed.curricula.find(item => item.curriculum.id === effectiveCurriculum.curriculum.id)?.curriculum.personaId).toBe("operations_associate");
+    expect(parsed.progress).toEqual(data.progress);
+    expect(parsed.certifications).toEqual([issuedCertification]);
+    expect(parsed.lockedCapabilities).toEqual(sellerData.lockedCapabilities);
+    expect(rpc.mock.calls).toEqual([["my_learning_snapshot"]]);
+  });
+
+  it("preserves an explicit server seller persona", async () => {
+    const data = sellerSnapshot("marketing_events_lead");
+    const repository = new SupabaseLearningRepository({ schema: () => ({ rpc: async () => ({ data, error: null }) }) });
+    expect((await repository.snapshot()).curricula[0]!.curriculum.personaId).toBe("marketing_events_lead");
+  });
+
+  it.each([
+    { id: "internal.role.events.unknown.v1" },
+    { version: 2 },
+    { audience: "vendor" },
+    { personaId: "" },
+    { personaId: 7 },
+  ])("rejects malformed or unrecognized null-persona curricula: %j", async (patch) => {
+    const data = sellerSnapshot();
+    Object.assign(data.curricula[0]!.curriculum, patch);
+    const repository = new SupabaseLearningRepository({ schema: () => ({ rpc: async () => ({ data, error: null }) }) });
+    await expect(repository.snapshot()).rejects.toThrow("invalid personaId");
+  });
+
+  it("does not infer missing personas for another role or non-role assignments", async () => {
+    for (const source of ["assignment", "department"]) {
+      const data = sellerSnapshot();
+      data.curricula[0]!.source = source;
+      const repository = new SupabaseLearningRepository({ schema: () => ({ rpc: async () => ({ data, error: null }) }) });
+      await expect(repository.snapshot()).rejects.toThrow("invalid personaId");
+    }
+    const data = { ...sellerSnapshot(), curricula: [
+      ...sellerSnapshot().curricula,
+      { ...effectiveCurriculum, curriculum: { ...effectiveCurriculum.curriculum, personaId: null } },
+    ] };
+    const repository = new SupabaseLearningRepository({ schema: () => ({ rpc: async () => ({ data, error: null }) }) });
+    await expect(repository.snapshot()).rejects.toThrow("invalid personaId");
+  });
+
   it("preserves the assigned version checkpoint list returned by the server", async () => {
     const data = snapshot();
     const ids = ["review-custody-evidence", "record-independent-disposition"];
