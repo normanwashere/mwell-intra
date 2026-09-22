@@ -1,5 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { includeFile, documentationOnly, secretKinds, checksum } from './export-handoff-source.mjs';
 
 test('copy includes app source, templates, locked tools and migration history', () => {
@@ -17,4 +22,30 @@ test('scanner reports categories without returning credential values', () => {
   assert.deepEqual(secretKinds(sample), ['provider_secret']);
   assert.deepEqual(secretKinds(Buffer.from('const password = process.env.PASSWORD;')), []);
   assert.equal(checksum(Buffer.from('abc')), 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+});
+
+test('recipient verification succeeds for matching files and rejects altered bytes or unsafe manifest paths', () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'mwell-source-verifier-'));
+  const script = fileURLToPath(new URL('./export-handoff-source.mjs', import.meta.url));
+  const run = () => spawnSync(process.execPath, [script, '--verify', dir], { encoding: 'utf8', windowsHide: true });
+  try {
+    mkdirSync(path.join(dir, 'apps/shell'), { recursive: true });
+    writeFileSync(path.join(dir, 'apps/shell/package.json'), '{}');
+    writeFileSync(path.join(dir, 'pnpm-lock.yaml'), 'lockfileVersion: 9');
+    const manifest = { schemaVersion: 1, commit: 'a'.repeat(40), sourceCommit: 'b'.repeat(40), files: {
+      'apps/shell/package.json': checksum(Buffer.from('{}')),
+      'pnpm-lock.yaml': checksum(Buffer.from('lockfileVersion: 9')),
+    } };
+    const save = () => writeFileSync(path.join(dir, 'source-manifest.json'), JSON.stringify(manifest));
+    save();
+    const good = run();
+    assert.equal(good.status, 0, good.stderr);
+    assert.equal(JSON.parse(good.stdout).filesVerified, 2);
+    writeFileSync(path.join(dir, 'pnpm-lock.yaml'), 'tampered');
+    assert.notEqual(run().status, 0);
+    writeFileSync(path.join(dir, 'pnpm-lock.yaml'), 'lockfileVersion: 9');
+    manifest.files['../escape'] = 'c'.repeat(64);
+    save();
+    assert.notEqual(run().status, 0);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

@@ -1,5 +1,15 @@
 # Event Seller CI Date Correction
 
+## September 22 UAT Deployment Receipt
+
+Application `9989a0d20fd6126f4ce61ebe5c9e38b9bda0feb1` was deployed to the UAT project and promoted to the canonical UAT domain. Deployment ID: `dpl_7oWQMZJ6f7gfmAFVCLxUh6GheiKw`. Health at 2026-09-22T14:08:10.464Z confirmed that exact commit, UAT environment and project `kkoitlvydytdhlpxhuah`.
+
+Only migrations `20260922111953` and `20260922123940` were installed after a scoped dry run. The public governed approval wrapper stayed unchanged; the private delegate remains inaccessible to API roles. No active DOA policy, role, learning completion or historical approval was rewritten.
+
+The existing synthetic PHP340 Operations request passed final approval through the live UI as its named Operations Lead. Unassigned Procurement Lead eligibility remained denied. Database readback confirmed Approved status and identical hashes for the two prior decisions. Desktop/390/320 confirmation screenshots had no page-wide overflow. These synthetic test marks do not represent real-person approval or a supplier commitment.
+
+CI206 preparation passed. Six route widths, two transaction widths, independent cleanup and the final bundle are tracked separately in run 35737238630. The team handoff records the latest observed result. SMTP is untouched; production, actual participant acceptance and the downstream seller chain remain separate gates. Candidate evidence below is historical, not a current-status assertion.
+
 ## Why Run 203 Stopped
 
 The named-seller ledger test created its event using PostgreSQL `current_date`, which follows the database session timezone. Seller access correctly evaluates event dates in Asia/Manila. Run 203 reached the check at 17:10 UTC on September 20, already September 21 in Manila. Its synthetic September 20 event was therefore expired, and the real predicate correctly rejected it with `Not authorized: event custody read`.

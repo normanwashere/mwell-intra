@@ -60,6 +60,8 @@ for (const item of status.items) {
 const drafts = Object.fromEntries(['data', 'technical', 'testers'].map(k => [k, input(`docs/handoffs/2026-09-22/${k}.md`)]));
 drafts.technical += '\n' + input('docs/handoffs/2026-09-22/PORTABILITY.md');
 input('scripts/docs/build-handoffs-20260922.mjs');
+input('tools/handoff/package.json');
+input('tools/handoff/package-lock.json');
 const maintenance = input('docs/handoffs/2026-09-22/README.md');
 
 // Every source read is pinned to the requested commit, not a moving working tree.
@@ -376,7 +378,8 @@ async function inspectPrint(qa) {
   const reports = [];
   for (const key of ['index', 'data', 'technical', 'testers']) {
     const pdfPath = path.join(qa, `${key}-print-a4.pdf`);
-    const pdf = await pdfjs.getDocument({ data: new Uint8Array(readFileSync(pdfPath)), useSystemFonts: true }).promise;
+    const loadingTask = pdfjs.getDocument({ data: new Uint8Array(readFileSync(pdfPath)), useSystemFonts: true, isEvalSupported: false });
+    const pdf = await loadingTask.promise;
     const pagesText = [];
     for (let n = 1; n <= pdf.numPages; n++) {
       const page = await pdf.getPage(n);
@@ -416,7 +419,7 @@ async function inspectPrint(qa) {
     }
     writeFileSync(path.join(qa, `${key}-print-contact-sheet.png`), sheet.toBuffer('image/png'));
     reports.push({ document: key, pages: pdf.numPages, allSectionHeadingsPresent: true, currentReleasePointerPresent: true, blankPages: 0, caseIdsChecked: key === 'testers' ? cases.length : 0, datasetIdsChecked: key === 'data' ? datasetIds.length : 0, renderedPages: pdf.numPages });
-    await pdf.destroy();
+    await loadingTask.destroy();
   }
   return reports;
 }

@@ -14,8 +14,10 @@ Use Node 24 and pnpm 10.23.0. From the full monorepo root:
 
 ```sh
 pnpm install --frozen-lockfile
-npm ci --prefix tools/handoff --ignore-scripts
-npm exec --prefix tools/handoff -- playwright install chromium
+cd tools/handoff
+npm ci --ignore-scripts
+npm exec -- playwright install chromium
+cd ../..
 node scripts/docs/build-handoffs-20260922.mjs
 node scripts/docs/build-handoffs-20260922.mjs --verify
 ```
@@ -37,6 +39,8 @@ node scripts/docs/export-handoff-source.mjs --ref <documentation-commit> --appli
 ```
 
 Install the documentation toolchain first. The exporter creates a fresh source directory, ZIP, file-hash manifest and ZIP checksum. It excludes local environments, caches, linked-project metadata, scratch work and generated output. Distribute through an approved access-controlled channel. Do not recursively ZIP a working directory.
+
+Before installing an extracted source package, compare the ZIP checksum through the agreed delivery channel and run `node scripts/docs/export-handoff-source.mjs --verify .`. This verifies all manifest-listed file bytes. It does not authenticate an attacker-supplied manifest or scan extra unlisted files.
 
 A plain source ZIP can build the app. Two historical screenshot-provenance checks additionally need the original Git commit objects. Keep those checks strict: import history or provide an approved archive of that history. Do not delete the assertions to make a source-only copy appear fully certified.
 

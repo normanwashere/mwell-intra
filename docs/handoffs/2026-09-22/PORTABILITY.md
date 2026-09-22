@@ -19,6 +19,8 @@ The app installs and builds from a source copy, but two historical screenshot-pr
 
 Use **Node 24** for the current release, matching UAT certification, and **pnpm 10.23.0**. The app manifest permits Node 22+, but this is not proof that every supported version was retested. Use the lockfile; do not upgrade packages during transfer.
 
+The legacy `.node-version` file and old production workflow still say 22. Select Node 24 explicitly in the receiving build/test runner to reproduce current certification. Do not silently inherit that legacy setting. Before installing a source ZIP, verify its delivered checksum and run `node scripts/docs/export-handoff-source.mjs --verify .` from the extracted source root.
+
 ```sh
 pnpm install --frozen-lockfile
 pnpm lint

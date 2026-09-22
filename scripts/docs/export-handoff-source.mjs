@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,6 +30,22 @@ export function secretKinds(bytes) {
 }
 
 async function main(args) {
+  if (args.length === 2 && args[0] === '--verify') {
+    const root = path.resolve(args[1]);
+    const manifest = JSON.parse(readFileSync(path.join(root, 'source-manifest.json'), 'utf8'));
+    assert.equal(manifest.schemaVersion, 1);
+    assert.match(manifest.commit, /^[a-f0-9]{40}$/);
+    assert.match(manifest.sourceCommit, /^[a-f0-9]{40}$/);
+    assert(manifest.files['apps/shell/package.json'] && manifest.files['pnpm-lock.yaml']);
+    for (const [name, hash] of Object.entries(manifest.files)) {
+      assert(includeFile(name), `Unsafe manifest path: ${name}`);
+      assert.match(hash, /^[a-f0-9]{64}$/);
+      assert.equal(checksum(readFileSync(path.join(root, name))), hash, `Changed source file: ${name}`);
+    }
+    console.log(JSON.stringify({ applicationCommit: manifest.commit, sourceCommit: manifest.sourceCommit,
+      filesVerified: Object.keys(manifest.files).length, status: 'passed', scope: 'Manifest-listed files only; compare archive checksum via trusted delivery channel.' }, null, 2));
+    return;
+  }
   assert.equal(args.length, 6, 'Use --ref COMMIT --application-ref COMMIT --out NEW_DIRECTORY');
   const options = Object.fromEntries(Array.from({ length: 3 }, (_, i) => [args[i * 2], args[i * 2 + 1]]));
   assert.deepEqual(Object.keys(options).sort(), ['--application-ref', '--out', '--ref']);
