@@ -22,6 +22,7 @@ import {
 import { cleanupRun } from "./live-e2e-cleanup.mjs";
 import { createReceivingAuditEvidence } from "./receiving-audit-evidence.mjs";
 import { createPaymentAuditEvidence, evidencePdf } from "./payment-audit-evidence.mjs";
+import { selectDoaFixtureApprovers } from "./doa-assignment-driver.mjs";
 import { cleanupCertificationRequestEvidence, cleanupExcessCustodyStorage, gateCertificationRequestCleanup,
   prepareTask3ApprovalMembership, changeTask3ApprovalMembership } from "./cleanup-uat-live-run.mjs";
 import { resolveSharedUatPassword } from "./provision-uat-intra-test-users.mjs";
@@ -2349,7 +2350,7 @@ async function adminCreateDoaWorkflow(
   page,
   marker,
   { captureState },
-  { department, departmentName },
+  { department, departmentName, departmentHeadId, finalApproverId },
 ) {
   const version = `${marker}-V1`;
   await page.goto(`${baseUrl}/admin/doa?workflow=${Date.now()}`, {
@@ -2424,11 +2425,7 @@ async function adminCreateDoaWorkflow(
   await page.locator("#doa-effective-date").fill("2026-07-14");
   await page.getByLabel("Tier 1 minimum").fill("0");
   await page.getByLabel("Tier 1 maximum").fill("1000");
-  const approvers = page.getByLabel(/Tier \d+ named approver/);
-  for (let index = 0; index < (await approvers.count()); index += 1)
-    await page
-      .getByLabel(`Tier ${index + 1} named approver`)
-      .selectOption({ index: 1 });
+  await selectDoaFixtureApprovers(page, { departmentHeadId, finalApproverId });
   await clickSaveDraft();
   const matrixCard = page.getByRole("group", {
     name: `${departmentName} ${version} DOA matrix`,
@@ -2771,6 +2768,8 @@ async function createTask3ReceiptFixture(marker, registerTask3Cleanup) {
     cycleRequestId: null,
     requesterId: requesterProfiles[0].id,
     reviewerId: reviewerProfiles[0].id,
+    departmentHeadId: approverProfiles[0].id,
+    finalApproverId: officerProfiles[0].id,
     approverName: approverProfiles[0].full_name,
     poIds: [
       ids.cleanPo,
@@ -9434,6 +9433,8 @@ try {
                 adminCreateDoaWorkflow(page, marker, hooks, {
                   department: task3Fixture.ids.departmentCode,
                   departmentName: `${marker} Receipt Department`,
+                  departmentHeadId: task3Fixture.departmentHeadId,
+                  finalApproverId: task3Fixture.finalApproverId,
                 }),
             },
           ),

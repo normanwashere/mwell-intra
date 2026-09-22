@@ -6,6 +6,22 @@ import test from "node:test";
 import { assertZeroResidue, buildRunScope } from "./cleanup-uat-live-run.mjs";
 import { buildDeterministicAuditRunId } from "./uat-ci-run-id.mjs";
 import { waitForExactDeployment } from "./wait-for-uat-deployment.mjs";
+import { selectDoaFixtureApprovers } from './doa-assignment-driver.mjs';
+
+test('DOA fixture selects named qualified actors, never alphabetical dropdown positions', async () => {
+  const departmentHeadId = '60bdca8a-14dd-4297-b9a8-be64e9e7a1cc';
+  const finalApproverId = '2936c9fc-5859-47fc-b2fc-4ee3bb49fc71';
+  const calls = [];
+  const page = { getByLabel: label => ({ count: async () => 2,
+    inputValue: async () => label === 'Tier 1' ? 'dept_head' : 'final_approver',
+    selectOption: async value => { assert.equal(typeof value, 'string'); calls.push([label, value]); } }) };
+  await selectDoaFixtureApprovers(page, { departmentHeadId, finalApproverId });
+  assert.deepEqual(calls, [['Tier 1 named approver', departmentHeadId], ['Tier 2 named approver', finalApproverId]]);
+  await assert.rejects(selectDoaFixtureApprovers(page, { departmentHeadId }), /final-approver fixture identity/);
+  await assert.rejects(selectDoaFixtureApprovers(page, { departmentHeadId, finalApproverId: departmentHeadId }), /distinct fixture/);
+  await assert.rejects(selectDoaFixtureApprovers({ getByLabel: () => ({ count: async () => 3 }) },
+    { departmentHeadId, finalApproverId }), /default DOA tiers change/);
+});
 
 const require = createRequire(new URL("../../apps/shell/package.json", import.meta.url));
 const yaml = createRequire(require.resolve("eslint"))("js-yaml");
