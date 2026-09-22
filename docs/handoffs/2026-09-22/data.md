@@ -159,6 +159,6 @@ The proposed performance gate is capture within five minutes and no more than 10
 
 ## References and Next Step
 
-The HTML includes the full proposed reporting design and implementation plan as offline downloads, plus the Dataset Catalogue appendix. They remain proposed documents. The design's security section is a threat model and proposed verification work, not penetration-test evidence or security acceptance. The app source was reviewed at `9989a0d20fd6126f4ce61ebe5c9e38b9bda0feb1`; the separate September 20 reporting documents remain design inputs, not code in that release.
+The HTML includes the full proposed reporting design and implementation plan as offline downloads, plus the Dataset Catalogue appendix. They remain proposed documents. The design's security section is a threat model and proposed verification work, not penetration-test evidence or security acceptance. The app source was reviewed at `9823059bbe08fd1949105a5901683188e5716115`; the separate September 20 reporting documents remain design inputs, not code in that release.
 
 **Next step:** Data confirms the setup checklist; Engineering turns the approved contract into a scheduled implementation. App certification and reporting-service acceptance stay separate. Nothing in this pack changes business workflows, grants credentials or enables a production connection.

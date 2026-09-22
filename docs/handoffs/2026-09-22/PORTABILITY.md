@@ -2,6 +2,8 @@
 
 **Bitbucket is the source repository and can run CI; it does not replace the application server, database, Auth or private file storage.** The production host and backend ownership are not yet confirmed. Moving source alone does not move these services or their data.
 
+**Do not copy the default `main` branch as this release.** The reviewed application is `9823059bbe08fd1949105a5901683188e5716115` on `codex/uat-launch-blockers`. The transfer branch `codex/sep22-event-seller-certification` adds the final handoff status as documentation-only successor commits. Use the source ZIP's `source-manifest.json` for its exact transfer commit, or import that branch and verify its diff from the application commit contains documentation only. `main` was intentionally not updated because its legacy workflow can deploy automatically to a separately configured production target.
+
 | Transfer route | Required delivery | Receiving-team check |
 | --- | --- | --- |
 | Git repository import | Full Intra monorepo, agreed release commit and retained history; import into a private destination | Match the release commit before modifying it. Configure branch protection, reviewers and destination-owned credentials |
