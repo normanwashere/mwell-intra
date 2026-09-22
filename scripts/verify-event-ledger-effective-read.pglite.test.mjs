@@ -11,11 +11,14 @@ const newCheck = "core.has_live_cap('events','approve_settlement')";
 const definition = name => original.match(new RegExp(`create (?:or replace )?function ${name.replaceAll('.', '\\.')}\\([\\s\\S]*?\\$\\$;`))[0];
 const ledger = async (db, event = 'own') => (await db.query('select warehouse.event_custody_ledger($1::jsonb) result', [{ event_id: event }])).rows[0].result;
 
-async function fixture({ apply = true } = {}) {
+async function fixture({ apply = true, timeZone = 'UTC' } = {}) {
   const db = await rawReadFixture();
+  await db.query("select set_config('TimeZone',$1,false)", [timeZone]);
   await db.exec(`alter table core.profiles add full_name text default 'Fixture',add email text;
     update core.profiles set email=case when id='${READER}' then 'reader@example.test' else 'other@example.test' end;
-    alter table warehouse.events add name text default 'Event',add status text default 'active',add owner_email text default 'reader@example.test',add start_date date default current_date,add end_date date default current_date;
+    alter table warehouse.events add name text default 'Event',add status text default 'active',add owner_email text default 'reader@example.test',
+      add start_date date default (statement_timestamp() at time zone 'Asia/Manila')::date,
+      add end_date date default (statement_timestamp() at time zone 'Asia/Manila')::date;
     create table private.event_sellers(event_id text,user_id uuid,revoked_at timestamptz,valid_from timestamptz,valid_until timestamptz);
     insert into private.event_sellers values('own','${READER}',null,now()-interval '1 day',now()+interval '1 day');
     create table private.event_custody_sources(event_id text,allocation_id text,product_id text);
@@ -82,6 +85,63 @@ test('named seller keeps own entries only; unassigned and other-event sellers de
   await db.exec('reset role;delete from private.event_sellers;set role authenticated');
   await assert.rejects(ledger(db), /Not authorized/);
 });
+
+for (const timeZone of ['UTC', 'Pacific/Honolulu', 'Pacific/Kiritimati']) {
+  test(`seller fixture stays on the Manila event date with database timezone ${timeZone}`, async t => {
+    const db = await fixture({ timeZone }); t.after(() => db.close());
+    await setRoles(db, [['events', 'seller']]);
+    assert.deepEqual((await ledger(db)).entries.map(entry => entry.seller_id), [READER]);
+    await assert.rejects(ledger(db, 'foreign'), /Not authorized: event custody read/);
+    await db.exec('reset role');
+    const dates = (await db.query(`select
+      start_date::text as start_date, end_date::text as end_date,
+      (statement_timestamp() at time zone 'Asia/Manila')::date::text as event_date
+      from warehouse.events where id='own'`)).rows[0];
+    assert.equal(dates.start_date, dates.event_date, 'fixture start must use the event business timezone');
+    assert.equal(dates.end_date, dates.event_date, 'fixture end must use the event business timezone');
+  });
+}
+
+test('seller event access includes Manila opening midnight and excludes closing midnight', async t => {
+  const db = await fixture(); t.after(() => db.close());
+  // Only the clock is substituted in the isolated database; the actual
+  // seller predicate, role checks and half-open date boundaries stay intact.
+  await db.exec(`create function private.fixture_statement_timestamp() returns timestamptz language sql stable as $$
+      select current_setting('test.event_clock')::timestamptz $$;
+    update warehouse.events set start_date='2026-09-20',end_date='2026-09-20';
+    update private.event_sellers set valid_from='2026-09-19T00:00:00Z',valid_until='2026-09-22T00:00:00Z';`);
+  await db.exec(definition('private.is_event_seller')
+    .replace('create function', 'create or replace function')
+    .replaceAll('statement_timestamp()', 'private.fixture_statement_timestamp()'));
+  await setRoles(db, [['events', 'seller']]);
+  for (const [instant, allowed] of [
+    ['2026-09-19T15:59:59.999Z', false],
+    ['2026-09-19T16:00:00Z', true],
+    ['2026-09-20T15:59:59.999Z', true],
+    ['2026-09-20T16:00:00Z', false],
+    ['2026-09-20T17:10:55Z', false],
+  ]) {
+    await db.query("select set_config('test.event_clock',$1,false)", [instant]);
+    if (allowed) assert.deepEqual((await ledger(db)).entries.map(entry => entry.seller_id), [READER], instant);
+    else await assert.rejects(ledger(db), /Not authorized: event custody read/, instant);
+  }
+});
+
+for (const [state, change] of [
+  ['revoked assignment', 'update private.event_sellers set revoked_at=now()'],
+  ['expired assignment', "update private.event_sellers set valid_until=now()-interval '1 second'"],
+  ['future assignment', "update private.event_sellers set valid_from=now()+interval '1 hour'"],
+  ['inactive profile', "update core.profiles set status='inactive'"],
+  ['expired role', "update core.user_roles set expires_at=now()-interval '1 second'"],
+]) {
+  test(`seller with ${state} still cannot read event custody`, async t => {
+    const db = await fixture(); t.after(() => db.close());
+    await setRoles(db, [['events', 'seller']]);
+    assert.deepEqual((await ledger(db)).entries.map(entry => entry.seller_id), [READER]);
+    await db.exec(`reset role;${change};set role authenticated`);
+    await assert.rejects(ledger(db), /Not authorized: event custody read/);
+  });
+}
 
 test('event owner branch remains effective-capability gated', async t => {
   const db = await fixture(); t.after(() => db.close());

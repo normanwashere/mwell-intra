@@ -14,6 +14,20 @@ export const HANDBOOK_TABS = Object.freeze([
 
 const CATALOG = [
   {
+    source: "docs/releases/2026-09-22-EVENT-SELLER-CI-DATE.md",
+    id: "sept22-event-seller-ci-date",
+    title: "September 22 Seller Test Date Correction",
+    primaryTab: "release",
+    relatedTabs: ["security"],
+    contentType: "release-note",
+    audience: ["developer", "release-reviewer"],
+    summary: "Manila-date correction for isolated seller-access test fixtures, with expiry protections unchanged and hosted certification tracked separately.",
+    keywords: ["event seller", "timezone", "Manila", "certification", "expiry"],
+    sortOrder: -2,
+    collapse: "reference",
+    relatedSources: ["docs/releases/2026-09-20-EXPERIENCE-REMEDIATION-CANDIDATE.md"],
+  },
+  {
     source: "docs/releases/2026-09-20-EXPERIENCE-REMEDIATION-CANDIDATE.md",
     id: "sept20-experience-remediation-candidate",
     title: "September 20 Experience Candidate",
