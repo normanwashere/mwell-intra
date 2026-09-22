@@ -1,11 +1,31 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { includeFile, documentationOnly, secretKinds, checksum } from './export-handoff-source.mjs';
+import { includeFile, documentationOnly, secretKinds, checksum, sourceArchive } from './export-handoff-source.mjs';
+
+test('source ZIP preserves committed text and binary bytes even with Windows autocrlf enabled', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'mwell-source-archive-'));
+  const git = (...args) => execFileSync('git', ['-C', dir, ...args], { windowsHide: true });
+  const require = createRequire(new URL('../../tools/handoff/package.json', import.meta.url));
+  const JSZip = require('jszip');
+  try {
+    git('init', '--quiet');
+    git('config', 'core.autocrlf', 'true');
+    writeFileSync(path.join(dir, 'reference.txt'), 'first line\nsecond line\n');
+    writeFileSync(path.join(dir, 'binary.dat'), Buffer.from([0, 13, 10, 255, 10]));
+    git('add', '--', 'reference.txt', 'binary.dat');
+    git('-c', 'user.name=Source export test', '-c', 'user.email=source-test@example.invalid', 'commit', '--quiet', '-m', 'fixture');
+    const zip = await JSZip.loadAsync(sourceArchive(git, 'HEAD'));
+    for (const file of ['reference.txt', 'binary.dat']) {
+      assert.deepEqual(await zip.file(file).async('nodebuffer'), git('show', `HEAD:${file}`), file);
+    }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
 
 test('copy includes app source, templates, locked tools and migration history', () => {
   for (const name of ['apps/shell/package.json', '.env.example', 'pnpm-lock.yaml', 'tools/handoff/package-lock.json', 'supabase/migrations/20260101.sql']) assert(includeFile(name), name);

@@ -38,7 +38,7 @@ Prefer a full Git import to Bitbucket and preserve history. Build a source-only 
 node scripts/docs/export-handoff-source.mjs --ref <documentation-commit> --application-ref <live-application-commit> --out <new-output-directory>
 ```
 
-Install the documentation toolchain first. The exporter creates a fresh source directory, ZIP, file-hash manifest and ZIP checksum. It excludes local environments, caches, linked-project metadata, scratch work and generated output. Distribute through an approved access-controlled channel. Do not recursively ZIP a working directory.
+Install the documentation toolchain first. The exporter creates a fresh source directory, ZIP, file-hash manifest and ZIP checksum. It disables host line-ending conversion and verifies each included file against its committed Git blob before packing; local Windows settings must not change release bytes. It excludes local environments, caches, linked-project metadata, scratch work and generated output. Distribute through an approved access-controlled channel. Do not recursively ZIP a working directory.
 
 Before installing an extracted source package, compare the ZIP checksum through the agreed delivery channel and run `node scripts/docs/export-handoff-source.mjs --verify .`. This verifies all manifest-listed file bytes. It does not authenticate an attacker-supplied manifest or scan extra unlisted files.
 

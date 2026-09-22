@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const checksum = bytes => createHash('sha256').update(bytes).digest('hex');
+export const sourceArchive = (git, revision) => git('-c', 'core.autocrlf=false', '-c', 'core.eol=lf', 'archive', '--format=zip', revision);
 export function includeFile(name) {
   const parts = name.split('/');
   if (path.isAbsolute(name) || /[\\:\x00]/.test(name) || parts.some(p => p === '..' || p === '')) return false;
@@ -59,7 +60,15 @@ async function main(args) {
   assert(changed.every(documentationOnly), 'Source revision includes unverified runtime changes');
   const runtimeRequire = createRequire(path.join(root, 'tools/handoff/package.json'));
   const JSZip = runtimeRequire('jszip');
-  const archive = await JSZip.loadAsync(git('archive', '--format=zip', sourceCommit));
+  const archive = await JSZip.loadAsync(sourceArchive(git, sourceCommit));
+  const objectFormat = git('rev-parse', '--show-object-format').toString().trim();
+  assert(['sha1', 'sha256'].includes(objectFormat), 'Unsupported Git object format');
+  const blobs = new Map(git('ls-tree', '-r', '-z', '--format=%(objectname)%x09%(path)', sourceCommit)
+    .toString('utf8').split('\0').filter(Boolean).map(entry => {
+      const separator = entry.indexOf('\t');
+      assert(separator > 0, 'Invalid Git tree record');
+      return [entry.slice(separator + 1), entry.slice(0, separator)];
+    }));
   const packed = new JSZip();
   const files = {};
   const entries = [];
@@ -70,6 +79,8 @@ async function main(args) {
     if (!includeFile(name)) { excluded.push(name); continue; }
     assert.equal((Number(entry.unixPermissions) & 0o170000) === 0o120000, false, `Symlink requires review: ${name}`);
     const bytes = await entry.async('nodebuffer');
+    const blobHash = createHash(objectFormat).update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
+    assert.equal(blobHash, blobs.get(name), `Archive changed committed bytes: ${name}`);
     const kinds = secretKinds(bytes);
     if (kinds.length) findings.push({ file: name, kinds });
     files[name] = checksum(bytes);
