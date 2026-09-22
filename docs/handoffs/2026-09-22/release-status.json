@@ -1,0 +1,170 @@
+{
+  "schemaVersion": 1,
+  "asOf": "2026-09-22",
+  "timezone": "Asia/Singapore",
+  "updatedBy": "Engineering release verification",
+  "latestOwnerUpdateAt": "2026-09-22T14:12:00Z",
+  "sourceCommit": "9989a0d20fd6126f4ce61ebe5c9e38b9bda0feb1",
+  "liveCommit": "9989a0d20fd6126f4ce61ebe5c9e38b9bda0feb1",
+  "liveDeploymentId": "dpl_7oWQMZJ6f7gfmAFVCLxUh6GheiKw",
+  "liveVerifiedAt": "2026-09-22T14:08:10.464Z",
+  "uatProjectRef": "kkoitlvydytdhlpxhuah",
+  "canonicalUat": "https://mwell-intra-uat.vercel.app/",
+  "summary": "Current fixes are deployed to UAT. The previously blocked final DOA approval passed through the live UI with saved-state verification; earlier approvals are unchanged. Full CI206 is running on this exact commit. Source portability, receiving-environment setup and business acceptance are separate handoff gates.",
+  "evidenceBoundary": "Exact application commit verified by canonical UAT health and authenticated synthetic approval test. Two scoped migrations installed with unchanged public approval wrapper; no roles or policy assignments changed. Local unit, SQL, native PostgreSQL and clean-build results are recorded separately. Documentation QA does not certify app journeys. SMTP untouched.",
+  "items": [
+    {
+      "id": "technical-transfer",
+      "label": "Technical transfer",
+      "state": "Awaiting recipient confirmation",
+      "detail": "Operating context prepared. Access, clean setup, installed migration inventory, support ownership and recovery evidence still require the receiving team's confirmation.",
+      "owner": "Receiving engineering lead",
+      "evidence": "This technical pack; no receiving-team acceptance recorded",
+      "evidenceUrl": null
+    },
+    {
+      "id": "tester-readiness",
+      "label": "Tester readiness",
+      "state": "Conditional",
+      "detail": "Coordinator must allocate identities, date-valid fixtures, required learning, next actors and known issues before individual cases become Ready. All 27 starter case groups are Not run.",
+      "owner": "UAT coordinator",
+      "evidence": "Tester pack and blank execution checklist",
+      "evidenceUrl": null
+    },
+    {
+      "id": "full-ci",
+      "label": "Full CI206",
+      "state": "Running",
+      "detail": "Run 35737238630 checks exact commit 9989a0d. Preparation is in progress. Full route, transaction, cleanup and bundle results are not yet available. Historical CI205 failed mobile 320/390 and vendor submission; both independent cleanup jobs completed successfully.",
+      "owner": "Engineering and QA",
+      "evidence": "GitHub job status inspected directly on September 22; do not treat pending or skipped jobs as passes",
+      "evidenceUrl": "https://github.com/normanwashere/mwell-intra/actions/runs/35737238630"
+    },
+    {
+      "id": "ci-correction-checks",
+      "label": "Focused CI correction checks",
+      "state": "Locally verified",
+      "detail": "Clean locked installation and Vercel build passed. Clean-source workspace run passed 44/45 tasks; the remaining shell task had two historical Git-evidence checks requiring original commit history. Its entire affected 32-test file passed when supplied that history. Native PostgreSQL 16/16 and SQL/CI contracts 110/110 passed. Production dependency audit found no known vulnerabilities. These groups are not a complete live certificate.",
+      "owner": "Engineering and QA",
+      "evidence": "Clean source logs, native PostgreSQL log and historical-evidence rerun retained under outputs/sep22-release-handoff; overlapping counts are not summed",
+      "evidenceUrl": null
+    },
+    {
+      "id": "seller-contract",
+      "label": "Seller automated contract",
+      "state": "Reported passed",
+      "detail": "Seller test passed in CI204. The earlier CI203 seller failure is historical. This is not a completed live stock-to-Finance journey.",
+      "owner": "Engineering and QA",
+      "evidence": "Release-owner report; pinned source includes the business-date fixture correction",
+      "evidenceUrl": null
+    },
+    {
+      "id": "onboarding-pilot",
+      "label": "Onboarding and participant pilot",
+      "state": "Human pilot open",
+      "detail": "Automated onboarding tests are not real participant evidence. Record genuinely fresh first-use sessions, combined-role behavior and physical-device checks separately.",
+      "owner": "Business UAT lead",
+      "evidence": "Automated test definitions only; no human acceptance recorded here",
+      "evidenceUrl": null
+    },
+    {
+      "id": "seller-chain",
+      "label": "Seller stock to Finance",
+      "state": "Final approval passed; downstream journey open",
+      "detail": "Operations PR req_9b26a575109949debb74ac92329d71ca (PHP340, synthetic run d9e41f7c-c94a-41c6-bee2-c996338b25d1) is now approved. Named Operations Lead completed the exact pending final DOA step through the live UI. Earlier approvals are byte-identical; an unassigned Procurement Lead was denied eligibility. This does not create a PO or stock. Procurement-to-receiving-to-seller-to-Finance end-to-end proof remains open; revalidate the event business date before further activity.",
+      "owner": "Warehouse, Events and Finance",
+      "evidence": "Live probe 2026-09-22T14:08:09.025Z; exact commit, authenticated eligibility, UI submit HTTP200, reload/database readback and desktop/390/320 screenshots. Synthetic automation, not a human approval.",
+      "evidenceUrl": null
+    },
+    {
+      "id": "operations-policy-draft",
+      "label": "Operations approval correction",
+      "state": "Keep inactive - workaround not recommended",
+      "detail": "Draft 98055107-8114-4fd3-8916-0b756c77e259 was saved under earlier draft-only approval. After the user's clarification, the chosen solution fixes code to follow the existing approved DOA rather than substituting Procurement Lead. Preserve this inactive draft as history; do not activate it. No Marketing change, role grant, training completion or approval-history rewrite occurred.",
+      "owner": "Separate policy reviewer and release authority",
+      "evidence": "Single save audit, inactive readback, no duplicate on read-only replay, and actual desktop/mobile draft screenshots. Automated review is not authorization to activate.",
+      "evidenceUrl": null
+    },
+    {
+      "id": "local-approval-fix",
+      "label": "DOA authority and signature fixes",
+      "state": "Deployed; targeted live approval passed",
+      "detail": "Installed migrations 20260922111953 and 20260922123940 on UAT only. Approval follows the exact pending DOA actor and current matrix/version/scope/amount, permissions and required learning. The governed public wrapper hash is unchanged and the private delegate is not executable by the service role. Live assigned approval passed, unassigned eligibility denied, prior decisions preserved. The inactive substitute-approver draft remains inactive.",
+      "owner": "Engineering and QA",
+      "evidence": "Scoped migration dry run/install receipt, ACL/wrapper readback, 110 SQL/CI checks, 16 native PostgreSQL tests and live approval probe. Full CI206 still separate.",
+      "evidenceUrl": null
+    },
+    {
+      "id": "vendor-chain",
+      "label": "Vendor upload to Legal",
+      "state": "Deployed; full live retest running",
+      "detail": "Signature readiness and submission use the same captured-signature data. Seven new regressions and the 244-test Legal suite passed locally; the fix is deployed in 9989a0d. CI206 must still prove private upload, submission, Legal handoff and independent cleanup on both transaction widths.",
+      "owner": "Legal and QA",
+      "evidence": "Deployed commit and local Legal regressions; current CI206 result will replace this pending state",
+      "evidenceUrl": null
+    },
+    {
+      "id": "reporting-api",
+      "label": "Reporting API",
+      "state": "Design only",
+      "detail": "No working reporting endpoint, connector or machine credentials are delivered. The proposed 30-dataset contract still needs implementation and acceptance.",
+      "owner": "Engineering, Data and Infrastructure",
+      "evidence": "September 20 design and implementation plan; reviewed API source tree has no reporting/v1 service",
+      "evidenceUrl": null
+    },
+    {
+      "id": "data-stack",
+      "label": "Data runtime and database",
+      "state": "Confirmation required",
+      "detail": "Data must explicitly confirm its runtime, database, network, scheduler, technical contact and disclosure/retention decisions. Node/TypeScript and PostgreSQL are suggestions only.",
+      "owner": "Data technical lead",
+      "evidence": "No recipient confirmation recorded",
+      "evidenceUrl": null
+    },
+    {
+      "id": "post-event-policy",
+      "label": "Post-event corrections",
+      "state": "Decision open",
+      "detail": "Events and Finance must agree the correction authority and audit process. Existing closed-event restrictions remain in place.",
+      "owner": "Events owner and Finance",
+      "evidence": "Pinned technical specification; no new policy approval recorded",
+      "evidenceUrl": null
+    },
+    {
+      "id": "operations-acceptance",
+      "label": "Operational acceptance",
+      "state": "Evidence required",
+      "detail": "Name support and escalation owners; verify database and private Storage restore, retention, RPO/RTO and approved access transfer without distributing secrets.",
+      "owner": "Receiving engineering lead and Infrastructure",
+      "evidence": "Runbook requirements, not a completed restore drill",
+      "evidenceUrl": null
+    },
+    {
+      "id": "production",
+      "label": "Business and production acceptance",
+      "state": "Not granted",
+      "detail": "Require current full CI, high-risk journeys, visual review, actual participant results, named business decisions and a separate production go/no-go. Documentation delivery is not acceptance.",
+      "owner": "Business owners and release authority",
+      "evidence": "No final acceptance recorded",
+      "evidenceUrl": null
+    },
+    {
+      "id": "smtp",
+      "label": "SMTP and email delivery",
+      "state": "Out of scope",
+      "detail": "No SMTP changes or invitation/password-reset delivery certification. Use already provisioned accounts; email-only steps are blocked, not passed.",
+      "owner": "Release scope owner",
+      "evidence": "Explicit user exclusion",
+      "evidenceUrl": null
+    },
+    {
+      "id": "source-portability",
+      "label": "Bitbucket and source-copy readiness",
+      "state": "Packaging and recipient validation in progress",
+      "detail": "Portable documentation tooling and source-only export are being verified. Full Git import is preferred; historical screenshot-provenance tests require original Git objects. Source hosting does not migrate hosting, database, Auth, Storage or secrets. Fresh-backend rehearsal, protected production pipeline, support ownership and restore drill remain recipient gates.",
+      "owner": "Engineering and receiving infrastructure lead",
+      "evidence": "Independent handoff review and technical portability section",
+      "evidenceUrl": null
+    }
+  ]
+}

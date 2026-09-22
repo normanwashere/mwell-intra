@@ -1,0 +1,89 @@
+import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+export const checksum = bytes => createHash('sha256').update(bytes).digest('hex');
+export function includeFile(name) {
+  const parts = name.split('/');
+  if (path.isAbsolute(name) || /[\\:\x00]/.test(name) || parts.some(p => p === '..' || p === '')) return false;
+  if (parts.some(p => /^(?:node_modules|\.git|\.vercel|\.next|\.turbo|\.temp|\.superpowers|\.codex.*|outputs|test-results|playwright-report|coverage)$/.test(p))) return false;
+  if (parts.some(p => /^\.env(?:\.|$)/.test(p) && p !== '.env.example')) return false;
+  if (/(?:^|\/)(?:storageState|storage-state|auth-state|credentials)\.(?:json|ya?ml|env)$/i.test(name)) return false;
+  return true;
+}
+export function documentationOnly(name) {
+  return /^(?:docs\/|scripts\/docs\/|tools\/handoff\/)/.test(name);
+}
+export function secretKinds(bytes) {
+  if (bytes.includes(0)) return [];
+  const text = bytes.toString('utf8');
+  const rules = {
+    private_key: /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
+    provider_secret: /\b(?:sb_secret_|sbp_|ghp_|github_pat_|sk_live_)[A-Za-z0-9_-]{20,}/,
+    signed_token: /\beyJ[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}/,
+  };
+  return Object.entries(rules).filter(([, re]) => re.test(text)).map(([kind]) => kind);
+}
+
+async function main(args) {
+  assert.equal(args.length, 6, 'Use --ref COMMIT --application-ref COMMIT --out NEW_DIRECTORY');
+  const options = Object.fromEntries(Array.from({ length: 3 }, (_, i) => [args[i * 2], args[i * 2 + 1]]));
+  assert.deepEqual(Object.keys(options).sort(), ['--application-ref', '--out', '--ref']);
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+  const git = (...a) => execFileSync('git', ['-C', root, ...a], { maxBuffer: 256 * 1024 * 1024, windowsHide: true });
+  const resolve = ref => git('rev-parse', '--verify', `${ref}^{commit}`).toString().trim();
+  const sourceCommit = resolve(options['--ref']);
+  const commit = resolve(options['--application-ref']);
+  git('merge-base', '--is-ancestor', commit, sourceCommit);
+  const changed = git('diff', '--name-only', commit, sourceCommit).toString().trim().split('\n').filter(Boolean);
+  assert(changed.every(documentationOnly), 'Source revision includes unverified runtime changes');
+  const runtimeRequire = createRequire(path.join(root, 'tools/handoff/package.json'));
+  const JSZip = runtimeRequire('jszip');
+  const archive = await JSZip.loadAsync(git('archive', '--format=zip', sourceCommit));
+  const packed = new JSZip();
+  const files = {};
+  const entries = [];
+  const excluded = [];
+  const findings = [];
+  for (const [name, entry] of Object.entries(archive.files).sort(([a], [b]) => a.localeCompare(b))) {
+    if (entry.dir) continue;
+    if (!includeFile(name)) { excluded.push(name); continue; }
+    assert.equal((Number(entry.unixPermissions) & 0o170000) === 0o120000, false, `Symlink requires review: ${name}`);
+    const bytes = await entry.async('nodebuffer');
+    const kinds = secretKinds(bytes);
+    if (kinds.length) findings.push({ file: name, kinds });
+    files[name] = checksum(bytes);
+    entries.push([name, bytes]);
+    packed.file(name, bytes, { date: entry.date, unixPermissions: entry.unixPermissions });
+  }
+  assert.deepEqual(findings, [], 'Potential secrets must be reviewed before packaging; values intentionally not printed');
+  assert(files['apps/shell/package.json'] && files['pnpm-lock.yaml'] && files['tools/handoff/package-lock.json']);
+  const manifest = { schemaVersion: 1, commit, sourceCommit, createdAt: new Date().toISOString(),
+    scope: 'Committed app source plus documentation-only successor. No Git history, credentials or infrastructure state.',
+    historicalEvidenceRequiresGitHistory: true, excluded, files };
+  const manifestBytes = Buffer.from(JSON.stringify(manifest, null, 2) + '\n');
+  packed.file('source-manifest.json', manifestBytes);
+  const zip = await packed.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE', compressionOptions: { level: 6 }, platform: 'UNIX' });
+  const restored = await JSZip.loadAsync(zip);
+  for (const [name, hash] of Object.entries(files)) assert.equal(checksum(await restored.file(name).async('nodebuffer')), hash);
+  const out = path.resolve(options['--out']);
+  assert(!existsSync(out), 'Output must be a new directory; existing evidence is never overwritten');
+  mkdirSync(out, { recursive: true });
+  const dest = path.join(out, 'source');
+  for (const [name, bytes] of [...entries, ['source-manifest.json', manifestBytes]]) {
+    const file = path.resolve(dest, name);
+    assert(file.startsWith(dest + path.sep));
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(file, bytes, { flag: 'wx' });
+  }
+  const zipName = `mwell-intra-source-${sourceCommit.slice(0, 12)}.zip`;
+  writeFileSync(path.join(out, zipName), zip, { flag: 'wx' });
+  writeFileSync(path.join(out, 'SHA256SUMS'), `${checksum(zip)}  ${zipName}\n`, { flag: 'wx' });
+  console.log(JSON.stringify({ commit, sourceCommit, out, zipName, files: entries.length, excluded: excluded.length,
+    sha256: checksum(zip), zipRoundtrip: 'passed', scan: 'No configured secret patterns found; not a comprehensive security audit' }, null, 2));
+}
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main(process.argv.slice(2));
