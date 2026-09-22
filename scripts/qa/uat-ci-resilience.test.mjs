@@ -1,10 +1,53 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import test from "node:test";
 
 import { assertZeroResidue, buildRunScope } from "./cleanup-uat-live-run.mjs";
 import { buildDeterministicAuditRunId } from "./uat-ci-run-id.mjs";
 import { waitForExactDeployment } from "./wait-for-uat-deployment.mjs";
+
+const require = createRequire(new URL("../../apps/shell/package.json", import.meta.url));
+const yaml = createRequire(require.resolve("eslint"))("js-yaml");
+const readUatWorkflow = async () => (await readFile(
+  new URL("../../.github/workflows/uat-live-certification.yml", import.meta.url), "utf8",
+)).replaceAll("\r\n", "\n");
+
+const browserHelperFiles = [
+  "scripts/qa/audit-disclosure.browser.test.mjs",
+  "scripts/qa/event-demand-selector.browser.test.mjs",
+  "scripts/qa/quality-validation-workflow.browser.test.mjs",
+  "scripts/qa/route-evidence.browser.test.mjs",
+  "scripts/qa/evidence-upload.browser.test.mjs",
+  "scripts/qa/receipt-quality-probes.test.mjs",
+  "scripts/qa/excess-save-outcome.browser.test.mjs",
+  "scripts/qa/receiving-audit-evidence.test.mjs",
+];
+
+function assertBrowserHelperContract(workflow) {
+  const steps = workflow.jobs.prepare.steps;
+  const index = name => {
+    assert.equal(steps.filter(step => step.name === name).length, 1, `one ${name} step is required`);
+    return steps.findIndex(step => step.name === name);
+  };
+  const dependencies = index("Install locked dependencies");
+  const installed = index("Install Chromium for browser-backed contracts and first-login certification");
+  const unit = index("Run unit and contract tests");
+  const contract = index("Verify browser audit visibility and readiness contracts");
+  const orientation = index("Complete first-login role orientations on desktop");
+  assert.ok(dependencies < installed && installed < unit,
+    "Chromium must be installed after dependencies and before browser-backed workspace tests");
+  assert.ok(installed < contract && contract < orientation,
+    "Browser helper contracts must run after Chromium and before live orientation");
+  const step = steps[contract];
+  assert.equal(step.if, undefined, "browser helper contracts must not be conditional");
+  assert.equal(step["continue-on-error"], undefined, "browser helper failures must block certification");
+  assert.deepEqual(step.run.trim().split(/\s+/), ["node", "--test", ...browserHelperFiles]);
+  for (const file of browserHelperFiles) {
+    assert.equal(steps.flatMap(item => item.run?.trim().split(/\s+/) ?? [])
+      .filter(token => token === file).length, 1, `${file} must run exactly once in prepare`);
+  }
+}
 
 test("deterministic audit IDs are stable across transaction and cleanup jobs", () => {
   const input = { date: "20260722", runNumber: 29, ordinal: 91 };
@@ -195,7 +238,7 @@ test("UAT certification workflow gates deployment and always certifies cleanup",
 });
 
 test("CI bounds nested test pools without relaxing assertions or deadlines", async () => {
-  const workflow = await readFile(new URL("../../.github/workflows/uat-live-certification.yml", import.meta.url), "utf8");
+  const workflow = await readUatWorkflow();
   const step = workflow.split("      - name: Run unit and contract tests\n")[1]?.split("      - name:")[0];
   assert.ok(step);
   assert.match(step, /run: pnpm exec turbo run test --concurrency=1 -- --maxWorkers=2/);
@@ -203,7 +246,7 @@ test("CI bounds nested test pools without relaxing assertions or deadlines", asy
 });
 
 test("prepare runs only reviewed Sep05 SQL suites before persona provisioning", async () => {
-  const workflow = await readFile(new URL("../../.github/workflows/uat-live-certification.yml", import.meta.url), "utf8");
+  const workflow = await readUatWorkflow();
   const prepare = workflow.split("  prepare:\n")[1]?.split("\n  routes:")[0];
   assert.ok(prepare, "prepare job exists");
   const stepName = "Verify Sep05 isolated SQL regression suites";
@@ -235,7 +278,7 @@ test("prepare runs only reviewed Sep05 SQL suites before persona provisioning", 
 });
 
 test('Sep20 safety contracts run without live seller provisioning or SMTP', async () => {
-  const workflow = await readFile(new URL('../../.github/workflows/uat-live-certification.yml', import.meta.url), 'utf8');
+  const workflow = await readUatWorkflow();
   const prepare = workflow.split('\n  prepare:')[1].split('\n  routes:')[0];
   const stepName = 'Verify Sep20 event custody and warehouse access contracts';
   const step = prepare.split(`      - name: ${stepName}\n`)[1]?.split('      - name:')[0];
@@ -260,7 +303,7 @@ test('Sep20 safety contracts run without live seller provisioning or SMTP', asyn
 });
 
 test('route concurrency is isolated and the full strict audit follows the critical gate', async () => {
-  const workflow = await readFile(new URL('../../.github/workflows/uat-live-certification.yml', import.meta.url), 'utf8');
+  const workflow = await readUatWorkflow();
   const routes = workflow.split('\n  routes:')[1].split('\n  transactions:')[0];
   assert.match(routes, /needs: prepare/);
   assert.match(routes, /max-parallel: 3/);
@@ -288,29 +331,38 @@ test("controlled vendor cleanup uses the same exact run mailbox and refuses a sh
 });
 
 test("UAT runs explicit browser and receipt-quality helper contracts after Chromium installation", async () => {
-  const workflow = await readFile(new URL("../../.github/workflows/uat-live-certification.yml", import.meta.url), "utf8");
-  const installed = workflow.indexOf("Install Chromium for browser-backed contracts and first-login certification");
-  const unit = workflow.indexOf("Run unit and contract tests");
-  const dependencies = workflow.indexOf("Install locked dependencies");
-  assert.ok(dependencies >= 0 && dependencies < installed && installed < unit,
-    "The Legal CSP browser test requires Chromium before workspace tests in a fresh checkout");
-  const contract = workflow.indexOf("run: node --test scripts/qa/audit-disclosure.browser.test.mjs scripts/qa/quality-validation-workflow.browser.test.mjs");
-  const orientation = workflow.indexOf("Complete first-login role orientations on desktop");
-  assert.ok(installed >= 0 && contract > installed && orientation > contract);
-  const step = workflow.split("      - name: Verify browser audit visibility and readiness contracts\n")[1]?.split("      - name:")[0];
-  assert.ok(step, "dedicated browser/helper contract step exists");
-  assert.deepEqual(step.trim().split(/\s+/), [
-    "run:", "node", "--test",
-    "scripts/qa/audit-disclosure.browser.test.mjs",
-    "scripts/qa/quality-validation-workflow.browser.test.mjs",
-    "scripts/qa/route-evidence.browser.test.mjs",
-    "scripts/qa/evidence-upload.browser.test.mjs",
-    "scripts/qa/receipt-quality-probes.test.mjs",
-    "scripts/qa/excess-save-outcome.browser.test.mjs",
-    "scripts/qa/receiving-audit-evidence.test.mjs",
-  ]);
-  assert.equal(workflow.split("scripts/qa/receiving-audit-evidence.test.mjs").length, 2,
-    "Receiving evidence must not also run before Chromium installation");
+  assertBrowserHelperContract(yaml.load(await readUatWorkflow()));
+});
+
+for (const file of browserHelperFiles) {
+  test(`browser workflow contract rejects omission of ${file}`, async () => {
+    const workflow = yaml.load(await readUatWorkflow());
+    const step = workflow.jobs.prepare.steps.find(item => item.name === "Verify browser audit visibility and readiness contracts");
+    step.run = step.run.replace(file, "");
+    assert.throws(() => assertBrowserHelperContract(workflow));
+  });
+}
+
+for (const [label, mutate] of [
+  ["conditional execution", (_steps, step) => { step.if = "false"; }],
+  ["ignored failure", (_steps, step) => { step["continue-on-error"] = true; }],
+  ["duplicate suite", (steps, step) => { steps.push({ name: "Duplicate", run: step.run }); }],
+  ["orientation before contracts", (steps) => {
+    const index = steps.findIndex(step => step.name === "Complete first-login role orientations on desktop");
+    steps.unshift(...steps.splice(index, 1));
+  }],
+]) {
+  test(`browser workflow contract rejects ${label}`, async () => {
+    const workflow = yaml.load(await readUatWorkflow());
+    const steps = workflow.jobs.prepare.steps;
+    mutate(steps, steps.find(step => step.name === "Verify browser audit visibility and readiness contracts"));
+    assert.throws(() => assertBrowserHelperContract(workflow));
+  });
+}
+
+test("browser workflow contract accepts both LF and CRLF YAML source", async () => {
+  const source = await readUatWorkflow();
+  for (const text of [source, source.replaceAll("\n", "\r\n")]) assertBrowserHelperContract(yaml.load(text));
 });
 
 test("production certification is read-only and covers every supported viewport", async () => {
