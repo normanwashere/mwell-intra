@@ -3,6 +3,10 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, expect, it, vi } from 'vitest';
 import type { ProcurementRequest, PurchaseOrder } from '../types';
 import { RequestDetailPage } from './RequestDetailPage';
+import { normalizeApprovalSignature } from '../approvalSignature';
+import { createRequire } from 'node:module';
+import { readFileSync, mkdirSync } from 'node:fs';
+import path from 'node:path';
 
 let request: ProcurementRequest;
 let readError: string | undefined;
@@ -86,3 +90,87 @@ it('keeps the competitive sourcing introduction stage-neutral until the sourcing
   expect(submit).not.toHaveBeenCalled();
   expect(cancel).not.toHaveBeenCalled();
 });
+
+const signaturePng = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+it.each(['governed', 'legacy'])('renders the saved %s signature in the actual approval row', shape => {
+  request.approvalSteps = [{
+    id: 'signed-step', order: 1, tier: 'dept_head', status: 'approved',
+    signature: normalizeApprovalSignature(shape === 'governed'
+      ? { signature_png: signaturePng, signer_name: 'Synthetic reviewer', signature_method: 'typed', signed_at: '2026-09-22T11:00:00Z' }
+      : { dataUrl: signaturePng, signerName: 'Synthetic reviewer', method: 'typed', signedAt: '2026-09-22T11:00:00Z' }),
+  }];
+  const html = renderPage();
+  expect(html).toContain('e-signed by Synthetic reviewer');
+  expect(html).toContain('alt="Signature of Synthetic reviewer"');
+  expect(html).toContain(`src="${signaturePng}"`);
+  expect(html).not.toContain('Signature of undefined');
+  expect(submit).not.toHaveBeenCalled();
+  expect(cancel).not.toHaveBeenCalled();
+});
+
+it('keeps the recorded decision visible without rendering an invalid signature image', () => {
+  request.approvalSteps = [{
+    id: 'signed-step', order: 1, tier: 'dept_head', status: 'approved', note: 'Saved approval note',
+    signature: normalizeApprovalSignature({ signature_png: 'https://example.invalid/signature.png', signer_name: 'Synthetic reviewer', signature_method: 'typed' }),
+  }];
+  const html = renderPage();
+  expect(html).toContain('Saved approval note');
+  expect(html).not.toContain('Signature of');
+  expect(html).not.toContain('example.invalid/signature.png');
+});
+
+it.each([320, 360, 390, 1440])('keeps real approval rows and attachment actions within the %spx page', async width => {
+  const shellRequire = createRequire(new URL('../../../../apps/shell/package.json', import.meta.url));
+  const { chromium } = shellRequire('@playwright/test');
+  const postcss = shellRequire('postcss');
+  const tailwind = shellRequire('tailwindcss');
+  const preset = shellRequire('@intra/config/tailwind/preset');
+  const email = 'intra.test.procurement.lead@mwell.com.ph';
+  request.status = 'under_review';
+  request.approvalSteps = [{
+    id: 'signed-step', order: 1, tier: 'procurement_head', status: 'approved',
+    label: 'Procurement Head - Synthetic UAT Procurement Lead', decidedByEmail: email,
+    decidedAt: '2026-09-22T11:00:00Z', note: 'Recorded approval for this synthetic request.',
+    signature: normalizeApprovalSignature({ signature_png: signaturePng, signer_name: 'Synthetic UAT Procurement Lead', signature_method: 'typed', signed_at: '2026-09-22T11:00:00Z' }),
+  }];
+  request.attachments = [{
+    id: 'attachment-layout', kind: 'spec', filename: 'SYNTHETIC-d9e41f7c-long-specification-evidence.pdf',
+    mimeType: 'application/pdf', sizeBytes: 640, uploadedByEmail: email,
+    uploadedAt: '2026-09-22T11:00:00Z', storagePath: 'synthetic/request/spec.pdf',
+  }];
+  const markup = `<main class="shell-content workspace-hierarchy p-4">${renderPage()}</main>`;
+  const read = (file: string) => readFileSync(new URL(`../../../../${file}`, import.meta.url), 'utf8');
+  const styles = read('packages/ui/src/styles.css') + read('apps/shell/app/globals.css') + read('apps/shell/app/hierarchy-preview.css');
+  const css = (await postcss([tailwind({ presets: [preset], content: [{ raw: markup, extension: 'html' }] })]).process(styles, { from: undefined })).css;
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const context = await browser.newContext({ viewport: { width, height: 900 }, isMobile: width < 768, hasTouch: width < 768, offline: true });
+    const page = await context.newPage();
+    await page.setContent(`<meta name="viewport" content="width=device-width,initial-scale=1"><style>:root{--font-poppins:system-ui;--font-jbmono:monospace}${css}</style>${markup}`);
+    await page.locator('img[alt="Signature of Synthetic UAT Procurement Lead"]').waitFor();
+    expect(await page.evaluate(() => window.innerWidth)).toBe(width);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+    expect(await page.locator('img[alt="Signature of Synthetic UAT Procurement Lead"]').evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
+    const offenders = await page.locator('main p, main button, main img').evaluateAll((elements: HTMLElement[]) => elements.filter(element => {
+      const box = element.getBoundingClientRect();
+      return box.right > document.documentElement.clientWidth + 1 || box.left < -1 || (element.tagName === 'P' && element.scrollWidth > element.clientWidth + 1);
+    }).map(element => ({ tag: element.tagName, text: element.textContent, width: element.clientWidth, scrollWidth: element.scrollWidth })));
+    expect(offenders).toEqual([]);
+    const download = page.getByRole('button', { name: `Download ${request.attachments[0]!.filename}`, exact: true });
+    const box = await download.boundingBox();
+    expect(box?.height).toBeGreaterThanOrEqual(44);
+    expect(box?.width).toBeGreaterThanOrEqual(44);
+    expect(await download.evaluate((element: HTMLElement) => {
+      const box = element.getBoundingClientRect();
+      const metadata = element.parentElement!.firstElementChild!.getBoundingClientRect();
+      return metadata.right <= box.left + 1 || metadata.bottom <= box.top + 1;
+    })).toBe(true);
+    if (process.env.PROCUREMENT_LAYOUT_EVIDENCE_DIR) {
+      mkdirSync(process.env.PROCUREMENT_LAYOUT_EVIDENCE_DIR, { recursive: true });
+      await page.screenshot({ path: path.join(process.env.PROCUREMENT_LAYOUT_EVIDENCE_DIR, `request-${width}.png`), fullPage: true });
+    }
+    expect(submit).not.toHaveBeenCalled();
+    expect(cancel).not.toHaveBeenCalled();
+    await context.close();
+  } finally { await browser.close(); }
+}, 30_000);

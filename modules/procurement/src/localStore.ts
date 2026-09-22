@@ -20,6 +20,7 @@ import { useReadQuery } from './useReadQuery';
 import { readReadinessIndependently } from './readinessReads';
 import { useCan, useSession } from '@intra/auth';
 import { governedReceivedQuantity } from './evidencePresentation';
+import { approvalSignatureForRpc, normalizeApprovalSignature } from './approvalSignature';
 import type {
   ApprovalDecision,
   ApprovalSignature,
@@ -195,7 +196,7 @@ function mapStep(row: LiveRow): ApprovalStep {
     note: row.note ?? undefined,
     decidedAt: row.decided_at ?? undefined,
     decidedByEmail: row.decided_by_email ?? undefined,
-    signature: row.signature ?? undefined,
+    signature: normalizeApprovalSignature(row.signature),
   } as ApprovalStep;
 }
 
@@ -988,7 +989,7 @@ export function useProcurementRequests(requestId?: string): ProcurementRequestsA
           decision,
           decided_by_email: actor.email,
           note: actor.note,
-          signature: actor.signature,
+          signature: approvalSignatureForRpc(actor.signature),
         }).then((row) => {
           const mapped = mapProcurementRequest(row);
           return refreshLive().then(() => mapped);
@@ -2052,7 +2053,7 @@ export function useApprovalHistory(entityId?: string): ApprovalDecision[] {
         decidedByEmail: row.decided_by_email ?? undefined,
         tier: row.tier,
         stepId: row.id,
-        signature: row.signature ?? undefined,
+        signature: normalizeApprovalSignature(row.signature),
       }) as ApprovalDecision,
     { column: 'decided_at', ascending: false },
   );

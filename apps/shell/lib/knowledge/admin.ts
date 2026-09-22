@@ -139,6 +139,9 @@ export const ADMINISTRATOR_GUIDES: AdministratorGuide[] = [
     validation: [
       "No gaps or overlaps between amount bands",
       "Every active band has an active named approver",
+      "Final approval follows the approved DOA. The requesting department head can approve when named for that request; Procurement Admin access is not required",
+      "The assigned employee still needs current approval permission and training. The request must match one current policy for its department, category, amount and saved policy version. Nobody can approve their own request or override the policy with admin access",
+      "If the request or approver changes, the confirmation closes and clears the note and signature. Reopen the request, review the current details and sign again. Use Retry requests if refresh fails. If a policy update is in progress, nothing is saved; try again shortly",
       "Final authority covers the highest permitted value",
       "The temporary UAT baseline contains one open named owner for Department Head, Procurement Head, Legal, Finance, and Final Approver in every active department matrix; replace it with the approved operating schedule before production",
     ],
@@ -151,7 +154,7 @@ export const ADMINISTRATOR_GUIDES: AdministratorGuide[] = [
     auditEffect:
       "Creates a new immutable version; transactions retain the DOA version and approver used at decision time.",
     recovery:
-      "If draft validation fails, Intra moves focus to the first invalid field and shows an inline message beside it on desktop and mobile. Correct that field and save again. If the governed save still fails, confirm that no matrix was created, retain the displayed reference, and escalate the error instead of switching departments. Supersede an incorrect saved version with a corrected reviewed version. Do not edit or delete a ladder already used by a transaction.",
+      "If draft validation fails, Intra moves focus to the first invalid field and shows an inline message beside it on desktop and mobile. Correct that field and save again. If the governed save still fails, confirm that no matrix was created, retain the displayed reference, and escalate the error instead of switching departments. Ask Legal or the policy administrator to distinguish missing approval permission, a DOA version/scope mismatch and missing training; do not grant an administrator role or repeat completed training to force a final decision. Supersede an incorrect version only through independent review. A new draft does not reroute a pending request or rewrite history. The earlier inactive Procurement Lead draft is not recommended or activated. This local candidate changes no history, account roles, active policy or SMTP; deployment and live verification remain pending.",
     requiredReview:
       "Legal or Platform governance review before activation and after any material change; Procurement may review the operational effect but cannot configure or activate the ladder.",
     flowIds: ["doa-governance", "procure-to-pay"],

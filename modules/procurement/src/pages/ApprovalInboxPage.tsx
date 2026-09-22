@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Badge,
@@ -25,29 +25,87 @@ import { resolveTiers, type UserRolesShape } from '../tiers';
 import { formatDate, formatDateTime, statusLabel } from '../labels';
 import { makeTypedSignature } from '../signature';
 
+function decisionContext(request: ProcurementRequest): string {
+  // Bind live permission and signing intent to both authority and displayed facts.
+  return JSON.stringify({
+    id: request.id, revision: request.revision, status: request.status,
+    department: request.department, category: request.category, amount: request.estimatedAmount,
+    requesterId: request.requesterId, requesterEmail: request.requesterEmail,
+    requesterName: request.requesterName, title: request.title, costCenter: request.costCenter,
+    neededBy: request.neededBy, vendorName: request.vendorName, lines: request.lines,
+    justification: request.justification, sourcingMethod: request.sourcingMethod,
+    steps: request.approvalSteps?.map(step => ({
+      id: step.id, order: step.order, tier: step.tier, status: step.status,
+      assignedUserId: step.assignedUserId, requestVersion: step.requestVersion,
+      matrixVersion: step.matrixVersion, label: step.label,
+    })),
+  });
+}
+
 export function ApprovalInboxPage() {
   const { rows, decide, loading, refresh, error: readError } = useProcurementRequests();
-  const { profile, userRoles, mode, supabaseClient } = useSession();
-  const [eligibility, setEligibility] = useState<Record<string, boolean>>({});
-  const rowKey = rows.map(r => `${r.id}:${r.status}:${r.approvalSteps?.map(s => `${s.id}:${s.status}:${s.assignedUserId}`).join(',')}`).join('|');
+  const { profile, userRoles, userCapabilities, roleCapabilities, capabilityStatus, loading: sessionLoading, mode, supabaseClient } = useSession();
+  const [eligibility, setEligibility] = useState<{
+    scope: string;
+    client: typeof supabaseClient;
+    rows: Record<string, { context: string; stepId: string }>;
+  } | null>(null);
+  const [refreshVersion, setRefreshVersion] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshFailure, setRefreshFailure] = useState<string>();
+  const requestReadError = readError ?? (mode === 'supabase' ? refreshFailure : undefined);
+  const scopeKey = JSON.stringify([
+    mode, profile?.id, profile?.email, profile?.name, profile?.kind,
+    userRoles, userCapabilities, roleCapabilities, capabilityStatus,
+    sessionLoading, loading, requestReadError, refreshing, refreshVersion,
+  ]);
+  const rowKey = JSON.stringify(rows.map(decisionContext));
+  const liveReady = mode === 'supabase' && !!supabaseClient && !!profile?.id &&
+    !sessionLoading && !loading && !requestReadError && !refreshing &&
+    capabilityStatus !== 'pending' && capabilityStatus !== 'error';
   useEffect(() => {
     let active = true;
-    setEligibility({});
-    if (mode === 'supabase' && supabaseClient) {
+    if (liveReady && supabaseClient) {
       void Promise.all(rows.filter(r => ['submitted','under_review'].includes(r.status)).map(async r => {
+        const context = decisionContext(r);
+        const step = nextPendingStep(r.approvalSteps);
         const { data, error } = await supabaseClient.schema('procurement').rpc('request_decision_eligibility', { payload: { request_id: r.id } });
-        return [r.id, !error && data?.canDecide === true] as const;
-      })).then(entries => { if (active) setEligibility(Object.fromEntries(entries)); }).catch(() => { if (active) setEligibility({}); });
-    }
+        const stepId = !error && data?.canDecide === true && typeof data.stepId === 'string' && data.stepId === step?.id
+          ? data.stepId : '';
+        return [r.id, { context, stepId }] as const;
+      })).then(entries => {
+        if (active) setEligibility({ scope: scopeKey, client: supabaseClient, rows: Object.fromEntries(entries) });
+      }).catch(() => { if (active) setEligibility(null); });
+    } else setEligibility(null);
     return () => { active = false; };
-  }, [rowKey, profile?.id, mode, supabaseClient]);
+  }, [rowKey, scopeKey, liveReady, supabaseClient]);
+  const hasLiveEligibility = useCallback((request: ProcurementRequest) => {
+    const binding = eligibility?.rows[request.id];
+    const step = nextPendingStep(request.approvalSteps);
+    return liveReady && eligibility?.scope === scopeKey && eligibility.client === supabaseClient &&
+      !!step && binding?.stepId === step.id && binding.context === decisionContext(request);
+  }, [eligibility, liveReady, scopeKey, supabaseClient]);
   const { success, error } = useToast();
   const [active, setActive] = useState<ProcurementRequest | null>(null);
+  const [activeBinding, setActiveBinding] = useState<{ scope: string; context: string } | null>(null);
   const [decision, setDecision] = useState<'approved' | 'rejected' | null>(null);
   const [note, setNote] = useState('');
   // Captured signature — REQUIRED for approvals (§9 sign-off), optional for
   // rejections (a rejection is a gate, not a binding sign-off).
   const [signature, setSignature] = useState<SignaturePayload | null>(null);
+  const closeSheet = useCallback(() => {
+    setActive(null);
+    setActiveBinding(null);
+    setDecision(null);
+    setNote('');
+    setSignature(null);
+  }, []);
+  const currentActive = active ? rows.find(row => row.id === active.id) : undefined;
+  const liveDecisionCurrent = Boolean(active && currentActive && activeBinding?.scope === scopeKey &&
+    activeBinding.context === decisionContext(currentActive) && hasLiveEligibility(currentActive));
+  useEffect(() => {
+    if (mode === 'supabase' && active && !liveDecisionCurrent) closeSheet();
+  }, [mode, active, liveDecisionCurrent, closeSheet]);
 
   const myTiers = useMemo(
     () => resolveTiers(userRoles as UserRolesShape),
@@ -82,11 +140,11 @@ export function ApprovalInboxPage() {
       // cap can decide" behaviour of the old inbox. This keeps existing
       // localStorage drafts actionable during the rollout.
       const step = nextPendingStep(r.approvalSteps);
-      if (mode === 'supabase') return eligibility[r.id] === true;
+      if (mode === 'supabase') return hasLiveEligibility(r);
       if (r.requesterId === profile?.id || r.requesterEmail === profile?.email) return false;
       return !!step && (!step.assignedUserId || step.assignedUserId === profile?.id) && myTiers.includes(step.tier);
     });
-  }, [rows, myTiers, profile, mode, eligibility]);
+  }, [rows, myTiers, profile, mode, hasLiveEligibility]);
 
   const pendingValue = useMemo(
     () => pending.reduce((s, r) => s + (r.estimatedAmount ?? 0), 0),
@@ -123,21 +181,37 @@ export function ApprovalInboxPage() {
   }
 
   function openDecision(req: ProcurementRequest, d: 'approved' | 'rejected') {
+    if (mode === 'supabase' && !hasLiveEligibility(req)) return;
     setActive(req);
+    setActiveBinding(mode === 'supabase' ? { scope: scopeKey, context: decisionContext(req) } : null);
     setDecision(d);
     setNote('');
     setSignature(null);
   }
 
-  function closeSheet() {
-    setActive(null);
-    setDecision(null);
-    setNote('');
-    setSignature(null);
+  async function refreshRequests() {
+    if (mode !== 'supabase') return refresh();
+    setEligibility(null);
+    closeSheet();
+    setRefreshFailure(undefined);
+    setRefreshing(true);
+    try {
+      await refresh();
+    } catch (cause) {
+      setRefreshFailure(cause instanceof Error ? cause.message : 'Request refresh failed. Please try again.');
+    } finally {
+      // A denied decision may refresh identical rows; still require a new lookup.
+      setRefreshVersion(version => version + 1);
+      setRefreshing(false);
+    }
   }
 
   async function submitDecision() {
     if (!active || !decision) return;
+    if (mode === 'supabase' && !liveDecisionCurrent) {
+      closeSheet();
+      return;
+    }
     // Prefer a pad-committed signature; fall back to a freshly-timestamped
     // typed signature from the prefilled name (the seed that armed the CTA).
     const sig =
@@ -154,7 +228,8 @@ export function ApprovalInboxPage() {
       error('This request has no pending tier for you to decide on.');
       return;
     }
-    if (step && !myTiers.includes(step.tier)) {
+    // Live authority comes from server eligibility and the governed decision RPC.
+    if (mode !== 'supabase' && step && !myTiers.includes(step.tier)) {
       error(`This step is waiting on ${tierLabel(step.tier)} — not your tier.`);
       return;
     }
@@ -177,10 +252,13 @@ export function ApprovalInboxPage() {
       error('Could not save the decision.');
     }
     } catch (cause) {
-      setEligibility({});
+      setEligibility(null);
       error(cause instanceof Error ? cause.message : 'Decision failed. Refresh and try again.');
-      await refresh();
-      closeSheet();
+      if (mode === 'supabase') await refreshRequests();
+      else {
+        await refresh();
+        closeSheet();
+      }
     }
   }
 
@@ -227,7 +305,7 @@ export function ApprovalInboxPage() {
             />
           }
         />
-        {readError ? <div role="alert"><p>{readError}</p><button type="button" className="btn-outline" disabled={loading} onClick={() => void refresh()}>Retry requests</button></div> : loading ? (
+        {requestReadError ? <div role="alert"><p>{requestReadError}</p><button type="button" className="btn-outline" disabled={loading || (mode === 'supabase' && refreshing)} onClick={() => void refreshRequests()}>Retry requests</button></div> : loading ? (
           <div className="h-32 animate-pulse rounded-2xl bg-inset" aria-hidden />
         ) : pending.length === 0 ? (
           <EmptyState
@@ -325,7 +403,7 @@ export function ApprovalInboxPage() {
       )}
 
       <Sheet
-        open={Boolean(active && decision)}
+        open={Boolean(active && decision && (mode !== 'supabase' || liveDecisionCurrent))}
         onOpenChange={(v) => {
           if (!v) closeSheet();
         }}
@@ -339,7 +417,7 @@ export function ApprovalInboxPage() {
             <button
               type="button"
               onClick={submitDecision}
-              disabled={isSelfApproval || (mode === 'supabase' && !!active && !eligibility[active.id]) || (decision === 'approved' && !effectiveSignature)}
+              disabled={isSelfApproval || (mode === 'supabase' && !liveDecisionCurrent) || (decision === 'approved' && !effectiveSignature)}
               className={
                 decision === 'approved'
                   ? 'btn-primary disabled:cursor-not-allowed disabled:opacity-60'

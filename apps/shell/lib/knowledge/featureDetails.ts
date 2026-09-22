@@ -555,7 +555,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         control(
           "Activate matrix",
           "Confirms and activates the selected draft through the DOA activation RPC.",
-          "Only a draft with valid assignments may be activated after confirmation.",
+          "Only a draft with valid assignments may be activated by an independent authorized checker after confirmation. The September 22 local candidate is not live 46b0b85; its earlier inactive Procurement Lead draft is not recommended or activated.",
           "The draft becomes active and the prior active revision is superseded.",
         ),
         control(
@@ -606,7 +606,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Tier",
           "Selects the approval ladder responsibility for one assignment.",
           true,
-          "The value must be one of the five supported DOA tiers.",
+          "Choose one of the five supported approval steps. Final approval follows the approved DOA for the request's department, category and amount, not an administrator title. The named employee needs current approval permission and training. A changed request or approver requires a fresh review and signature; a policy update in progress saves nothing and asks you to try again shortly.",
         ),
         field(
           "Category",
@@ -630,7 +630,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Named approver",
           "Links one assignment to an active employee profile.",
           true,
-          "Every assignment requires a selected active employee identifier.",
+          "Every assignment requires a selected active employee identifier. The local final-authority candidate's private predicate accepts any current Procurement approve_request role, but a decision also requires exactly one current matrix and matching active assignment, the pending step's exact matrix version, matching department/category and inclusive amount band, the named pending assignee and required training. No self-approval or administrator override is allowed. It changes no history, roles, active policy or SMTP; live verification remains pending.",
         ),
       ],
     },
@@ -3016,7 +3016,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Attachment",
           "Shows evidence linked to submit readiness.",
           false,
-          "The attachment kind and request ownership must match.",
+          "The attachment kind and request ownership must match. Read the filename and uploader before selecting Download; on narrow screens, Download may sit below the details.",
         ),
       ],
     },
@@ -3038,7 +3038,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           "Approve request",
           "Records approval for the current ladder step.",
           "The assigned actor needs an active profile and role, an effective unexpired tier grant, required capability and certification, and a fresh electronic signature. Requesters cannot decide their own request.",
-          "The step closes and the next tier may activate.",
+          "The step closes and the next tier may activate. Review the saved decision and signer details after reload. If a signature preview is unavailable, report the request reference; do not repeat the approval or replace historical evidence to recreate the image.",
         ),
         control(
           "Reject request",
@@ -3571,8 +3571,8 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         control(
           "Submit application",
           "Review the working copy, capture a fresh signature, and use Sign and submit to create the immutable submission.",
-          "All required facts, evidence and declarations must pass. A correction must match Legal's source version and expected submission version; an old signature or stale draft is not reusable.",
-          "The next submission returns to Legal under the same case, retaining the original snapshot and linked version history.",
+          "All required facts, evidence and declarations must pass. Readiness uses the freshly captured signature's date; a saved date alone is not a signature. A correction must match Legal's source version and expected submission version; an old signature or stale draft is not reusable.",
+          "The next submission returns to Legal under the same case, retaining the original snapshot and linked version history. Saved securely confirms only the draft. Confirm the submitted case status; if it remains a draft, report the case reference rather than assuming Legal has received it.",
         ),
         control(
           "Back to case",

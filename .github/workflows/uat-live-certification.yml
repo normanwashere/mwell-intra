@@ -28,6 +28,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     environment: uat
+    services:
+      doa-postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: sep22-ci-disposable-only
+          POSTGRES_INITDB_ARGS: --set=cluster_name=sep22_doa_ci
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     outputs:
       audit_date: ${{ steps.audit_identity.outputs.audit_date }}
     env:
@@ -79,6 +94,8 @@ jobs:
         run: |
           node --test --test-concurrency=1 \
             scripts/verify-sep05-procurement.pglite.test.mjs \
+            scripts/verify-sep22-doa-tier.pglite.test.mjs \
+            scripts/verify-sep22-doa-final-authority.pglite.test.mjs \
             scripts/qa/request-cleanup.pglite.test.mjs \
             scripts/qa/payment-cleanup.pglite.test.mjs \
             scripts/verify-provisional-quality-hold-release.pglite.test.mjs \
@@ -94,6 +111,11 @@ jobs:
             scripts/verify-warehouse-custody-truncate.pglite.test.mjs
       - name: Verify requester-name and return authorization regressions
         run: node --test --test-concurrency=1 scripts/verify-department-request-names.pglite.test.mjs scripts/verify-replacement-delivery.pglite.test.mjs scripts/verify-authority-plan-performance.pglite.test.mjs
+      - name: Verify final DOA concurrency on disposable PostgreSQL
+        env:
+          SEP22_DOA_EPHEMERAL_CI: "1"
+          SEP22_DOA_CI_DATABASE_URL: postgresql://postgres:sep22-ci-disposable-only@127.0.0.1:5432/postgres
+        run: node --test scripts/verify-sep22-doa-final-authority.postgres.test.mjs
       - name: Verify vendor training authority and recorded journey evidence
         run: node --test scripts/verify-vendor-certification-scope.pglite.test.mjs scripts/qa/recorded-vendor-evidence.test.mjs scripts/qa/controlled-po-acknowledgement.test.mjs scripts/qa/role-api-performance.test.mjs
       - name: Verify vendor document upload ownership and current authority
@@ -147,7 +169,7 @@ jobs:
       - name: Wait for the exact commit to be deployed
         run: node scripts/qa/wait-for-uat-deployment.mjs
       - name: Verify browser audit visibility and readiness contracts
-        run: node --test scripts/qa/audit-disclosure.browser.test.mjs scripts/qa/event-demand-selector.browser.test.mjs scripts/qa/quality-validation-workflow.browser.test.mjs scripts/qa/route-evidence.browser.test.mjs scripts/qa/evidence-upload.browser.test.mjs scripts/qa/receipt-quality-probes.test.mjs scripts/qa/excess-save-outcome.browser.test.mjs scripts/qa/receiving-audit-evidence.test.mjs
+        run: node --test scripts/qa/audit-disclosure.browser.test.mjs scripts/qa/event-demand-selector.browser.test.mjs scripts/qa/quality-validation-workflow.browser.test.mjs scripts/qa/route-evidence.browser.test.mjs scripts/qa/evidence-upload.browser.test.mjs scripts/qa/receipt-quality-probes.test.mjs scripts/qa/excess-save-outcome.browser.test.mjs scripts/qa/receiving-audit-evidence.test.mjs scripts/qa/sep22-departments-target.browser.test.mjs
       - name: Verify warehouse reference and home-link targets
         run: node --test scripts/qa/return-links.browser.test.mjs scripts/qa/warehouse-brand-target.browser.test.mjs
       - name: Verify fresh-account onboarding driver regressions

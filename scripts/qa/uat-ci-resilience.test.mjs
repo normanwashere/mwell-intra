@@ -22,6 +22,7 @@ const browserHelperFiles = [
   "scripts/qa/receipt-quality-probes.test.mjs",
   "scripts/qa/excess-save-outcome.browser.test.mjs",
   "scripts/qa/receiving-audit-evidence.test.mjs",
+  "scripts/qa/sep22-departments-target.browser.test.mjs",
 ];
 
 function assertBrowserHelperContract(workflow) {
@@ -258,6 +259,8 @@ test("prepare runs only reviewed Sep05 SQL suites before persona provisioning", 
   assert.deepEqual(command, [
     "node", "--test", "--test-concurrency=1",
     "scripts/verify-sep05-procurement.pglite.test.mjs",
+    "scripts/verify-sep22-doa-tier.pglite.test.mjs",
+    "scripts/verify-sep22-doa-final-authority.pglite.test.mjs",
     "scripts/qa/request-cleanup.pglite.test.mjs",
     "scripts/qa/payment-cleanup.pglite.test.mjs",
     "scripts/verify-provisional-quality-hold-release.pglite.test.mjs",
@@ -332,6 +335,47 @@ test("controlled vendor cleanup uses the same exact run mailbox and refuses a sh
 
 test("UAT runs explicit browser and receipt-quality helper contracts after Chromium installation", async () => {
   assertBrowserHelperContract(yaml.load(await readUatWorkflow()));
+});
+
+function assertDoaConcurrencyGate(workflow) {
+  const job = workflow.jobs.prepare;
+  const service = job.services?.['doa-postgres'];
+  assert.equal(service?.image, 'postgres:17-alpine');
+  assert.equal(service.env.POSTGRES_DB, 'postgres');
+  assert.equal(service.env.POSTGRES_USER, 'postgres');
+  assert.equal(service.env.POSTGRES_INITDB_ARGS, '--set=cluster_name=sep22_doa_ci');
+  assert.deepEqual(service.ports, ['5432:5432']);
+  assert.match(service.options, /pg_isready -U postgres/);
+  const name = 'Verify final DOA concurrency on disposable PostgreSQL';
+  const steps = job.steps.filter(step => step.name === name);
+  assert.equal(steps.length, 1);
+  const step = steps[0];
+  assert.equal(step.run, 'node --test scripts/verify-sep22-doa-final-authority.postgres.test.mjs');
+  assert.equal(step.if, undefined);
+  assert.equal(step['continue-on-error'], undefined);
+  assert.equal(step.env.SEP22_DOA_EPHEMERAL_CI, '1');
+  assert.equal(step.env.SEP22_DOA_CI_DATABASE_URL,
+    `postgresql://postgres:${service.env.POSTGRES_PASSWORD}@127.0.0.1:5432/postgres`);
+  assert.deepEqual(Object.keys(step.env).sort(), ['SEP22_DOA_CI_DATABASE_URL', 'SEP22_DOA_EPHEMERAL_CI']);
+  assert.doesNotMatch(JSON.stringify(step.env), /secrets|supabase/i);
+  assert.ok(job.steps.indexOf(step) > job.steps.findIndex(item => item.name === 'Install locked dependencies'));
+  assert.ok(job.steps.indexOf(step) < job.steps.findIndex(item => item.name === 'Reconcile guarded UAT personas'));
+}
+
+test('final DOA concurrency uses a required isolated PostgreSQL gate', async () => {
+  const workflow = yaml.load(await readUatWorkflow());
+  assertDoaConcurrencyGate(workflow);
+  for (const mutate of [
+    copy => { delete copy.jobs.prepare.services; },
+    copy => { copy.jobs.prepare.steps = copy.jobs.prepare.steps.filter(step => step.name !== 'Verify final DOA concurrency on disposable PostgreSQL'); },
+    copy => { copy.jobs.prepare.steps.find(step => step.name === 'Verify final DOA concurrency on disposable PostgreSQL').if = 'false'; },
+    copy => { copy.jobs.prepare.steps.find(step => step.name === 'Verify final DOA concurrency on disposable PostgreSQL')['continue-on-error'] = true; },
+    copy => { copy.jobs.prepare.steps.find(step => step.name === 'Verify final DOA concurrency on disposable PostgreSQL').env.SEP22_DOA_CI_DATABASE_URL = '${{ secrets.DATABASE_URL }}'; },
+  ]) {
+    const copy = structuredClone(workflow);
+    mutate(copy);
+    assert.throws(() => assertDoaConcurrencyGate(copy));
+  }
 });
 
 for (const file of browserHelperFiles) {

@@ -883,7 +883,7 @@ function ApprovalStepRow({ step }: { step: ApprovalStep }) {
       >
         <Icon name={meta.icon} className="h-4 w-4" />
       </span>
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
         <p className="text-sm font-semibold text-ink">
           Step {step.order} · {label}
         </p>
@@ -981,9 +981,9 @@ function AttachmentRow({ att }: { att: RequestAttachment }) {
   }
 
   return (
-    <li className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface p-2">
-      <div className="min-w-0">
-        <p className="truncate text-sm font-semibold text-ink" title={att.filename}>
+    <li className="flex min-w-0 flex-col items-stretch gap-3 rounded-xl border border-line bg-surface p-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+        <p className="text-sm font-semibold text-ink" title={att.filename}>
           {att.filename} <Badge tone="slate">{attachmentKindLabel(att.kind)}</Badge>
         </p>
         <p className="text-xs text-muted">
@@ -997,7 +997,7 @@ function AttachmentRow({ att }: { att: RequestAttachment }) {
         <a
           href={att.dataUrl}
           download={att.filename}
-          className="btn-ghost btn-sm"
+          className="btn-ghost btn-sm min-h-11 shrink-0 self-start sm:self-auto"
           aria-label={`Download ${att.filename}`}
         >
           <Icon name="download" className="h-4 w-4" />
@@ -1007,7 +1007,7 @@ function AttachmentRow({ att }: { att: RequestAttachment }) {
       {!att.dataUrl && att.storagePath && (
         <button
           type="button"
-          className="btn-ghost btn-sm min-h-11"
+          className="btn-ghost btn-sm min-h-11 shrink-0 self-start sm:self-auto"
           aria-label={`Download ${att.filename}`}
           disabled={downloading}
           onClick={downloadLiveAttachment}

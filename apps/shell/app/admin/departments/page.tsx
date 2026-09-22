@@ -621,7 +621,7 @@ function DepartmentAdministration() {
           </Button>
         </div>
         <div
-          className="overflow-x-auto border-y border-line focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+          className="min-h-11 overflow-x-auto border-y border-line focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
           role="region"
           aria-label="Department hierarchy table"
           tabIndex={0}

@@ -254,7 +254,11 @@ export function VendorApplicationPage() {
 
   const activeCase = kase;
   const currentApplication = application;
-  const validation = validateV2025Application(application);
+  // Readiness and submission must validate the same captured-signature payload.
+  const submissionApplication: VendorApplicationSnapshot = signature
+    ? { ...application, declaration: { ...application.declaration, signedAt: signature.signedAt } }
+    : application;
+  const validation = validateV2025Application(submissionApplication);
 
   function updateCompany(key: keyof VendorCompanyDetails, value: string) {
     updateApplication((current) => ({
@@ -335,10 +339,7 @@ export function VendorApplicationPage() {
       error('Add the authorized signatory signature before submitting.');
       return;
     }
-    const next: VendorApplicationSnapshot = {
-      ...application,
-      declaration: { ...application.declaration, signedAt: signature.signedAt },
-    };
+    const next = submissionApplication;
     const result = validateV2025Application(next);
     if (!result.ok) {
       error(`Complete ${result.errors.length} required application field${result.errors.length === 1 ? '' : 's'}.`);
