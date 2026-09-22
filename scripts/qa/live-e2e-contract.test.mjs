@@ -1059,7 +1059,13 @@ test("the mutating harness waits for quality data and uses unambiguous DOA contr
     source,
     /getByLabel\("Tier 1", \{ exact: true \}\)\s*\.selectOption\("final_approver"\)/,
   );
-  assert.match(source, /getByLabel\(`Tier \$\{index \+ 1\} named approver`\)/);
+  assert.match(source, /selectDoaFixtureApprovers\(page, \{ departmentHeadId, finalApproverId \}\)/);
+  assert.match(source, /departmentHeadId: task3Fixture\.departmentHeadId/);
+  assert.match(source, /finalApproverId: task3Fixture\.finalApproverId/);
+  const doaDriver = await readFile(new URL('./doa-assignment-driver.mjs', import.meta.url), 'utf8');
+  assert.match(doaDriver, /getByLabel\('Tier 1 named approver', \{ exact: true \}\)\.selectOption\(departmentHeadId\)/);
+  assert.match(doaDriver, /getByLabel\('Tier 2 named approver', \{ exact: true \}\)\.selectOption\(finalApproverId\)/);
+  assert.doesNotMatch(doaDriver, /selectOption\(\{\s*index:/);
   assert.match(source, /DOA draft saved for independent review/);
   assert.match(source, /legalActivateDoaWorkflow/);
   assert.match(source, /Loading quality controls/);
