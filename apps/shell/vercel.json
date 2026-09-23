@@ -3,6 +3,6 @@
   "functions": {
     "app/knowledge/page.tsx": { "regions": ["hnd1"] }
   },
-  "installCommand": "cd ../.. && pnpm install",
+  "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
   "buildCommand": "cd ../.. && pnpm turbo build --filter=@intra/shell"
 }

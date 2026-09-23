@@ -7,19 +7,19 @@
 | Release fact | Evidence boundary |
 | --- | --- |
 | Canonical UAT | [mwell-intra-uat.vercel.app](https://mwell-intra-uat.vercel.app/) |
-| Source reviewed | `9823059bbe08fd1949105a5901683188e5716115`; full monorepo with named-approver fixture correction and updated test contracts |
-| Live commit and health | Canonical UAT health checked directly at 2026-09-22T17:31:24.643Z; exact reviewed application commit, correct UAT backend and reachable assets. |
+| Source reviewed | Exact application and reference revisions appear in this pack's Release Status and Source Review; use the full monorepo, not a branch name alone. |
+| Live commit and health | Exact deployment ID, observed commit, backend and check time appear in Release Status. Do not reuse an older health observation for a new release. |
 | UAT Supabase project | `kkoitlvydytdhlpxhuah` |
-| Certification tracking | CI208 passed all 12 jobs on the exact deployed application commit; completed 2026-09-22T17:24:14Z (September 23 Asia/Singapore). |
+| Certification tracking | CI208 passed all 12 jobs on baseline 9823059. The newer release needs its own CI result, recorded in Release Status; the earlier pass does not certify changed code. |
 | Release ownership | Engineering deployed the reviewed source, installed two scoped UAT migrations and ran the targeted live DOA approval check. Receiving-team acceptance remains separate. |
-| Reporting API | Design only; not part of the running architecture below |
+| Reporting API | Inactive security foundation and draft source mapping; no endpoint or connector in the running architecture below |
 | SMTP | Explicitly deferred; no change or delivery-certification claim |
 
-Health proves availability only at its recorded time, not workflow correctness, email delivery or security completeness. Earlier CI203-206 results are historical. Preserve the current run URL, application commit and complete job results when updating status. Runtime sources are unchanged from 9989a0d; newer commits update fixtures, test contracts and documentation.
+Health proves availability only at its recorded time, not workflow correctness, email delivery or security completeness. Earlier CI results are historical. Preserve the current run URL, application commit and complete job results when updating status. The reporting foundation and dependency update are a new candidate, not a documentation-only relabeling of CI208.
 
 ## Repository and System Map
 
-Use [the full Intra repository at the reviewed source commit](https://github.com/normanwashere/mwell-intra/tree/9823059bbe08fd1949105a5901683188e5716115), or the separately verified source-transfer archive. It contains `apps/shell`, `modules`, `packages` and the root pnpm workspace. **Do not deploy the older standalone Warehouse application.** No original developer directory is required. This release was authorized for UAT only. A Bitbucket import or source copy is not production deployment authorization. Do not use a dirty working directory as a certified release.
+Use the full Intra repository at the exact revision linked in this pack's Source Review, or a separately verified source-transfer archive of that revision. It contains `apps/shell`, `modules`, `packages` and the root pnpm workspace. **Do not deploy the older standalone Warehouse application.** No original developer directory is required. This release was authorized for UAT only. A Bitbucket import or source copy is not production deployment authorization. Do not use a dirty working directory as a certified release.
 
 ```mermaid
 flowchart TD
@@ -70,6 +70,14 @@ pnpm verify:app-documentation-html
 These are the receiving team's reproduction commands. Our clean-source results are recorded below; the receiver must run them again in their own environment. Historical evidence tests require the original Git history. Live certification/provisioning scripts can mutate UAT and require approved fixtures, credentials and cleanup. Read their environment guards before invoking them.
 
 ## Environment and Security Controls
+
+### Reporting Foundation
+
+The `apps/shell/lib/reporting` helpers validate short-lived access tokens, strict JSON and bounded transport, and verify canonical record/dataset hashes. The accompanying dictionary is a draft reviewed against source metadata, not an approved disclosure contract or working export. The authority migration and its test scope are documented in the bundled `reporting-authority-foundation.md`.
+
+Keep reporting disconnected until the remaining security gates pass. Do not create a shortcut using a browser session, shared Supabase service-role key or direct operational-table access. The managed issuer, isolated deployment identities, approved projections, shared quotas, capture/publication pipeline, private storage permissions and recipient connector still need integration acceptance. An installed private schema alone does not prove any of those boundaries.
+
+The deployment install uses `--frozen-lockfile` so Vercel reproduces the reviewed dependencies. See the dependency remediation ledger for exact package versions and tests. No new data-team credential or human business authority is granted by this foundation.
 
 | Setting / resource | Required handling |
 | --- | --- |

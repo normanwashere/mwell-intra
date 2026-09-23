@@ -1,6 +1,6 @@
 # Connect and Sync: Data-Team Handoff
 
-September 20, 2026. Proposed delivery guide. **The API and connector have not been built or deployed yet.** Commands below define what the implementation must deliver; do not use them as if they are available today.
+September 20, 2026 design; status clarified September 23. **There is no working API or connector yet.** Tested security helpers and a draft field dictionary are engineering inputs, not a dashboard connection. Commands below define the eventual delivery; do not run them as if they are available today. See [current implementation evidence](FOUNDATION-PROGRESS.md).
 
 ## What You Will Receive
 
@@ -8,7 +8,7 @@ Your existing dashboard stays in place. A connector on your backend copies Wareh
 
 The default bundle covers products, stock, movements, receiving/Quality, fulfillment/returns, procurement requests/approvals, sourcing, POs, amendments and payment readiness. Private drafts, personal contacts, bank details, documents and still-sealed commercial information are excluded. The catalogue will show exact available datasets/fields; an unsupported required dataset is not represented as a successful empty export.
 
-The handoff includes a tested Node/TypeScript connector, PostgreSQL adapter, SQLite demonstration, OpenAPI, Postman collection, synthetic examples, field dictionary and common SQL joins. The connector handles authentication, pagination, retries and saved progress. Your team owns dashboard calculations and end-user access.
+The completed integration handoff must include a tested Node/TypeScript connector, PostgreSQL adapter, SQLite demonstration, OpenAPI, Postman collection, synthetic examples, approved field dictionary and common SQL joins. Only the draft dictionary and foundation evidence are supplied so far. The future connector must handle authentication, pagination, retries and saved progress. Your team owns dashboard calculations and end-user access.
 
 ## Setup Inputs
 

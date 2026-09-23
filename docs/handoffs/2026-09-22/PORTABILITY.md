@@ -2,7 +2,7 @@
 
 **Bitbucket is the source repository and can run CI; it does not replace the application server, database, Auth or private file storage.** The production host and backend ownership are not yet confirmed. Moving source alone does not move these services or their data.
 
-**Do not copy the default `main` branch as this release.** The reviewed application is `9823059bbe08fd1949105a5901683188e5716115` on `codex/uat-launch-blockers`. The transfer branch `codex/sep22-event-seller-certification` adds the final handoff status as documentation-only successor commits. Use the source ZIP's `source-manifest.json` for its exact transfer commit, or import that branch and verify its diff from the application commit contains documentation only. `main` was intentionally not updated because its legacy workflow can deploy automatically to a separately configured production target.
+**Do not copy the default `main` branch as this release.** Use the exact application and transfer commits in this pack's Release Status and Source Review, or the source ZIP's `source-manifest.json`. The current work is maintained on `codex/reporting-security-foundation` and released through `codex/uat-launch-blockers`; branch names can move. A documentation-only successor must have only documentation differences from the recorded application commit. `main` was intentionally not updated because its workflow can deploy automatically to a separately configured production target.
 
 | Transfer route | Required delivery | Receiving-team check |
 | --- | --- | --- |
@@ -21,7 +21,7 @@ The app installs and builds from a source copy, but two historical screenshot-pr
 
 Use **Node 24** for the current release, matching UAT certification, and **pnpm 10.23.0**. The app manifest permits Node 22+, but this is not proof that every supported version was retested. Use the lockfile; do not upgrade packages during transfer.
 
-The legacy `.node-version` file and old production workflow still say 22. Select Node 24 explicitly in the receiving build/test runner to reproduce current certification. Do not silently inherit that legacy setting. Before installing a source ZIP, verify its delivered checksum and run `node scripts/docs/export-handoff-source.mjs --verify .` from the extracted source root.
+The repository's `.node-version` and deployment workflow now also select Node 24. Select it explicitly in the receiving build/test runner and keep pnpm 10.23.0. Before installing a source ZIP, verify its delivered checksum and run `node scripts/docs/export-handoff-source.mjs --verify .` from the extracted source root.
 
 ```sh
 pnpm install --frozen-lockfile
@@ -36,7 +36,7 @@ The application needs a Node server, not a static HTML host. Port 3000 is an exa
 
 Build runners need approved registry access and, with the current `next/font/google` configuration, access to Google's font download endpoints. Restricted-network builds need an independently reviewed font-vendoring change; do not silently replace fonts or bypass TLS checks. Provide dependency/license inventories and third-party notices with the release. mWell must confirm recipient rights for branding and other supplied assets; source possession alone is not a license determination.
 
-The reporting API and capture worker are not implemented. Do not create a scheduler for a proposed worker or advertise working `/api/reporting/v1` endpoints from these plans.
+The reporting helpers and private authority foundation do not implement the Reporting API or capture worker. Do not create a scheduler for a proposed worker or advertise working `/api/reporting/v1` endpoints from these plans.
 
 ## Value-Free Configuration Checklist
 

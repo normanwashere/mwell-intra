@@ -1,0 +1,5032 @@
+{
+  "version": 1,
+  "environment": "uat",
+  "project_id": "kkoitlvydytdhlpxhuah",
+  "base_commit": "96f75f9",
+  "reviewed_at": "2026-09-23T02:51:19.316058Z",
+  "started_at": "2026-09-23T02:47:15.171620Z",
+  "method": "Supabase execute_sql; pg_catalog only; BEGIN READ ONLY / ROLLBACK; no business rows, defaults, function bodies or secrets queried",
+  "fingerprint": {
+    "algorithm": "sha256-jcs-relations-v1",
+    "value": "713cbd164ce3968a7cff8b2eb0419d6178d43e91093babb4c1588c874ed3f081"
+  },
+  "queries": [
+    "BEGIN READ ONLY;\nWITH targets AS (\n SELECT c.oid,n.nspname,c.relname,c.relkind,c.relrowsecurity,c.relforcerowsecurity,c.reloptions\n FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace\n WHERE ((n.nspname='warehouse' AND c.relname IN ('products','locations','storage_areas','lots','inventory_units','inventory_position_v1','movements','bi_movements_v1','receipts','quality_inspections','bi_quality_v1','inventory_holds','allocations','department_stock_requests','fulfillment_orders','customer_return_cases','vendor_returns','cycle_counts','bi_cycle_counts_v1','kit_definitions','rekit_work_orders','suppliers','purchase_orders')) OR (n.nspname='procurement' AND c.relname IN ('requests','approval_steps','purchase_order_amendment_steps','sourcing_events','route_decisions','sourcing_responses','purchase_orders','purchase_order_lines','purchase_order_amendments','receipts','v_purchase_order_receipt_status','payment_readiness_packs','payment_readiness_staleness_events','acceptance_packs'))) AND c.relkind IN ('r','p','v','m')\n)\nSELECT clock_timestamp() AS reviewed_at, jsonb_agg(jsonb_build_object(\n 'relation', t.nspname||'.'||t.relname, 'kind', t.relkind,\n 'rls_enabled',t.relrowsecurity,'rls_forced',t.relforcerowsecurity,\n 'view_options',coalesce(to_jsonb(t.reloptions),'[]'::jsonb),\n 'view_definition',CASE WHEN t.relkind IN ('v','m') THEN pg_catalog.pg_get_viewdef(t.oid,true) ELSE NULL END,\n 'columns',(SELECT jsonb_agg(jsonb_build_object('name',a.attname,'postgres_type',pg_catalog.format_type(a.atttypid,a.atttypmod),'nullable',NOT a.attnotnull) ORDER BY a.attnum)\n FROM pg_catalog.pg_attribute a WHERE a.attrelid=t.oid AND a.attnum>0 AND NOT a.attisdropped),\n 'constraints',coalesce((SELECT jsonb_agg(jsonb_build_object('name',con.conname,'kind',con.contype,'definition',pg_catalog.pg_get_constraintdef(con.oid,true)) ORDER BY con.conname)\n FROM pg_catalog.pg_constraint con WHERE con.conrelid=t.oid AND con.contype IN ('p','u','f','c')),'[]'::jsonb)\n) ORDER BY t.nspname,t.relname) AS relations FROM targets t;\nROLLBACK;",
+    "BEGIN READ ONLY;\nWITH targets AS (\n SELECT c.oid,n.nspname,c.relname,c.relkind,c.relrowsecurity,c.relforcerowsecurity,c.reloptions\n FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace\n WHERE ((n.nspname='core' AND c.relname IN ('vendors','vendor_aliases')) OR (n.nspname='warehouse' AND c.relname='stock_levels')) AND c.relkind IN ('r','p','v','m')\n)\nSELECT clock_timestamp() AS reviewed_at, jsonb_agg(jsonb_build_object(\n 'relation', t.nspname||'.'||t.relname, 'kind', t.relkind,\n 'rls_enabled',t.relrowsecurity,'rls_forced',t.relforcerowsecurity,\n 'view_options',coalesce(to_jsonb(t.reloptions),'[]'::jsonb),\n 'view_definition',CASE WHEN t.relkind IN ('v','m') THEN pg_catalog.pg_get_viewdef(t.oid,true) ELSE NULL END,\n 'columns',(SELECT jsonb_agg(jsonb_build_object('name',a.attname,'postgres_type',pg_catalog.format_type(a.atttypid,a.atttypmod),'nullable',NOT a.attnotnull) ORDER BY a.attnum)\n FROM pg_catalog.pg_attribute a WHERE a.attrelid=t.oid AND a.attnum>0 AND NOT a.attisdropped),\n 'constraints',coalesce((SELECT jsonb_agg(jsonb_build_object('name',con.conname,'kind',con.contype,'definition',pg_catalog.pg_get_constraintdef(con.oid,true)) ORDER BY con.conname)\n FROM pg_catalog.pg_constraint con WHERE con.conrelid=t.oid AND con.contype IN ('p','u','f','c')),'[]'::jsonb)\n) ORDER BY t.nspname,t.relname) AS relations FROM targets t;\nROLLBACK;",
+    "BEGIN READ ONLY;\nWITH targets AS (\n SELECT c.oid,n.nspname,c.relname,c.relkind,c.relrowsecurity,c.relforcerowsecurity,c.reloptions\n FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace\n WHERE ((n.nspname='procurement' AND c.relname='receipt_reconciliations') OR (n.nspname='warehouse' AND c.relname IN ('events','returns'))) AND c.relkind IN ('r','p','v','m')\n)\nSELECT clock_timestamp() AS reviewed_at, jsonb_agg(jsonb_build_object(\n 'relation', t.nspname||'.'||t.relname, 'kind', t.relkind,\n 'rls_enabled',t.relrowsecurity,'rls_forced',t.relforcerowsecurity,\n 'view_options',coalesce(to_jsonb(t.reloptions),'[]'::jsonb),\n 'view_definition',CASE WHEN t.relkind IN ('v','m') THEN pg_catalog.pg_get_viewdef(t.oid,true) ELSE NULL END,\n 'columns',(SELECT jsonb_agg(jsonb_build_object('name',a.attname,'postgres_type',pg_catalog.format_type(a.atttypid,a.atttypmod),'nullable',NOT a.attnotnull) ORDER BY a.attnum)\n FROM pg_catalog.pg_attribute a WHERE a.attrelid=t.oid AND a.attnum>0 AND NOT a.attisdropped),\n 'constraints',coalesce((SELECT jsonb_agg(jsonb_build_object('name',con.conname,'kind',con.contype,'definition',pg_catalog.pg_get_constraintdef(con.oid,true)) ORDER BY con.conname)\n FROM pg_catalog.pg_constraint con WHERE con.conrelid=t.oid AND con.contype IN ('p','u','f','c')),'[]'::jsonb)\n) ORDER BY t.nspname,t.relname) AS relations FROM targets t;\nROLLBACK;"
+  ],
+  "relations": [
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "legal_name",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "trade_name",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "tin",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "category",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "accreditation_status",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "accreditation_expires_at",
+          "nullable": true,
+          "postgres_type": "date"
+        },
+        {
+          "name": "owner_module",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "postgres_type": "timestamp with time zone"
+        }
+      ],
+      "relation": "core.vendors",
+      "rls_forced": false,
+      "constraints": [
+        {
+          "kind": "p",
+          "name": "vendors_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "kind": "c",
+          "name": "vendors_status_check",
+          "definition": "CHECK (accreditation_status = ANY (ARRAY['draft'::text, 'submitted'::text, 'under_review'::text, 'approved'::text, 'provisional'::text, 'rejected'::text, 'expired'::text, 'renewal_due'::text, 'suspended'::text, 'offboarded'::text]))"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    },
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "purchase_order_id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "request_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "warehouse_receipt_reference",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "acceptance_type",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "accepted_scope",
+          "nullable": false,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "exceptions",
+          "nullable": false,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "accepted_by",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "accepted_at",
+          "nullable": false,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "document_hash",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "accepted_amount",
+          "nullable": true,
+          "postgres_type": "numeric(14,2)"
+        }
+      ],
+      "relation": "procurement.acceptance_packs",
+      "rls_forced": true,
+      "constraints": [
+        {
+          "kind": "c",
+          "name": "acceptance_hash_check",
+          "definition": "CHECK (document_hash ~ '^[0-9a-f]{64}$'::text)"
+        },
+        {
+          "kind": "f",
+          "name": "acceptance_packs_accepted_by_fkey",
+          "definition": "FOREIGN KEY (accepted_by) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "p",
+          "name": "acceptance_packs_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "kind": "f",
+          "name": "acceptance_packs_purchase_order_id_fkey",
+          "definition": "FOREIGN KEY (purchase_order_id) REFERENCES procurement.purchase_orders(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "acceptance_packs_request_id_fkey",
+          "definition": "FOREIGN KEY (request_id) REFERENCES procurement.requests(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "c",
+          "name": "acceptance_status_check",
+          "definition": "CHECK (status = ANY (ARRAY['accepted'::text, 'accepted_with_exceptions'::text, 'rejected'::text, 'superseded'::text]))"
+        },
+        {
+          "kind": "c",
+          "name": "acceptance_type_check",
+          "definition": "CHECK (acceptance_type = ANY (ARRAY['goods_receipt'::text, 'service_completion'::text, 'technical_acceptance'::text, 'partial_acceptance'::text]))"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    },
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "request_id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "step_order",
+          "nullable": false,
+          "postgres_type": "integer"
+        },
+        {
+          "name": "tier",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "label",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "note",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "decided_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "decided_by_email",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "signature",
+          "nullable": true,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "assigned_user_id",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "matrix_version",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "request_version",
+          "nullable": false,
+          "postgres_type": "integer"
+        }
+      ],
+      "relation": "procurement.approval_steps",
+      "rls_forced": false,
+      "constraints": [
+        {
+          "kind": "f",
+          "name": "approval_steps_assigned_user_id_fkey",
+          "definition": "FOREIGN KEY (assigned_user_id) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "p",
+          "name": "approval_steps_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "kind": "f",
+          "name": "approval_steps_request_id_fkey",
+          "definition": "FOREIGN KEY (request_id) REFERENCES procurement.requests(id) ON DELETE CASCADE"
+        },
+        {
+          "kind": "u",
+          "name": "approval_steps_request_id_step_order_key",
+          "definition": "UNIQUE (request_id, step_order)"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    },
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "purchase_order_id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "acceptance_pack_id",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "policy_version",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "po_match",
+          "nullable": false,
+          "postgres_type": "boolean"
+        },
+        {
+          "name": "invoice_or_si_storage_path",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "milestone_support_storage_path",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "tax_withholding_support_storage_path",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "payment_terms",
+          "nullable": false,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "prepared_by",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "prepared_at",
+          "nullable": false,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "finance_reviewed_by",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "finance_reviewed_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "finance_note",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "corrected_from",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "acceptance_pack_ids",
+          "nullable": false,
+          "postgres_type": "uuid[]"
+        },
+        {
+          "name": "accepted_quantity",
+          "nullable": false,
+          "postgres_type": "numeric"
+        },
+        {
+          "name": "acceptance_evidence_version",
+          "nullable": false,
+          "postgres_type": "bigint"
+        },
+        {
+          "name": "evidence_stale",
+          "nullable": false,
+          "postgres_type": "boolean"
+        },
+        {
+          "name": "evidence_stale_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "invoice_number",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "invoice_date",
+          "nullable": true,
+          "postgres_type": "date"
+        },
+        {
+          "name": "due_date",
+          "nullable": true,
+          "postgres_type": "date"
+        },
+        {
+          "name": "invoice_amount",
+          "nullable": true,
+          "postgres_type": "numeric(14,2)"
+        },
+        {
+          "name": "tax_amount",
+          "nullable": false,
+          "postgres_type": "numeric(14,2)"
+        },
+        {
+          "name": "withholding_amount",
+          "nullable": false,
+          "postgres_type": "numeric(14,2)"
+        },
+        {
+          "name": "purchase_order_amount",
+          "nullable": true,
+          "postgres_type": "numeric(14,2)"
+        },
+        {
+          "name": "accepted_amount",
+          "nullable": true,
+          "postgres_type": "numeric(14,2)"
+        },
+        {
+          "name": "variance_amount",
+          "nullable": true,
+          "postgres_type": "numeric(14,2)"
+        },
+        {
+          "name": "released_amount",
+          "nullable": false,
+          "postgres_type": "numeric(14,2)"
+        },
+        {
+          "name": "foreign_vendor_evidence_storage_path",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "document_ids",
+          "nullable": true,
+          "postgres_type": "jsonb"
+        }
+      ],
+      "relation": "procurement.payment_readiness_packs",
+      "rls_forced": true,
+      "constraints": [
+        {
+          "kind": "f",
+          "name": "payment_readiness_packs_acceptance_pack_id_fkey",
+          "definition": "FOREIGN KEY (acceptance_pack_id) REFERENCES procurement.acceptance_packs(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "payment_readiness_packs_corrected_from_fkey",
+          "definition": "FOREIGN KEY (corrected_from) REFERENCES procurement.payment_readiness_packs(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "payment_readiness_packs_finance_reviewed_by_fkey",
+          "definition": "FOREIGN KEY (finance_reviewed_by) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "p",
+          "name": "payment_readiness_packs_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "kind": "f",
+          "name": "payment_readiness_packs_prepared_by_fkey",
+          "definition": "FOREIGN KEY (prepared_by) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "payment_readiness_packs_purchase_order_id_fkey",
+          "definition": "FOREIGN KEY (purchase_order_id) REFERENCES procurement.purchase_orders(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "c",
+          "name": "payment_readiness_status_check",
+          "definition": "CHECK (status = ANY (ARRAY['draft'::text, 'ready_for_finance'::text, 'returned'::text, 'accepted'::text, 'released'::text, 'superseded'::text]))"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    },
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "payment_readiness_pack_id",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "purchase_order_id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "prior_status",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "prior_acceptance_evidence_version",
+          "nullable": false,
+          "postgres_type": "bigint"
+        },
+        {
+          "name": "acceptance_evidence_version",
+          "nullable": false,
+          "postgres_type": "bigint"
+        },
+        {
+          "name": "reason",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "recorded_at",
+          "nullable": false,
+          "postgres_type": "timestamp with time zone"
+        }
+      ],
+      "relation": "procurement.payment_readiness_staleness_events",
+      "rls_forced": true,
+      "constraints": [
+        {
+          "kind": "u",
+          "name": "payment_readiness_staleness_e_payment_readiness_pack_id_acc_key",
+          "definition": "UNIQUE (payment_readiness_pack_id, acceptance_evidence_version)"
+        },
+        {
+          "kind": "f",
+          "name": "payment_readiness_staleness_even_payment_readiness_pack_id_fkey",
+          "definition": "FOREIGN KEY (payment_readiness_pack_id) REFERENCES procurement.payment_readiness_packs(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "p",
+          "name": "payment_readiness_staleness_events_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "kind": "f",
+          "name": "payment_readiness_staleness_events_purchase_order_id_fkey",
+          "definition": "FOREIGN KEY (purchase_order_id) REFERENCES procurement.purchase_orders(id) ON DELETE RESTRICT"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    },
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "amendment_id",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "step_order",
+          "nullable": false,
+          "postgres_type": "integer"
+        },
+        {
+          "name": "tier",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "assigned_user_id",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "doa_assignment_id",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "decision_reason",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "signature",
+          "nullable": true,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "decided_by",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "decided_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        }
+      ],
+      "relation": "procurement.purchase_order_amendment_steps",
+      "rls_forced": true,
+      "constraints": [
+        {
+          "kind": "f",
+          "name": "purchase_order_amendment_steps_amendment_id_fkey",
+          "definition": "FOREIGN KEY (amendment_id) REFERENCES procurement.purchase_order_amendments(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "u",
+          "name": "purchase_order_amendment_steps_amendment_id_step_order_key",
+          "definition": "UNIQUE (amendment_id, step_order)"
+        },
+        {
+          "kind": "f",
+          "name": "purchase_order_amendment_steps_assigned_user_id_fkey",
+          "definition": "FOREIGN KEY (assigned_user_id) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "purchase_order_amendment_steps_decided_by_fkey",
+          "definition": "FOREIGN KEY (decided_by) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "purchase_order_amendment_steps_doa_assignment_id_fkey",
+          "definition": "FOREIGN KEY (doa_assignment_id) REFERENCES procurement.doa_assignments(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "p",
+          "name": "purchase_order_amendment_steps_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "kind": "c",
+          "name": "purchase_order_amendment_steps_status_check",
+          "definition": "CHECK (status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text, 'skipped'::text]))"
+        },
+        {
+          "kind": "c",
+          "name": "purchase_order_amendment_steps_step_order_check",
+          "definition": "CHECK (step_order > 0)"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    },
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "purchase_order_id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "po_line_id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "previous_quantity",
+          "nullable": false,
+          "postgres_type": "numeric"
+        },
+        {
+          "name": "amended_quantity",
+          "nullable": false,
+          "postgres_type": "numeric"
+        },
+        {
+          "name": "reason",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "evidence_urls",
+          "nullable": false,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "doa_matrix_id",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "doa_matrix_version",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "effective_at",
+          "nullable": false,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "department",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "category",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "before_commitment_version",
+          "nullable": false,
+          "postgres_type": "integer"
+        },
+        {
+          "name": "after_commitment_version",
+          "nullable": false,
+          "postgres_type": "integer"
+        },
+        {
+          "name": "before_commitment",
+          "nullable": false,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "after_commitment",
+          "nullable": false,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "requested_by",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "requested_at",
+          "nullable": false,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "approved_by",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "approved_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "decision",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "decided_by",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "decided_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "decision_reason",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "legacy_record",
+          "nullable": false,
+          "postgres_type": "boolean"
+        }
+      ],
+      "relation": "procurement.purchase_order_amendments",
+      "rls_forced": true,
+      "constraints": [
+        {
+          "kind": "f",
+          "name": "purchase_order_amendments_approved_by_fkey",
+          "definition": "FOREIGN KEY (approved_by) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "c",
+          "name": "purchase_order_amendments_check",
+          "definition": "CHECK (amended_quantity > previous_quantity)"
+        },
+        {
+          "kind": "f",
+          "name": "purchase_order_amendments_decided_by_fkey",
+          "definition": "FOREIGN KEY (decided_by) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "purchase_order_amendments_doa_matrix_id_fkey",
+          "definition": "FOREIGN KEY (doa_matrix_id) REFERENCES procurement.doa_matrices(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "c",
+          "name": "purchase_order_amendments_governed_snapshot_check",
+          "definition": "CHECK (legacy_record OR doa_matrix_id IS NOT NULL AND NULLIF(doa_matrix_version, ''::text) IS NOT NULL AND effective_at IS NOT NULL AND NULLIF(department, ''::text) IS NOT NULL AND before_commitment_version IS NOT NULL AND after_commitment_version IS NOT NULL AND before_commitment IS NOT NULL AND after_commitment IS NOT NULL)"
+        },
+        {
+          "kind": "c",
+          "name": "purchase_order_amendments_legacy_terminal_check",
+          "definition": "CHECK (NOT legacy_record OR (status = ANY (ARRAY['rejected'::text, 'superseded'::text])))"
+        },
+        {
+          "kind": "p",
+          "name": "purchase_order_amendments_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "kind": "f",
+          "name": "purchase_order_amendments_po_line_id_fkey",
+          "definition": "FOREIGN KEY (po_line_id) REFERENCES procurement.purchase_order_lines(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "c",
+          "name": "purchase_order_amendments_previous_quantity_check",
+          "definition": "CHECK (previous_quantity > 0::numeric)"
+        },
+        {
+          "kind": "f",
+          "name": "purchase_order_amendments_purchase_order_id_fkey",
+          "definition": "FOREIGN KEY (purchase_order_id) REFERENCES procurement.purchase_orders(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "purchase_order_amendments_requested_by_fkey",
+          "definition": "FOREIGN KEY (requested_by) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "c",
+          "name": "purchase_order_amendments_status_check",
+          "definition": "CHECK (status = ANY (ARRAY['requested'::text, 'under_review'::text, 'approved'::text, 'rejected'::text, 'superseded'::text]))"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    },
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "purchase_order_id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "line_no",
+          "nullable": false,
+          "postgres_type": "integer"
+        },
+        {
+          "name": "description",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "quantity",
+          "nullable": false,
+          "postgres_type": "numeric(14,4)"
+        },
+        {
+          "name": "uom",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "unit_price",
+          "nullable": true,
+          "postgres_type": "numeric(14,2)"
+        },
+        {
+          "name": "received_quantity",
+          "nullable": false,
+          "postgres_type": "numeric(14,4)"
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "warehouse_product_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "receiving_status",
+          "nullable": false,
+          "postgres_type": "text"
+        }
+      ],
+      "relation": "procurement.purchase_order_lines",
+      "rls_forced": false,
+      "constraints": [
+        {
+          "kind": "c",
+          "name": "procurement_po_line_receiving_status_check",
+          "definition": "CHECK (receiving_status = ANY (ARRAY['open'::text, 'rejected'::text, 'cancelled'::text]))"
+        },
+        {
+          "kind": "p",
+          "name": "purchase_order_lines_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "kind": "f",
+          "name": "purchase_order_lines_purchase_order_id_fkey",
+          "definition": "FOREIGN KEY (purchase_order_id) REFERENCES procurement.purchase_orders(id) ON DELETE CASCADE"
+        },
+        {
+          "kind": "u",
+          "name": "purchase_order_lines_purchase_order_id_line_no_key",
+          "definition": "UNIQUE (purchase_order_id, line_no)"
+        },
+        {
+          "kind": "f",
+          "name": "purchase_order_lines_warehouse_product_id_fkey",
+          "definition": "FOREIGN KEY (warehouse_product_id) REFERENCES warehouse.products(id) ON DELETE RESTRICT"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    },
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "po_number",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "request_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "core_vendor_id",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "vendor_name",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "origin",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "actor_id",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "actor_email",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "expected_date",
+          "nullable": true,
+          "postgres_type": "date"
+        },
+        {
+          "name": "notes",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "lines",
+          "nullable": false,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "total",
+          "nullable": false,
+          "postgres_type": "numeric(14,2)"
+        },
+        {
+          "name": "approved_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "approved_by_email",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "approval_signature",
+          "nullable": true,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "updated_at",
+          "nullable": false,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "acceptance_evidence_version",
+          "nullable": false,
+          "postgres_type": "bigint"
+        },
+        {
+          "name": "commitment_version",
+          "nullable": false,
+          "postgres_type": "integer"
+        },
+        {
+          "name": "cancellation_version",
+          "nullable": false,
+          "postgres_type": "integer"
+        },
+        {
+          "name": "cancellation_reason",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "cancelled_by",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "cancelled_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "issued_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "authored_by",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "authored_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "final_approved_by",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "final_approved_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        }
+      ],
+      "relation": "procurement.purchase_orders",
+      "rls_forced": false,
+      "constraints": [
+        {
+          "kind": "f",
+          "name": "purchase_orders_actor_id_fkey",
+          "definition": "FOREIGN KEY (actor_id) REFERENCES core.profiles(id) ON DELETE SET NULL"
+        },
+        {
+          "kind": "f",
+          "name": "purchase_orders_authored_by_fkey",
+          "definition": "FOREIGN KEY (authored_by) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "purchase_orders_cancelled_by_fkey",
+          "definition": "FOREIGN KEY (cancelled_by) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "purchase_orders_core_vendor_id_fkey",
+          "definition": "FOREIGN KEY (core_vendor_id) REFERENCES core.vendors(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "purchase_orders_final_approved_by_fkey",
+          "definition": "FOREIGN KEY (final_approved_by) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "p",
+          "name": "purchase_orders_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "kind": "u",
+          "name": "purchase_orders_po_number_key",
+          "definition": "UNIQUE (po_number)"
+        },
+        {
+          "kind": "f",
+          "name": "purchase_orders_request_id_fkey",
+          "definition": "FOREIGN KEY (request_id) REFERENCES procurement.requests(id) ON DELETE SET NULL"
+        },
+        {
+          "kind": "c",
+          "name": "purchase_orders_status_check",
+          "definition": "CHECK (status = ANY (ARRAY['draft'::text, 'pending_approval'::text, 'approved'::text, 'issued'::text, 'closed'::text, 'cancelled'::text]))"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    },
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "legacy_receipt_id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "purchase_order_id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "warehouse_receipt_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "legacy_line_total",
+          "nullable": false,
+          "postgres_type": "numeric"
+        },
+        {
+          "name": "reconciliation_status",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "reconciled_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "reconciled_by",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "note",
+          "nullable": true,
+          "postgres_type": "text"
+        }
+      ],
+      "relation": "procurement.receipt_reconciliations",
+      "rls_forced": true,
+      "constraints": [
+        {
+          "kind": "p",
+          "name": "receipt_reconciliations_pkey",
+          "definition": "PRIMARY KEY (legacy_receipt_id)"
+        },
+        {
+          "kind": "f",
+          "name": "receipt_reconciliations_reconciled_by_fkey",
+          "definition": "FOREIGN KEY (reconciled_by) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    },
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "purchase_order_id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "received_at",
+          "nullable": false,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "received_by_email",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "note",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "lines",
+          "nullable": false,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "closed_po",
+          "nullable": false,
+          "postgres_type": "boolean"
+        },
+        {
+          "name": "authority_status",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "archived_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "warehouse_receipt_id",
+          "nullable": true,
+          "postgres_type": "text"
+        }
+      ],
+      "relation": "procurement.receipts",
+      "rls_forced": true,
+      "constraints": [
+        {
+          "kind": "p",
+          "name": "receipts_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "kind": "f",
+          "name": "receipts_purchase_order_id_fkey",
+          "definition": "FOREIGN KEY (purchase_order_id) REFERENCES procurement.purchase_orders(id) ON DELETE CASCADE"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    },
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "title",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "description",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "requester_id",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "requester_name",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "requester_email",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "department",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "cost_center",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "project_code",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "budget_code",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "needed_by",
+          "nullable": true,
+          "postgres_type": "date"
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "core_vendor_id",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "vendor_name",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "estimated_amount",
+          "nullable": true,
+          "postgres_type": "numeric(14,2)"
+        },
+        {
+          "name": "category",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "sourcing_method",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "sourcing_override",
+          "nullable": false,
+          "postgres_type": "boolean"
+        },
+        {
+          "name": "justification",
+          "nullable": true,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "attachments",
+          "nullable": false,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "compliance",
+          "nullable": true,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "lines",
+          "nullable": false,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "submitted_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "decided_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "decision_note",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "decided_by_email",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "updated_at",
+          "nullable": false,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "draft_client_key",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "draft_version",
+          "nullable": false,
+          "postgres_type": "integer"
+        },
+        {
+          "name": "draft_payload",
+          "nullable": true,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "cancellation_version",
+          "nullable": false,
+          "postgres_type": "integer"
+        },
+        {
+          "name": "cancellation_reason",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "cancelled_by",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "cancelled_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "requirement_kind",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "solicitation_type",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "procurement_mode",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "governance_tier",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "policy_profile_id",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "route_reasons",
+          "nullable": true,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "route_version",
+          "nullable": false,
+          "postgres_type": "integer"
+        },
+        {
+          "name": "route_confirmed_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "route_confirmed_by",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "solicitation_requirements",
+          "nullable": false,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "revision",
+          "nullable": false,
+          "postgres_type": "integer"
+        }
+      ],
+      "relation": "procurement.requests",
+      "rls_forced": false,
+      "constraints": [
+        {
+          "kind": "c",
+          "name": "procurement_requests_draft_version_check",
+          "definition": "CHECK (draft_version >= 0)"
+        },
+        {
+          "kind": "u",
+          "name": "procurement_requests_owner_draft_client_key_uq",
+          "definition": "UNIQUE (requester_id, draft_client_key)"
+        },
+        {
+          "kind": "f",
+          "name": "requests_cancelled_by_fkey",
+          "definition": "FOREIGN KEY (cancelled_by) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "requests_core_vendor_id_fkey",
+          "definition": "FOREIGN KEY (core_vendor_id) REFERENCES core.vendors(id) ON DELETE SET NULL"
+        },
+        {
+          "kind": "c",
+          "name": "requests_governance_tier_check",
+          "definition": "CHECK (governance_tier IS NULL OR (governance_tier = ANY (ARRAY['standard'::text, 'formal_bid'::text, 'high_risk'::text])))"
+        },
+        {
+          "kind": "p",
+          "name": "requests_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "kind": "f",
+          "name": "requests_policy_profile_id_fkey",
+          "definition": "FOREIGN KEY (policy_profile_id) REFERENCES procurement.policy_profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "c",
+          "name": "requests_procurement_mode_check",
+          "definition": "CHECK (procurement_mode IS NULL OR (procurement_mode = ANY (ARRAY['competitive_bidding'::text, 'sole_source'::text, 'repeat_order'::text, 'emergency_purchase'::text, 'petty_cash'::text, 'approved_exception'::text])))"
+        },
+        {
+          "kind": "f",
+          "name": "requests_requester_id_fkey",
+          "definition": "FOREIGN KEY (requester_id) REFERENCES core.profiles(id) ON DELETE SET NULL"
+        },
+        {
+          "kind": "c",
+          "name": "requests_requirement_kind_check",
+          "definition": "CHECK (requirement_kind IS NULL OR (requirement_kind = ANY (ARRAY['materials'::text, 'services'::text])))"
+        },
+        {
+          "kind": "f",
+          "name": "requests_route_confirmed_by_fkey",
+          "definition": "FOREIGN KEY (route_confirmed_by) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "c",
+          "name": "requests_route_reasons_check",
+          "definition": "CHECK (route_reasons IS NULL OR jsonb_typeof(route_reasons) = 'array'::text)"
+        },
+        {
+          "kind": "c",
+          "name": "requests_solicitation_type_check",
+          "definition": "CHECK (solicitation_type IS NULL OR (solicitation_type = ANY (ARRAY['rfq'::text, 'rfp'::text, 'none'::text])))"
+        },
+        {
+          "kind": "c",
+          "name": "requests_status_check",
+          "definition": "CHECK (status = ANY (ARRAY['draft'::text, 'submitted'::text, 'under_review'::text, 'approved'::text, 'rejected'::text, 'cancelled'::text]))"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    },
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "request_id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "policy_version",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "request_version",
+          "nullable": false,
+          "postgres_type": "integer"
+        },
+        {
+          "name": "method",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "reasons",
+          "nullable": false,
+          "postgres_type": "text[]"
+        },
+        {
+          "name": "risk_facts",
+          "nullable": false,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "confirmed_by",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "confirmed_at",
+          "nullable": false,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "solicitation_type",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "procurement_mode",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "governance_tier",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "policy_profile_id",
+          "nullable": true,
+          "postgres_type": "uuid"
+        }
+      ],
+      "relation": "procurement.route_decisions",
+      "rls_forced": true,
+      "constraints": [
+        {
+          "kind": "f",
+          "name": "route_decisions_confirmed_by_fkey",
+          "definition": "FOREIGN KEY (confirmed_by) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "c",
+          "name": "route_decisions_governance_tier_check",
+          "definition": "CHECK (governance_tier IS NULL OR (governance_tier = ANY (ARRAY['standard'::text, 'formal_bid'::text, 'high_risk'::text])))"
+        },
+        {
+          "kind": "p",
+          "name": "route_decisions_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "kind": "f",
+          "name": "route_decisions_policy_profile_id_fkey",
+          "definition": "FOREIGN KEY (policy_profile_id) REFERENCES procurement.policy_profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "c",
+          "name": "route_decisions_procurement_mode_check",
+          "definition": "CHECK (procurement_mode IS NULL OR (procurement_mode = ANY (ARRAY['competitive_bidding'::text, 'sole_source'::text, 'repeat_order'::text, 'emergency_purchase'::text, 'petty_cash'::text, 'approved_exception'::text])))"
+        },
+        {
+          "kind": "f",
+          "name": "route_decisions_request_id_fkey",
+          "definition": "FOREIGN KEY (request_id) REFERENCES procurement.requests(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "u",
+          "name": "route_decisions_request_id_request_version_key",
+          "definition": "UNIQUE (request_id, request_version)"
+        },
+        {
+          "kind": "c",
+          "name": "route_decisions_solicitation_type_check",
+          "definition": "CHECK (solicitation_type IS NULL OR (solicitation_type = ANY (ARRAY['rfq'::text, 'rfp'::text, 'none'::text])))"
+        },
+        {
+          "kind": "c",
+          "name": "route_method_check",
+          "definition": "CHECK (method = ANY (ARRAY['rfq'::text, 'rfp'::text, 'direct_award'::text, 'repeat_order'::text, 'emergency'::text, 'petty_cash'::text]))"
+        },
+        {
+          "kind": "c",
+          "name": "route_status_check",
+          "definition": "CHECK (status = ANY (ARRAY['confirmed'::text, 'superseded'::text, 'policy_decision_required'::text]))"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    },
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "request_id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "route_decision_id",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "issued_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "submission_deadline",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "intended_responses",
+          "nullable": true,
+          "postgres_type": "integer"
+        },
+        {
+          "name": "clarification_log",
+          "nullable": false,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "created_by",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "selected_vendor_id",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "closure_note",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "closed_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "original_submission_deadline",
+          "nullable": false,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "package_version",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "package_hash",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "failed_bid_reason",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "response_closed_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        }
+      ],
+      "relation": "procurement.sourcing_events",
+      "rls_forced": true,
+      "constraints": [
+        {
+          "kind": "c",
+          "name": "sourcing_event_failed_bid_reason_check",
+          "definition": "CHECK (failed_bid_reason IS NULL OR (failed_bid_reason = ANY (ARRAY['insufficient_responses'::text, 'non_compliant_submissions'::text, 'all_technically_non_compliant'::text, 'implausible_pricing'::text])))"
+        },
+        {
+          "kind": "c",
+          "name": "sourcing_event_status_check",
+          "definition": "CHECK (status = ANY (ARRAY['draft'::text, 'issued'::text, 'response_closed'::text, 'failed_bid'::text, 'evaluation'::text, 'awarded'::text, 'cancelled'::text]))"
+        },
+        {
+          "kind": "f",
+          "name": "sourcing_events_created_by_fkey",
+          "definition": "FOREIGN KEY (created_by) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "p",
+          "name": "sourcing_events_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "kind": "f",
+          "name": "sourcing_events_request_id_fkey",
+          "definition": "FOREIGN KEY (request_id) REFERENCES procurement.requests(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "sourcing_events_route_decision_id_fkey",
+          "definition": "FOREIGN KEY (route_decision_id) REFERENCES procurement.route_decisions(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "sourcing_events_selected_vendor_id_fkey",
+          "definition": "FOREIGN KEY (selected_vendor_id) REFERENCES core.vendors(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "c",
+          "name": "sourcing_intended_responses_check",
+          "definition": "CHECK (intended_responses IS NULL OR intended_responses > 0)"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    },
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "sourcing_event_id",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "vendor_id",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "invited_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "received_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "deadline_compliant",
+          "nullable": true,
+          "postgres_type": "boolean"
+        },
+        {
+          "name": "proposal_storage_path",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "commercial",
+          "nullable": false,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "technical",
+          "nullable": false,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "material_exceptions",
+          "nullable": false,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "invitation_delivered_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "invitation_acknowledged_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "current_invitation_communication_id",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "current_invitation_group_id",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "current_invitation_package_version",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "current_invitation_package_hash",
+          "nullable": true,
+          "postgres_type": "text"
+        }
+      ],
+      "relation": "procurement.sourcing_responses",
+      "rls_forced": true,
+      "constraints": [
+        {
+          "kind": "p",
+          "name": "sourcing_responses_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "kind": "f",
+          "name": "sourcing_responses_sourcing_event_id_fkey",
+          "definition": "FOREIGN KEY (sourcing_event_id) REFERENCES procurement.sourcing_events(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "u",
+          "name": "sourcing_responses_sourcing_event_id_vendor_id_key",
+          "definition": "UNIQUE (sourcing_event_id, vendor_id)"
+        },
+        {
+          "kind": "f",
+          "name": "sourcing_responses_vendor_id_fkey",
+          "definition": "FOREIGN KEY (vendor_id) REFERENCES core.vendors(id) ON DELETE RESTRICT"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    },
+    {
+      "kind": "v",
+      "columns": [
+        {
+          "name": "purchase_order_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "ordered_quantity",
+          "nullable": true,
+          "postgres_type": "numeric"
+        },
+        {
+          "name": "accepted_quantity",
+          "nullable": true,
+          "postgres_type": "numeric"
+        },
+        {
+          "name": "rejected_or_quarantined_quantity",
+          "nullable": true,
+          "postgres_type": "numeric"
+        },
+        {
+          "name": "outstanding_quantity",
+          "nullable": true,
+          "postgres_type": "numeric"
+        },
+        {
+          "name": "latest_warehouse_receipt_reference",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "qc_status",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "last_received_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "accepted_lines",
+          "nullable": true,
+          "postgres_type": "jsonb"
+        }
+      ],
+      "relation": "procurement.v_purchase_order_receipt_status",
+      "rls_forced": false,
+      "constraints": [],
+      "rls_enabled": false,
+      "view_options": [
+        "security_invoker=true"
+      ],
+      "view_definition": " SELECT purchase_order_id,\n    ordered_quantity,\n    accepted_quantity,\n    rejected_or_quarantined_quantity,\n    outstanding_quantity,\n    latest_warehouse_receipt_reference,\n    qc_status,\n    last_received_at,\n    accepted_lines\n   FROM private.procurement_po_receipt_status() procurement_po_receipt_status(purchase_order_id, ordered_quantity, accepted_quantity, rejected_or_quarantined_quantity, outstanding_quantity, latest_warehouse_receipt_reference, qc_status, last_received_at, accepted_lines);"
+    },
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "event_id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "product_id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "quantity",
+          "nullable": false,
+          "postgres_type": "integer"
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "promotional",
+          "nullable": false,
+          "postgres_type": "boolean"
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "postgres_type": "timestamp with time zone"
+        }
+      ],
+      "relation": "warehouse.allocations",
+      "rls_forced": false,
+      "constraints": [
+        {
+          "kind": "p",
+          "name": "allocations_pkey",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    },
+    {
+      "kind": "v",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "cycle_count_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "location_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "bin_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "status",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "submitted_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "product_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "expected",
+          "nullable": true,
+          "postgres_type": "integer"
+        },
+        {
+          "name": "counted",
+          "nullable": true,
+          "postgres_type": "integer"
+        },
+        {
+          "name": "variance",
+          "nullable": true,
+          "postgres_type": "integer"
+        }
+      ],
+      "relation": "warehouse.bi_cycle_counts_v1",
+      "rls_forced": false,
+      "constraints": [],
+      "rls_enabled": false,
+      "view_options": [
+        "security_invoker=true"
+      ],
+      "view_definition": " SELECT (count_record.id || '|'::text) || ((line.ordinality - 1)::text) AS id,\n    count_record.id AS cycle_count_id,\n    count_record.location_id,\n    count_record.bin_id,\n    count_record.status,\n    count_record.submitted_at,\n    line.value ->> 'productId'::text AS product_id,\n    (line.value ->> 'expected'::text)::integer AS expected,\n    (line.value ->> 'counted'::text)::integer AS counted,\n    ((line.value ->> 'counted'::text)::integer) - ((line.value ->> 'expected'::text)::integer) AS variance\n   FROM warehouse.cycle_counts count_record\n     CROSS JOIN LATERAL jsonb_array_elements(count_record.lines) WITH ORDINALITY line(value, ordinality)\n  WHERE count_record.status <> 'draft'::text;"
+    },
+    {
+      "kind": "v",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "created_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "type",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "product_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "sku",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "quantity",
+          "nullable": true,
+          "postgres_type": "integer"
+        },
+        {
+          "name": "from_location_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "to_location_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "from_bin_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "to_bin_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "lot_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "serial_number",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "event_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "reason",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "reference",
+          "nullable": true,
+          "postgres_type": "text"
+        }
+      ],
+      "relation": "warehouse.bi_movements_v1",
+      "rls_forced": false,
+      "constraints": [],
+      "rls_enabled": false,
+      "view_options": [
+        "security_invoker=true"
+      ],
+      "view_definition": " SELECT movement.id,\n    movement.created_at,\n    movement.type,\n    movement.product_id,\n    product.sku,\n    movement.quantity,\n    movement.from_location_id,\n    movement.to_location_id,\n    movement.from_bin_id,\n    movement.to_bin_id,\n    movement.lot_id,\n    movement.serial_number,\n    movement.event_id,\n    movement.reason,\n    movement.reference\n   FROM warehouse.movements movement\n     JOIN warehouse.products product ON product.id = movement.product_id;"
+    },
+    {
+      "kind": "v",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "created_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "source_type",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "source_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "product_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "sku",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "location_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "bin_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "lot_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "serial_number",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "quantity",
+          "nullable": true,
+          "postgres_type": "integer"
+        },
+        {
+          "name": "disposition",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "reason",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "active_hold_quantity",
+          "nullable": true,
+          "postgres_type": "integer"
+        }
+      ],
+      "relation": "warehouse.bi_quality_v1",
+      "rls_forced": false,
+      "constraints": [],
+      "rls_enabled": false,
+      "view_options": [
+        "security_invoker=true"
+      ],
+      "view_definition": " SELECT inspection.id,\n    inspection.inspected_at AS created_at,\n    inspection.source_type,\n    inspection.source_id,\n    inspection.product_id,\n    product.sku,\n    inspection.location_id,\n    inspection.bin_id,\n    inspection.lot_id,\n    inspection.serial_number,\n    inspection.quantity,\n    inspection.disposition,\n    inspection.reason,\n        CASE\n            WHEN hold.status = 'active'::text THEN hold.quantity\n            ELSE 0\n        END AS active_hold_quantity\n   FROM warehouse.quality_inspections inspection\n     JOIN warehouse.products product ON product.id = inspection.product_id\n     LEFT JOIN warehouse.inventory_holds hold ON hold.inspection_id = inspection.id;"
+    },
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "source_order_id",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "serial_number",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "product_id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "defect_description",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "requesting_department",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "resolution",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "quarantine_bin_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "replacement_order_id",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "refund_reference",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "supplier_reference",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "created_by",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "resolved_by",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "resolved_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "finance_evidence_url",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "customer_resolution_reference",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "customer_closure_evidence_url",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "customer_closed_by",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "customer_closed_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "replacement_delivery",
+          "nullable": true,
+          "postgres_type": "jsonb"
+        }
+      ],
+      "relation": "warehouse.customer_return_cases",
+      "rls_forced": false,
+      "constraints": [
+        {
+          "kind": "f",
+          "name": "customer_return_cases_created_by_fkey",
+          "definition": "FOREIGN KEY (created_by) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "customer_return_cases_customer_closed_by_fkey",
+          "definition": "FOREIGN KEY (customer_closed_by) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "p",
+          "name": "customer_return_cases_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "kind": "f",
+          "name": "customer_return_cases_product_id_fkey",
+          "definition": "FOREIGN KEY (product_id) REFERENCES warehouse.products(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "customer_return_cases_quarantine_bin_id_fkey",
+          "definition": "FOREIGN KEY (quarantine_bin_id) REFERENCES warehouse.storage_areas(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "customer_return_cases_replacement_order_id_fkey",
+          "definition": "FOREIGN KEY (replacement_order_id) REFERENCES warehouse.fulfillment_orders(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "customer_return_cases_resolved_by_fkey",
+          "definition": "FOREIGN KEY (resolved_by) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "customer_return_cases_source_order_id_fkey",
+          "definition": "FOREIGN KEY (source_order_id) REFERENCES warehouse.fulfillment_orders(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_customer_return_closed_check",
+          "definition": "CHECK (status <> 'closed'::text OR customer_closed_by IS NOT NULL AND customer_closed_at IS NOT NULL AND NULLIF(btrim(customer_resolution_reference), ''::text) IS NOT NULL AND NULLIF(btrim(customer_closure_evidence_url), ''::text) IS NOT NULL) NOT VALID"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_customer_return_department_check",
+          "definition": "CHECK (requesting_department = 'customer_service'::text)"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_customer_return_resolution_check",
+          "definition": "CHECK (resolution = ANY (ARRAY['pending'::text, 'replacement'::text, 'refund'::text, 'vendor_return'::text, 're_kit'::text, 'write_off'::text]))"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_customer_return_resolved_check",
+          "definition": "CHECK ((status <> ALL (ARRAY['resolved'::text, 'closed'::text])) AND resolution = 'pending'::text AND resolved_by IS NULL AND resolved_at IS NULL OR (status = ANY (ARRAY['resolved'::text, 'closed'::text])) AND resolution <> 'pending'::text AND resolved_by IS NOT NULL AND resolved_at IS NOT NULL)"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_customer_return_status_check",
+          "definition": "CHECK (status = ANY (ARRAY['submitted'::text, 'received'::text, 'inspecting'::text, 'decision_required'::text, 'resolved'::text, 'closed'::text]))"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    },
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "location_id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "category",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "lines",
+          "nullable": false,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "actor",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "bin_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "requested_by",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "submitted_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        }
+      ],
+      "relation": "warehouse.cycle_counts",
+      "rls_forced": false,
+      "constraints": [
+        {
+          "kind": "f",
+          "name": "cycle_counts_bin_fk",
+          "definition": "FOREIGN KEY (bin_id) REFERENCES warehouse.storage_areas(id) ON DELETE SET NULL"
+        },
+        {
+          "kind": "p",
+          "name": "cycle_counts_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "kind": "f",
+          "name": "cycle_counts_requested_by_fkey",
+          "definition": "FOREIGN KEY (requested_by) REFERENCES core.profiles(id) ON DELETE SET NULL"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_cycle_count_status_check",
+          "definition": "CHECK (status = ANY (ARRAY['draft'::text, 'submitted'::text, 'pending_approval'::text, 'approved'::text, 'rejected'::text]))"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    },
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "requesting_department",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "purpose",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "cost_center",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "required_date",
+          "nullable": false,
+          "postgres_type": "date"
+        },
+        {
+          "name": "expense_treatment",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "lines",
+          "nullable": false,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "requested_by",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "requested_at",
+          "nullable": false,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "approved_by",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "approved_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "fulfillment_order_id",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "event_id",
+          "nullable": true,
+          "postgres_type": "text"
+        }
+      ],
+      "relation": "warehouse.department_stock_requests",
+      "rls_forced": false,
+      "constraints": [
+        {
+          "kind": "f",
+          "name": "department_stock_requests_approved_by_fkey",
+          "definition": "FOREIGN KEY (approved_by) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "department_stock_requests_event_id_fkey",
+          "definition": "FOREIGN KEY (event_id) REFERENCES warehouse.events(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "department_stock_requests_fulfillment_order_id_fkey",
+          "definition": "FOREIGN KEY (fulfillment_order_id) REFERENCES warehouse.fulfillment_orders(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "p",
+          "name": "department_stock_requests_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "kind": "f",
+          "name": "department_stock_requests_requested_by_fkey",
+          "definition": "FOREIGN KEY (requested_by) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_department_request_decision_check",
+          "definition": "CHECK ((status <> ALL (ARRAY['approved'::text, 'rejected'::text])) OR approved_by IS NOT NULL AND approved_at IS NOT NULL)"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_department_request_expense_check",
+          "definition": "CHECK (expense_treatment = ANY (ARRAY['expense'::text, 'custody'::text, 'sale'::text]))"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_department_request_lines_check",
+          "definition": "CHECK (jsonb_typeof(lines) = 'array'::text AND jsonb_array_length(lines) > 0)"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_department_request_status_check",
+          "definition": "CHECK (status = ANY (ARRAY['draft'::text, 'pending_approval'::text, 'approved'::text, 'rejected'::text, 'allocated'::text, 'issued'::text, 'closed'::text, 'cancelled'::text]))"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    },
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "name",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "type",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "site_location_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "start_date",
+          "nullable": false,
+          "postgres_type": "date"
+        },
+        {
+          "name": "end_date",
+          "nullable": true,
+          "postgres_type": "date"
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "owner_id",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "owner_email",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "lifecycle_reason",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "updated_at",
+          "nullable": false,
+          "postgres_type": "timestamp with time zone"
+        }
+      ],
+      "relation": "warehouse.events",
+      "rls_forced": false,
+      "constraints": [
+        {
+          "kind": "f",
+          "name": "events_owner_id_fkey",
+          "definition": "FOREIGN KEY (owner_id) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "p",
+          "name": "events_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_events_date_order_check",
+          "definition": "CHECK (end_date IS NULL OR end_date >= start_date)"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_events_status_check",
+          "definition": "CHECK (status = ANY (ARRAY['planned'::text, 'active'::text, 'closed'::text, 'cancelled'::text]))"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    },
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "source",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "external_reference",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "requesting_department",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "source_location_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "source_bin_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "customer_reference",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "event_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "third_party_location_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "gross_sales_amount",
+          "nullable": true,
+          "postgres_type": "numeric(14,2)"
+        },
+        {
+          "name": "courier",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "waybill_number",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "lines",
+          "nullable": false,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "packaging",
+          "nullable": false,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "created_by",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "updated_at",
+          "nullable": false,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "released_by",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "released_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "delivery_method",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "handover_recipient_name",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "handover_recipient_department",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "handover_reference",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "handover_evidence_url",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "parent_order_id",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "picked_by",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "picked_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "packed_by",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "packed_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "acknowledged_by",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "acknowledged_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "acknowledgement_reference",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "acknowledgement_evidence_url",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "cancellation_reason",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "packaging_disposition",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "shipment_status",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "dispatched_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "last_tracking_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "delivery_failure_reason",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "failed_delivery_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "proof_of_delivery_reference",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "proof_of_delivery_evidence_url",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "delivered_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "ecommerce_channel",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "order_date",
+          "nullable": true,
+          "postgres_type": "date"
+        },
+        {
+          "name": "customer_name",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "customer_contact",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "customer_email",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "delivery_area",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "delivery_address",
+          "nullable": true,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "payment_status",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "payment_method",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "payment_reference",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "payment_date",
+          "nullable": true,
+          "postgres_type": "date"
+        },
+        {
+          "name": "payment_rrn",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "payment_provider_method",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "payment_provider_status",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "campaign_name",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "sales_invoice_number",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "shipping_fee",
+          "nullable": true,
+          "postgres_type": "numeric(14,2)"
+        },
+        {
+          "name": "other_fees",
+          "nullable": true,
+          "postgres_type": "numeric(14,2)"
+        },
+        {
+          "name": "reported_total_amount",
+          "nullable": true,
+          "postgres_type": "numeric(14,2)"
+        },
+        {
+          "name": "order_notes",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "delivery_link",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "shipment_events",
+          "nullable": false,
+          "postgres_type": "jsonb"
+        }
+      ],
+      "relation": "warehouse.fulfillment_orders",
+      "rls_forced": false,
+      "constraints": [
+        {
+          "kind": "f",
+          "name": "fulfillment_orders_acknowledged_by_fkey",
+          "definition": "FOREIGN KEY (acknowledged_by) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "fulfillment_orders_created_by_fkey",
+          "definition": "FOREIGN KEY (created_by) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "fulfillment_orders_event_id_fkey",
+          "definition": "FOREIGN KEY (event_id) REFERENCES warehouse.events(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "fulfillment_orders_packed_by_fkey",
+          "definition": "FOREIGN KEY (packed_by) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "fulfillment_orders_parent_order_id_fkey",
+          "definition": "FOREIGN KEY (parent_order_id) REFERENCES warehouse.fulfillment_orders(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "fulfillment_orders_picked_by_fkey",
+          "definition": "FOREIGN KEY (picked_by) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "p",
+          "name": "fulfillment_orders_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "kind": "f",
+          "name": "fulfillment_orders_released_by_fkey",
+          "definition": "FOREIGN KEY (released_by) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "fulfillment_orders_source_bin_id_fkey",
+          "definition": "FOREIGN KEY (source_bin_id) REFERENCES warehouse.storage_areas(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "fulfillment_orders_source_location_id_fkey",
+          "definition": "FOREIGN KEY (source_location_id) REFERENCES warehouse.locations(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "fulfillment_orders_third_party_location_id_fkey",
+          "definition": "FOREIGN KEY (third_party_location_id) REFERENCES warehouse.locations(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_fulfillment_delivery_address_check",
+          "definition": "CHECK (delivery_address IS NULL OR jsonb_typeof(delivery_address) = 'object'::text AND delivery_address ?& ARRAY['addressLine'::text, 'city'::text, 'province'::text, 'postalCode'::text])"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_fulfillment_delivery_link_check",
+          "definition": "CHECK (delivery_link IS NULL OR delivery_link ~* '^https://[^/[:space:]@]+(/|$)'::text)"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_fulfillment_delivery_method_check",
+          "definition": "CHECK (delivery_method = ANY (ARRAY['shipment'::text, 'internal_handover'::text, 'event_handover'::text, 'third_party_transfer'::text]))"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_fulfillment_lines_check",
+          "definition": "CHECK (jsonb_typeof(lines) = 'array'::text AND jsonb_array_length(lines) > 0)"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_fulfillment_other_fees_check",
+          "definition": "CHECK (other_fees IS NULL OR other_fees >= 0::numeric)"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_fulfillment_packaging_check",
+          "definition": "CHECK (jsonb_typeof(packaging) = 'array'::text)"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_fulfillment_packaging_disposition_check",
+          "definition": "CHECK (packaging_disposition IS NULL OR (packaging_disposition = ANY (ARRAY['returned_to_stock'::text, 'consumed'::text])))"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_fulfillment_payment_status_check",
+          "definition": "CHECK (payment_status IS NULL OR (payment_status = ANY (ARRAY['paid'::text, 'authorized'::text, 'cod'::text, 'pending'::text, 'failed'::text, 'refunded'::text])))"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_fulfillment_release_check",
+          "definition": "CHECK ((status <> ALL (ARRAY['released'::text, 'completed'::text])) OR released_by IS NOT NULL AND released_at IS NOT NULL AND (delivery_method = 'shipment'::text AND NULLIF(btrim(courier), ''::text) IS NOT NULL AND NULLIF(btrim(waybill_number), ''::text) IS NOT NULL OR delivery_method <> 'shipment'::text AND NULLIF(btrim(handover_recipient_name), ''::text) IS NOT NULL AND NULLIF(btrim(handover_recipient_department), ''::text) IS NOT NULL AND NULLIF(btrim(handover_reference), ''::text) IS NOT NULL AND NULLIF(btrim(handover_evidence_url), ''::text) IS NOT NULL)) NOT VALID"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_fulfillment_reported_total_check",
+          "definition": "CHECK (reported_total_amount IS NULL OR reported_total_amount >= 0::numeric)"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_fulfillment_sales_check",
+          "definition": "CHECK (gross_sales_amount IS NULL OR gross_sales_amount >= 0::numeric)"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_fulfillment_shipment_events_check",
+          "definition": "CHECK (jsonb_typeof(shipment_events) = 'array'::text)"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_fulfillment_shipment_status_check",
+          "definition": "CHECK (shipment_status = ANY (ARRAY['not_applicable'::text, 'awaiting_dispatch'::text, 'dispatched'::text, 'in_transit'::text, 'delivery_failed'::text, 'delivered'::text, 'returned_to_sender'::text]))"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_fulfillment_shipping_fee_check",
+          "definition": "CHECK (shipping_fee IS NULL OR shipping_fee >= 0::numeric)"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_fulfillment_source_check",
+          "definition": "CHECK (source = ANY (ARRAY['ecommerce'::text, 'department_request'::text, 'event'::text, 'third_party'::text]))"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_fulfillment_status_check",
+          "definition": "CHECK (status = ANY (ARRAY['received'::text, 'allocated'::text, 'picking'::text, 'packing'::text, 'ready'::text, 'released'::text, 'completed'::text, 'cancelled'::text]))"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    },
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "inspection_id",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "product_id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "location_id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "lot_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "serial_number",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "quantity",
+          "nullable": false,
+          "postgres_type": "integer"
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "reason",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "evidence_urls",
+          "nullable": false,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "created_by",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "released_by",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "released_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "release_reason",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "release_evidence_urls",
+          "nullable": false,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "bin_id",
+          "nullable": true,
+          "postgres_type": "text"
+        }
+      ],
+      "relation": "warehouse.inventory_holds",
+      "rls_forced": true,
+      "constraints": [
+        {
+          "kind": "f",
+          "name": "inventory_holds_bin_id_fkey",
+          "definition": "FOREIGN KEY (bin_id) REFERENCES warehouse.storage_areas(id) ON DELETE SET NULL"
+        },
+        {
+          "kind": "f",
+          "name": "inventory_holds_created_by_fkey",
+          "definition": "FOREIGN KEY (created_by) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "inventory_holds_inspection_id_fkey",
+          "definition": "FOREIGN KEY (inspection_id) REFERENCES warehouse.quality_inspections(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "inventory_holds_location_id_fkey",
+          "definition": "FOREIGN KEY (location_id) REFERENCES warehouse.locations(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "inventory_holds_lot_id_fkey",
+          "definition": "FOREIGN KEY (lot_id) REFERENCES warehouse.lots(id) ON DELETE SET NULL"
+        },
+        {
+          "kind": "p",
+          "name": "inventory_holds_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "kind": "f",
+          "name": "inventory_holds_product_id_fkey",
+          "definition": "FOREIGN KEY (product_id) REFERENCES warehouse.products(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "inventory_holds_released_by_fkey",
+          "definition": "FOREIGN KEY (released_by) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_hold_quantity_check",
+          "definition": "CHECK (quantity > 0)"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_hold_release_check",
+          "definition": "CHECK (status = 'active'::text AND released_by IS NULL AND released_at IS NULL OR status <> 'active'::text AND released_by IS NOT NULL AND released_at IS NOT NULL)"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_hold_status_check",
+          "definition": "CHECK (status = ANY (ARRAY['active'::text, 'released'::text, 'vendor_return'::text, 'written_off'::text]))"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_holds_secure_evidence_urls_check",
+          "definition": "CHECK (NOT jsonb_path_exists(evidence_urls, '$[*]?(@ like_regex \"^http://\" flag \"i\")'::jsonpath) AND NOT jsonb_path_exists(release_evidence_urls, '$[*]?(@ like_regex \"^http://\" flag \"i\")'::jsonpath))"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    },
+    {
+      "kind": "v",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "product_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "location_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "bin_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "on_hand",
+          "nullable": true,
+          "postgres_type": "bigint"
+        },
+        {
+          "name": "committed",
+          "nullable": true,
+          "postgres_type": "bigint"
+        },
+        {
+          "name": "held",
+          "nullable": true,
+          "postgres_type": "bigint"
+        },
+        {
+          "name": "unavailable",
+          "nullable": true,
+          "postgres_type": "bigint"
+        },
+        {
+          "name": "available",
+          "nullable": true,
+          "postgres_type": "bigint"
+        },
+        {
+          "name": "created_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        }
+      ],
+      "relation": "warehouse.inventory_position_v1",
+      "rls_forced": false,
+      "constraints": [],
+      "rls_enabled": false,
+      "view_options": [
+        "security_invoker=true"
+      ],
+      "view_definition": " WITH on_hand AS (\n         SELECT stock_levels.product_id,\n            stock_levels.location_id,\n            stock_levels.bin_id,\n            sum(stock_levels.quantity) AS on_hand\n           FROM warehouse.stock_levels\n          GROUP BY stock_levels.product_id, stock_levels.location_id, stock_levels.bin_id\n        UNION ALL\n         SELECT inventory_units.product_id,\n            inventory_units.location_id,\n            inventory_units.bin_id,\n            count(*) AS on_hand\n           FROM warehouse.inventory_units\n          WHERE inventory_units.status = ANY (ARRAY['in_stock'::text, 'returned'::text])\n          GROUP BY inventory_units.product_id, inventory_units.location_id, inventory_units.bin_id\n        ), positions AS (\n         SELECT on_hand.product_id,\n            on_hand.location_id,\n            on_hand.bin_id,\n            sum(on_hand.on_hand)::bigint AS on_hand\n           FROM on_hand\n          GROUP BY on_hand.product_id, on_hand.location_id, on_hand.bin_id\n        ), ranked AS (\n         SELECT positions.product_id,\n            positions.location_id,\n            positions.bin_id,\n            positions.on_hand,\n            row_number() OVER (PARTITION BY positions.product_id ORDER BY positions.location_id, positions.bin_id NULLS FIRST) AS product_position\n           FROM positions\n        ), commitments AS (\n         SELECT allocations.product_id,\n            sum(allocations.quantity) AS committed\n           FROM warehouse.allocations\n          WHERE allocations.status = ANY (ARRAY['reserved'::text, 'allocated'::text])\n          GROUP BY allocations.product_id\n        ), holds AS (\n         SELECT inventory_holds.product_id,\n            inventory_holds.location_id,\n            inventory_holds.bin_id,\n            sum(inventory_holds.quantity) AS held\n           FROM warehouse.inventory_holds\n          WHERE inventory_holds.status = 'active'::text\n          GROUP BY inventory_holds.product_id, inventory_holds.location_id, inventory_holds.bin_id\n        ), unavailable AS (\n         SELECT inventory_units.product_id,\n            inventory_units.location_id,\n            inventory_units.bin_id,\n            count(*) AS unavailable\n           FROM warehouse.inventory_units\n          WHERE inventory_units.status = 'returned'::text\n          GROUP BY inventory_units.product_id, inventory_units.location_id, inventory_units.bin_id\n        )\n SELECT (((ranked.product_id || '|'::text) || ranked.location_id) || '|'::text) || COALESCE(ranked.bin_id, ''::text) AS id,\n    ranked.product_id,\n    ranked.location_id,\n    ranked.bin_id,\n    ranked.on_hand,\n        CASE\n            WHEN ranked.product_position = 1 THEN COALESCE(commitments.committed, 0::bigint)\n            ELSE 0::bigint\n        END AS committed,\n    COALESCE(holds.held, 0::bigint) AS held,\n    COALESCE(unavailable.unavailable, 0::bigint) AS unavailable,\n    GREATEST(ranked.on_hand -\n        CASE\n            WHEN ranked.product_position = 1 THEN COALESCE(commitments.committed, 0::bigint)\n            ELSE 0::bigint\n        END - COALESCE(holds.held, 0::bigint) - COALESCE(unavailable.unavailable, 0::bigint), 0::bigint) AS available,\n    '1970-01-01 00:00:00+00'::timestamp with time zone AS created_at\n   FROM ranked\n     LEFT JOIN commitments USING (product_id)\n     LEFT JOIN holds ON holds.product_id = ranked.product_id AND holds.location_id = ranked.location_id AND NOT holds.bin_id IS DISTINCT FROM ranked.bin_id\n     LEFT JOIN unavailable ON unavailable.product_id = ranked.product_id AND unavailable.location_id = ranked.location_id AND NOT unavailable.bin_id IS DISTINCT FROM ranked.bin_id;"
+    },
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "product_id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "serial_number",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "lot_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "location_id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "assigned_to",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "event_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "bin_id",
+          "nullable": true,
+          "postgres_type": "text"
+        }
+      ],
+      "relation": "warehouse.inventory_units",
+      "rls_forced": false,
+      "constraints": [
+        {
+          "kind": "f",
+          "name": "inventory_units_bin_fk",
+          "definition": "FOREIGN KEY (bin_id) REFERENCES warehouse.storage_areas(id) ON DELETE SET NULL"
+        },
+        {
+          "kind": "p",
+          "name": "inventory_units_pkey",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    },
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "product_id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "version",
+          "nullable": false,
+          "postgres_type": "integer"
+        },
+        {
+          "name": "name",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "components",
+          "nullable": false,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "owner_department",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "product_approval_reference",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "created_by",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "postgres_type": "timestamp with time zone"
+        }
+      ],
+      "relation": "warehouse.kit_definitions",
+      "rls_forced": false,
+      "constraints": [
+        {
+          "kind": "f",
+          "name": "kit_definitions_created_by_fkey",
+          "definition": "FOREIGN KEY (created_by) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "p",
+          "name": "kit_definitions_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "kind": "f",
+          "name": "kit_definitions_product_id_fkey",
+          "definition": "FOREIGN KEY (product_id) REFERENCES warehouse.products(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "u",
+          "name": "kit_definitions_product_id_version_key",
+          "definition": "UNIQUE (product_id, version)"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_kit_components_check",
+          "definition": "CHECK (jsonb_typeof(components) = 'array'::text AND jsonb_array_length(components) > 0)"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_kit_owner_check",
+          "definition": "CHECK (owner_department = 'product'::text)"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_kit_status_check",
+          "definition": "CHECK (status = ANY (ARRAY['draft'::text, 'active'::text, 'retired'::text]))"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_kit_version_check",
+          "definition": "CHECK (version > 0)"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    },
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "name",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "type",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "active",
+          "nullable": false,
+          "postgres_type": "boolean"
+        }
+      ],
+      "relation": "warehouse.locations",
+      "rls_forced": false,
+      "constraints": [
+        {
+          "kind": "p",
+          "name": "locations_pkey",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    },
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "product_id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "lot_code",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "supplier_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "unit_cost",
+          "nullable": false,
+          "postgres_type": "numeric"
+        },
+        {
+          "name": "received_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "expiry_date",
+          "nullable": true,
+          "postgres_type": "date"
+        }
+      ],
+      "relation": "warehouse.lots",
+      "rls_forced": false,
+      "constraints": [
+        {
+          "kind": "p",
+          "name": "lots_pkey",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    },
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "type",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "product_id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "quantity",
+          "nullable": false,
+          "postgres_type": "integer"
+        },
+        {
+          "name": "from_location_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "to_location_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "lot_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "serial_number",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "event_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "reason",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "reference",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "evidence_urls",
+          "nullable": false,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "actor",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "from_bin_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "to_bin_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "unit_cost_at_movement",
+          "nullable": true,
+          "postgres_type": "numeric"
+        }
+      ],
+      "relation": "warehouse.movements",
+      "rls_forced": false,
+      "constraints": [
+        {
+          "kind": "p",
+          "name": "movements_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_movements_secure_evidence_urls_check",
+          "definition": "CHECK (NOT jsonb_path_exists(evidence_urls, '$[*]?(@ like_regex \"^http://\" flag \"i\")'::jsonpath))"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    },
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "sku",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "name",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "category",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "device_type",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "merchandise_type",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "serialized",
+          "nullable": false,
+          "postgres_type": "boolean"
+        },
+        {
+          "name": "attributes",
+          "nullable": false,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "unit_cost",
+          "nullable": false,
+          "postgres_type": "numeric"
+        },
+        {
+          "name": "reorder_point",
+          "nullable": false,
+          "postgres_type": "integer"
+        },
+        {
+          "name": "promotional",
+          "nullable": true,
+          "postgres_type": "boolean"
+        },
+        {
+          "name": "barcode",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "price",
+          "nullable": true,
+          "postgres_type": "numeric"
+        },
+        {
+          "name": "expiry_tracked",
+          "nullable": false,
+          "postgres_type": "boolean"
+        },
+        {
+          "name": "shelf_life_warning_days",
+          "nullable": false,
+          "postgres_type": "integer"
+        },
+        {
+          "name": "item_class",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "serialization_policy",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "uom",
+          "nullable": false,
+          "postgres_type": "text"
+        }
+      ],
+      "relation": "warehouse.products",
+      "rls_forced": false,
+      "constraints": [
+        {
+          "kind": "p",
+          "name": "products_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_product_item_class_check",
+          "definition": "CHECK (item_class = ANY (ARRAY['sellable_sku'::text, 'merchandise'::text, 'event_material'::text, 'fulfillment_supply'::text, 'warehouse_tool'::text, 're_kitted_item'::text]))"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_product_serialization_consistency_check",
+          "definition": "CHECK ((serialization_policy = ANY (ARRAY['required'::text, 'asset_tag'::text])) AND serialized OR serialization_policy = 'none'::text AND NOT serialized OR serialization_policy = 'optional'::text)"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_product_serialization_policy_check",
+          "definition": "CHECK (serialization_policy = ANY (ARRAY['required'::text, 'optional'::text, 'none'::text, 'asset_tag'::text]))"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_product_shelf_life_check",
+          "definition": "CHECK (shelf_life_warning_days >= 0 AND shelf_life_warning_days <= 3650)"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_product_uom_check",
+          "definition": "CHECK (length(btrim(uom)) >= 1 AND length(btrim(uom)) <= 40)"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    },
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "supplier_id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "lines",
+          "nullable": false,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "expected_date",
+          "nullable": true,
+          "postgres_type": "date"
+        },
+        {
+          "name": "actor",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "postgres_type": "timestamp with time zone"
+        }
+      ],
+      "relation": "warehouse.purchase_orders",
+      "rls_forced": false,
+      "constraints": [
+        {
+          "kind": "p",
+          "name": "purchase_orders_pkey",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    },
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "source_type",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "source_id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "product_id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "lot_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "serial_number",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "location_id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "quantity",
+          "nullable": false,
+          "postgres_type": "integer"
+        },
+        {
+          "name": "disposition",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "reason",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "evidence_urls",
+          "nullable": false,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "inspected_by",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "inspected_by_email",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "inspected_at",
+          "nullable": false,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "bin_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "procurement_po_line_id",
+          "nullable": true,
+          "postgres_type": "text"
+        }
+      ],
+      "relation": "warehouse.quality_inspections",
+      "rls_forced": true,
+      "constraints": [
+        {
+          "kind": "f",
+          "name": "quality_inspections_bin_id_fkey",
+          "definition": "FOREIGN KEY (bin_id) REFERENCES warehouse.storage_areas(id) ON DELETE SET NULL"
+        },
+        {
+          "kind": "f",
+          "name": "quality_inspections_inspected_by_fkey",
+          "definition": "FOREIGN KEY (inspected_by) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "quality_inspections_location_id_fkey",
+          "definition": "FOREIGN KEY (location_id) REFERENCES warehouse.locations(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "quality_inspections_lot_id_fkey",
+          "definition": "FOREIGN KEY (lot_id) REFERENCES warehouse.lots(id) ON DELETE SET NULL"
+        },
+        {
+          "kind": "p",
+          "name": "quality_inspections_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "kind": "f",
+          "name": "quality_inspections_product_id_fkey",
+          "definition": "FOREIGN KEY (product_id) REFERENCES warehouse.products(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_quality_disposition_check",
+          "definition": "CHECK (disposition = ANY (ARRAY['pending'::text, 'accepted'::text, 'damaged'::text, 'hold'::text, 'vendor_return'::text, 'unavailable'::text]))"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_quality_quantity_check",
+          "definition": "CHECK (quantity > 0)"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_quality_secure_evidence_urls_check",
+          "definition": "CHECK (NOT jsonb_path_exists(evidence_urls, '$[*]?(@ like_regex \"^http://\" flag \"i\")'::jsonpath))"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_quality_source_check",
+          "definition": "CHECK (source_type = ANY (ARRAY['receipt'::text, 'return'::text]))"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    },
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "supplier_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "location_id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "lines",
+          "nullable": false,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "evidence_urls",
+          "nullable": false,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "actor",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "operation_route_id",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "procurement_po_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "quality_status",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "actual_delivery_date",
+          "nullable": true,
+          "postgres_type": "date"
+        },
+        {
+          "name": "delivery_reference",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "courier_or_driver",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "receipt_exception",
+          "nullable": true,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "received_by",
+          "nullable": true,
+          "postgres_type": "uuid"
+        }
+      ],
+      "relation": "warehouse.receipts",
+      "rls_forced": false,
+      "constraints": [
+        {
+          "kind": "f",
+          "name": "receipts_operation_route_id_fkey",
+          "definition": "FOREIGN KEY (operation_route_id) REFERENCES warehouse.operation_routes(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "p",
+          "name": "receipts_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "kind": "f",
+          "name": "receipts_received_by_fkey",
+          "definition": "FOREIGN KEY (received_by) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_receipt_courier_driver_check",
+          "definition": "CHECK (courier_or_driver IS NULL OR length(btrim(courier_or_driver)) >= 1 AND length(btrim(courier_or_driver)) <= 160)"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_receipt_delivery_reference_check",
+          "definition": "CHECK (delivery_reference IS NULL OR length(btrim(delivery_reference)) >= 1 AND length(btrim(delivery_reference)) <= 120)"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_receipt_exception_shape_check",
+          "definition": "CHECK (receipt_exception IS NULL OR jsonb_typeof(receipt_exception) = 'object'::text AND ((receipt_exception ->> 'type'::text) = ANY (ARRAY['non_po'::text, 'overage'::text])) AND length(btrim(COALESCE(receipt_exception ->> 'reason'::text, ''::text))) >= 1 AND length(btrim(COALESCE(receipt_exception ->> 'reason'::text, ''::text))) <= 2000 AND jsonb_typeof(receipt_exception -> 'evidenceUrls'::text) = 'array'::text AND jsonb_array_length(receipt_exception -> 'evidenceUrls'::text) > 0)"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_receipt_quality_status_check",
+          "definition": "CHECK (quality_status = ANY (ARRAY['pending'::text, 'partial'::text, 'accepted'::text, 'hold'::text, 'closed'::text]))"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_receipts_secure_evidence_urls_check",
+          "definition": "CHECK (NOT jsonb_path_exists(evidence_urls, '$[*]?(@ like_regex \"^http://\" flag \"i\")'::jsonpath))"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    },
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "source_return_case_id",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "kit_definition_id",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "output_serial_number",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "component_serial_numbers",
+          "nullable": false,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "condition",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "created_by",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "completed_by",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "completed_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        }
+      ],
+      "relation": "warehouse.rekit_work_orders",
+      "rls_forced": false,
+      "constraints": [
+        {
+          "kind": "f",
+          "name": "rekit_work_orders_completed_by_fkey",
+          "definition": "FOREIGN KEY (completed_by) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "rekit_work_orders_created_by_fkey",
+          "definition": "FOREIGN KEY (created_by) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "rekit_work_orders_kit_definition_id_fkey",
+          "definition": "FOREIGN KEY (kit_definition_id) REFERENCES warehouse.kit_definitions(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "u",
+          "name": "rekit_work_orders_output_serial_number_key",
+          "definition": "UNIQUE (output_serial_number)"
+        },
+        {
+          "kind": "p",
+          "name": "rekit_work_orders_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "kind": "f",
+          "name": "rekit_work_orders_source_return_case_id_fkey",
+          "definition": "FOREIGN KEY (source_return_case_id) REFERENCES warehouse.customer_return_cases(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_rekit_complete_check",
+          "definition": "CHECK (status <> 'completed'::text OR completed_by IS NOT NULL AND completed_at IS NOT NULL)"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_rekit_component_serials_check",
+          "definition": "CHECK (jsonb_typeof(component_serial_numbers) = 'array'::text)"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_rekit_condition_check",
+          "definition": "CHECK (condition = ANY (ARRAY['open_box'::text, 'reconditioned'::text]))"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_rekit_status_check",
+          "definition": "CHECK (status = ANY (ARRAY['draft'::text, 'inspection'::text, 'ready'::text, 'completed'::text, 'cancelled'::text]))"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    },
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "source",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "event_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "lines",
+          "nullable": false,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "evidence_urls",
+          "nullable": false,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "actor",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "source_order_id",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "return_case_id",
+          "nullable": true,
+          "postgres_type": "uuid"
+        }
+      ],
+      "relation": "warehouse.returns",
+      "rls_forced": false,
+      "constraints": [
+        {
+          "kind": "c",
+          "name": "returns_customer_lineage",
+          "definition": "CHECK (source_order_id IS NULL AND return_case_id IS NULL OR source = 'customer'::text AND source_order_id IS NOT NULL)"
+        },
+        {
+          "kind": "p",
+          "name": "returns_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "kind": "f",
+          "name": "returns_return_case_id_fkey",
+          "definition": "FOREIGN KEY (return_case_id) REFERENCES warehouse.customer_return_cases(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "returns_source_order_id_fkey",
+          "definition": "FOREIGN KEY (source_order_id) REFERENCES warehouse.fulfillment_orders(id) ON DELETE RESTRICT"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    },
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "product_id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "location_id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "lot_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "quantity",
+          "nullable": false,
+          "postgres_type": "integer"
+        },
+        {
+          "name": "bin_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "id",
+          "nullable": false,
+          "postgres_type": "uuid"
+        }
+      ],
+      "relation": "warehouse.stock_levels",
+      "rls_forced": false,
+      "constraints": [
+        {
+          "kind": "f",
+          "name": "stock_levels_bin_fk",
+          "definition": "FOREIGN KEY (bin_id) REFERENCES warehouse.storage_areas(id) ON DELETE SET NULL"
+        },
+        {
+          "kind": "p",
+          "name": "stock_levels_pkey",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    },
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "location_id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "code",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "label",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "zone",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "active",
+          "nullable": false,
+          "postgres_type": "boolean"
+        }
+      ],
+      "relation": "warehouse.storage_areas",
+      "rls_forced": false,
+      "constraints": [
+        {
+          "kind": "p",
+          "name": "storage_areas_pkey",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    },
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "name",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "lead_time_days",
+          "nullable": false,
+          "postgres_type": "integer"
+        }
+      ],
+      "relation": "warehouse.suppliers",
+      "rls_forced": false,
+      "constraints": [
+        {
+          "kind": "p",
+          "name": "suppliers_pkey",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    },
+    {
+      "kind": "r",
+      "columns": [
+        {
+          "name": "id",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "hold_id",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "supplier_id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "source_receipt_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "source_return_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "product_id",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "lot_id",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "serial_number",
+          "nullable": true,
+          "postgres_type": "text"
+        },
+        {
+          "name": "quantity",
+          "nullable": false,
+          "postgres_type": "integer"
+        },
+        {
+          "name": "reason",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "reference",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "postgres_type": "text"
+        },
+        {
+          "name": "evidence_urls",
+          "nullable": false,
+          "postgres_type": "jsonb"
+        },
+        {
+          "name": "created_by",
+          "nullable": false,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "created_at",
+          "nullable": false,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "handed_off_by",
+          "nullable": true,
+          "postgres_type": "uuid"
+        },
+        {
+          "name": "handed_off_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        },
+        {
+          "name": "completed_at",
+          "nullable": true,
+          "postgres_type": "timestamp with time zone"
+        }
+      ],
+      "relation": "warehouse.vendor_returns",
+      "rls_forced": true,
+      "constraints": [
+        {
+          "kind": "f",
+          "name": "vendor_returns_created_by_fkey",
+          "definition": "FOREIGN KEY (created_by) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "vendor_returns_handed_off_by_fkey",
+          "definition": "FOREIGN KEY (handed_off_by) REFERENCES core.profiles(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "vendor_returns_hold_id_fkey",
+          "definition": "FOREIGN KEY (hold_id) REFERENCES warehouse.inventory_holds(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "vendor_returns_lot_id_fkey",
+          "definition": "FOREIGN KEY (lot_id) REFERENCES warehouse.lots(id) ON DELETE SET NULL"
+        },
+        {
+          "kind": "p",
+          "name": "vendor_returns_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "kind": "f",
+          "name": "vendor_returns_product_id_fkey",
+          "definition": "FOREIGN KEY (product_id) REFERENCES warehouse.products(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "f",
+          "name": "vendor_returns_supplier_id_fkey",
+          "definition": "FOREIGN KEY (supplier_id) REFERENCES warehouse.suppliers(id) ON DELETE RESTRICT"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_vendor_return_quantity_check",
+          "definition": "CHECK (quantity > 0)"
+        },
+        {
+          "kind": "c",
+          "name": "warehouse_vendor_return_status_check",
+          "definition": "CHECK (status = ANY (ARRAY['draft'::text, 'ready'::text, 'handed_off'::text, 'completed'::text, 'cancelled'::text]))"
+        }
+      ],
+      "rls_enabled": true,
+      "view_options": [],
+      "view_definition": null
+    }
+  ],
+  "child_contracts": [
+    {
+      "relation": "warehouse.receipts",
+      "column": "lines",
+      "evidence": "packages/data-kit/src/domain/types.ts:ReceiptLine",
+      "properties": [
+        {
+          "name": "productId",
+          "type": "opaque_id",
+          "nullable": true
+        },
+        {
+          "name": "procurementLineId",
+          "type": "opaque_id",
+          "nullable": true
+        },
+        {
+          "name": "quantity",
+          "type": "decimal_string",
+          "nullable": true
+        },
+        {
+          "name": "binId",
+          "type": "opaque_id",
+          "nullable": true
+        },
+        {
+          "name": "expiryDate",
+          "type": "date",
+          "nullable": true
+        }
+      ],
+      "runtime_shape_verified": false
+    },
+    {
+      "relation": "warehouse.department_stock_requests",
+      "column": "lines",
+      "evidence": "packages/data-kit/src/domain/wms.ts:DepartmentStockRequestLine",
+      "properties": [
+        {
+          "name": "productId",
+          "type": "opaque_id",
+          "nullable": true
+        },
+        {
+          "name": "quantity",
+          "type": "decimal_string",
+          "nullable": true
+        }
+      ],
+      "runtime_shape_verified": false
+    },
+    {
+      "relation": "warehouse.fulfillment_orders",
+      "column": "lines",
+      "evidence": "packages/data-kit/src/domain/wms.ts:FulfillmentOrderLine",
+      "properties": [
+        {
+          "name": "productId",
+          "type": "opaque_id",
+          "nullable": true
+        },
+        {
+          "name": "quantity",
+          "type": "decimal_string",
+          "nullable": true
+        },
+        {
+          "name": "pickedQuantity",
+          "type": "decimal_string",
+          "nullable": true
+        },
+        {
+          "name": "pickBinId",
+          "type": "opaque_id",
+          "nullable": true
+        }
+      ],
+      "runtime_shape_verified": false
+    },
+    {
+      "relation": "warehouse.fulfillment_orders",
+      "column": "shipment_events",
+      "evidence": "packages/data-kit/src/domain/wms.ts:ShipmentEvent; supabase/migrations/20260817121220_ecommerce_fulfillment_intake_and_directed_pick.sql:99-109",
+      "properties": [
+        {
+          "name": "status",
+          "type": "string",
+          "nullable": true
+        },
+        {
+          "name": "occurredAt",
+          "type": "timestamp",
+          "nullable": true
+        }
+      ],
+      "runtime_shape_verified": false
+    },
+    {
+      "relation": "warehouse.cycle_counts",
+      "column": "lines",
+      "evidence": "packages/data-kit/src/domain/types.ts:CycleCountLine; warehouse.bi_cycle_counts_v1 reviewed definition",
+      "properties": [
+        {
+          "name": "productId",
+          "type": "opaque_id",
+          "nullable": true
+        },
+        {
+          "name": "expected",
+          "type": "decimal_string",
+          "nullable": true
+        },
+        {
+          "name": "counted",
+          "type": "decimal_string",
+          "nullable": true
+        }
+      ],
+      "runtime_shape_verified": false
+    },
+    {
+      "relation": "warehouse.kit_definitions",
+      "column": "components",
+      "evidence": "packages/data-kit/src/domain/wms.ts:KitComponent",
+      "properties": [
+        {
+          "name": "productId",
+          "type": "opaque_id",
+          "nullable": true
+        },
+        {
+          "name": "quantity",
+          "type": "decimal_string",
+          "nullable": true
+        },
+        {
+          "name": "serializationPolicy",
+          "type": "string",
+          "nullable": true
+        }
+      ],
+      "runtime_shape_verified": false
+    },
+    {
+      "relation": "procurement.requests",
+      "column": "lines",
+      "evidence": "modules/procurement/src/types.ts:ProcurementRequestLine",
+      "properties": [
+        {
+          "name": "quantity",
+          "type": "decimal_string",
+          "nullable": true
+        },
+        {
+          "name": "uom",
+          "type": "string",
+          "nullable": true
+        },
+        {
+          "name": "unitPrice",
+          "type": "decimal_string",
+          "nullable": true
+        }
+      ],
+      "runtime_shape_verified": false
+    },
+    {
+      "relation": "procurement.receipts",
+      "column": "lines",
+      "evidence": "supabase/migrations/20260714175318_single_po_receipt_authority.sql:2361-2366 (legacy backfill only)",
+      "properties": [
+        {
+          "name": "poLineId",
+          "type": "opaque_id",
+          "nullable": true
+        },
+        {
+          "name": "quantity",
+          "type": "decimal_string",
+          "nullable": true
+        }
+      ],
+      "runtime_shape_verified": false
+    }
+  ],
+  "missing_relations": [
+    {
+      "relation": "core.vendor_aliases",
+      "reason": "Not present in the targeted pg_catalog query. No warehouse.suppliers.core_vendor_id column exists in UAT; migration candidate is not effective evidence."
+    }
+  ],
+  "limitations": [
+    "Fingerprint covers only the reviewed relation descriptors (columns, keys/checks, RLS flags, view options/definitions), not business contents, policies, grants, functions, indexes, triggers or the complete database.",
+    "Queries were separate read-only transactions, not a consistent business snapshot or proof of deployed migration identity.",
+    "Child property contracts are repository evidence only; live JSON element types/requiredness and historical completeness were not inspected.",
+    "Live metadata existence is not permission or approval to disclose any field."
+  ]
+}

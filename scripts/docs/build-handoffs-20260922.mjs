@@ -95,6 +95,9 @@ const referenceDefinitions = [
   ['UAT and issues', 'docs/UAT_AND_ISSUE_MANAGEMENT.md', 'P0/P1 defects cannot be waived', 'Business sign-off is distinct from automated results; production blockers are not waived by handing over documents.'],
   ['Interactive Warehouse export', 'apps/shell/app/api/warehouse/exports/route.ts', 'reportingViews', 'Existing interactive exports are not the proposed unattended Reporting API.'],
   ['Interactive Insights export', 'apps/shell/app/api/insights/export/route.ts', 'reporting_period_start', 'Existing insight export is not a full detailed integration feed.'],
+  ['Reporting dataset registry', 'apps/shell/lib/reporting/catalog.ts', "availability: 'unavailable'", 'All 30 proposed IDs remain unavailable; a draft mapping is not an export permission.'],
+  ['Draft dictionary parser', 'apps/shell/lib/reporting/dictionary.ts', 'export function parseReportingDictionary', 'Source-metadata validation only; no business-record serializer or approved reporting projection.'],
+  ['Draft dictionary checks', 'apps/shell/lib/reporting/dictionary.test.ts', 'parseReportingDictionary', 'Maintained tests verify the draft contract; their presence alone does not show they passed.'],
 ];
 const sourceReview = referenceDefinitions.map(([title, file, needle, finding]) => {
   const text = pinned(file);
@@ -103,13 +106,23 @@ const sourceReview = referenceDefinitions.map(([title, file, needle, finding]) =
   return { title, file, line, sha256: sha(text), finding, url: `${repoUrl}${file}#L${line}` };
 });
 const tree = snapshot ? Object.keys(snapshot.files).join('\n') : git('ls-tree', '-r', '--name-only', commit, 'apps/shell/app/api');
-assert.ok(!tree.includes('apps/shell/app/api/reporting/'), 'Reporting implementation appeared; review design-only status before rebuilding.');
+assert.ok(!tree.includes('apps/shell/app/api/reporting/'), 'Reporting endpoint appeared; review unavailable-service status before rebuilding.');
 
 const designInputs = {
   'reporting-design.md': 'docs/superpowers/specs/2026-09-20-reporting-api-design.md',
   'reporting-implementation-plan.md': 'docs/superpowers/plans/2026-09-20-reporting-api-implementation.md',
   'reporting-quickstart.md': 'docs/integrations/reporting-api/DATA-TEAM-QUICKSTART.md',
   'reporting-security-review.md': 'docs/integrations/reporting-api/SECURITY-REVIEW.md',
+  'reporting-foundation-progress.md': 'docs/integrations/reporting-api/FOUNDATION-PROGRESS.md',
+  'reporting-source-map.md': 'docs/integrations/reporting-api/source-map.md',
+  'reporting-authority-foundation.md': 'docs/integrations/reporting-api/AUTHORITY-FOUNDATION.md',
+  'reporting-dependency-remediation.md': 'docs/integrations/reporting-api/DEPENDENCY-REMEDIATION.md',
+  'reporting-release-readiness.md': 'docs/integrations/reporting-api/RELEASE-READINESS.md',
+};
+const machineInputs = {
+  'dictionary.json': 'docs/integrations/reporting-api/dictionary.json',
+  'source-schema.json': 'docs/integrations/reporting-api/source-schema.json',
+  'hash-vectors.json': 'docs/integrations/reporting-api/hash-vectors.json',
 };
 const designDocs = {};
 for (const [name, file] of Object.entries(designInputs)) {
@@ -117,11 +130,17 @@ for (const [name, file] of Object.entries(designInputs)) {
   marked.walkTokens(marked.lexer(text), token => {
     if (token.type !== 'link' || /^(?:https?:|#)/.test(token.href)) return;
     const resolved = path.resolve(root, path.dirname(file), token.href);
-    const bundled = Object.entries(designInputs).find(([, inputPath]) => path.resolve(root, inputPath) === resolved);
-    assert.ok(bundled, `Unbundled design reference: ${file}: ${token.href}`);
-    text = text.replaceAll(`](${token.href})`, `](${bundled[0]})`);
+    const bundled = Object.entries({ ...designInputs, ...machineInputs }).find(([, inputPath]) => path.resolve(root, inputPath) === resolved);
+    const reviewedSource = sourceReview.find(item => path.resolve(root, item.file) === resolved);
+    assert.ok(bundled || reviewedSource, `Unreviewed design reference: ${file}: ${token.href}`);
+    text = text.replaceAll(`](${token.href})`, `](${bundled ? bundled[0] : reviewedSource.url})`);
   });
-  designDocs[name] = `> Archived design input from September 20, 2026. DESIGN ONLY. No working endpoint, connector or credentials are supplied. Original historical source claims below are not current deployment or acceptance evidence.\n\n${text}`;
+  designDocs[name] = `> Reporting engineering reference. No working endpoint, connector or credentials are supplied. Design requirements are not implementation evidence; see the dated progress and Release Status for completed checks and remaining gates.\n\n${text}`;
+}
+for (const [name, file] of Object.entries(machineInputs)) {
+  const text = input(file);
+  JSON.parse(text);
+  designDocs[name] = text;
 }
 const catalogue = marked.lexer(designDocs['reporting-design.md']).find(t => t.type === 'table' && t.rows.some(r => r[0].text.includes('warehouse.products')));
 assert.ok(catalogue, 'Dataset catalogue not found');
@@ -238,7 +257,7 @@ for (const key of ['data', 'technical', 'testers']) {
   const parts = sections(drafts[key]);
   if (key === 'data') {
     parts.push({ title: 'Dataset Catalogue', id: 'dataset-catalogue', html: `<p><strong>30 proposed datasets: 19 Warehouse, 10 Procurement, one relationship dataset.</strong> These are design mappings, not implemented API resources. Verify effective schema, stable keys and disclosure before delivery.</p>${markdown(catalogue.raw)}` });
-    parts.push({ title: 'Design Downloads', id: 'design-downloads', html: `<p>Archived September 20 design inputs, provided offline. Their original source baseline predates this pack. No working API, connector, OpenAPI artifact, credentials or runtime acceptance is included.</p>${Object.entries(designDocs).map(([name, text]) => download(name, text)).join(' ')}` });
+    parts.push({ title: 'Design and Engineering Downloads', id: 'design-downloads', html: `<p>Offline design, tested-foundation evidence, draft field dictionary, observed source schema and portable hash vectors. The draft mappings do not authorize disclosure. No working API, connector, OpenAPI artifact, credentials or integration acceptance is included.</p>${Object.entries(designDocs).map(([name, text]) => download(name, text)).join(' ')}` });
   }
   if (key === 'testers') parts.push({ title: 'Execution Downloads', id: 'execution-downloads', html: `<p><strong>${cases.length} case groups, all Not run.</strong> Allocate fixtures and identities before Ready. Add execution rows for each actor, viewport, negative path and retest. Protect the completed results as internal evidence; keep passwords, real personal data and signed URLs out.</p>${download('test-results.csv', testsCsv, 'Download test checklist CSV')}${download('issue-template.csv', issuesCsv, 'Download issue template CSV')}` });
   parts.push({ title: 'Source Review', id: 'source-review', html: sourceHtml });
@@ -289,7 +308,7 @@ async function renderDiagrams() {
   } finally { await browser.close(); }
 }
 
-const distributionReadme = `# mWell Intra Handoffs September 22 2026\n\nOpen index.html, or open data.html, technical.html or testers.html directly. Each audience HTML is self-contained, with local styles, interactions, rendered flowcharts and embedded downloads. No server or internet is needed to read it. Cross-pack navigation requires the four HTML files to remain together. Repository and UAT links require authorized network access and were not opened as part of document QA.\n\nThe checklist has ${cases.length} case groups, all Not run. The reporting catalogue has ${datasetIds.length} proposed datasets, not deployed resources. The reporting documents are archived DESIGN ONLY inputs. There is no working reporting endpoint, connector or credential in this package. SMTP is out of scope. Never deploy the old standalone Warehouse repository.\n\nCurrent status is a dated snapshot embedded from release-status.json. Editing the distributed JSON alone does not update already-built HTML; the maintainer must edit the source JSON and rebuild. Do not label app journeys or business acceptance passed from documentation QA.\n\n## Maintainer instructions\n\n${maintenance.split('## Rebuild')[1] || ''}`;
+const distributionReadme = `# mWell Intra Handoffs September 22 2026\n\nOpen index.html, or open data.html, technical.html or testers.html directly. Each audience HTML is self-contained, with local styles, interactions, rendered flowcharts and embedded downloads. No server or internet is needed to read it. Cross-pack navigation requires the four HTML files to remain together. Repository and UAT links require authorized network access and were not opened as part of document QA.\n\nThe checklist has ${cases.length} case groups, all Not run. The reporting catalogue has ${datasetIds.length} proposed datasets, not deployed resources. Reporting downloads include design requirements, tested-foundation evidence and a draft dictionary, not disclosure approval. There is no working reporting endpoint, connector or credential in this package. SMTP is out of scope. Never deploy the old standalone Warehouse repository.\n\nCurrent status is a dated snapshot embedded from release-status.json. Editing the distributed JSON alone does not update already-built HTML; the maintainer must edit the source JSON and rebuild. Do not label app journeys or business acceptance passed from documentation QA.\n\n## Maintainer instructions\n\n${maintenance.split('## Rebuild')[1] || ''}`;
 const licenseFiles = [
   ['marked 15.0.12 (build-time Markdown parser)', path.join(source, 'node_modules/marked/LICENSE.md')],
   ['Mermaid 11.17.0 (build-time diagram renderer; only SVG output is distributed)', path.join(source, 'node_modules/mermaid/LICENSE')],

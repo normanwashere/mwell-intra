@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, createElement } from 'react';
+import { act, createElement, type ComponentProps } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -22,7 +22,8 @@ function deferred<T>() {
   const promise = new Promise<T>(done => { resolve = done; });
   return { promise, resolve };
 }
-async function mount(rpc: ReturnType<typeof vi.fn>, canManage = true) {
+type SourcingClient = NonNullable<ComponentProps<typeof SourcingWorkspace>['client']>;
+async function mount(rpc: ReturnType<SourcingClient['schema']>['rpc'], canManage = true) {
   const schema = vi.fn(() => ({ rpc }));
   await act(async () => { root.render(createElement(SourcingWorkspace, {
     requestId, method: 'rfq', canManage, canApprove: false, client: { schema }, vendors: [],

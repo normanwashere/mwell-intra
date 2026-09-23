@@ -46,7 +46,7 @@ A plain source ZIP can build the app. Two historical screenshot-provenance check
 
 ## Recipient Acceptance
 
-- Data: the API is design only. Runtime, database, network, disclosure and ownership still need confirmation.
+- Data: the security foundation is partial implementation, not a working API. Review the draft dictionary and engineering evidence; runtime, database, identity provider, network, disclosure and ownership still need confirmation.
 - Technical: reproduce clean setup, configure the receiving host/backend and pipeline, verify migrations and recovery, and name support owners.
 - Testers: allocate current fixtures, identities, required learning and next actors. Starter checklist rows intentionally begin Not run; historical automation does not populate a recipient's results.
 - Production: requires a separate go/no-go, actual business acceptance and the receiving environment's own verification.

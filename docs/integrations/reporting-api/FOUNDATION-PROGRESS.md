@@ -3,7 +3,20 @@
 September 23, 2026. Experimental branch: `codex/reporting-security-foundation`.
 Base: `89875c3f82081c166b219aa35636a01f3b5fdcc3` (full Intra source).
 
-## Scope and Decisions
+## Follow-Up Delivery
+
+The user subsequently approved the next engineering steps, GitHub push and Vercel UAT deployment. This does **not** approve enabling a Reporting API or issuing machine credentials. The handoff's dated Release Status identifies the actual deployed app build and CI evidence; do not apply the earlier test counts below to a later commit.
+
+- The [draft dictionary and source map](source-map.md) now cover all 30 proposed datasets against 42 read-only UAT relation descriptors. There are 39 dictionary checks. Shell regression with the completed mapping passed 995 tests, with one unchanged opt-in browser test skipped. No business records were queried for this mapping; all datasets remain unavailable.
+- [Private authority foundation](AUTHORITY-FOUNDATION.md) documents the inactive schema, current grants, permanent client denial, epochs, audited administrative functions and real PostgreSQL test boundary. It is not source-data or Storage isolation, a deployed identity provider, an HTTP service, or a recipient connector.
+- [Dependency remediation](DEPENDENCY-REMEDIATION.md) records the separately verified package updates and compatibility tests. The new full and production registry scans report no known advisories. The earlier nine-entry triage below is historical, not a current unresolved count.
+- The local optimized shell build passed on Node 24 with the existing UAT configuration, including TypeScript, 21 static pages and 223 service-worker entries. No reporting endpoint appears in the route output.
+- Vercel now installs from the frozen lockfile; the repository and deployment workflow select Node 24. CI retains its production-dependency gate and adds all-dependency Moderate-or-higher checking, hash-vector verification and the required native PostgreSQL authority suite. Four release-contract tests pass; the absent-gate check failed before the CI additions.
+- The Data, Technical and Tester packs include source mapping, current engineering evidence and the [remaining delivery checklist](RELEASE-READINESS.md). Source-transfer and existing CI-contract checks passed (36 tests); these are not app browser or human acceptance evidence.
+
+The following sections preserve the first-slice evidence and decisions. They must not be read as a claim that no follow-up migration or dependency update was made. Current deployment/install details belong to Release Status and the authority ledger.
+
+## First-Slice Scope and Decisions
 
 User approved starting the security foundation, not releasing an API. This slice implements inert libraries and adversarial local tests. It does not introduce routes, migrations, credentials, live grants, storage, source projections, or a recipient connector. SMTP and operational journeys are unchanged.
 
@@ -106,6 +119,6 @@ The Data team can review the proposed contracts and golden vectors now. They sti
 
 ## Release Boundary
 
-No reporting API is live. All R01-R12 remain release-gated until their complete evidence requirements are met. Current UAT and the verified source-transfer package remain unchanged.
+No reporting API is live. All R01-R12 remain release-gated until their complete evidence requirements are met. The first-slice verification did not change UAT or the earlier verified source-transfer package. The separately approved follow-up is recorded above and in the handoff's Release Status.
 
-The September 22 packaged handoff remains a dated release snapshot; do not distribute this experimental branch as the certified application ZIP. This updated security review and progress ledger are the engineering addendum until the foundation is integrated and a new release is verified.
+Keep the earlier verified source ZIP immutable. Any follow-up source-transfer package must identify its own application commit, documentation revision, checksum and test boundary. A deployed app containing inactive helpers is not a certified Reporting API.

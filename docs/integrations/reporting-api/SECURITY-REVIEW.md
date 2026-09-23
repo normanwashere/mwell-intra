@@ -4,16 +4,17 @@ September 20, 2026. Revision 2. Scope: proposed Warehouse/Procurement integratio
 
 ## September 23 Engineering Update
 
-The first security foundation now exists on the isolated `codex/reporting-security-foundation` branch, based on the full Intra transfer source `89875c3f82081c166b219aa35636a01f3b5fdcc3`. It is not deployed or included in the previously verified source-transfer ZIP. See [implementation evidence and remaining work](FOUNDATION-PROGRESS.md).
+The security foundation exists on `codex/reporting-security-foundation`, based on the full Intra transfer source `89875c3f82081c166b219aa35636a01f3b5fdcc3`. The follow-up adds a draft source dictionary, inactive private authority controls and dependency remediation. Use the handoff Release Status for deployment evidence; none of this enables a Reporting API. The previously verified source ZIP is immutable. See [implementation evidence and remaining work](FOUNDATION-PROGRESS.md).
 
-| Finding | What is implemented locally | What is still required |
+| Finding | Implemented foundation (not an enabled API) | What is still required |
 |---|---|---|
-| R01 | Pinned asymmetric JWT access-token checks, <=600-second lifetime, strict claims/header parsing, fresh grant callback on every request, deny/revoke handling, bounded grant-read timeout | Managed provider/JWKS adapter, durable administrator-controlled grants and permanent-deny storage, key-rotation procedure, actual HTTP/SQL denial tests; sender constraints remain an infrastructure decision |
-| R03 | Closed 30-ID registry and strict bootstrap/checkpoint request shapes; every dataset remains unavailable until mapping is verified | Per-field dictionary, audience-specific manifests/counts/relationships and scoped durable idempotency |
+| R01 | Pinned asymmetric JWT access-token checks, <=600-second lifetime, strict claims/header parsing, fresh grant callback, bounded grant-read timeout; private durable grant/epoch/permanent-deny controls installed empty on UAT and verified on native PostgreSQL | Managed provider/JWKS and actual authority adapter, approved client administration, key-rotation/restore procedure and authenticated HTTP denial tests; sender constraints remain an infrastructure decision |
+| R04 | Private NOLOGIN owner/admin/reader roles, fixed-search-path functions, explicit closed ACLs and native PostgreSQL negative tests; live UAT app-role denial checked | Actual extractor/publisher/reader identities and Storage IAM; resolve inherited/PUBLIC operational RPC exposure before granting any runtime login/membership; full direct SQL/Storage denial matrix |
+| R03 | Closed 30-ID registry, strict bootstrap/checkpoint shapes and draft per-field dictionary checked against UAT metadata; every dataset remains unavailable | Field/disclosure approval, implemented projections, audience-specific manifests/counts/relationships and scoped durable idempotency |
 | R09 | Maintained JCS canonicalization, record/dataset hash verification, duplicate-ID denial, UTF-8 ID sorting and 14 published golden vectors | Dataset-specific semantic/schema validation, paged staging, source projections and recipient activation/reconciliation |
 | R12 | Duplicate-key/Unicode/depth/size validation, bounded JSON body/response reads, same-origin reporting-path allowlist, no redirect/cookie forwarding, strict response-schema hook and fixed public errors | Route wiring, trusted gateway behavior and logging, SQL parameterization, deployment request fuzzing and real recipient output escaping |
 
-These are partial engineering results, not closure of R01/R03/R09/R12. R02/R04-R08/R10/R11 still need their stateful database, storage and recipient controls. None of the twelve findings is fully certified. The existing app workflows and SMTP are unchanged.
+These are partial engineering results, not closure of R01/R03/R04/R09/R12. R02/R05-R08/R10/R11 still need their stateful database, storage and recipient controls. None of the twelve findings is fully certified. The existing app workflows and SMTP are unchanged. See the [authority installation and limitations](AUTHORITY-FOUNDATION.md).
 
 ## Review Verdict
 

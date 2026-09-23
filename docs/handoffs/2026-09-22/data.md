@@ -9,19 +9,19 @@ We are keeping your existing custom dashboard. The proposed integration would su
 | Item | Current position |
 | --- | --- |
 | Application | Canonical UAT [mwell-intra-uat.vercel.app](https://mwell-intra-uat.vercel.app/); availability/build must be reconfirmed before use |
-| Reporting integration | Proposed design and implementation plan only |
+| Reporting integration | Security libraries implemented; field mapping and private authority work tracked in the engineering evidence appendix. No connectable service yet. |
 | Initial scope | Warehouse and Procurement; all approved departments and locations |
 | Consumer | Your custom application's backend, not its browser |
 | Suggested connector | Node/TypeScript with PostgreSQL adapter; actual team stack still needs explicit confirmation |
 | Timing | Poll every 15 minutes; not a guaranteed 15-minute end-to-end freshness SLA |
 | SMTP | Not required for the proposed machine-to-machine connection |
-| Handoff status | Design review ready; connection acceptance not started |
+| Handoff status | Engineering foundation for review; connection acceptance not started |
 
 **First meeting outcome:** record a technical contact, target database/runtime, reporting owner, approved fields and retention rules. Do not send passwords, private keys or database connection strings in the meeting notes.
 
 ## What Data Is Included
 
-The proposed contract contains **30 datasets**, grouped below. Exact columns, stable keys and live source definitions still need implementation verification. A missing dataset must be reported as unavailable, not returned as an apparently successful empty result.
+The proposed contract contains **30 datasets**, grouped below. The draft field dictionary and source map are included for review. They distinguish observed source columns from proposed output fields, exclusions and unresolved relationships. They do not approve disclosure or create reporting projections. Every dataset remains unavailable until its implementation and disclosure checks pass; an unavailable dataset must not look like a successful empty result.
 
 | Group | Proposed datasets |
 | --- | --- |
@@ -96,7 +96,7 @@ Do not use a shared tester account, scrape UI screens, or hand out a Supabase se
 | `GET /streams/{stream}/generations/{generation}` | Reconcile a complete incremental generation |
 | `POST /checkpoints`, `GET /status` | Acknowledge local completion and monitor freshness |
 
-The implementation must deliver a checked OpenAPI file, field dictionary, sample responses, Postman collection, typed connector, PostgreSQL adapter and SQLite demonstration. Those artifacts are **still deliverables**, not hidden somewhere in this package.
+The draft field dictionary is included in the engineering downloads. A checked OpenAPI file, working sample responses, Postman collection, typed connector, PostgreSQL adapter and SQLite demonstration are **still deliverables**, not hidden somewhere in this package.
 
 The intended operator commands are `doctor`, `sync --once` and `sync --interval 900`. Exact executable paths, exit codes and configuration keys must come from the tested connector release. Schedule one recurring mechanism only; do not run both an internal timer and an external 15-minute scheduler.
 
@@ -159,6 +159,6 @@ The proposed performance gate is capture within five minutes and no more than 10
 
 ## References and Next Step
 
-The HTML includes the full proposed reporting design and implementation plan as offline downloads, plus the Dataset Catalogue appendix. They remain proposed documents. The design's security section is a threat model and proposed verification work, not penetration-test evidence or security acceptance. The app source was reviewed at `9823059bbe08fd1949105a5901683188e5716115`; the separate September 20 reporting documents remain design inputs, not code in that release.
+The HTML includes the proposed design, implementation plan, security review, engineering progress, draft source map and field dictionary as offline downloads. The Release Status identifies the exact deployed build and its test boundary. The September 20 design remains a proposal; the newer progress ledgers describe only the components actually tested. Neither is a penetration-test certificate or approval to disclose data.
 
-**Next step:** Data confirms the setup checklist; Engineering turns the approved contract into a scheduled implementation. App certification and reporting-service acceptance stay separate. Nothing in this pack changes business workflows, grants credentials or enables a production connection.
+**Next step:** Data confirms the setup checklist and reviews the draft field meanings. Infrastructure identifies the managed token issuer and deployment identities. Engineering then implements and tests the projections, capture/publication pipeline and recipient connector against that agreement. App certification and reporting-service acceptance stay separate. Nothing in this pack changes business workflows, grants credentials or enables a production connection.

@@ -1,5 +1,5 @@
 import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RecordCopyActions, useListReturnPosition } from '@intra/ui';
 
 afterEach(() => { cleanup(); sessionStorage.clear(); vi.restoreAllMocks(); });
@@ -33,6 +33,11 @@ describe('record copy controls', () => {
 });
 
 describe('list return position', () => {
+  beforeEach(() => {
+    // Vitest 4 reuses the setup's scrollTo mock; restoreAllMocks does not clear its history.
+    vi.mocked(window.scrollTo).mockClear();
+  });
+
   it('waits for rows and restores a one-time checkpoint for the same user and view', () => {
     vi.spyOn(window, 'scrollY', 'get').mockReturnValue(650);
     const scroll = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});

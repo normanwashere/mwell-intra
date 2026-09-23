@@ -79,6 +79,12 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Block high severity production dependency vulnerabilities
         run: pnpm audit --prod --audit-level high
+      - name: Block known build and test tooling vulnerabilities
+        run: pnpm audit --audit-level moderate
+      - name: Verify reporting release gates and hash vectors
+        run: |
+          node --test scripts/reporting/release-contract.test.mjs
+          node scripts/reporting/generate-hash-vectors.mjs
       - name: Verify deployed UAT schema and runtime authority convergence
         run: pnpm verify:security-db-launch-blockers
       - name: Lint all workspaces
@@ -116,6 +122,11 @@ jobs:
           SEP22_DOA_EPHEMERAL_CI: "1"
           SEP22_DOA_CI_DATABASE_URL: postgresql://postgres:sep22-ci-disposable-only@127.0.0.1:5432/postgres
         run: node --test scripts/verify-sep22-doa-final-authority.postgres.test.mjs
+      - name: Verify private reporting authority on disposable PostgreSQL
+        env:
+          SEP22_DOA_EPHEMERAL_CI: "1"
+          SEP22_DOA_CI_DATABASE_URL: postgresql://postgres:sep22-ci-disposable-only@127.0.0.1:5432/postgres
+        run: node --test scripts/reporting/verify-authority.postgres.test.mjs
       - name: Verify vendor training authority and recorded journey evidence
         run: node --test scripts/verify-vendor-certification-scope.pglite.test.mjs scripts/qa/recorded-vendor-evidence.test.mjs scripts/qa/controlled-po-acknowledgement.test.mjs scripts/qa/role-api-performance.test.mjs
       - name: Verify vendor document upload ownership and current authority

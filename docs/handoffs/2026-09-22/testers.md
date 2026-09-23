@@ -2,9 +2,9 @@
 
 ## Start Here
 
-Open [live UAT](https://mwell-intra-uat.vercel.app/), use your assigned test account, and work only on records allocated to your test run. **The automated release checks passed. This is still UAT, not production approval or your team's completed acceptance.**
+Open [live UAT](https://mwell-intra-uat.vercel.app/), use your assigned test account, and work only on records allocated to your test run. **Check this pack's Release Status for the current build and test result. This is UAT, not production approval or your team's completed acceptance.**
 
-The current changes are live on UAT as `9823059`. CI208 passed all 12 jobs, including desktop/mobile workflows and cleanup. We also confirmed the assigned final DOA approval through the app and checked the saved result. Your checklist starts as Not run so your own results stay separate from automation. Confirm your session's build with the coordinator, and do not switch to a more powerful account to get around a blocker.
+The September 23 work adds the reporting security foundation and dependency fixes. It does not add a Reporting API screen or change Warehouse, Procurement, approval or stock-handling steps. Earlier CI208 passed all 12 jobs on build `9823059`; the current build's result is recorded separately in Release Status. Your checklist starts as Not run so your own results stay separate from automation. Confirm your session's build with the coordinator, and do not switch to a more powerful account to get around a blocker.
 
 **Before your session, ask the UAT coordinator for:** your account/password through the approved private channel, your scenario and record IDs, the next person's handoff slot, and the current known-issues list. Passwords are intentionally not in this document.
 
