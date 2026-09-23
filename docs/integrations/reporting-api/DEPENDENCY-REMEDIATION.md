@@ -197,6 +197,20 @@ part of this dependency change.
 
 ## Remaining Boundaries
 
+### Clean-Runner Follow-Up
+
+CI209 on candidate `16b2716` passed locked installation, both dependency audits, reporting release guards,
+deployed-schema convergence and lint. It stopped at UI typecheck: existing tests import `node:fs`/`node:path`
+and use `process`, but `@intra/ui` did not declare `@types/node`. Local resolution had access to ancestor
+types; that local pass did not prove a clean runner's dependency closure. No browser journeys ran in CI209.
+
+The follow-up declares `@types/node` at the existing monorepo range `^22.7.4` (locked 22.20.0) in the UI
+package. A new release-contract assertion first failed for the missing declaration and then passed.
+The regenerated lockfile also normalized ESLint peer snapshot keys without changing their package versions.
+Frozen offline installation, UI typecheck, all 61 UI tests and all five release guards passed.
+No application behavior, assertion, skip or timeout changed. A fresh exact-build CI run is required;
+consult Release Status rather than treating CI209 as certified.
+
 An npm audit is a dated check of known registry advisories, not a guarantee
 against undisclosed vulnerabilities. The overrides require review when
 upstream dependency majors change. Six unused-variable lint warnings remain

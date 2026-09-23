@@ -55,3 +55,10 @@ test('source-copy and deployment runners agree on the tested Node version', () =
   assert.equal(deploy.jobs.deploy.steps.find(step => step.uses?.startsWith('actions/setup-node@')).with['node-version'], '24');
   assert.equal(workflow().jobs.prepare.steps.find(step => step.uses?.startsWith('actions/setup-node@')).with['node-version'], '24');
 });
+
+test('shared UI Node-based tests declare their own types for a clean checkout', () => {
+  const ui = JSON.parse(readFileSync(new URL('../../packages/ui/package.json', import.meta.url), 'utf8'));
+  const core = JSON.parse(readFileSync(new URL('../../packages/core-data/package.json', import.meta.url), 'utf8'));
+  assert.equal(ui.devDependencies['@types/node'], core.devDependencies['@types/node']);
+  assert(ui.devDependencies['@types/node'], 'UI tests must not borrow Node types from an ancestor checkout');
+});
