@@ -34,8 +34,8 @@ test('never copy local credentials, state, caches, scratch or unsafe paths', () 
   for (const name of ['.env', 'apps/shell/.env.local', '.vercel/project.json', 'supabase/.temp/pooler-url', '.superpowers/a', 'outputs/test.json', 'node_modules/a.js', '.codex-tmp/a', 'qa/storage-state.json', '../escape', 'C:/escape', '/root', 'a\\b']) assert.equal(includeFile(name), false, name);
 });
 test('newer documentation cannot disguise a runtime or deployment change', () => {
-  for (const name of ['docs/handoffs/a.md', 'scripts/docs/export.mjs', 'tools/handoff/package.json']) assert(documentationOnly(name));
-  for (const name of ['apps/shell/page.tsx', 'supabase/migrations/a.sql', '.github/workflows/deploy.yml', 'package.json']) assert.equal(documentationOnly(name), false);
+  for (const name of ['README.md', 'docs/handoffs/a.md', 'scripts/docs/export.mjs', 'tools/handoff/package.json']) assert(documentationOnly(name));
+  for (const name of ['README.mjs', 'README.md.js', 'apps/shell/README.md', 'apps/shell/page.tsx', 'supabase/migrations/a.sql', '.github/workflows/deploy.yml', 'package.json']) assert.equal(documentationOnly(name), false);
 });
 test('scanner reports categories without returning credential values', () => {
   const sample = Buffer.from('sb_' + 'secret_' + 'x'.repeat(30));

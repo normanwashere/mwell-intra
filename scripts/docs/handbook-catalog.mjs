@@ -14,6 +14,20 @@ export const HANDBOOK_TABS = Object.freeze([
 
 const CATALOG = [
   {
+    source: "docs/releases/2026-09-23-REPORTING-FOUNDATION.md",
+    id: "sept23-reporting-foundation",
+    title: "September 23 Reporting Foundation",
+    primaryTab: "release",
+    relatedTabs: ["architecture", "security"],
+    contentType: "release-note",
+    audience: ["developer", "release-reviewer"],
+    summary: "Inactive reporting security foundation, draft field mapping and dependency fixes; no connectable API, credentials or workflow change. Exact live evidence and remaining acceptance are separate.",
+    keywords: ["reporting", "data team", "API", "authority", "dictionary", "handoff"],
+    sortOrder: -3,
+    collapse: "reference",
+    relatedSources: ["docs/TECHNICAL_AND_FUNCTIONAL_SPECIFICATION.md"],
+  },
+  {
     source: "docs/releases/2026-09-22-EVENT-SELLER-CI-DATE.md",
     id: "sept22-event-seller-ci-date",
     title: "September 22 Seller Test Date Correction",

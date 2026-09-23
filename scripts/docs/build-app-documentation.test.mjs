@@ -133,7 +133,7 @@ function repositoryFile(relativePath) {
   return readFileSync(
     new URL(`../../${relativePath}`, import.meta.url),
     "utf8",
-  );
+  ).replace(/\r\n?/g, "\n");
 }
 
 function markdownSection(markdown, level, heading) {
@@ -300,7 +300,7 @@ function runtimeFunction(name, nextFunction, bindings = {}) {
   const runtime = readFileSync(
     new URL("./handbook-runtime.js", import.meta.url),
     "utf8",
-  );
+  ).replace(/\r\n?/g, "\n");
   const match = runtime.match(
     new RegExp(
       `function ${name}\\([\\s\\S]*?\\n    }\\n\\n    function ${nextFunction}`,
@@ -320,7 +320,7 @@ function generatorFunction(name, nextFunction, bindings = {}) {
   const generator = readFileSync(
     new URL("./build-app-documentation.mjs", import.meta.url),
     "utf8",
-  );
+  ).replace(/\r\n?/g, "\n");
   const match = generator.match(
     new RegExp(
       `function ${name}\\([\\s\\S]*?\\n}\\n\\nfunction ${nextFunction}`,

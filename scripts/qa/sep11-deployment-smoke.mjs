@@ -26,7 +26,7 @@ try {
       ['operations', 'intra.test.operations.associate@mwell.com.ph', '/warehouse/fulfillment?tab=orders'],
       ['administrator', 'intra.test.admin@mwell.com.ph', '/admin/audit'],
     ]) {
-      const context = await browser.newContext({ viewport: { width, height: width === 390 ? 844 : 900 }, serviceWorkers: 'allow' });
+      const context = await browser.newContext({ viewport: { width, height: width === 390 ? 844 : 900 }, isMobile: width === 390, hasTouch: width === 390, serviceWorkers: 'allow' });
       const page = await context.newPage();
       const result = { role, width, route, status: 'running', pageErrors: [], serverErrors: [], transactionMutations: false };
       page.on('pageerror', error => result.pageErrors.push(error.message));
@@ -43,6 +43,10 @@ try {
         else if (width >= 768) await expect(page.getByRole('group', { name: 'Order counters' })).toBeVisible({ timeout: 45000 });
         else {
           await expect(page.getByRole('heading', { name: 'Pick & Pack', exact: true })).toBeVisible({ timeout: 45000 });
+          const filters = page.getByRole('button', { name: 'Filters', exact: true });
+          await expect(filters).toHaveAttribute('aria-expanded', 'false');
+          await filters.click();
+          await expect(filters).toHaveAttribute('aria-expanded', 'true');
           const status = page.getByRole('combobox', { name: 'Status', exact: true });
           await expect(status).toBeVisible();
           await expect(status).toHaveValue('active');
@@ -66,8 +70,8 @@ try {
           }
         }
         if (role === 'administrator') {
-          await page.getByRole('button', { name: /^Notifications/ }).click();
-          const dialog = page.getByRole('dialog', { name: 'Notifications', exact: true });
+          await page.getByRole('button', { name: /^Inbox(?:,|$)/ }).click();
+          const dialog = page.getByRole('dialog', { name: 'Inbox', exact: true });
           await expect(dialog.getByRole('button', { name: 'Unread', exact: true })).toBeVisible();
           await expect(dialog.getByLabel('Sort')).toBeVisible();
           await page.screenshot({ path: path.join(output, `notifications-${width}.png`), animations: 'disabled' });

@@ -1066,6 +1066,7 @@ function roleGuide(definition) {
 }
 
 const SOURCE_ROOT_HEADINGS = {
+  "sept23-reporting-foundation": "Reporting Foundation Update",
   "sept22-event-seller-ci-date": "Event Seller CI Date Correction",
   "sept20-experience-remediation-candidate": "September 20 Experience Update",
   "sept14-receiving-practice-checkpoint": "September 14 - Receiving Practice And Sourcing Recovery",
@@ -1412,6 +1413,7 @@ function markdownHeadings(source) {
 }
 
 const LEGACY_TARGET_BY_SOURCE_ID = {
+  "sept23-reporting-foundation": ["system", "source-references", "source-sept23-reporting-foundation"],
   "sept22-event-seller-ci-date": ["system", "source-references", "source-sept22-event-seller-ci-date"],
   "sept20-experience-remediation-candidate": ["system", "source-references", "source-sept20-experience-remediation-candidate"],
   "sept14-receiving-practice-checkpoint": ["system", "source-references", "source-sept14-receiving-practice-checkpoint"],

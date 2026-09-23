@@ -17,7 +17,7 @@ export function includeFile(name) {
   return true;
 }
 export function documentationOnly(name) {
-  return /^(?:docs\/|scripts\/docs\/|tools\/handoff\/)/.test(name);
+  return name === 'README.md' || /^(?:docs\/|scripts\/docs\/|tools\/handoff\/)/.test(name);
 }
 export function secretKinds(bytes) {
   if (bytes.includes(0)) return [];
