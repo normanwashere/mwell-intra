@@ -125,7 +125,7 @@ private authority schema. It does not add a connectable API or change business w
   Updated the current counts to 503 routes and 47 sources without relabeling the historical certification,
   regenerated the handbook and passed both exact CI documentation commands locally. CI211 is failed
   historical evidence, not a browser-journey certificate.
-- The maintained six-case live smoke passed on `22d6b98`: Marketing requests/receipt dialog,
+- The maintained six-case live smoke passed on `22d6b98` and again on deployed `223144f`: Marketing requests/receipt dialog,
   Operations fulfillment/filters and Admin Inbox at 1440 and 390 pixels. No business submissions,
   notification marking, page errors, server errors or horizontal overflow were observed. The test now
   uses Inbox and expands mobile Filters before selecting Status. The earlier stale-selector failures
