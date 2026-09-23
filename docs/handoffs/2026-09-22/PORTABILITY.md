@@ -23,6 +23,8 @@ Use **Node 24** for the current release, matching UAT certification, and **pnpm 
 
 The repository's `.node-version` and deployment workflow now also select Node 24. Select it explicitly in the receiving build/test runner and keep pnpm 10.23.0. Before installing a source ZIP, verify its delivered checksum and run `node scripts/docs/export-handoff-source.mjs --verify .` from the extracted source root.
 
+Keep that verified archive immutable and build in a separate extracted copy. Next.js regenerates `apps/shell/next-env.d.ts` during a build; the source-copy test observed one new generated type import and no other changed manifest file. A later strict source-manifest check correctly reports this build output as changed. Do not refresh the delivered checksum, weaken verification, or redistribute the built working tree as the original source archive.
+
 ```sh
 pnpm install --frozen-lockfile
 pnpm lint
@@ -35,6 +37,8 @@ pnpm --filter @intra/shell start --hostname 0.0.0.0 --port 3000
 The application needs a Node server, not a static HTML host. Port 3000 is an example behind the receiving team's HTTPS reverse proxy. The default `next start` deployment needs the complete workspace and installed production/runtime dependencies; no Docker image or standalone-output bundle is certified in this delivery. Multi-instance cache coordination, proxy buffering, limits, health checks and process restart policies must be reviewed for the chosen host. Browser camera use requires HTTPS outside localhost.
 
 The test command above matches the current CI's bounded workspace/worker concurrency. It runs the same tests without competing nested worker pools; it does not skip failures or alter assertions. Full certification also includes the separate SQL, browser, cleanup and evidence commands in the reviewed workflow.
+
+**Observed source-copy proof, September 23:** application `223144f` with documentation `b2f1800` exported 2,309 files without `.git` or dependencies. Frozen installation, the optimized shell build (including TypeScript), loopback health and the browser-rendered sign-in page/logo passed. The temporary server and browser were stopped. UAT configuration was supplied only to the process, not copied into the archive. This used the existing approved UAT backend; it does not prove a fresh backend, production setup or authenticated transactions from the copied deployment.
 
 Build runners need approved registry access and, with the current `next/font/google` configuration, access to Google's font download endpoints. Restricted-network builds need an independently reviewed font-vendoring change; do not silently replace fonts or bypass TLS checks. Provide dependency/license inventories and third-party notices with the release. mWell must confirm recipient rights for branding and other supplied assets; source possession alone is not a license determination.
 

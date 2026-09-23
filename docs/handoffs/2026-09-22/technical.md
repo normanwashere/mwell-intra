@@ -10,7 +10,7 @@
 | Source reviewed | Exact application and reference revisions appear in this pack's Release Status and Source Review; use the full monorepo, not a branch name alone. |
 | Live commit and health | Exact deployment ID, observed commit, backend and check time appear in Release Status. Do not reuse an older health observation for a new release. |
 | UAT Supabase project | `kkoitlvydytdhlpxhuah` |
-| Certification tracking | CI208 passed all 12 jobs on baseline 9823059. The newer release needs its own CI result, recorded in Release Status; the earlier pass does not certify changed code. |
+| Certification tracking | CI212 passed all 12 jobs on application 223144f. The full bundle is retained and SHA-256 verified; exact details are in Release Status. CI208 remains historical. |
 | Release ownership | Engineering deployed the reviewed source, retained the two September 22 DOA fixes, and installed the empty September 23 reporting-authority schema on UAT only. Receiving-team acceptance remains separate. |
 | Reporting API | Inactive security foundation and draft source mapping; no endpoint or connector in the running architecture below |
 | SMTP | Explicitly deferred; no change or delivery-certification claim |
@@ -107,6 +107,18 @@ The exact live application, deployment, CI run and observation time are recorded
 The reporting follow-up includes the strict validation libraries, 30-dataset draft dictionary and empty
 private authority schema. It does not add a connectable API or change business workflows.
 
+- CI212 passed all 12 jobs on `223144f`: six route widths, 48/48 maintained workflows at each of
+  1440 and 390 pixels, both independent cleanups and the complete evidence bundle. The two widths
+  repeat the same maintained workflows; they are not 96 unique journeys. Vendor submission and
+  independent Legal readback both passed. These cases exclude invitation-email acceptance.
+- The clean CI workspace run passed 4,316 tests and all 15 test tasks, with one unchanged opt-in
+  shell browser skip. Typecheck, lint, build, CodeQL, documentation and dependency gates also passed.
+  Scoped SQL/contract suites have their own coverage and explicit skips; do not add overlapping counts.
+- Bundle `10734547630` is retained locally: SHA-256
+  `859a98fea2f83aae2c4ef0817aef9c20a234fb08dc8072f00a73cb93f92e72ee`.
+  GitHub retention ends October 23. Transfer evidence through an approved internal channel, not a
+  public source repository. Canonical health rechecked the exact build at 06:07:01 UTC on September 23.
+
 - Local evidence: 4,316 passing workspace tests across the full run and complete corrected package reruns;
   one unchanged opt-in browser skip. All 15 typechecks and lint tasks passed, with six pre-existing warnings.
 - Native authority proof: 17/17 real PostgreSQL checks, repeated after the existing 16/16 DOA suite;
@@ -134,6 +146,12 @@ private authority schema. It does not add a connectable API or change business w
   tree, verified all 2,309 files, installed frozen dependencies, passed all 15 typechecks and regenerated/
   checked the handoff without Git. Its dated archive is preserved separately. Verify the final transfer
   package's own manifest; this is not a receiving-team fresh-backend or production acceptance test.
+- A second independent copy of application `223144f` / documentation `b2f1800` verified all 2,309
+  source files, installed frozen dependencies, built the optimized shell and passed loopback health
+  plus the hydrated sign-in page/logo at 04:52:36 UTC. Its temporary server/browser were stopped.
+  Next.js regenerated only `next-env.d.ts`; strict post-build source verification correctly detected
+  that change. Preserve the immutable archive and build a separate copy. No fresh backend or copied
+  deployment's authenticated transactions are certified by this check.
 
 Detailed ledgers are bundled with the Data pack. These scoped results are not a penetration test,
 maximum-capacity test, real participant pilot or completed recipient integration.
@@ -175,8 +193,8 @@ Earlier candidate checks and failed runs remain retained, not relabelled as new-
 
 | ID | Priority / accountable role | Specific next action | Closure evidence |
 | --- | --- | --- | --- |
-| T01 | Release verification / Engineering + QA | Verify the current application and deployment recorded in Release Status. Prior exact-build health is not transferable. | Canonical health must match the released SHA and UAT backend |
-| T02 | Current-build CI / QA lead | Inspect all jobs of the current run in Release Status; CI208 remains historical evidence. | Six route widths; both transaction widths; both independent cleanups; complete bundle |
+| T01 | Closed for 223144f / Engineering + QA | Canonical UAT health matches 223144f and the intended backend at 06:07:01 UTC on September 23. Recheck any future deployment. | Deployment dpl_J3sta4ZBmLxMReTq3bWJryiYt5TN; dated health receipt |
+| T02 | Closed for 223144f / QA lead | CI212 passed all 12 jobs; its complete bundle was downloaded and hash-verified. | Six route widths; 48/48 at both transaction widths; both independent cleanups; bundle 10734547630 |
 | T03 | Journey gap / Warehouse + Events + Finance | Revalidate date-valid event fixtures; then execute procurement, receipt, independent Quality, putaway, pick/pack, separate release, acknowledgment, seller outcomes, return/recovery and Finance readback. | Same source IDs/serials across all actors; actual movements and balances; retained cleanup disposition |
 | T04 | Closed / Legal + QA | Deployed signature-readiness fix passed CI208 vendor submission and Legal handoff at 1440 and 390. | Both transaction reports: vendor application legal prerequisite and legal submitted application handoff are successful; email acceptance excluded |
 | T05 | Closed / Legal Engineering | Both CI208 scoped and independent cleanup receipts report complete. Earlier CI205 draft remains historical evidence, not an unresolved runtime failure. | Runs QA-20260922-0000519B and QA-20260922-0000519C; independent cleanup jobs 106855823269 and 106855823275 |

@@ -3,15 +3,15 @@
   "asOf": "2026-09-23",
   "timezone": "Asia/Singapore",
   "updatedBy": "Engineering release verification",
-  "latestOwnerUpdateAt": "2026-09-23T04:34:36Z",
+  "latestOwnerUpdateAt": "2026-09-23T06:07:24Z",
   "sourceCommit": "223144f3ffbf315d112accac376fa3e187f1d301",
   "liveCommit": "223144f3ffbf315d112accac376fa3e187f1d301",
   "liveDeploymentId": "dpl_J3sta4ZBmLxMReTq3bWJryiYt5TN",
-  "liveVerifiedAt": "2026-09-23T04:34:36.502Z",
+  "liveVerifiedAt": "2026-09-23T06:07:01.823Z",
   "uatProjectRef": "kkoitlvydytdhlpxhuah",
   "canonicalUat": "https://mwell-intra-uat.vercel.app/",
-  "summary": "The reporting security foundation, draft field dictionary and dependency fixes are live on UAT build 223144f. The six desktop/mobile smoke checks pass; CI212 is still running. No Reporting API, connector or credentials are enabled. Receiving-environment setup, the separate seller-to-Finance scenario and human business acceptance remain open.",
-  "evidenceBoundary": "Canonical UAT health matches application 223144f and the intended Supabase project. CI209 stopped at typecheck, CI210 at handbook registration and CI211 at inventory counts, all before live browser journeys. Those issues are corrected; CI212 must finish independently. The September 23 authority schema remains empty with no app-role access. Automated tests, sampled screenshots and documentation QA are not exhaustive visual, penetration-test or human acceptance evidence. SMTP untouched.",
+  "summary": "The reporting security foundation, draft field dictionary and dependency fixes are live on UAT build 223144f. CI212 passed all 12 jobs, including 48 of 48 maintained workflows on both desktop and mobile and both independent cleanups. No Reporting API, connector or credentials are enabled. Receiving-environment setup, the separate seller-to-Finance scenario and human business acceptance remain open.",
+  "evidenceBoundary": "Canonical UAT health matches application 223144f and the intended Supabase project. CI209, CI210 and CI211 remain failed historical runs; CI212 independently passed the corrected build. Its complete evidence bundle is retained locally and SHA-256 verified. All four reporting-authority tables were still empty at 06:07:24 UTC. Automated tests, sampled screenshots and documentation QA are not exhaustive visual, penetration-test or human acceptance evidence. SMTP untouched.",
   "items": [
     {
       "id": "technical-transfer",
@@ -36,18 +36,18 @@
     {
       "id": "full-ci",
       "label": "Full CI212",
-      "state": "Running - not yet certified",
-      "detail": "Run 35818818312 targets exact commit 223144f. The early documentation gate passed. Preparation, six route widths, desktop/mobile transactions, independent cleanup and the final evidence bundle must all pass before current-build certification is recorded. Prior failed/skipped runs are not passes.",
+      "state": "Passed - all 12 jobs",
+      "detail": "Run 35818818312 certified application 223144f: preparation, six route widths (1440, 1280, 768, 390, 360, 320), 48/48 maintained workflows at each of 1440 and 390, both independent cleanups and the complete bundle passed. The two transaction widths are repeated coverage, not 96 unique workflows. All independent cleanup residual counts are zero within the run scope. This is automated suite certification, not production or human acceptance.",
       "owner": "Engineering and QA",
-      "evidence": "New exact-build run started September 23. Prior CI208 artifact 10710067181 remains historical evidence with SHA-256 25afc13332595d1a9b1688afca80fb9966a1f1a40fe73bf2e619121df4bde8ba; its retention ends October 22.",
+      "evidence": "Complete bundle 10734547630 (uat-live-certification-212.zip), 241670613 bytes, downloaded and SHA-256 verified: 859a98fea2f83aae2c4ef0817aef9c20a234fb08dc8072f00a73cb93f92e72ee. GitHub retention ends 2026-10-23T05:57:40Z. Retain through the approved internal evidence channel; prior CI208 evidence stays historical.",
       "evidenceUrl": "https://github.com/normanwashere/mwell-intra/actions/runs/35818818312",
-      "tone": "warning"
+      "tone": "success"
     },
     {
       "id": "ci-correction-checks",
       "label": "Focused CI correction checks",
-      "state": "Current local checks passed",
-      "detail": "Locked install and optimized shell build passed. Local workspace evidence: 4316 passing tests across the full run and complete corrected package reruns, plus one unchanged opt-in browser skip. All 15 typecheck and lint tasks passed; six pre-existing warnings remain. Native authority 17/17 passed twice after DOA 16/16. UI typecheck and all 61 UI tests passed after the CI209 dependency correction. The latest handbook, archive, documentation and CI regression set passed 143/143, including seven release guards. Full and production audits found no known advisories. These overlapping scoped checks are not a full live certificate.",
+      "state": "Passed locally and on the clean CI runner",
+      "detail": "CI212 completed one clean workspace run: 4316 passing tests, all 15 tasks passed, one unchanged opt-in shell browser skip. Typecheck, lint, optimized build, CodeQL, full/production dependency gates and mandatory native authority 17/17 after DOA 16/16 passed. Six pre-existing lint warnings remain. Local handbook, archive, documentation and CI regression checks passed 143/143. Other scoped suites include their own explicit opt-in skips; counts overlap and are not added as unique coverage. No known dependency advisories is not a security-completeness guarantee.",
       "owner": "Engineering and QA",
       "evidence": "Reporting foundation, authority and dependency ledgers record commands, initial failures and corrected reruns; generated local logs are retained separately. CI209 passed install/audits/schema/lint but failed UI typecheck; its skipped browser journeys are not passed.",
       "evidenceUrl": null,
@@ -56,11 +56,11 @@
     {
       "id": "seller-contract",
       "label": "Seller automated contract",
-      "state": "Passed in CI208",
-      "detail": "CI208 preparation passed the event custody and warehouse access contracts. The earlier CI203 seller failure is historical. This is not a completed live stock-to-Finance journey.",
+      "state": "Passed in CI212",
+      "detail": "CI212 preparation passed the event custody and warehouse access contracts on 223144f. The earlier CI203 seller failure is historical. This is not a completed live stock-to-Finance journey.",
       "owner": "Engineering and QA",
-      "evidence": "CI208 preparation job 106818550837, Verify Sep20 event custody and warehouse access contracts: success",
-      "evidenceUrl": "https://github.com/normanwashere/mwell-intra/actions/runs/35748805822",
+      "evidence": "CI212 preparation job 107046063362, Verify Sep20 event custody and warehouse access contracts: success",
+      "evidenceUrl": "https://github.com/normanwashere/mwell-intra/actions/runs/35818818312",
       "tone": "success"
     },
     {
@@ -106,11 +106,11 @@
     {
       "id": "vendor-chain",
       "label": "Vendor upload to Legal",
-      "state": "Passed in CI208 on desktop and mobile",
-      "detail": "The maintained vendor application and separate Legal handoff workflows passed at 1440 and 390 pixels on 9823059, followed by both independent cleanup jobs and the final bundle. The independently provisioned vendor case does not prove invitation-email acceptance or a continuous invitation-to-accreditation lifecycle. Email delivery remains excluded.",
+      "state": "Passed in CI212 on desktop and mobile",
+      "detail": "The maintained vendor application and separate Legal handoff workflows passed at 1440 and 390 pixels on 223144f, followed by both independent cleanup jobs and the final bundle. The independently provisioned vendor case does not prove invitation-email acceptance or a continuous invitation-to-accreditation lifecycle. Email delivery remains excluded.",
       "owner": "Legal and QA",
-      "evidence": "CI208 transaction artifacts 10708224959 and 10710051782; cleanup jobs 106855823269 and 106855823275; complete bundle 10710067181",
-      "evidenceUrl": "https://github.com/normanwashere/mwell-intra/actions/runs/35748805822",
+      "evidence": "CI212 transaction artifacts 10734331035 and 10734347905; cleanup jobs 107062972324 and 107062972388; complete bundle 10734547630. Both transaction reports explicitly record vendor application legal prerequisite and legal submitted application handoff as successful.",
+      "evidenceUrl": "https://github.com/normanwashere/mwell-intra/actions/runs/35818818312",
       "tone": "success"
     },
     {
@@ -177,7 +177,7 @@
       "id": "source-portability",
       "label": "Bitbucket and source-copy readiness",
       "state": "Source-copy checks passed; recipient setup open",
-      "detail": "An independently exported application 185fbd9 / documentation c781d11 source copy verified all 2309 file hashes, installed frozen dependencies, passed all 15 typechecks and regenerated/checked the handoff without Git or ancestor project dependencies. These are dated portability checks, not proof of a fresh backend or every later archive. Full Git import is preferred for historical provenance tests. Hosting, database, Auth, Storage, secrets, protected release pipeline and restore rehearsal still require a recipient-owned setup.",
+      "detail": "An independent application 223144f / documentation b2f1800 copy verified all 2309 file hashes, installed frozen dependencies, built the optimized shell and passed loopback health plus hydrated sign-in/logo checks without Git or ancestor project dependencies. An earlier 185fbd9/c781d11 copy also passed all 15 typechecks and offline handoff generation/QA. Preserve the original archive: Next.js changes next-env.d.ts during builds, so a built copy is not the immutable source package. Verify the final transfer archive's own manifest. Full Git import is preferred for historical provenance tests. Recipient hosting, fresh backend, Auth, Storage, secrets, protected pipeline and restore rehearsal remain open.",
       "owner": "Engineering and receiving infrastructure lead",
       "evidence": "Independent handoff review and technical portability section",
       "evidenceUrl": null,
