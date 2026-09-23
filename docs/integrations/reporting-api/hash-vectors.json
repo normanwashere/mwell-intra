@@ -1,0 +1,148 @@
+{
+  "hash_algorithm": "sha256-jcs-v1",
+  "generator": "canonicalize@5.1.0 + node:crypto SHA-256",
+  "records": [
+    {
+      "name": "null",
+      "input": {
+        "value": null
+      },
+      "canonical": "{\"value\":null}",
+      "record_hash": "1c197daef20de3f47eec5e2f735ec6669869d3180cc29f35be4788511e0af0f8"
+    },
+    {
+      "name": "absent",
+      "input": {},
+      "canonical": "{}",
+      "record_hash": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+    },
+    {
+      "name": "decimal-scale-2",
+      "input": {
+        "amount": "12.50",
+        "currency": "PHP"
+      },
+      "canonical": "{\"amount\":\"12.50\",\"currency\":\"PHP\"}",
+      "record_hash": "0e07290722b0aeefb4aba7d6287eb223e693fcf5f01fdfdcea23e7489fb34970"
+    },
+    {
+      "name": "decimal-scale-1",
+      "input": {
+        "amount": "12.5",
+        "currency": "PHP"
+      },
+      "canonical": "{\"amount\":\"12.5\",\"currency\":\"PHP\"}",
+      "record_hash": "9f239bcabd7845137b03dec4716bb517bfcb6b5406d540c79cfb0ed02099dbde"
+    },
+    {
+      "name": "large-decimal",
+      "input": {
+        "amount": "12345678901234567890.01"
+      },
+      "canonical": "{\"amount\":\"12345678901234567890.01\"}",
+      "record_hash": "3f9554b0bc06dca96eaa33e59ba7669023bcb0936eee6e57bd76f6963f999be1"
+    },
+    {
+      "name": "unicode-composed",
+      "input": {
+        "value": "é"
+      },
+      "canonical": "{\"value\":\"é\"}",
+      "record_hash": "69e46f3f0688000ab7eeb9e40e6a516a254268cd644a24f4f69cf7ad063cf479"
+    },
+    {
+      "name": "unicode-decomposed",
+      "input": {
+        "value": "é"
+      },
+      "canonical": "{\"value\":\"é\"}",
+      "record_hash": "1b986c631da83257beca64c93ff3e5174908d558af7bb9dfb36b25a6198f7c38"
+    },
+    {
+      "name": "unicode-key-order",
+      "input": {
+        "": 1,
+        "𐀀": 2
+      },
+      "canonical": "{\"𐀀\":2,\"\":1}",
+      "record_hash": "9d4cdc71dda603c42f9b21d88d0c2ffc31a76cd1bd461d7359406cf169845f1e"
+    },
+    {
+      "name": "ordered-array",
+      "input": {
+        "steps": [
+          "receive",
+          "inspect",
+          "store"
+        ]
+      },
+      "canonical": "{\"steps\":[\"receive\",\"inspect\",\"store\"]}",
+      "record_hash": "8c9b9bcaf9477cad589fec2a464c4633940a01b8cf2a3aeae1579d01f4a066c5"
+    },
+    {
+      "name": "reordered-array",
+      "input": {
+        "steps": [
+          "inspect",
+          "receive",
+          "store"
+        ]
+      },
+      "canonical": "{\"steps\":[\"inspect\",\"receive\",\"store\"]}",
+      "record_hash": "c84dee83ac4f31f6ec99977e40ec7cb3b286d7d764ba034d5a9b63b4c331eaba"
+    },
+    {
+      "name": "record-envelope",
+      "input": {
+        "record_id": "product-1",
+        "dataset": "warehouse.products",
+        "source_system": "intra",
+        "source_id": "product-1",
+        "source_updated_at": null,
+        "data_quality_flags": [],
+        "quantity": "1.00"
+      },
+      "canonical": "{\"data_quality_flags\":[],\"dataset\":\"warehouse.products\",\"quantity\":\"1.00\",\"record_id\":\"product-1\",\"source_id\":\"product-1\",\"source_system\":\"intra\",\"source_updated_at\":null}",
+      "record_hash": "91ca21222a78832219e31c486d620d8cecfc3f4bc57ded048d03de62524b17e7"
+    },
+    {
+      "name": "quality-flag",
+      "input": {
+        "record_id": "product-1",
+        "dataset": "warehouse.products",
+        "source_system": "intra",
+        "source_id": "product-1",
+        "source_updated_at": null,
+        "data_quality_flags": [
+          "missing_link"
+        ],
+        "quantity": "1.00"
+      },
+      "canonical": "{\"data_quality_flags\":[\"missing_link\"],\"dataset\":\"warehouse.products\",\"quantity\":\"1.00\",\"record_id\":\"product-1\",\"source_id\":\"product-1\",\"source_system\":\"intra\",\"source_updated_at\":null}",
+      "record_hash": "adf1ed7b0c49ee0dcae7977f23927e65e62ddba75bbd4b25a7d96e544510059b"
+    }
+  ],
+  "datasets": [
+    {
+      "records": [],
+      "record_count": 0,
+      "canonical_lines": "",
+      "checksum": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "records": [
+        {
+          "record_id": "𐀀",
+          "record_hash": "1c197daef20de3f47eec5e2f735ec6669869d3180cc29f35be4788511e0af0f8"
+        },
+        {
+          "record_id": "",
+          "record_hash": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+        }
+      ],
+      "record_count": 2,
+      "canonical_lines": "[\"\",\"44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a\"]\n[\"𐀀\",\"1c197daef20de3f47eec5e2f735ec6669869d3180cc29f35be4788511e0af0f8\"]\n",
+      "checksum": "b3a318cea29449527adb240f403584d9c328e0db2ae1dbf558d21a7ba449c974"
+    }
+  ]
+}

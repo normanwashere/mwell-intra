@@ -10,7 +10,7 @@
 
 **Spec:** [Technical specification](../specs/2026-09-20-reporting-api-design.md).
 
-**Status:** Revision 2 after security and developer-experience review, September 20, 2026. No API implementation, credential provisioning, migration or deployment has been performed. Read the security review and data-team quickstart linked from the spec before execution.
+**Status:** Revision 2 design with a September 23 partial engineering update. Inert security libraries and local negative tests are implemented on `codex/reporting-security-foundation`; see [foundation progress](../../integrations/reporting-api/FOUNDATION-PROGRESS.md). No API endpoints, source projections, credential provisioning, migrations, connector or deployment have been delivered. The task checklists below remain incomplete and must not be marked passed from library tests.
 
 ## Global Constraints
 
@@ -45,11 +45,13 @@ All code paths below are relative to the implementation monorepo. New paths are 
 | 4 | Backend + infra | 2, 3 | Consistent generation capture with hosting proof |
 | 5 | Backend | 4 | Diff, cursors, manifests and retention correctness |
 | 6 | API/backend | 2, 5 | Documented authenticated endpoints |
-| 7 | Data integration | 6 | Runnable reference consumer with transactional staging |
+| 7 | Data integration | 1 for offline contracts; 6 for HTTP integration | Runnable reference consumer with transactional staging |
 | 8 | QA + security + infra | 3-7 | Performance, security and regression evidence |
 | 9 | Release + data-team owner | 8 | UAT onboarding, docs and controlled release |
 
 Independent source mapping/projection work can be split between Warehouse and Procurement. One owner maintains the contract and capture protocol. Run a separate security/correctness review before release; multiple agents must not edit the same migration or credential code simultaneously.
+
+The first foundation implements only the registry, strict request contracts, JSON/hash utilities, a provider-agnostic verifier/current-grant interface and a GET-only safe transport helper. Source maps, field dictionaries, public manifests, rate limits, authoritative persistence, application routes and connector state are not implied by those files existing.
 
 ## Task 1: Contract and Source Mapping
 
