@@ -245,7 +245,7 @@ const clientScript = `
  document.querySelector('#print').addEventListener('click',()=>window.print());applySearch();if(location.hash)revealHash();
 })();`;
 const titles = { index: 'mWell Intra Handoffs', data: 'Data Team Handoff', technical: 'Technical Team Handoff', testers: 'Tester Handoff' };
-const subtitles = { index: 'Data, engineering and controlled UAT coordination', data: 'Reporting API plan and the decisions needed to build it', technical: 'Setup, deployment, support and release checks', testers: 'Role-based sessions, saved-result checks and cross-team handoffs' };
+const subtitles = { index: 'Data, engineering and controlled UAT coordination', data: 'Reporting foundation, draft data contract and connection preparation', technical: 'Setup, deployment, support and release checks', testers: 'Role-based sessions, saved-result checks and cross-team handoffs' };
 function page(key, parts) {
   const all = [...parts];
   all.splice(1, 0, { title: 'Release Status', id: 'release-status', html: statusHtml() });

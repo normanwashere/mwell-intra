@@ -67,7 +67,7 @@ Keeping managed Supabase is different from self-hosting it. The current CSP and 
 
 ## Database Upgrade Versus Fresh Install
 
-**Do not run a blind migration push.** UAT's historical migration versions do not all match the repository filenames. Some changes were recorded under different historical IDs. This release used a separate copy of UAT's recorded history, then dry-ran and applied only the two reviewed September 22 migrations. It did not rewrite historical migration records or run old seeds.
+**Do not run a blind migration push.** UAT's historical migration versions do not all match the repository filenames. Some changes were recorded under different historical IDs. The September 22 release reconciled UAT history and applied only its two reviewed migrations. The September 23 reporting follow-up separately installed the exact reviewed private-authority SQL. Neither release rewrote historical migration records or ran old seeds.
 
 | Existing UAT upgrade | Fresh receiving environment |
 | --- | --- |
@@ -81,11 +81,19 @@ Keeping managed Supabase is different from self-hosting it. The current CSP and 
 
 The two release migrations are `20260922111953_procurement_doa_tier_guard.sql` and `20260922123940_procurement_final_approval_doa_authority.sql`. They depend on the existing effective Procurement/core/learning schema. They are not a bootstrap script.
 
+The additional private-authority source is `20260923025605_reporting_private_authority_foundation.sql`.
+UAT's managed migration service recorded it as `20260923032017_reporting_private_authority_foundation`.
+The SQL SHA-256 is `8bbc47627fbfb4dcd2f97ce0f3efdfbd73ab066d6835bf12f4ffc158378b6d98`.
+Preserve this explicit mapping; do not replay the source simply because its filename timestamp differs.
+The four tables are empty, three roles are NOLOGIN and no app account has schema access. The bundled
+authority ledger includes prerequisites, ACL checks and the remaining PUBLIC-RPC isolation limitation.
+Do not grant a reporting runtime login or expose this schema through PostgREST during transfer.
+
 Database migrations alone do not transfer Auth service configuration, secret keys, object bytes, Storage policies outside the reviewed baseline, Edge Function deployments, redirect allowlists or independently approved learning content. The CI database bootstrap excludes some managed services and is not evidence of a complete fresh production install. **Recipient fresh-backend readiness remains open until the full rehearsal passes.**
 
 ## CI and Release Controls on Another Host
 
-Do not assume GitHub Actions files execute in Bitbucket. The receiving team must port the actual commands and evidence checks, not just the job names. Preserve frozen dependency installation, vulnerability scanning, lint/type checks, unit tests, SQL/real-PostgreSQL authorization tests, build, exact-release health check, six route widths, two transaction widths, independent cleanup and the final evidence gate. Keep SMTP explicitly excluded unless separately commissioned.
+Do not assume GitHub Actions files execute in Bitbucket. The receiving team must port the actual commands and evidence checks, not just the job names. Preserve frozen dependency installation, both production and all-dependency vulnerability gates, lint/type checks, unit tests, hash vectors, SQL/real-PostgreSQL authorization tests, build, exact-release health check, six route widths, two transaction widths, independent cleanup and the final evidence gate. Run the private-authority PostgreSQL gate sequentially after the existing DOA gate in the disposable marked PG17 service. Keep SMTP explicitly excluded unless separately commissioned.
 
 The existing `deploy-vercel.yml` at the application baseline automatically deploys on a push to `main` and does not wait for separate UAT certification. **Do not enable or transplant this legacy production path as an approved release process.** Keep automatic production deployment disabled until the recipient has configured protected approvals, explicit target project, reviewed migration readiness and successful certification for the exact artifact. The current task releases UAT only, not production.
 

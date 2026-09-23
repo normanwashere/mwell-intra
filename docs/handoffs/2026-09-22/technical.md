@@ -11,7 +11,7 @@
 | Live commit and health | Exact deployment ID, observed commit, backend and check time appear in Release Status. Do not reuse an older health observation for a new release. |
 | UAT Supabase project | `kkoitlvydytdhlpxhuah` |
 | Certification tracking | CI208 passed all 12 jobs on baseline 9823059. The newer release needs its own CI result, recorded in Release Status; the earlier pass does not certify changed code. |
-| Release ownership | Engineering deployed the reviewed source, installed two scoped UAT migrations and ran the targeted live DOA approval check. Receiving-team acceptance remains separate. |
+| Release ownership | Engineering deployed the reviewed source, retained the two September 22 DOA fixes, and installed the empty September 23 reporting-authority schema on UAT only. Receiving-team acceptance remains separate. |
 | Reporting API | Inactive security foundation and draft source mapping; no endpoint or connector in the running architecture below |
 | SMTP | Explicitly deferred; no change or delivery-certification claim |
 
@@ -101,7 +101,35 @@ Core boundaries to preserve:
 - Private files require current authorized access. Durable registration IDs are not expiring preview URLs.
 - Reporting grants will be read-only and separate from human sessions; no generic direct database access for dashboard consumers.
 
-## What Passed and What Did Not
+## Current Reporting Release
+
+The exact live application, deployment, CI run and observation time are recorded in Release Status.
+The reporting follow-up includes the strict validation libraries, 30-dataset draft dictionary and empty
+private authority schema. It does not add a connectable API or change business workflows.
+
+- Local evidence: 4,316 passing workspace tests across the full run and complete corrected package reruns;
+  one unchanged opt-in browser skip. All 15 typechecks and lint tasks passed, with six pre-existing warnings.
+- Native authority proof: 17/17 real PostgreSQL checks, repeated after the existing 16/16 DOA suite;
+  scoped cleanup passed. Independent AI review found no P0-P2 issue in this inactive slice.
+- UAT install: four empty authority tables, no app-role access and unchanged operational function,
+  relation and policy metadata. No client, credential or reporting grant was created.
+- Dependency follow-up: no known advisories in full/production registry scans. CI209 exposed a missing
+  direct Node type dependency in UI tests; the corrected declaration, 61 UI tests and five release guards
+  passed. CI209 did not run browser journeys and is not a certificate. The successor's result is in Release Status.
+- Read-only live screens on `185fbd9`: Marketing requests and its receipt dialog passed at 1440/390,
+  Operations queue passed at 1440, and targeted current-control probes passed for Admin Inbox at
+  1440/390 and Operations mobile filters at 390. No business record was submitted or notification marked
+  read. The old September 11 smoke first failed three cases because it expected the former Notifications
+  name and an always-visible mobile filter; those failures remain in its original report. The current-control
+  retest is separate evidence, not a claim that the old script passed or that transactions were certified.
+
+Detailed ledgers are bundled with the Data pack. These scoped results are not a penetration test,
+maximum-capacity test, real participant pilot or completed recipient integration.
+
+## Previous App Baseline
+
+The following CI208 and September 22 records are retained as dated evidence for `9823059`, not as
+certification of the newer reporting release. Use Release Status for its exact-build outcome.
 
 | Evidence | Result | Limit |
 | --- | --- | --- |
@@ -114,7 +142,7 @@ Core boundaries to preserve:
 
 Do not add overlapping test counts as unique coverage. Do not relabel earlier screenshots with the current commit. A matrix job skipped by an upstream failure is not a successful test of that workflow.
 
-## Release Verification
+## September 22 Evidence
 
 - Application commit: `9823059bbe08fd1949105a5901683188e5716115`. UAT deployment: `dpl_FTMPTes5Uj8v3sEcDc3uyz3vaPSy`. Runtime sources match 9989a0d; the successor corrects audit fixtures and contracts, not business permissions.
 - Installed migrations: `20260922111953_procurement_doa_tier_guard.sql` and `20260922123940_procurement_final_approval_doa_authority.sql`. No blind migration replay; original public governed wrapper and prior decisions are preserved.
@@ -135,8 +163,8 @@ Earlier candidate checks and failed runs remain retained, not relabelled as new-
 
 | ID | Priority / accountable role | Specific next action | Closure evidence |
 | --- | --- | --- | --- |
-| T01 | Closed / Engineering + QA | Exact deployed application 9823059 and CI208 outcome recorded. | Canonical health at 17:31:24Z; all 12 job conclusions and immutable bundle digest in Release Status |
-| T02 | Closed / QA lead | Full automated certification completed after the fixture repair. | Six route widths; 48/48 workflows per transaction width; both independent cleanups; complete bundle |
+| T01 | Release verification / Engineering + QA | Verify the current application and deployment recorded in Release Status. Prior exact-build health is not transferable. | Canonical health must match the released SHA and UAT backend |
+| T02 | Current-build CI / QA lead | Inspect all jobs of the current run in Release Status; CI208 remains historical evidence. | Six route widths; both transaction widths; both independent cleanups; complete bundle |
 | T03 | Journey gap / Warehouse + Events + Finance | Revalidate date-valid event fixtures; then execute procurement, receipt, independent Quality, putaway, pick/pack, separate release, acknowledgment, seller outcomes, return/recovery and Finance readback. | Same source IDs/serials across all actors; actual movements and balances; retained cleanup disposition |
 | T04 | Closed / Legal + QA | Deployed signature-readiness fix passed CI208 vendor submission and Legal handoff at 1440 and 390. | Both transaction reports: vendor application legal prerequisite and legal submitted application handoff are successful; email acceptance excluded |
 | T05 | Closed / Legal Engineering | Both CI208 scoped and independent cleanup receipts report complete. Earlier CI205 draft remains historical evidence, not an unresolved runtime failure. | Runs QA-20260922-0000519B and QA-20260922-0000519C; independent cleanup jobs 106855823269 and 106855823275 |
@@ -190,7 +218,7 @@ Before support takes ownership, name the release manager, app engineer, DB/Stora
 | Repository, CI, Vercel and Supabase access transferred by approved channels | Receiving team's confirmation needed |
 | Clean local setup and tests reproduced | Not performed by receiving team in this handoff |
 | Exact release and migration inventory recorded | Reviewed source pinned; live commit and installed migration inventory still require recipient reconciliation |
-| Automated CI complete | CI208 passed all 12 jobs on 9823059 |
+| Automated CI complete | Use Release Status for the current-build result; CI208 is the prior baseline |
 | Separate high-risk seller journey complete | Open; final approval passed but downstream stock-to-Finance proof remains |
 | Named support owners, alert destinations and escalation roster | To assign |
 | Database/Storage restore drill, retention, RPO/RTO | Evidence required |

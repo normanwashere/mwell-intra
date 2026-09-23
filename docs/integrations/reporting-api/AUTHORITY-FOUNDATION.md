@@ -186,10 +186,11 @@ Required shared CI environment:
 ```text
 CI=true
 SEP22_DOA_EPHEMERAL_CI=1
-SEP22_DOA_CI_DATABASE_URL=postgresql://postgres:<disposable-password>@127.0.0.1:<port>/postgres
+SEP22_DOA_CI_DATABASE_URL=<isolated-service-connection-from-the-CI-secret-context>
 POSTGRES_INITDB_ARGS=--set=cluster_name=sep22_doa_ci
 ```
 
+Use the disposable service password and mapped port, never a Supabase or operational database connection.
 The guard requires numeric loopback, `/postgres`, user `postgres`, PG17 and the marker. It rejects URL query
 overrides, other databases, custom maintenance schemas/objects, unexpected roles and custom memberships.
 It allows only validated NOLOGIN `anon`, `authenticated`, `service_role` left by the prior harness, plus standard
@@ -270,6 +271,8 @@ Post-install read-only verification confirmed:
   their SET and INHERIT options are false. The managed administrator remains a trusted operator.
 - `anon`, `authenticated`, `authenticator` and `service_role` have no schema USAGE. No application
   role received authority membership. PostgREST's exposed-schema list excludes `reporting_authority`.
+  A live anonymous read probe at 03:46:50 UTC returned HTTP 406 / `PGRST106` for that schema, before
+  data access. This is one exposure check, not the future runtime-identity SQL/Storage test matrix.
 - All four tables are RLS-enabled and owned by `reporting_authority_owner`, with owner-only table ACLs.
   The reader can execute only `read_current_grant`; the admin has only the five documented admin functions.
   Internal helpers have owner-only EXECUTE. All functions use `pg_catalog, pg_temp` as their fixed search path.
