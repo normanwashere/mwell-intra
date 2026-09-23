@@ -1238,7 +1238,7 @@ test("capture provenance rejects future, stale, unreachable, and jointly-mutated
 });
 
 test("capture helper cannot certify headings, empty states, ignored frames, or asserted constants", () => {
-  const source = readFileSync(path.join(root, "scripts/qa/capture-handbook-stage-evidence.mjs"), "utf8");
+  const source = readFileSync(path.join(root, "scripts/qa/capture-handbook-stage-evidence.mjs"), "utf8").replace(/\r\n?/g, "\n");
   assert.doesNotMatch(source, /fallback\s*:/);
   assert.doesNotMatch(source, /CERTIFIED_SOURCE_FRAMES|renderCertifiedSourceFrame|\.codex-tmp/);
   assert.doesNotMatch(source, /hostMatched:\s*true|routeMatched:\s*true|roleMatched:\s*true|targetVisible:\s*true/);

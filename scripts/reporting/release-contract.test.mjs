@@ -62,3 +62,35 @@ test('shared UI Node-based tests declare their own types for a clean checkout', 
   assert.equal(ui.devDependencies['@types/node'], core.devDependencies['@types/node']);
   assert(ui.devDependencies['@types/node'], 'UI tests must not borrow Node types from an ancestor checkout');
 });
+
+function assertEarlyDocumentationGate(document) {
+  const steps = document.jobs.prepare.steps;
+  const matches = steps.filter(step => step.name === 'Verify release documentation is synchronized');
+  assert.equal(matches.length, 1);
+  const [gate] = matches;
+  assert.equal(gate.run.trim(), 'node scripts/qa/verify-release-documentation.mjs --manifest test-results/documentation-sync-source.json\npnpm verify:app-documentation-html');
+  assert.equal(gate.if, undefined);
+  assert.equal(gate['continue-on-error'], undefined);
+  assert(steps.indexOf(gate) > steps.findIndex(step => step.name === 'Install locked dependencies'));
+  for (const name of ['Lint all workspaces', 'Run unit and contract tests', 'Build all workspaces', 'Reconcile guarded UAT personas']) {
+    assert(steps.indexOf(gate) < steps.findIndex(step => step.name === name), `Documentation must be checked before ${name}`);
+  }
+}
+
+test('documentation drift fails before long tests, builds or live mutations', () => {
+  assertEarlyDocumentationGate(workflow());
+});
+
+test('documentation gate cannot be skipped, weakened, removed or delayed', () => {
+  for (const mutate of [
+    steps => steps.filter(step => step.name !== 'Verify release documentation is synchronized'),
+    steps => { steps.find(step => step.name === 'Verify release documentation is synchronized').if = 'false'; return steps; },
+    steps => { steps.find(step => step.name === 'Verify release documentation is synchronized')['continue-on-error'] = true; return steps; },
+    steps => { steps.find(step => step.name === 'Verify release documentation is synchronized').run = 'echo passed'; return steps; },
+    steps => [...steps.filter(step => step.name !== 'Verify release documentation is synchronized'), steps.find(step => step.name === 'Verify release documentation is synchronized')],
+  ]) {
+    const document = workflow();
+    document.jobs.prepare.steps = mutate(document.jobs.prepare.steps);
+    assert.throws(() => assertEarlyDocumentationGate(document));
+  }
+});

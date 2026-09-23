@@ -27,12 +27,14 @@ The repository's `.node-version` and deployment workflow now also select Node 24
 pnpm install --frozen-lockfile
 pnpm lint
 pnpm typecheck
-pnpm test
+pnpm exec turbo run test --concurrency=1 -- --maxWorkers=2
 pnpm build
 pnpm --filter @intra/shell start --hostname 0.0.0.0 --port 3000
 ```
 
 The application needs a Node server, not a static HTML host. Port 3000 is an example behind the receiving team's HTTPS reverse proxy. The default `next start` deployment needs the complete workspace and installed production/runtime dependencies; no Docker image or standalone-output bundle is certified in this delivery. Multi-instance cache coordination, proxy buffering, limits, health checks and process restart policies must be reviewed for the chosen host. Browser camera use requires HTTPS outside localhost.
+
+The test command above matches the current CI's bounded workspace/worker concurrency. It runs the same tests without competing nested worker pools; it does not skip failures or alter assertions. Full certification also includes the separate SQL, browser, cleanup and evidence commands in the reviewed workflow.
 
 Build runners need approved registry access and, with the current `next/font/google` configuration, access to Google's font download endpoints. Restricted-network builds need an independently reviewed font-vendoring change; do not silently replace fonts or bypass TLS checks. Provide dependency/license inventories and third-party notices with the release. mWell must confirm recipient rights for branding and other supplied assets; source possession alone is not a license determination.
 

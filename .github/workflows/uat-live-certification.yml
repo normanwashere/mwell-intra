@@ -85,6 +85,10 @@ jobs:
         run: |
           node --test scripts/reporting/release-contract.test.mjs
           node scripts/reporting/generate-hash-vectors.mjs
+      - name: Verify release documentation is synchronized
+        run: |
+          node scripts/qa/verify-release-documentation.mjs --manifest test-results/documentation-sync-source.json
+          pnpm verify:app-documentation-html
       - name: Verify deployed UAT schema and runtime authority convergence
         run: pnpm verify:security-db-launch-blockers
       - name: Lint all workspaces
@@ -161,10 +165,6 @@ jobs:
         run: pnpm test:intra-live-contract
       - name: Verify evidence upload and cleanup contracts
         run: node --test scripts/qa/payment-audit-evidence.test.mjs scripts/qa/payment-harness.integration.test.mjs scripts/qa/payment-storage-cleanup.test.mjs scripts/qa/payment-run-cleanup.test.mjs scripts/qa/payment-fixture.lifecycle.test.mjs scripts/qa/approval-group-cleanup.test.mjs scripts/qa/vendor-application-fixture.test.mjs scripts/qa/vendor-application-cleanup.pglite.test.mjs
-      - name: Verify release documentation is synchronized
-        run: |
-          node scripts/qa/verify-release-documentation.mjs --manifest test-results/documentation-sync-source.json
-          pnpm verify:app-documentation-html
       - name: Verify CI resilience contracts
         run: node --test scripts/qa/uat-ci-resilience.test.mjs
       - name: Verify UAT persona provisioner contract

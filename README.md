@@ -53,7 +53,7 @@ response is availability evidence, not workflow, email or security certification
 ```sh
 pnpm lint
 pnpm typecheck
-pnpm test
+pnpm exec turbo run test --concurrency=1 -- --maxWorkers=2
 pnpm build
 ```
 

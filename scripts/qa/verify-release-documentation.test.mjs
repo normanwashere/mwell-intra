@@ -60,8 +60,8 @@ test("accepts operational releases with the complete documentation set", () => {
   assert.equal(result.ready, true);
 });
 
-test("derives the certified legacy-route count and rejects any declared count drift", () => {
-  assert.equal(LEGACY_ROUTES.length, 483);
+test("derives the current legacy-route count and rejects any declared count drift", () => {
+  assert.equal(LEGACY_ROUTES.length, 503);
   const documents = Object.fromEntries(
     LEGACY_ROUTE_COUNT_DOCUMENTS.map(({ file }) => [
       file,
@@ -72,6 +72,17 @@ test("derives the certified legacy-route count and rejects any declared count dr
   assert.equal(result.expectedCount, LEGACY_ROUTES.length);
   assert.equal(result.ready, true, result.failures.join("\n"));
   assert.deepEqual(result.failures, []);
+});
+
+test("retains all five reporting release source links without implying a connectable API", () => {
+  const article = "doc-releases-2026-09-23-reporting-foundation-md";
+  for (const heading of [null, "reporting-foundation-update", "what-changed", "what-testers-need-to-know", "evidence-and-limits"]) {
+    const routes = LEGACY_ROUTES.filter(route => route.legacyArticleId === article && route.legacyHeadingId === (heading ? `${article}-${heading}` : null));
+    assert.equal(routes.length, 1);
+    assert.equal(routes[0].guideId, "source-references");
+  }
+  const note = readFileSync(path.join(root, "docs/releases/2026-09-23-REPORTING-FOUNDATION.md"), "utf8");
+  assert.match(note, /All 30 dataset IDs remain unavailable/);
 });
 
 test("retains the eight return and Quality display reference routes without screenshot credit", () => {

@@ -116,12 +116,24 @@ private authority schema. It does not add a connectable API or change business w
 - Dependency follow-up: no known advisories in full/production registry scans. CI209 exposed a missing
   direct Node type dependency in UI tests; the corrected declaration, 61 UI tests and five release guards
   passed. CI209 did not run browser journeys and is not a certificate. The successor's result is in Release Status.
-- Read-only live screens on `185fbd9`: Marketing requests and its receipt dialog passed at 1440/390,
-  Operations queue passed at 1440, and targeted current-control probes passed for Admin Inbox at
-  1440/390 and Operations mobile filters at 390. No business record was submitted or notification marked
-  read. The old September 11 smoke first failed three cases because it expected the former Notifications
-  name and an always-visible mobile filter; those failures remain in its original report. The current-control
-  retest is separate evidence, not a claim that the old script passed or that transactions were certified.
+- CI210 passed application tests, build, CodeQL and database regressions, then stopped at the strict
+  handbook gate: the new release note was not registered. Added its source entry and navigation, then
+  regenerated the handbook. All 61 focused handbook/source-transfer/release checks passed. Semantic
+  test readers now normalize CRLF, while raw archive byte checks remain strict. Skipped CI210 journeys
+  are not passes; use Release Status for the successor's result.
+- CI211 exposed stale handbook inventory counts in three maintained documents (498 versus 503 routes).
+  Updated the current counts to 503 routes and 47 sources without relabeling the historical certification,
+  regenerated the handbook and passed both exact CI documentation commands locally. CI211 is failed
+  historical evidence, not a browser-journey certificate.
+- The maintained six-case live smoke passed on `22d6b98`: Marketing requests/receipt dialog,
+  Operations fulfillment/filters and Admin Inbox at 1440 and 390 pixels. No business submissions,
+  notification marking, page errors, server errors or horizontal overflow were observed. The test now
+  uses Inbox and expands mobile Filters before selecting Status. The earlier stale-selector failures
+  remain in their original report; no application behavior or assertion was weakened.
+- A source-only copy of application `185fbd9` / documentation `c781d11`, outside the original dependency
+  tree, verified all 2,309 files, installed frozen dependencies, passed all 15 typechecks and regenerated/
+  checked the handoff without Git. Its dated archive is preserved separately. Verify the final transfer
+  package's own manifest; this is not a receiving-team fresh-backend or production acceptance test.
 
 Detailed ledgers are bundled with the Data pack. These scoped results are not a penetration test,
 maximum-capacity test, real participant pilot or completed recipient integration.
