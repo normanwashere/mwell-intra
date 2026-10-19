@@ -61,7 +61,7 @@ test("accepts operational releases with the complete documentation set", () => {
 });
 
 test("derives the current legacy-route count and rejects any declared count drift", () => {
-  assert.equal(LEGACY_ROUTES.length, 505);
+  assert.equal(LEGACY_ROUTES.length, 511);
   const documents = Object.fromEntries(
     LEGACY_ROUTE_COUNT_DOCUMENTS.map(({ file }) => [
       file,
@@ -83,6 +83,20 @@ test("retains all five reporting release source links without implying a connect
   }
   const note = readFileSync(path.join(root, "docs/releases/2026-09-23-REPORTING-FOUNDATION.md"), "utf8");
   assert.match(note, /All 30 dataset IDs remain unavailable/);
+});
+
+test("retains the Warehouse transition release routes separately from historical certification", () => {
+  const article = "doc-releases-2026-10-20-warehouse-transition-md";
+  for (const heading of [null, "warehouse-transition-release-record", "receiving-emailed-pos", "catalogue-and-opening-stock", "verification", "limits-and-follow-up"]) {
+    const routes = LEGACY_ROUTES.filter(route => route.legacyArticleId === article && route.legacyHeadingId === (heading ? `${article}-${heading}` : null));
+    assert.equal(routes.length, 1);
+    assert.equal(routes[0].guideId, "source-references");
+  }
+  const note = readFileSync(path.join(root, "docs/releases/2026-10-20-WAREHOUSE-TRANSITION.md"), "utf8");
+  assert.match(note, /not a new all-app CI certificate/);
+  const manual = readFileSync(path.join(root, "docs/manual/MWELL_INTRA_USER_MANUAL.md"), "utf8");
+  assert.match(manual, /\[Warehouse transition release record\]\(\.\.\/releases\/2026-10-20-WAREHOUSE-TRANSITION\.md\)/);
+  assert.match(manual, /This historical result does not certify later releases/);
 });
 
 test("retains both external receiving transition headings without inherited certification", () => {

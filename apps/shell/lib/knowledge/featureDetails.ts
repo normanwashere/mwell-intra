@@ -1211,7 +1211,7 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
         {
           ...control(
             "Open Quality",
-            "Opens /warehouse/quality for the existing independent inspection workflow. Review Quality on a posted shipment opens that receipt's source directly; Open Quality in the footer keeps the general queue available.",
+            "Opens /warehouse/quality for the existing independent inspection workflow. Review Quality on a posted shipment opens that receipt's source directly, showing matching Pending, Holds or Completed records and shortcuts to its other recorded states. A receipt link shows all matching lines, not a preselected inspection. Open Quality in the footer keeps the general queue available.",
             "Inspection needs current inspect_quality permission, required training and an inspector different from the recorded receiver. Multiple roles do not waive independence; pending inspection cannot be bypassed by direct hold release.",
             "Viewing the queue changes nothing. An accepted independent inspection releases the provisional hold; any continuing hold prevents normal putaway.",
           ),

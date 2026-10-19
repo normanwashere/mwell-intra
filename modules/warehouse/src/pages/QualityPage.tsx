@@ -99,6 +99,19 @@ export function QualityPage() {
   const pending = projection.pending;
   const queueError = loadError ?? projection.error;
   const queueBlocked = loading || Boolean(queueError);
+  const sourceMatches = useMemo(() => {
+    // Receipt links address every exact line; hold links resolve through their inspection.
+    const inspectionIds = new Set(inspections.filter(i => i.id === selectedSource || i.sourceId === selectedSource).map(i => i.id));
+    holds.filter(h => h.id === selectedSource).forEach(h => inspectionIds.add(h.inspectionId));
+    const linkedHolds = holds.filter(h => h.id === selectedSource || h.inspectionId === selectedSource || inspectionIds.has(h.inspectionId));
+    const holdIds = new Set(linkedHolds.map(h => h.id));
+    return {
+      pending: pending.filter(i => i.id === selectedSource || i.sourceId === selectedSource || inspectionIds.has(i.id)),
+      holds: linkedHolds.filter(h => h.status === 'active' && h.reason !== 'Awaiting independent quality inspection'),
+      completed: inspections.filter(i => inspectionIds.has(i.id) && i.disposition !== 'pending'),
+      vendorReturns: vendorReturns.filter(v => v.sourceReceiptId === selectedSource || v.sourceReturnId === selectedSource || holdIds.has(v.holdId)),
+    };
+  }, [selectedSource, pending, holds, inspections, vendorReturns]);
   useEffect(() => {
     if (queueError) {
       setSelectedPending(null);
@@ -110,21 +123,23 @@ export function QualityPage() {
   useEffect(() => {
     if (!selectedSource || queueBlocked || inspectionPending || openedSource.current === selectedSource) return;
     openedSource.current = selectedSource;
-    const item = pending.find(i => i.id === selectedSource);
-    if (item) { setTab('pending'); if (can(WAREHOUSE_MUTATION_CAPABILITIES.inspectQuality)) setSelectedPending(item); else setSearch(selectedSource); return; }
-    const hold = holds.find(h => h.id === selectedSource || h.inspectionId === selectedSource);
-    if (hold && hold.status === 'active' && hold.reason !== 'Awaiting independent quality inspection') {
-      setTab('holds'); setSearch(selectedSource); return;
-    }
-    const inspection = inspections.find(i => i.id === selectedSource);
-    if (inspection && inspection.disposition !== 'pending') setTab('completed');
     setSearch(selectedSource);
-  }, [selectedSource, queueBlocked, inspectionPending, pending, holds, inspections, can]);
+    setSelectedPending(null);
+    setSelectedHold(null);
+    setSelectedIds([]);
+    setBatchOpen(false);
+    const item = sourceMatches.pending.find(i => i.id === selectedSource);
+    if (item) { setTab('pending'); if (can(WAREHOUSE_MUTATION_CAPABILITIES.inspectQuality)) setSelectedPending(item); return; }
+    setTab(sourceMatches.pending.length ? 'pending'
+      : sourceMatches.holds.length || sourceMatches.vendorReturns.length ? 'holds'
+      : sourceMatches.completed.length ? 'completed' : 'pending');
+  }, [selectedSource, queueBlocked, inspectionPending, sourceMatches, can]);
 
   if (!data) return null;
   const productName = (productId: string) => data.products.find((product) => product.id === productId)?.name ?? productId;
   const matches = (...values: (string | undefined)[]) => values.join(' ').toLowerCase().includes(search.trim().toLowerCase());
-  const shownPending = pending.filter(i => matches(i.id, i.sourceId, i.serialNumber, productName(i.productId)));
+  const sourceFocused = Boolean(selectedSource && search.trim() === selectedSource);
+  const shownPending = sourceFocused ? sourceMatches.pending : pending.filter(i => matches(i.id, i.sourceId, i.serialNumber, productName(i.productId)));
   const selectedItems = pending.filter(item => selectedIds.includes(item.id));
   const selectedGroup = selectedItems[0] ? qualityBatchGroup(selectedItems[0]) : null;
   const toggleSelected = (item: PendingInspection) => setSelectedIds(ids => ids.includes(item.id)
@@ -137,11 +152,18 @@ export function QualityPage() {
   }
   const allActiveHolds = holds.filter((hold) =>
     hold.status === 'active' && hold.reason !== 'Awaiting independent quality inspection');
-  const activeHolds = allActiveHolds.filter((hold) =>
+  const activeHolds = sourceFocused ? sourceMatches.holds : allActiveHolds.filter((hold) =>
     matches(hold.id, hold.inspectionId, hold.serialNumber, hold.reason, productName(hold.productId)));
   const allCompleted = inspections.filter((inspection) => inspection.disposition !== 'pending');
-  const completed = allCompleted.filter((inspection) =>
+  const completed = sourceFocused ? sourceMatches.completed : allCompleted.filter((inspection) =>
     matches(inspection.id, inspection.sourceId, inspection.serialNumber, productName(inspection.productId)));
+  const shownVendorReturns = sourceFocused ? sourceMatches.vendorReturns : vendorReturns;
+  const sourceTabs: { value: QualityTab; label: string; count: number }[] = [
+    { value: 'pending', label: 'Pending', count: sourceMatches.pending.length },
+    { value: 'holds', label: 'Holds', count: sourceMatches.holds.length },
+    { value: 'completed', label: 'Completed', count: sourceMatches.completed.length },
+  ];
+  const sourceAvailable = sourceTabs.some(t => t.count > 0) || sourceMatches.vendorReturns.length > 0;
   const count = tab === 'pending' ? { shown: shownPending.length, total: pending.length, label: 'pending inspections' }
     : tab === 'holds' ? { shown: activeHolds.length, total: allActiveHolds.length, label: 'active holds' }
     : { shown: completed.length, total: allCompleted.length, label: 'completed inspections' };
@@ -240,9 +262,17 @@ export function QualityPage() {
       </div>}
       {selectedSource && <div className="space-y-1 rounded-lg border border-line p-3 text-sm">
         <p className="break-all">Selected source: {selectedSource}</p>
-        {!queueBlocked && !pending.some(i => i.id === selectedSource || i.sourceId === selectedSource)
-          && !holds.some(h => h.id === selectedSource || h.inspectionId === selectedSource)
-          && <p role="status">{inspections.some(i => i.id === selectedSource) ? 'This inspection is already recorded. Review its disposition below.' : 'This source is unavailable or outside your access. No different item was selected.'}</p>}
+        {!queueBlocked && <>
+          <p role="status">{sourceAvailable
+            ? `${sourceMatches.pending.length} pending inspections / ${sourceMatches.holds.length} active holds / ${sourceMatches.completed.length} completed inspections`
+            : 'This source is unavailable or outside your access. No different item was selected.'}</p>
+          <div className="flex flex-wrap gap-2">
+            {sourceTabs.filter(t => t.count > 0 && (t.value !== tab || !sourceFocused)).map(t => (
+              <button key={t.value} type="button" className="btn-ghost btn-sm min-h-11" disabled={inspectionPending}
+                onClick={() => { setSearch(selectedSource); setTab(t.value); }}>View {t.label} ({t.count})</button>
+            ))}
+          </div>
+        </>}
         <Link to={tasksReturnPath(params)} className="btn-ghost btn-sm">Back to tasks</Link>
       </div>}
 
@@ -278,7 +308,7 @@ export function QualityPage() {
           </ul>
         )
       ) : tab === 'holds' ? (
-        activeHolds.length === 0 && vendorReturns.length === 0 ? <EmptyState icon="clipboard" title="No active holds" /> : (
+        activeHolds.length === 0 && shownVendorReturns.length === 0 ? <EmptyState icon="clipboard" title="No active holds" /> : (
           <div className="space-y-4">
           {activeHolds.length > 0 && <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface" aria-label="Active holds">
             {activeHolds.map((hold) => (
@@ -292,9 +322,9 @@ export function QualityPage() {
               </li>
             ))}
           </ul>}
-          {vendorReturns.length > 0 && (
+          {shownVendorReturns.length > 0 && (
             <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface" aria-label="Vendor returns">
-              {vendorReturns.map((vendorReturn) => (
+              {shownVendorReturns.map((vendorReturn) => (
                 <li key={vendorReturn.id} className="flex min-h-16 items-center justify-between gap-3 px-4 py-3">
                   <div className="min-w-0"><p className="truncate text-sm font-semibold text-ink">{vendorReturn.reference}</p><p className="text-xs text-faint">{productName(vendorReturn.productId)} · {data.suppliers.find((supplier) => supplier.id === vendorReturn.supplierId)?.name ?? vendorReturn.supplierId}</p></div>
                   <Badge tone="brand">{vendorReturn.status === 'ready' ? 'Ready for handoff' : vendorReturn.status.replace('_', ' ')}</Badge>

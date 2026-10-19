@@ -1066,6 +1066,7 @@ function roleGuide(definition) {
 }
 
 const SOURCE_ROOT_HEADINGS = {
+  "oct20-warehouse-transition": "Warehouse Transition Release Record",
   "sept23-reporting-foundation": "Reporting Foundation Update",
   "sept22-event-seller-ci-date": "Event Seller CI Date Correction",
   "sept20-experience-remediation-candidate": "September 20 Experience Update",
@@ -1413,6 +1414,7 @@ function markdownHeadings(source) {
 }
 
 const LEGACY_TARGET_BY_SOURCE_ID = {
+  "oct20-warehouse-transition": ["system", "source-references", "source-oct20-warehouse-transition"],
   "sept23-reporting-foundation": ["system", "source-references", "source-sept23-reporting-foundation"],
   "sept22-event-seller-ci-date": ["system", "source-references", "source-sept22-event-seller-ci-date"],
   "sept20-experience-remediation-candidate": ["system", "source-references", "source-sept20-experience-remediation-candidate"],

@@ -17,6 +17,20 @@ test("embeds reviewed task training as a Roles & Training reference", () => {
   assert.ok(entry.relatedSources.includes("docs/manual/MWELL_INTRA_USER_MANUAL.md"));
 });
 
+test("classifies the Warehouse transition record as scoped release evidence", () => {
+  const source = "docs/releases/2026-10-20-WAREHOUSE-TRANSITION.md";
+  assert.ok(documentationSources().includes(source));
+  const entry = HANDBOOK_DOCUMENTS.find((document) => document.source === source);
+  assert.ok(entry);
+  assert.equal(entry.primaryTab, "release");
+  assert.equal(entry.contentType, "release-note");
+  assert.equal(entry.collapse, "reference");
+  assert.ok(entry.relatedTabs.includes("workflows"));
+  assert.ok(entry.relatedSources.includes("docs/manual/MWELL_INTRA_USER_MANUAL.md"));
+  assert.match(entry.summary, /Procurement remains available/);
+  assert.match(entry.summary, /verification limits/);
+});
+
 test("classifies every current maintained source exactly once", () => {
   const sources = documentationSources();
   const result = resolveHandbookCatalog(sources);

@@ -1,9 +1,39 @@
 import { describe, expect, it, vi } from "vitest";
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useNavigate } from 'react-router-dom';
 import { QualityPage } from "./QualityPage";
 import { makeRepo, renderWithProviders } from "@/test/renderWithProviders";
 import { InMemoryRepository } from '@/data/inMemoryRepository';
+import type { InventoryHold, QualityInspectionSummary } from '@intra/data-kit';
+
+const linkedReceipt = 'external-acbde0f1-7483-4a6a-b37a-d42b7aded9cc';
+
+async function repositoryWithLinkedInspections(pendingCount = 0) {
+  const data = await makeRepo().getData();
+  data.receipts = []; data.returns = [];
+  const repo = makeRepo(data);
+  const completed: QualityInspectionSummary[] = Array.from({ length: 75 }, (_, index) => ({
+    id: `completed-${index}`, sourceType: 'receipt',
+    sourceId: index < 3 ? linkedReceipt : `${linkedReceipt}-different`,
+    productId: 'shirt-l', quantity: 1, disposition: index === 2 ? 'damaged' : 'accepted',
+    serialNumber: `UNIT-${index}`, inspectedAt: '2026-10-19T00:00:00Z',
+    inspectedBy: 'inspector', evidenceCount: 0,
+  }));
+  const pending: QualityInspectionSummary[] = Array.from({ length: pendingCount }, (_, index) => ({
+    ...completed[0]!, id: `pending-${index}`, sourceId: 'other-pending-receipt',
+    serialNumber: `PENDING-${index}`, disposition: 'pending',
+  }));
+  const rows = [...pending, ...completed];
+  const load = vi.spyOn(repo, 'listQualityInspectionSummaries').mockImplementation(async query => {
+    const offset = Number(query.cursor ?? 0);
+    return { rows: rows.slice(offset, offset + 100), total: rows.length,
+      ...(offset + 100 < rows.length ? { nextCursor: String(offset + 100) } : {}) };
+  });
+  const save = vi.spyOn(repo, 'inspectQuality');
+  const batchSave = vi.spyOn(repo, 'inspectQualityBatch');
+  return { repo, completed, rows, load, save, batchSave, locationId: data.locations[0]!.id };
+}
 
 async function repositoryWithPendingReceipt() {
   const repo = makeRepo();
@@ -26,6 +56,121 @@ async function repositoryWithPendingReceipt() {
 }
 
 describe("QualityPage", () => {
+  it('hands a completed receipt source to all three exact inspections, not similarly named receipts', async () => {
+    const { repo, save, batchSave } = await repositoryWithLinkedInspections(608);
+    renderWithProviders(<QualityPage />, { repo, route: `/quality?source=${linkedReceipt}`, role: 'warehouse_operator' });
+    const list = await screen.findByRole('list', { name: 'Completed inspections' });
+    expect(screen.getByRole('tab', { name: 'Completed' })).toHaveAttribute('aria-selected', 'true');
+    expect(within(list).getAllByRole('listitem')).toHaveLength(3);
+    expect(within(list).getAllByText('accepted')).toHaveLength(2);
+    expect(within(list).getByText('damaged')).toBeInTheDocument();
+    expect(screen.getByText('3 of 75 completed inspections')).toBeInTheDocument();
+    expect(screen.queryByText(/unavailable or outside your access/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('tab', { name: 'Pending' }));
+    expect(screen.getByText('0 of 608 pending inspections')).toBeInTheDocument();
+    expect(screen.queryByText(/unavailable or outside your access/)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'View Completed (3)' }));
+    expect(screen.getByRole('list', { name: 'Completed inspections' })).toBeVisible();
+    expect(save).not.toHaveBeenCalled();
+    expect(batchSave).not.toHaveBeenCalled();
+  });
+
+  it('hands a receipt to its exact active holds and completed inspections without opening a mutation sheet', async () => {
+    const { repo, locationId, save, batchSave } = await repositoryWithLinkedInspections();
+    const hold: InventoryHold = { id: 'linked-hold', inspectionId: 'completed-2', productId: 'shirt-l',
+      locationId, quantity: 1, status: 'active', reason: 'Damaged watch pending review',
+      createdBy: 'inspector', createdAt: '2026-10-19T00:00:00Z' };
+    vi.spyOn(repo, 'listHolds').mockResolvedValue({ rows: [hold, { ...hold, id: 'unrelated-hold',
+      inspectionId: 'completed-3', reason: 'Different receipt hold' }] });
+    const release = vi.spyOn(repo, 'releaseHold');
+    renderWithProviders(<QualityPage />, { repo, route: `/quality?source=${linkedReceipt}`,
+      source: 'supabase', capabilities: ['inspect_quality'], role: 'warehouse_operator' });
+    const list = await screen.findByRole('list', { name: 'Active holds' });
+    expect(screen.getByRole('tab', { name: 'Holds' })).toHaveAttribute('aria-selected', 'true');
+    expect(within(list).getAllByRole('listitem')).toHaveLength(1);
+    expect(within(list).getByText('Damaged watch pending review')).toBeVisible();
+    expect(screen.getByText('1 of 2 active holds')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Review hold' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/unavailable or outside your access/)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'View Completed (3)' }));
+    expect(within(screen.getByRole('list', { name: 'Completed inspections' })).getAllByRole('listitem')).toHaveLength(3);
+    await userEvent.click(screen.getByRole('button', { name: 'View Holds (1)' }));
+    expect(screen.getByRole('list', { name: 'Active holds' })).toBeVisible();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(save).not.toHaveBeenCalled();
+    expect(batchSave).not.toHaveBeenCalled();
+    expect(release).not.toHaveBeenCalled();
+  });
+
+  it('shows every pending line for a mixed receipt source and keeps completed handover available', async () => {
+    const { repo, rows, completed, save, batchSave } = await repositoryWithLinkedInspections();
+    rows.push(...['first', 'second'].map(id => ({ ...completed[0]!, id, disposition: 'pending' as const })));
+    renderWithProviders(<QualityPage />, { repo, route: `/quality?source=${linkedReceipt}`, role: 'warehouse_operator' });
+    const list = await screen.findByRole('list', { name: 'Pending inspections' });
+    expect(within(list).getAllByRole('button', { name: 'Inspect' })).toHaveLength(2);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'View Completed (3)' }));
+    expect(within(screen.getByRole('list', { name: 'Completed inspections' })).getAllByRole('listitem')).toHaveLength(3);
+    await userEvent.click(screen.getByRole('button', { name: 'View Pending (2)' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(save).not.toHaveBeenCalled();
+    expect(batchSave).not.toHaveBeenCalled();
+  });
+
+  it('recovers the completed source after a failed queue read without claiming an access denial', async () => {
+    const { repo, load, save } = await repositoryWithLinkedInspections();
+    load.mockRejectedValueOnce(new Error('Quality read failed'));
+    renderWithProviders(<QualityPage />, { repo, route: `/quality?source=${linkedReceipt}`, role: 'warehouse_operator' });
+    expect(await screen.findByRole('alert')).toHaveTextContent('Quality read failed');
+    expect(screen.queryByText(/unavailable or outside your access/)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Retry quality queue' }));
+    const list = await screen.findByRole('list', { name: 'Completed inspections' });
+    expect(within(list).getAllByRole('listitem')).toHaveLength(3);
+    expect(screen.getByRole('tab', { name: 'Completed' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText(/unavailable or outside your access/)).not.toBeInTheDocument();
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it('clears an unsubmitted batch when navigating to another exact receipt source', async () => {
+    const { repo, rows, completed, save, batchSave } = await repositoryWithLinkedInspections();
+    rows.push(...['first', 'second'].map(id => ({ ...completed[0]!, id, disposition: 'pending' as const })));
+    rows.push({ ...completed[0]!, id: 'next-line', sourceId: 'next-receipt', disposition: 'pending' });
+    let navigate!: ReturnType<typeof useNavigate>;
+    function RoutedQuality() { navigate = useNavigate(); return <QualityPage />; }
+    renderWithProviders(<RoutedQuality />, { repo, route: `/quality?source=${linkedReceipt}`, role: 'warehouse_operator' });
+    await userEvent.click(await screen.findByRole('button', { name: 'Select group' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Review selected inspections' }));
+    expect(await screen.findByRole('dialog', { name: 'Review selected inspections' })).toBeVisible();
+    await act(async () => navigate('/quality?source=next-receipt'));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.queryByLabelText('Inspection selection')).not.toBeInTheDocument();
+    const list = screen.getByRole('list', { name: 'Pending inspections' });
+    expect(within(list).getAllByRole('button', { name: 'Inspect' })).toHaveLength(1);
+    expect(within(list).getByRole('checkbox')).not.toBeChecked();
+    await act(async () => navigate(`/quality?source=${linkedReceipt}`));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Inspection selection')).not.toBeInTheDocument();
+    expect(save).not.toHaveBeenCalled();
+    expect(batchSave).not.toHaveBeenCalled();
+  });
+
+  it.each(['nonexistent', 'access-filtered'])('does not substitute another receipt for a %s source', async kind => {
+    const { repo, rows, load, save } = await repositoryWithLinkedInspections();
+    const source = kind === 'nonexistent' ? 'missing-receipt' : linkedReceipt;
+    if (kind === 'access-filtered') load.mockResolvedValue({ rows: rows.filter(row => row.sourceId !== linkedReceipt) });
+    renderWithProviders(<QualityPage />, { repo, route: `/quality?source=${source}`,
+      source: 'supabase', capabilities: ['inspect_quality'], role: 'warehouse_operator' });
+    expect(await screen.findByText('This source is unavailable or outside your access. No different item was selected.')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^View (Pending|Holds|Completed)/ })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('tab', { name: 'Completed' }));
+    expect(screen.queryByRole('list', { name: 'Completed inspections' })).not.toBeInTheDocument();
+    expect(screen.getByText(/unavailable or outside your access/)).toBeInTheDocument();
+    expect(save).not.toHaveBeenCalled();
+  });
+
   it('keeps batch selection within one exact source and does not save while reviewing', async () => {
     const data = await makeRepo().getData();
     data.receipts = []; data.returns = [];

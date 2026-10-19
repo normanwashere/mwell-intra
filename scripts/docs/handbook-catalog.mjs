@@ -14,6 +14,20 @@ export const HANDBOOK_TABS = Object.freeze([
 
 const CATALOG = [
   {
+    source: "docs/releases/2026-10-20-WAREHOUSE-TRANSITION.md",
+    id: "oct20-warehouse-transition",
+    title: "October 20 Warehouse Transition",
+    primaryTab: "release",
+    relatedTabs: ["workflows", "roles"],
+    contentType: "release-note",
+    audience: ["operator", "trainer", "release-reviewer"],
+    summary: "Emailed PO receiving, catalogue and opening-stock transition, scoped UAT evidence and verification limits. Procurement remains available; follow-up status is tracked in this release record.",
+    keywords: ["warehouse", "emailed PO", "receiving", "Quality", "opening stock", "UAT"],
+    sortOrder: -4,
+    collapse: "reference",
+    relatedSources: ["docs/manual/MWELL_INTRA_USER_MANUAL.md"],
+  },
+  {
     source: "docs/releases/2026-09-23-REPORTING-FOUNDATION.md",
     id: "sept23-reporting-foundation",
     title: "September 23 Reporting Foundation",
