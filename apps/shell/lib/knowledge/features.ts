@@ -15,6 +15,8 @@ interface FeatureDefinition {
   exception: string;
   completionEvidence: string;
   roleIds?: string[];
+  availability?: "live" | "limited";
+  reviewedAt?: string;
 }
 
 interface FeatureRelationship {
@@ -191,6 +193,10 @@ const FEATURE_RELATIONSHIPS: Record<string, FeatureRelationship> = {
   "warehouse-receiving": {
     policyBasis: [POLICY.warehouse, POLICY.quality],
     relatedFlowIds: ["receive-to-putaway", "quality-disposition"],
+  },
+  "warehouse-external-receiving": {
+    policyBasis: [POLICY.warehouse, POLICY.quality, POLICY.resilience],
+    relatedFlowIds: ["receive-to-putaway", "quality-disposition", "exception-and-recovery"],
   },
   "warehouse-allocations": {
     policyBasis: [POLICY.event, POLICY.inventory],
@@ -535,7 +541,7 @@ const defineFeature = (definition: FeatureDefinition): KnowledgeFeature => {
     id: definition.id,
     title: definition.title,
     module: definition.module,
-    availability: "live",
+    availability: definition.availability ?? "live",
     routes: [definition.route],
     roleIds: definition.roleIds ?? rolesFor(definition.module, capabilityIds),
     capabilityIds,
@@ -551,9 +557,9 @@ const defineFeature = (definition: FeatureDefinition): KnowledgeFeature => {
     exceptions: [definition.exception],
     completionEvidence: [definition.completionEvidence],
     owner: ownerFor[definition.module],
-    reviewedAt: CURRENT_STATE_REVIEWED_FEATURE_IDS.has(definition.id)
+    reviewedAt: definition.reviewedAt ?? (CURRENT_STATE_REVIEWED_FEATURE_IDS.has(definition.id)
       ? "2026-08-11"
-      : "2026-07-12",
+      : "2026-07-12"),
   };
 };
 
@@ -996,6 +1002,26 @@ const definitions: FeatureDefinition[] = [
       "Save progress preserves unfinished scans without receiving stock. Reopen the PO to resume. A changed PO balance deselects stale draft items for review. Use uploaded delivery evidence or a secure HTTPS link; HTTP links are rejected. Standard receiving remains PO-first. A non-PO delivery or overage follows the evidenced exception route, not ordinary receiving. Duplicate serials are blocked.",
     completionEvidence:
       "Receipt number, received quantity, pending-inspection status, unavailable custody, traceability identity, destination, and Quality handoff are visible.",
+  },
+  {
+    id: "warehouse-external-receiving",
+    title: "External PO receiving",
+    module: "warehouse",
+    route: "/warehouse/external-receiving",
+    availability: "limited",
+    reviewedAt: "2026-10-19",
+    purpose:
+      "October 19 transition update: register the PO and documents emailed by Procurement, save partial shipment arrivals, then hand posted deliveries to independent Quality and normal putaway. Deployment and verification are tracked in the release record; this guidance does not establish live or certified status. This is transitional coexistence: Procurement is not removed or replaced. Existing in-app Procurement and its issued-PO receiving remain available through the separate request, sourcing, purchase approval, issuance and receiving flow. External PO evidence confirmation is not purchase approval. Access needs any one of receive_stock, inspect_quality or view_procurement; writing needs receive_stock. Required training and current scoped authority still apply; reading this guidance does not record completion or grant permission. SMTP is unchanged; no automatic email ingestion or sending is added.",
+    reads:
+      "External PO documents, supplier and product catalogue, receiving locations, custody bins, ordered and posted quantities, remaining balance and saved pending arrivals across authorized roles. Remaining equals ordered minus posted quantity; draft arrivals do not consume that balance. Load more orders retrieves further pages; search covers loaded orders only. A failed read is not an empty workspace.",
+    writes:
+      "Server commands save versioned PO records and shipment drafts. An independent Operations Lead confirms the evidence, not spending authority. Only the order creator edits unconfirmed records; confirmed orders are immutable. Only the shipment creator edits or posts their draft. Posting creates a receipt and held stock in unassigned staging, not available inventory or final putaway. The arrival bin records physical custody only. Independent Quality acceptance precedes the existing Storage putaway workflow.",
+    statuses:
+      "PO: draft, confirmed or returned for correction. Shipment: saved arrival - not available, or sent to Quality. Missing PO documents, excess quantities or unresolved product identity prevent posting; excess arrivals stay draft pending document correction. Confirmation does not receive stock, and posted does not mean Quality accepted or put away.",
+    exception:
+      "If the PO number already exists in Intra Procurement, external registration, confirmation and new posting are rejected. Use its existing receiving workflow when eligible; otherwise ask Operations Lead to review the PO. If already received through External PO and a Procurement PO is added later, Procurement receiving is blocked: ask Operations Lead to reconcile the existing receipt instead of receiving it again. PO-number checks ignore letter case and surrounding spaces. Do not change the PO number or supplier to bypass rejection. Complete missing PO number, sender, date and retained document before confirmation. Resolve catalogue or pack-conversion mismatches before recording lines; do not invent a product identity for unidentified goods. For excess, keep custody separate and ask Operations Lead for corrected documentation; a confirmed order cannot be edited. When an action outcome is uncertain, use Retry saved action with the original frozen key and payload, including after reopening in the same browser session. Retry verification only reads an acknowledged result; do not create a replacement shipment. Contact support if this environment lacks external receiving, sign in again for session errors, and retry loading after connectivity returns.",
+    completionEvidence:
+      "Read back the saved order or shipment, receipt reference and current remaining balance after each action. Retain the external source email sender/date, PO number, delivery reference, receipt reference and evidence for traceability. Future reconciliation with Procurement must not double-receive stock already posted through either flow and is not retroactive purchase approval. Compare existing receipts, quantities and serial/lot identities with Procurement before any later receiving action; stop and escalate an uncertain match. No automatic linking or reconciliation is implemented. Multiple partial shipments retain their own receiver and delivery evidence. A saved arrival is not a receipt; a posted receipt remains held until independent Quality acceptance, then requires normal putaway. Local test results and documentation do not establish release verification, training completion or proof of a real delivery.",
   },
   {
     id: "warehouse-allocations",

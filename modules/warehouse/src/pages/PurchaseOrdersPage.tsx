@@ -1138,6 +1138,10 @@ export function PurchaseOrdersPage() {
         }
       />
 
+      <Link to="/external-receiving" className="inline-flex min-h-11 items-center gap-2 text-sm text-link">
+        <Icon name="truck" className="h-4 w-4" /> Emailed POs and saved arrival drafts
+      </Link>
+
       {!canReadProcurement && (
         <p className="border-y border-line py-3 text-sm text-muted">Procurement owns requests and purchase orders. Approved orders appear in this receiving queue; contact Procurement with the PO reference for sourcing or request updates.</p>
       )}

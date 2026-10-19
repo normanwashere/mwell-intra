@@ -1,11 +1,32 @@
 import { readFileSync } from "node:fs";
 
-const migration = name => readFileSync(new URL(`../supabase/migrations/${name}`, import.meta.url), "utf8");
+const migration = name => readFileSync(new URL(`../supabase/migrations/${name}`, import.meta.url), "utf8").replace(/\r\n/g, "\n");
 export const verifierMigration = migration("20260905050907_quality_inspection_verifier_chain.sql");
+export const externalVerifierMigration = migration("20261019143020_external_po_quality_verifier_chain.sql");
 export function functionDefinition(sql, name) {
-  const start = sql.indexOf(`create or replace function ${name}(`);
+  const start = ["create or replace function", "create function"]
+    .map(prefix => sql.indexOf(`${prefix} ${name}(`)).find(index => index >= 0) ?? -1;
   if (start < 0) throw new Error(`Missing actual definition: ${name}`);
   return sql.slice(start, sql.indexOf("$$;", start) + 3);
+}
+
+export async function installExternalQualityChain(db) {
+  await db.exec("set check_function_bodies=off");
+  const sql = migration("20261019142956_warehouse_external_po_receiving.sql");
+  for (const [, name] of sql.matchAll(/^create (?:or replace )?function ([\w.]+)\(/gm)) {
+    await db.exec(functionDefinition(sql, name));
+  }
+  await db.exec("create table if not exists warehouse.inventory_holds(id uuid primary key)");
+  await db.exec(sql.match(/^create trigger guard_external_po_hold .*;$/m)[0]);
+  await db.exec(sql.slice(sql.indexOf("revoke all on function private.external_po_can_read()")));
+}
+
+export async function installLatestLaunchVerifier(db) {
+  // The vendor lookup is unrelated to Quality; preserve its outer RPC and output.
+  await db.exec(`create function private.legal_tailored_requirement_set(jsonb)
+    returns table(code text,title text) language sql as $$ select 'fixture-requirement'::text,'Fixture'::text $$`);
+  const sql = migration("20260914053733_uat_vendor_fixture_atomic_cleanup.sql");
+  await db.exec(sql.slice(0, sql.indexOf("-- No API/table grant:")));
 }
 
 // Catalog-only fixture: install actual bodies without executing business RPCs.

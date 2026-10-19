@@ -1,9 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useWarehouse } from "@/app/store";
-import { toStockState } from "@/data/repository";
-import { availableForProduct, isBelowReorder } from "@/domain/stock";
-import { groupProductsByFamily, variantLabel } from "@/domain/inventory";
+import { isBelowReorder } from "@/domain/stock";
+import { useInventoryAvailability } from "@/domain/useInventoryAvailability";
+import {
+  groupProductsByFamily,
+  INVENTORY_CATEGORIES,
+  inventoryCategory,
+  variantLabel,
+  type InventoryCategory,
+} from "@/domain/inventory";
 import {
   requiredSerializationPolicy,
   type ItemCategory,
@@ -12,12 +18,10 @@ import {
 } from "@/domain/types";
 import {
   Badge,
-  Card,
   EmptyState,
   Field,
   PageHeader,
   QuantityStepper,
-  SegmentedControl,
   Sheet,
   StaggerGrid,
   StaggerItem,
@@ -30,29 +34,29 @@ import { BarcodeLabelSheet } from "@/components/BarcodeLabelSheet";
 import { InventoryIntegrityPanel } from "@/components/InventoryIntegrityPanel";
 import { clsx } from "clsx";
 
-type Filter = "all" | ItemCategory;
+type Filter =
+  "all" | InventoryCategory | "legacy-device" | "legacy-merchandise";
 
 const INVENTORY_BATCH_SIZE = 12;
 
 export function InventoryPage() {
   const { data, createProduct, can } = useWarehouse();
+  const { totals: availableByProduct, loading: availabilityLoading, error: availabilityError, refresh: refreshAvailability } = useInventoryAvailability();
   const navigate = useNavigate();
   const toast = useToast();
   const canManageProducts = can("manage_products");
-  // Support dashboard deep-links: /inventory?filter=low|device|merchandise
+  // Preserve operational dashboard links independently of the browsing taxonomy.
   const [searchParams] = useSearchParams();
   const initialFilter = searchParams.get("filter");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>(
     initialFilter === "device" || initialFilter === "merchandise"
-      ? initialFilter
+      ? `legacy-${initialFilter}`
       : "all",
   );
   const [lowOnly, setLowOnly] = useState(initialFilter === "low");
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [visibleFamilyCount, setVisibleFamilyCount] = useState(
-    INVENTORY_BATCH_SIZE,
-  );
+  const [visibleFamilyCount, setVisibleFamilyCount] =
+    useState(INVENTORY_BATCH_SIZE);
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
   const [addOpen, setAddOpen] = useState(false);
@@ -114,14 +118,15 @@ export function InventoryPage() {
     setPromotional(false);
   };
 
-  const state = useMemo(() => (data ? toStockState(data) : null), [data]);
-
   const families = useMemo(() => {
-    if (!data || !state) return [];
+    if (!data) return [];
     const q = query.trim().toLowerCase();
-    const inScope = data.products.filter(
-      (p) => filter === "all" || p.category === filter,
-    );
+    const inScope = data.products.filter((p) => {
+      if (filter === "all") return true;
+      if (filter === "legacy-device") return p.category === "device";
+      if (filter === "legacy-merchandise") return p.category === "merchandise";
+      return inventoryCategory(p) === filter;
+    });
     return groupProductsByFamily(inScope)
       .map((fam) => {
         let shown = q
@@ -129,18 +134,18 @@ export function InventoryPage() {
               (p) =>
                 p.name.toLowerCase().includes(q) ||
                 p.sku.toLowerCase().includes(q) ||
-                (p.barcode ?? "").includes(q),
+                (p.barcode ?? "").toLowerCase().includes(q),
             )
           : fam.variants;
         if (lowOnly) {
-          shown = shown.filter((p) =>
-            isBelowReorder(p, availableForProduct(state, p.id)),
-          );
+          shown = availableByProduct ? shown.filter((p) =>
+            isBelowReorder(p, availableByProduct.get(p.id) ?? 0),
+          ) : [];
         }
         return { ...fam, isFamily: fam.variants.length > 1, shown };
       })
       .filter((fam) => fam.shown.length > 0);
-  }, [data, query, filter, lowOnly, state]);
+  }, [data, query, filter, lowOnly, availableByProduct]);
 
   const visibleFamilies = useMemo(
     () => families.slice(0, visibleFamilyCount),
@@ -177,29 +182,79 @@ export function InventoryPage() {
     return () => observer.disconnect();
   }, [families.length, hasMoreFamilies]);
 
-  if (!data || !state) return null;
-  const searching = query.trim().length > 0;
+  if (!data) return null;
 
-  const avail = (p: Product) => availableForProduct(state, p.id);
+  const avail = (p: Product) => availableByProduct ? availableByProduct.get(p.id) ?? 0 : null;
+  const isLow = (p: Product) => {
+    const available = avail(p);
+    return available !== null && isBelowReorder(p, available);
+  };
+  const unavailableLabel = availabilityLoading ? "Checking" : "Unverified";
   const skuCount = families.reduce((s, f) => s + f.shown.length, 0);
   const lowCount = families.reduce(
-    (s, f) => s + f.shown.filter((v) => isBelowReorder(v, avail(v))).length,
+    (s, f) => s + f.shown.filter(isLow).length,
     0,
   );
-  const toggle = (key: string) =>
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
+  const productRow = (product: Product) => {
+    const available = avail(product);
+    const browseCategory = inventoryCategory(product);
+    const categoryLabel = INVENTORY_CATEGORIES.find(
+      (category) => category.value === browseCategory,
+    )!.label;
+    const variant = variantLabel(product);
+    return (
+      <button
+        type="button"
+        onClick={() => navigate(`/inventory/${product.id}`)}
+        className="flex min-w-0 w-full items-center justify-between gap-2 p-3.5 text-left transition hover:bg-inset focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500 sm:gap-3"
+      >
+        <ProductThumb product={product} className="h-10 w-10 sm:h-11 sm:w-11" />
+        <div className="min-w-0 flex-1">
+          <p className="break-words font-semibold text-ink [overflow-wrap:anywhere]">
+            {product.name}
+          </p>
+          <p className="mt-1 break-words font-mono text-xs text-muted [overflow-wrap:anywhere]">
+            {product.sku}
+          </p>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            <Badge tone={browseCategory === "uncategorized" ? "amber" : "cyan"}>
+              <span className="whitespace-normal break-words">
+                {categoryLabel}
+              </span>
+            </Badge>
+            {variant !== "Standard" && (
+              <span className="text-xs text-muted">{variant}</span>
+            )}
+            {product.serialized && <Badge tone="slate">serialized</Badge>}
+            {product.promotional && <Badge tone="amber">promo</Badge>}
+            <ExpiryBadge product={product} lots={data.lots} />
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5 text-right sm:gap-2">
+          <div>
+            <p
+              className={clsx(
+                available === null ? "text-xs font-semibold" : "tnum text-lg font-extrabold",
+                isLow(product)
+                  ? "text-rose-600 dark:text-rose-300"
+                  : "text-ink",
+              )}
+            >
+              {available ?? unavailableLabel}
+            </p>
+            <p className="text-xs text-muted">available</p>
+          </div>
+          <Icon name="chevron" className="h-4 w-4 text-faint" />
+        </div>
+      </button>
+    );
+  };
 
   return (
     <div className="space-y-4">
       <PageHeader
         title="Inventory"
         icon="box"
-        subtitle="Grouped by product family, with sizes & serials"
         action={
           <div className="flex flex-wrap justify-end gap-2">
             {can("manage_inventory") && (
@@ -230,38 +285,59 @@ export function InventoryPage() {
         canApprove={can("approve_stock_adjustment")}
       />
 
-      <Card className="space-y-3">
-        <Field label="Search">
-          <div className="relative">
-            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint">
-              <Icon name="search" />
-            </span>
-            <input
-              className="input pl-10"
-              placeholder="Search name, SKU or barcode"
-              aria-label="Search inventory"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
+      <section
+        aria-label="Inventory filters"
+        className="min-w-0 space-y-2 border-y border-line py-2"
+      >
+        <div className="grid min-w-0 grid-cols-1 items-end gap-3 sm:grid-cols-[minmax(0,1fr)_auto] lg:grid-cols-[minmax(0,1fr)_240px_auto]">
+          <div className="min-w-0 sm:col-span-2 lg:col-span-1">
+            <Field label="Search" htmlFor="inventory-search">
+              <div className="relative">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint">
+                  <Icon name="search" />
+                </span>
+                <input
+                  id="inventory-search"
+                  className="input pl-10"
+                  placeholder="Search name, SKU or barcode"
+                  aria-label="Search inventory"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+              </div>
+            </Field>
           </div>
-        </Field>
-        <SegmentedControl<Filter>
-          ariaLabel="Category filter"
-          value={filter}
-          onChange={setFilter}
-          options={[
-            { value: "all", label: "All" },
-            { value: "device", label: "Devices" },
-            { value: "merchandise", label: "Merch" },
-          ]}
-        />
-        <div className="flex items-center justify-between gap-3">
+          <Field label="Category" htmlFor="inventory-category">
+            <select
+              id="inventory-category"
+              className="input"
+              aria-label="Category filter"
+              value={filter}
+              onChange={(event) => setFilter(event.target.value as Filter)}
+            >
+              <option value="all">All categories</option>
+              {filter === "legacy-device" && (
+                <option value="legacy-device">Devices (operational)</option>
+              )}
+              {filter === "legacy-merchandise" && (
+                <option value="legacy-merchandise">
+                  Merchandise (operational)
+                </option>
+              )}
+              {INVENTORY_CATEGORIES.map(({ value, label }) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </Field>
           <button
             type="button"
             aria-pressed={lowOnly}
+            disabled={!availableByProduct}
             onClick={() => setLowOnly((v) => !v)}
             className={clsx(
-              "inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition",
+              "inline-flex min-h-11 items-center justify-self-start gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition",
               lowOnly
                 ? "bg-amber-500/20 text-amber-800 dark:text-amber-200"
                 : "bg-inset text-muted hover:text-ink",
@@ -269,21 +345,29 @@ export function InventoryPage() {
           >
             <Icon name="alert" className="h-4 w-4" /> Low stock only
           </button>
-          <p className="text-xs text-faint">
-            {skuCount} SKU{skuCount === 1 ? "" : "s"}
-            {lowCount > 0 && (
-              <>
-                {" • "}
-                <span className="font-semibold text-rose-600 dark:text-rose-300">
-                  {lowCount} low
-                </span>
-              </>
-            )}
-          </p>
         </div>
-      </Card>
+        <p className="text-xs text-faint">
+          {lowOnly && !availableByProduct ? "Low-stock count unverified" : `${skuCount} SKU${skuCount === 1 ? "" : "s"}`}
+          {lowCount > 0 && (
+            <>
+              {" • "}
+              <span className="font-semibold text-rose-600 dark:text-rose-300">
+                {lowCount} low
+              </span>
+            </>
+          )}
+        </p>
+      </section>
 
-      {families.length === 0 ? (
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {availabilityLoading && <p role="status" className="text-sm text-muted">Checking inventory availability...</p>}
+        {availabilityError && <p role="alert" className="text-sm text-rose-700 dark:text-rose-300">{availabilityError}</p>}
+        <button type="button" className="btn-ghost btn-sm ml-auto" disabled={availabilityLoading} onClick={refreshAvailability}>
+          <Icon name="rotate" className="h-4 w-4" /> Refresh availability
+        </button>
+      </div>
+
+      {lowOnly && !availableByProduct ? null : families.length === 0 ? (
         <EmptyState
           icon="search"
           title={lowOnly ? "No low-stock items" : "No matching items"}
@@ -294,155 +378,57 @@ export function InventoryPage() {
           aria-label="Inventory list"
         >
           {visibleFamilies.map((fam) => {
-            const total = fam.shown.reduce((s, v) => s + avail(v), 0);
-            const anyLow = fam.shown.some((v) => isBelowReorder(v, avail(v)));
+            const total = availableByProduct ? fam.shown.reduce((s, v) => s + (avail(v) ?? 0), 0) : null;
+            const anyLow = fam.shown.some(isLow);
             const single = fam.shown[0];
             if (!single) return null;
 
-            // Single-product lines behave as a direct link to the product.
             if (!fam.isFamily) {
-              const available = avail(single);
               return (
                 <StaggerItem key={fam.key}>
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/inventory/${single.id}`)}
-                    className="card flex min-w-0 w-full items-center justify-between gap-2 overflow-hidden p-3.5 text-left transition hover:-translate-y-0.5 hover:shadow-e3 sm:gap-3"
-                  >
-                    <ProductThumb
-                      product={single}
-                      className="h-10 w-10 sm:h-11 sm:w-11"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-semibold text-ink">
-                        {single.name}
-                      </p>
-                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                        <Badge tone="slate">
-                          <span className="block max-w-[7rem] truncate font-mono sm:max-w-none">
-                            {single.sku}
-                          </span>
-                        </Badge>
-                        <Badge
-                          tone={single.category === "device" ? "brand" : "cyan"}
-                        >
-                          {single.category}
-                        </Badge>
-                        {single.serialized && (
-                          <Badge tone="slate">serialized</Badge>
-                        )}
-                        {single.promotional && (
-                          <Badge tone="amber">promo</Badge>
-                        )}
-                        <ExpiryBadge product={single} lots={data.lots} />
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1.5 text-right sm:gap-2">
-                      <div>
-                        <p
-                          className={clsx(
-                            "tnum text-lg font-extrabold",
-                            isBelowReorder(single, available)
-                              ? "text-rose-600 dark:text-rose-300"
-                              : "text-ink",
-                          )}
-                        >
-                          {available}
-                        </p>
-                        <p className="text-xs text-muted">available</p>
-                      </div>
-                      <Icon name="chevron" className="h-4 w-4 text-faint" />
-                    </div>
-                  </button>
+                  <div className="card min-w-0 !p-0">{productRow(single)}</div>
                 </StaggerItem>
               );
             }
 
-            const isOpen = searching || lowOnly || expanded.has(fam.key);
             return (
               <StaggerItem key={fam.key}>
-                <div className="card min-w-0 overflow-hidden !p-0">
-                  <button
-                    type="button"
-                    aria-expanded={isOpen}
-                    onClick={() => toggle(fam.key)}
-                    className="flex min-w-0 w-full items-center justify-between gap-2 p-3.5 text-left transition hover:bg-inset sm:gap-3"
-                  >
-                    <ProductThumb
-                      product={fam.variants[0]!}
-                      className="h-10 w-10 sm:h-11 sm:w-11"
-                    />
+                <section className="min-w-0">
+                  <div className="flex min-w-0 items-center justify-between gap-3 px-3.5 py-2">
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-semibold text-ink">
+                      <h2 className="break-words text-sm font-semibold text-ink [overflow-wrap:anywhere]">
                         {fam.label}
-                      </p>
+                      </h2>
                       <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                        <Badge
-                          tone={fam.category === "device" ? "brand" : "cyan"}
-                        >
-                          {fam.category}
+                        <Badge tone="slate">
+                          {fam.shown.length === fam.variants.length
+                            ? `${fam.shown.length} variants`
+                            : `${fam.shown.length} of ${fam.variants.length} variants`}
                         </Badge>
-                        <Badge tone="slate">{`${fam.variants.length} sizes`}</Badge>
                         {anyLow && <Badge tone="amber">low stock</Badge>}
                       </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5 text-right sm:gap-2">
                       <div>
-                        <p className="tnum text-lg font-extrabold text-ink">
-                          {total}
+                        <p className={total === null ? "text-xs font-semibold text-muted" : "tnum text-lg font-extrabold text-ink"}>
+                          {total ?? unavailableLabel}
                         </p>
                         {/* One stock noun module-wide (WH-23). */}
                         <p className="text-xs text-muted">available</p>
                       </div>
-                      <Icon
-                        name="chevron"
-                        className={clsx(
-                          "h-4 w-4 text-faint transition-transform",
-                          isOpen && "rotate-90",
-                        )}
-                      />
                     </div>
-                  </button>
-
-                  {isOpen && (
-                    <div className="border-t border-line bg-inset/40 p-3">
-                      <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3">
-                        {fam.shown.map((v) => {
-                          const a = avail(v);
-                          const low = isBelowReorder(v, a);
-                          return (
-                            <li key={v.id} className="min-w-0">
-                              <button
-                                type="button"
-                                onClick={() => navigate(`/inventory/${v.id}`)}
-                                className="flex min-w-0 w-full items-center justify-between gap-2 overflow-hidden rounded-xl bg-surface p-2.5 text-left shadow-e1 ring-1 ring-line transition hover:-translate-y-0.5 hover:shadow-e2"
-                              >
-                                <span className="min-w-0 flex-1">
-                                  <span className="block truncate text-sm font-medium text-ink">
-                                    {variantLabel(v)}
-                                  </span>
-                                  <span className="block truncate font-mono text-[0.7rem] text-faint">
-                                    {v.sku}
-                                  </span>
-                                </span>
-                                <span
-                                  className={clsx(
-                                    "tnum shrink-0 text-base font-extrabold",
-                                    low
-                                      ? "text-rose-600 dark:text-rose-300"
-                                      : "text-ink",
-                                  )}
-                                >
-                                  {a}
-                                </span>
-                              </button>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </div>
-                  )}
-                </div>
+                  </div>
+                  <ul
+                    aria-label={`${fam.label} variants`}
+                    className="grid min-w-0 grid-cols-1 divide-y divide-line border-y border-line bg-surface"
+                  >
+                    {fam.shown.map((product) => (
+                      <li key={product.id} className="min-w-0">
+                        {productRow(product)}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
               </StaggerItem>
             );
           })}

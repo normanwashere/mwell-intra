@@ -3,8 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { Route, Routes } from 'react-router-dom';
 import { warehouseModule } from '@intra/rbac';
+import type { InventoryPosition, PageResult } from '@intra/data-kit';
 import type { WarehouseSessionValue } from '@/auth/session';
-import { renderWithProviders } from '@/test/renderWithProviders';
+import { makeRepo, renderWithProviders } from '@/test/renderWithProviders';
 import { ProductDetailPage } from './ProductDetailPage';
 import { InventoryRecommendationAction } from '@/components/InventoryRecommendationAction';
 
@@ -22,11 +23,13 @@ function Detail() {
   return <><button onClick={() => refresh(n => n + 1)}>Refresh session</button>
     <Routes><Route path="/inventory/:id" element={<ProductDetailPage />} /></Routes></>;
 }
-function mount(capabilities = operationCaps, source: 'supabase' | 'memory' = 'supabase') {
-  return renderWithProviders(<Detail />, { route: '/inventory/doctor-token', role: 'operations', source, capabilities });
+function mount(capabilities = operationCaps, source: 'supabase' | 'memory' = 'supabase', repo?: ReturnType<typeof makeRepo>) {
+  return renderWithProviders(<Detail />, { route: '/inventory/doctor-token', role: 'operations', source, capabilities, repo });
 }
 async function open() {
-  fireEvent.click(await screen.findByRole('button', { name: 'Recommend replenishment' }));
+  const button = await screen.findByRole('button', { name: 'Recommend replenishment' });
+  await waitFor(() => expect(button).toBeEnabled());
+  fireEvent.click(button);
   return within(await screen.findByRole('dialog', { name: 'Recommend replenishment' }));
 }
 beforeEach(() => {
@@ -40,6 +43,27 @@ beforeEach(() => {
 });
 
 describe('Inventory recommendation entry', () => {
+  it('waits for governed availability before opening and keeps the verified recommendation dialog open', async () => {
+    const repo = makeRepo();
+    let finish!: (value: PageResult<InventoryPosition>) => void;
+    vi.spyOn(repo, 'listInventoryPositions').mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    mount(operationCaps, 'supabase', repo);
+    const button = await screen.findByRole('button', { name: 'Recommend replenishment' });
+    expect(button).toBeDisabled();
+    const opening = open();
+    await waitFor(() => expect(button).toBeDisabled());
+    expect(screen.queryByRole('dialog', { name: 'Recommend replenishment' })).not.toBeInTheDocument();
+    expect(schema).not.toHaveBeenCalled();
+    await act(async () => finish({ rows: [{ productId: 'doctor-token', locationId: 'loc-wh',
+      onHand: 10, committed: 0, held: 3, unavailable: 0, available: 7 }], total: 1 }));
+    const dialog = await opening;
+    expect(await dialog.findByText('No active recommendation')).toBeVisible();
+    expect(dialog.getByTestId('recommendation-available')).toHaveTextContent('7');
+    fireEvent.click(screen.getByText('Refresh session'));
+    expect(screen.getByRole('dialog', { name: 'Recommend replenishment' })).toBeVisible();
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
   it('uses the shared outlined button style for the icon and tap target', async () => {
     mount();
     const button = await screen.findByRole('button', { name: 'Recommend replenishment' });

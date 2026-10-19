@@ -20,6 +20,11 @@ const field = (
   validation: string,
 ): KnowledgeFeatureField => ({ name, purpose, required, validation });
 
+const externalReceivingWriters = [
+  "warehouse_operator", "warehouse_supervisor", "warehouse_logistics_supervisor", "warehouse_admin",
+];
+const externalPOReviewers = ["warehouse_supervisor", "warehouse_logistics_supervisor"];
+
 export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
   {
     "shell-home": {
@@ -1094,6 +1099,154 @@ export const EXPLICIT_FEATURE_DETAILS: Record<string, ExplicitFeatureDetails> =
           false,
           "Required evidence rules come from the active operation route.",
         ),
+      ],
+    },
+    "warehouse-external-receiving": {
+      controls: [
+        {
+          ...control(
+            "Register emailed PO",
+            "Opens a record for the PO and documents emailed by Procurement, with supplier, receiving location and catalogue lines.",
+            "Current receive_stock permission and required training apply. Demo mode cannot save external receiving records.",
+            "An unsaved form opens; no purchase approval, receipt or stock is created.",
+          ),
+          ownerRoleIds: externalReceivingWriters,
+        },
+        {
+          ...control(
+            "Save PO record",
+            "Saves the emailed-PO record or its permitted corrections through the live service.",
+            "Only the order creator edits a draft or returned record; confirmed orders are immutable. Use known supplier, location and product identities, positive whole quantities and catalogue UOM. Missing PO documentation permits draft-only work. An existing Intra Procurement PO number blocks external registration; use its eligible receiving workflow or ask Operations Lead to review it, without changing the number or supplier to bypass the check.",
+            "The saved version is read back. Retain the external source email, PO number and supporting evidence; later shipments retain their delivery and receipt references. Operations Lead confirmation remains a separate step, not purchase approval or automatic linking to Procurement.",
+          ),
+          ownerRoleIds: externalReceivingWriters,
+        },
+        {
+          ...control(
+            "Attach PO documents",
+            "Uploads PO documents separately from shipment photos. Open each document to review it; removing an attachment from an editable form does not delete a confirmed record.",
+            "Accept PDF, PNG, JPEG or WebP only, at most 8 MiB per file, with matching file signatures. HTML, SVG and EML are not accepted. Wait for upload completion before saving.",
+            "Documents remain in private warehouse-po-evidence storage under an opaque account-scoped path and open through short-lived signed URLs; no public file is exposed. Shipment photos still use the existing private image-evidence bucket.",
+          ),
+          ownerRoleIds: externalReceivingWriters,
+        },
+        {
+          ...control(
+            "Confirm PO record",
+            "Operations Lead checks the retained emailed PO evidence against the supplier, lines and email details; this is not purchase approval.",
+            "The server must return can_confirm for a current receiving-authorized supervisor, not the order creator. Required training still applies. PO number, sender, email date and existing retained documents must be valid at confirmation. A matching Intra Procurement PO blocks confirmation; use that PO's eligible receiving workflow or ask Operations Lead to review it.",
+            "The confirmed PO becomes immutable and eligible for shipment posting; no stock or spending authority is created by confirmation.",
+          ),
+          ownerRoleIds: externalPOReviewers,
+        },
+        {
+          ...control(
+            "Return for correction",
+            "Operations Lead records why the unconfirmed PO needs corrected evidence or details.",
+            "Requires the same independent supervisor authority as confirmation, a current version and a review note; the reviewer cannot be the order creator.",
+            "The record is returned for its creator to correct. Saved arrivals remain drafts and unavailable.",
+          ),
+          ownerRoleIds: externalPOReviewers,
+        },
+        {
+          ...control(
+            "Record shipment",
+            "Opens another physical arrival against the saved PO, including a partial delivery before confirmation.",
+            "Requires current receiving authority and known catalogue-matched PO lines. An arrival is not an approval or available stock.",
+            "A delivery form opens without changing the remaining posted balance.",
+          ),
+          ownerRoleIds: externalReceivingWriters,
+        },
+        {
+          ...control(
+            "Save shipment",
+            "Records delivery details and receiving custody before PO confirmation when necessary.",
+            "Only the shipment creator can change their draft. Require a delivery reference, actual delivery date, valid arrival bin and positive quantities against identified PO lines. Missing PO documents or excess quantity do not authorize posting.",
+            "The saved arrival remains a draft with no stock movement or availability; other authorized readers can see it for coordination.",
+          ),
+          ownerRoleIds: externalReceivingWriters,
+        },
+        {
+          ...control(
+            "Resume shipment",
+            "Reopens the receiver's saved pending arrival with its retained details and evidence.",
+            "Only its creator with receiving authority may edit the current draft version. Posted shipments and uncertain pending commands remain locked.",
+            "The existing draft resumes without creating another delivery or changing posted quantities.",
+          ),
+          ownerRoleIds: externalReceivingWriters,
+        },
+        {
+          ...control(
+            "Post to Quality",
+            "The shipment creator posts one saved arrival for independent inspection.",
+            "Requires current receiving authority, a confirmed PO, quantities within the current remaining balance, uploaded image evidence and exactly one unique serial per serialized unit. Do not provide serials for quantity-tracked goods. Excess or unidentified goods cannot be posted. A matching Intra Procurement PO blocks a new external posting. If this PO was already received externally, a later Procurement PO must be reconciled with the existing receipt, not received again.",
+            "A receipt and held stock enter unassigned staging. The arrival bin records custody, not final putaway. Stock is not available; independent Quality must accept it before normal Storage putaway.",
+          ),
+          ownerRoleIds: externalReceivingWriters,
+        },
+        {
+          ...control(
+            "Retry saved action",
+            "Retries the same saved idempotency key and frozen payload to resolve an uncertain response, including after reopening in the same browser session.",
+            "Keep the original account and pending command. Editing is disabled while its outcome is unknown. Never create a replacement PO or shipment to work around uncertainty.",
+            "The original result is reconciled and read back before further work; a network error is not proof that nothing was saved.",
+          ),
+          ownerRoleIds: externalReceivingWriters,
+        },
+        {
+          ...control(
+            "Retry verification",
+            "Retries saved-record readback and warehouse refresh without resending an acknowledged command.",
+            "Use when the action was accepted but its record could not be verified. Preserve the pending context and current authority.",
+            "Only a verified saved state clears pending work; failure does not report false completion.",
+          ),
+          ownerRoleIds: externalReceivingWriters,
+        },
+        control(
+          "Load more orders",
+          "Loads the next page of orders and saved arrivals. Search filters loaded records; load further pages when needed.",
+          "Requires any one of receive_stock, inspect_quality or view_procurement. Follow the server's next offset until there are no further pages.",
+          "More records become visible without truncating the first 100. A failed page is not an empty queue; retry loading or refresh orders.",
+        ),
+        {
+          ...control(
+            "Open Quality",
+            "Opens /warehouse/quality for the existing independent inspection workflow. Review Quality on a posted shipment opens that receipt's source directly; Open Quality in the footer keeps the general queue available.",
+            "Inspection needs current inspect_quality permission, required training and an inspector different from the recorded receiver. Multiple roles do not waive independence; pending inspection cannot be bypassed by direct hold release.",
+            "Viewing the queue changes nothing. An accepted independent inspection releases the provisional hold; any continuing hold prevents normal putaway.",
+          ),
+          ownerRoleIds: externalReceivingWriters,
+        },
+        {
+          ...control(
+            "Open Storage",
+            "Opens /warehouse/storage for the existing normal putaway queue after independent Quality acceptance.",
+            "Putaway needs current transfer_stock permission, required training, accepted unheld stock and a valid permitted destination. Arrival custody is not final bin assignment.",
+            "The authorized operator completes normal putaway and verifies its saved destination; opening the link alone does not move stock.",
+          ),
+          ownerRoleIds: externalReceivingWriters,
+        },
+      ],
+      fields: [
+        field("PO number", "Identifies the emailed purchase order.", false, "May be missing in a draft; required before confirmation. Do not invent a number."),
+        field("Supplier", "Identifies the supplier in the existing catalogue.", true, "Select an existing supplier; this record does not approve or accredit a vendor."),
+        field("Receiving location", "Identifies the receiving warehouse.", true, "Select a valid location and an arrival bin belonging to it."),
+        field("Email sender", "Retains the source email identity.", false, "Required before confirmation; manual registration does not retrieve or send email."),
+        field("Email date", "Retains the source email date.", false, "Required before confirmation; use the date supported by the evidence."),
+        field("PO documents", "Supports Operations Lead's evidence check.", false, "Missing documents allow draft arrival only. Upload supported private files and verify they remain readable before confirmation."),
+        field("Product", "Matches each ordered item to the catalogue.", true, "Use distinct known products. Unidentified goods need correction, not a made-up match."),
+        field("Quantity", "Records the ordered quantity in catalogue units.", true, "Use a positive whole number. Resolve pack conversions first; the UOM must match the catalogue."),
+        field("UOM", "Shows the catalogue unit of measure.", true, "Do not substitute packs or another unit for the product's recorded UOM."),
+        field("Review note", "Records the independent review or correction reason.", false, "A reason is required when returning a record for correction."),
+        field("Delivery reference", "Distinguishes this physical arrival from other partial shipments.", true, "Keep the saved reference when resuming or retrying the same shipment."),
+        field("Actual delivery date", "Records when this shipment physically arrived.", true, "Use a valid nonfuture delivery date, not the PO email date."),
+        field("Arrival bin", "Records physical receiving custody, not final putaway.", true, "Select a valid bin at the receiving location. Posting leaves stock in unassigned staging until independent Quality and normal putaway."),
+        field("Delivered quantity", "Records this shipment's quantity against each PO line.", true, "Use positive whole quantities. Multiple partials may post within the remaining balance; excess stays draft pending document correction."),
+        field("Serial numbers", "Identifies each serialized unit physically delivered.", false, "Posting requires exactly the delivered quantity of unique serials for serialized items; quantity-tracked items must not have serials."),
+        field("Lot code", "Preserves supplier batch metadata separately from the unique internal receipt lot identity.", false, "Enter the supplier's actual batch when known; do not replace the internal receipt identifier."),
+        field("Expiry date", "Retains dated stock traceability.", false, "When supplied, use a valid date not earlier than actual arrival."),
+        field("Shipment photos", "Supports the physical delivery and later Quality inspection.", false, "Uploaded image evidence in the existing private image bucket is required for posting. PO PDFs do not replace shipment photos."),
+        field("Notes", "Retains PO context or shipment custody issues.", false, "Describe discrepancies without claiming that a note approves excess, inspection or stock availability."),
       ],
     },
     "warehouse-allocations": {

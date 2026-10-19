@@ -4,6 +4,7 @@ import { useWarehouse } from '@/app/store';
 import { WAREHOUSE_MUTATION_CAPABILITIES } from '@/app/authorization';
 import { toStockState } from '@/data/repository';
 import { availableForProduct } from '@/domain/stock';
+import { useInventoryAvailability } from '@/domain/useInventoryAvailability';
 import { stockByLocation, validateTransfer } from '@/domain/transfers';
 import { stockByBin } from '@/domain/storage';
 import { productMovementHistory, unitTimeline } from '@/domain/traceability';
@@ -52,6 +53,7 @@ export function ProductDetailPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
   const { data, can, transfer, requestStockChange, source, loading, error } = useWarehouse();
+  const { totals: availableByProduct, loading: availabilityLoading, error: availabilityError, refresh: refreshAvailability } = useInventoryAvailability();
   const toast = useToast();
 
   const [relocateOpen, setRelocateOpen] = useState(false);
@@ -101,7 +103,7 @@ export function ProductDetailPage() {
   }
 
   const state = toStockState(data);
-  const available = availableForProduct(state, product.id);
+  const available = availableByProduct ? availableByProduct.get(product.id) ?? 0 : null;
   const allUnits = data.units.filter((u) => u.productId === product.id);
   const locationName = (lid: string) =>
     data.locations.find((l) => l.id === lid)?.name ?? lid;
@@ -270,9 +272,16 @@ export function ProductDetailPage() {
           </div>
           </div>
           <div className="shrink-0 text-right">
-            <p className="tnum font-display text-3xl font-extrabold text-ink">{available}</p>
+            <p className={available === null ? 'text-sm font-semibold text-muted' : 'tnum font-display text-3xl font-extrabold text-ink'}>{available ?? (availabilityLoading ? 'Checking' : 'Unverified')}</p>
             <p className="text-xs text-faint">available</p>
           </div>
+        </div>
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+          {availabilityLoading && <p role="status" className="text-sm text-muted">Checking inventory availability...</p>}
+          {availabilityError && <p role="alert" className="text-sm text-rose-700 dark:text-rose-300">{availabilityError}</p>}
+          <button type="button" className="btn-ghost btn-sm ml-auto" disabled={availabilityLoading} onClick={refreshAvailability}>
+            <Icon name="rotate" className="h-4 w-4" /> Refresh availability
+          </button>
         </div>
         {Object.keys(product.attributes).length > 0 && (
           <section aria-label="Product details" className="relative mt-4 min-w-0 border-t border-line pl-2 pt-3">
@@ -296,8 +305,8 @@ export function ProductDetailPage() {
             Price {product.price != null ? money(product.price) : '—'}
           </span>
           <div className="flex w-full flex-col gap-2 sm:ml-auto sm:w-auto sm:flex-row sm:items-center">
-            <InventoryRecommendationAction key={product.id} product={product} available={available}
-              source={source} stockReady={!loading && !error} />
+            <InventoryRecommendationAction key={product.id} product={product} available={available ?? 0}
+              source={source} stockReady={!loading && !error && available !== null} />
             {canManageProducts && (
               <button
                 type="button"

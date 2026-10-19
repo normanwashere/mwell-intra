@@ -151,7 +151,7 @@ const TABLE_PROJECTIONS: Record<string, string> = {
   lots: "id,product_id,lot_code,supplier_id,unit_cost,received_at,expiry_date",
   inventory_units:
     "id,product_id,serial_number,lot_id,location_id,bin_id,status,assigned_to,event_id",
-  stock_levels: "product_id,location_id,bin_id,lot_id,quantity",
+  stock_levels: "id,product_id,location_id,bin_id,lot_id,quantity",
   movements:
     "id,type,product_id,quantity,unit_cost_at_movement,from_location_id,to_location_id,from_bin_id,to_bin_id,lot_id,serial_number,event_id,reason,reference,evidence_urls,actor,created_at",
   allocations: "id,event_id,product_id,quantity,status,promotional,created_at",
@@ -212,6 +212,13 @@ const BOUNDED_HISTORY = new Set([
   "rekit_work_orders",
 ]);
 const OPERATIONAL_HISTORY_LIMIT = 5000;
+// These current-state inputs must be complete before calculating inventory or commitments.
+// History and control queues retain their separate bounded read contracts.
+const COMPLETE_OPERATIONAL_TABLES = new Set([
+  "products", "locations", "storage_areas", "suppliers", "lots",
+  "inventory_units", "stock_levels", "allocations", "events", "fulfillment_reservations",
+]);
+const OPERATIONAL_PAGE_SIZE = 1000;
 const CONTROL_TIMESTAMP_COLUMNS: Record<string, string> = {
   quality_inspections: "inspected_at",
   quality_inspection_queue: "inspected_at",
@@ -228,6 +235,30 @@ export class SupabaseRepository implements WarehouseControlRepository {
     const projection = TABLE_PROJECTIONS[table];
     if (!projection)
       throw new Error(`No safe projection configured for ${table}.`);
+    if (COMPLETE_OPERATIONAL_TABLES.has(table)) {
+      const rows: T[] = [];
+      const seen = new Set<string>();
+      let afterId: string | undefined;
+      for (;;) {
+        let page = this.db.from(table).select<string, Row>(projection)
+          .order("id", { ascending: true }).limit(OPERATIONAL_PAGE_SIZE);
+        if (afterId !== undefined) page = page.gt("id", afterId);
+        const { data, error } = await page;
+        if (error) throw new Error(`${table}: ${error.message}`);
+        if (!Array.isArray(data)) throw new Error(`${table}: invalid pagination response`);
+        // Only an empty page proves exhaustion: the server may impose a lower cap.
+        if (data.length === 0) return rows;
+        for (const row of data) {
+          const id = row?.id;
+          if (typeof id !== "string" || !id || seen.has(id)) {
+            throw new Error(`${table}: invalid pagination identity`);
+          }
+          seen.add(id);
+          rows.push(map(row as never));
+          afterId = id;
+        }
+      }
+    }
     let query: any = this.db.from(table).select(projection);
     if (BOUNDED_HISTORY.has(table)) {
       query = query

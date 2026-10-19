@@ -1,16 +1,18 @@
 # Task-first Coverage Inventory
 
-Date: 2026-09-06; inventory updated September 14 for candidate product-detail replenishment controls, retaining the return resolution, physical intake, Quality queue instructions and September 12 shared workspace controls. Scope: current knowledge inventory, including candidate instructions on existing feature routes. A feature's existing live classification does not certify its new candidate controls as deployed. NOT a release sign-off or completed Task11 pilot. Local screenshots do not establish live exact-control certification.
+Date: 2026-09-06; inventory updated October 19 for the limited external PO receiving transition, retaining the September 14 product-detail replenishment controls, return resolution, physical intake, Quality queue instructions and September 12 shared workspace controls. Scope: current knowledge inventory, including transition instructions. A feature's existing live classification does not certify its new controls as deployed. NOT a release sign-off or completed Task11 pilot. Local screenshots do not establish live exact-control certification.
 
 ## Exact Baseline
 
-68 features: 59 live, 0 limited, 9 coming soon. 300 documented controls: 291 on live-classified features and 9 non-executable roadmap controls. 26 flows, 58 decision nodes, 14 distinct policy-reference strings, 53 existing evidence records. Zero unresolved mapped flow/role targets and zero graph-validator errors in the current inventory.
+69 features: 59 live, 1 limited, 9 coming soon. 314 documented controls: 291 on live-classified features, 14 on the limited external receiving candidate and 9 non-executable roadmap controls. 26 flows, 58 decision nodes, 14 distinct policy-reference strings, 53 existing evidence records. Zero unresolved mapped flow/role targets and zero graph-validator errors in the current inventory.
 
-All 291 controls on live-classified features have written behavior/validation/result and an owned feature reference. **Zero exact control-name/hotspot evidence matches.** This does not mean 53 images are absent: their recorded scope does not establish every control. All 300 inventory rows remain unverified for release evidence. The validator reports 296 missing action-evidence bindings, including 5 existing flow-node bindings. No new screenshots, capture dates or acceptance states were fabricated.
+All 305 controls on live- or limited-classified features have written behavior/validation/result and an owned feature reference. **Zero exact control-name/hotspot evidence matches.** This does not mean 53 images are absent: their recorded scope does not establish every control. All 314 inventory rows remain unverified for release evidence. The validator reports 310 missing action-evidence bindings, including 5 existing flow-node bindings. No new screenshots, capture dates or acceptance states were fabricated.
 
 The earlier September 14 refresh added Fulfillment "Save resolution", Returns "Receive physical return" and "Review in Quality", and Quality "Pending, Holds and Completed"; it removed the superseded Returns "Set disposition" inventory entry. Those were four additions and one removal, not three newly certified controls. All four added entries have empty evidence bindings and remain unverified.
 
-The current candidate adds product-detail "Recommend replenishment", "Save recommendation" and "Cancel". Open/save have explicit canonical recommendation owners, distinct from the unchanged feature readership; other controls retain their existing reader fallback. These three additions have empty evidence bindings and remain unverified. Their documentation does not certify deployment, a successful live recommendation, Procurement acceptance/handoff, or stock movement.
+The September 14 candidate added product-detail "Recommend replenishment", "Save recommendation" and "Cancel". Open/save have explicit canonical recommendation owners, distinct from the unchanged feature readership; other controls retain their existing reader fallback. These three additions have empty evidence bindings and remain unverified. Their documentation does not certify deployment, a successful live recommendation, Procurement acceptance/handoff, or stock movement.
+
+The October 19 transition update documents `/warehouse/external-receiving` with 14 controls and explicit receiving/independent-supervisor owners. The receiver registers the PO and documents emailed by Procurement; deployment and verification are tracked in the release record, not certified by this inventory. Operations Lead confirms evidence, not purchase approval; saved arrivals may precede confirmation, posting creates held staging stock, and independent Quality precedes existing normal putaway. This is transitional coexistence: Procurement is not removed or replaced, and existing in-app Procurement-issued PO receiving remains available. An existing Intra Procurement PO number rejects external receiving; a later Procurement PO for an already externally received order requires reconciliation of the existing receipt instead of receiving again. External source references and evidence are retained without retroactive purchase approval; automatic linking or reconciliation is not implemented. Training requirements and SMTP are unchanged. Every new control has an empty evidence binding and remains unverified; no certification or training completion record was added.
 
 The snapshot below is intentionally exact. Changes require reviewing this inventory and its test, not reducing expected counts or treating a new control as implicitly verified. The inventory is current content, not a second task catalog.
 
@@ -57,6 +59,7 @@ StepWorkspace retains exact branch callback identity and permission behavior. Ti
 | feature-warehouse-inventory | live | 5 | /warehouse/inventory | Warehouse | receive-to-putaway, quality-disposition, event-fulfillment, returns-reconciliation, cycle-count-adjustment |
 | feature-warehouse-product-detail | live | 11 | /warehouse/inventory/:id | Warehouse | receive-to-putaway, quality-disposition, returns-reconciliation, cycle-count-adjustment, pricing-and-costing |
 | feature-warehouse-receiving | live | 5 | /warehouse/receiving | Warehouse | receive-to-putaway, quality-disposition |
+| feature-warehouse-external-receiving | limited | 14 | /warehouse/external-receiving | Warehouse | receive-to-putaway, quality-disposition, exception-and-recovery |
 | feature-warehouse-allocations | live | 5 | /warehouse/allocations | Warehouse | event-fulfillment, returns-reconciliation, allocation-event-return |
 | feature-warehouse-fulfillment | live | 18 | /warehouse/fulfillment | Warehouse | outbound-fulfillment, event-fulfillment, receive-to-putaway, returns-reconciliation, procure-to-pay, pricing-and-costing |
 | feature-warehouse-returns | live | 5 | /warehouse/returns | Warehouse | returns-reconciliation, allocation-event-return |
@@ -128,10 +131,10 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
 ```json
 {
   "counts": {
-    "features": 68,
-    "controls": 300,
+    "features": 69,
+    "controls": 314,
     "liveFeatures": 59,
-    "limitedFeatures": 0,
+    "limitedFeatures": 1,
     "comingSoonFeatures": 9,
     "flows": 26,
     "decisions": 58,
@@ -1354,6 +1357,174 @@ This is inventory metadata, not a screenshot acceptance manifest. Each exact key
       "flowIds": [
         "receive-to-putaway",
         "quality-disposition"
+      ],
+      "evidenceIds": [],
+      "unverified": true
+    },
+    {
+      "key": "warehouse-external-receiving:Register emailed PO",
+      "referenceId": "feature-warehouse-external-receiving",
+      "availability": "limited",
+      "flowIds": [
+        "receive-to-putaway",
+        "quality-disposition",
+        "exception-and-recovery"
+      ],
+      "evidenceIds": [],
+      "unverified": true
+    },
+    {
+      "key": "warehouse-external-receiving:Save PO record",
+      "referenceId": "feature-warehouse-external-receiving",
+      "availability": "limited",
+      "flowIds": [
+        "receive-to-putaway",
+        "quality-disposition",
+        "exception-and-recovery"
+      ],
+      "evidenceIds": [],
+      "unverified": true
+    },
+    {
+      "key": "warehouse-external-receiving:Attach PO documents",
+      "referenceId": "feature-warehouse-external-receiving",
+      "availability": "limited",
+      "flowIds": [
+        "receive-to-putaway",
+        "quality-disposition",
+        "exception-and-recovery"
+      ],
+      "evidenceIds": [],
+      "unverified": true
+    },
+    {
+      "key": "warehouse-external-receiving:Confirm PO record",
+      "referenceId": "feature-warehouse-external-receiving",
+      "availability": "limited",
+      "flowIds": [
+        "receive-to-putaway",
+        "quality-disposition",
+        "exception-and-recovery"
+      ],
+      "evidenceIds": [],
+      "unverified": true
+    },
+    {
+      "key": "warehouse-external-receiving:Return for correction",
+      "referenceId": "feature-warehouse-external-receiving",
+      "availability": "limited",
+      "flowIds": [
+        "receive-to-putaway",
+        "quality-disposition",
+        "exception-and-recovery"
+      ],
+      "evidenceIds": [],
+      "unverified": true
+    },
+    {
+      "key": "warehouse-external-receiving:Record shipment",
+      "referenceId": "feature-warehouse-external-receiving",
+      "availability": "limited",
+      "flowIds": [
+        "receive-to-putaway",
+        "quality-disposition",
+        "exception-and-recovery"
+      ],
+      "evidenceIds": [],
+      "unverified": true
+    },
+    {
+      "key": "warehouse-external-receiving:Save shipment",
+      "referenceId": "feature-warehouse-external-receiving",
+      "availability": "limited",
+      "flowIds": [
+        "receive-to-putaway",
+        "quality-disposition",
+        "exception-and-recovery"
+      ],
+      "evidenceIds": [],
+      "unverified": true
+    },
+    {
+      "key": "warehouse-external-receiving:Resume shipment",
+      "referenceId": "feature-warehouse-external-receiving",
+      "availability": "limited",
+      "flowIds": [
+        "receive-to-putaway",
+        "quality-disposition",
+        "exception-and-recovery"
+      ],
+      "evidenceIds": [],
+      "unverified": true
+    },
+    {
+      "key": "warehouse-external-receiving:Post to Quality",
+      "referenceId": "feature-warehouse-external-receiving",
+      "availability": "limited",
+      "flowIds": [
+        "receive-to-putaway",
+        "quality-disposition",
+        "exception-and-recovery"
+      ],
+      "evidenceIds": [],
+      "unverified": true
+    },
+    {
+      "key": "warehouse-external-receiving:Retry saved action",
+      "referenceId": "feature-warehouse-external-receiving",
+      "availability": "limited",
+      "flowIds": [
+        "receive-to-putaway",
+        "quality-disposition",
+        "exception-and-recovery"
+      ],
+      "evidenceIds": [],
+      "unverified": true
+    },
+    {
+      "key": "warehouse-external-receiving:Retry verification",
+      "referenceId": "feature-warehouse-external-receiving",
+      "availability": "limited",
+      "flowIds": [
+        "receive-to-putaway",
+        "quality-disposition",
+        "exception-and-recovery"
+      ],
+      "evidenceIds": [],
+      "unverified": true
+    },
+    {
+      "key": "warehouse-external-receiving:Load more orders",
+      "referenceId": "feature-warehouse-external-receiving",
+      "availability": "limited",
+      "flowIds": [
+        "receive-to-putaway",
+        "quality-disposition",
+        "exception-and-recovery"
+      ],
+      "evidenceIds": [],
+      "unverified": true
+    },
+    {
+      "key": "warehouse-external-receiving:Open Quality",
+      "referenceId": "feature-warehouse-external-receiving",
+      "availability": "limited",
+      "flowIds": [
+        "receive-to-putaway",
+        "quality-disposition",
+        "exception-and-recovery"
+      ],
+      "evidenceIds": [],
+      "unverified": true
+    },
+    {
+      "key": "warehouse-external-receiving:Open Storage",
+      "referenceId": "feature-warehouse-external-receiving",
+      "availability": "limited",
+      "flowIds": [
+        "receive-to-putaway",
+        "quality-disposition",
+        "exception-and-recovery"
       ],
       "evidenceIds": [],
       "unverified": true

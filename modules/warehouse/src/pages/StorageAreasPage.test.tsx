@@ -4,6 +4,293 @@ import userEvent from '@testing-library/user-event';
 import { StorageAreasPage } from './StorageAreasPage';
 import { makeRepo, renderWithProviders } from '@/test/renderWithProviders';
 import { loadCompleteControlQueue } from '@/domain/controlQueues';
+import type { StorageArea } from '@/domain/types';
+import { _resetMemoryQueue, allPending, replayEntry, type InventoryHold, type InventoryPosition } from '@intra/data-kit';
+
+describe('StorageAreasPage putaway availability', () => {
+  async function fixture() {
+    const seed = await makeRepo().getData();
+    const unit = seed.units.find(row => row.serialNumber === 'SMART-WATCH-SN0001')!;
+    unit.serialNumber = 'OCT19-EXT-WATCH-002';
+    unit.status = 'in_stock';
+    unit.binId = undefined;
+    const hold: InventoryHold = {
+      id: 'damaged-watch', inspectionId: 'damaged-inspection', productId: unit.productId,
+      locationId: unit.locationId, lotId: unit.lotId, serialNumber: unit.serialNumber,
+      quantity: 1, status: 'active', reason: 'Damaged', createdBy: 'quality', createdAt: '2026-10-19T00:00:00Z',
+    };
+    return { repo: makeRepo(seed), unit, hold };
+  }
+
+  async function scanStock(repo: ReturnType<typeof makeRepo>, options: { liveWithoutHoldAccess?: boolean; live?: boolean; code?: string } = {}) {
+    const user = userEvent.setup();
+    renderWithProviders(<StorageAreasPage />, { repo, ...(options.liveWithoutHoldAccess
+      ? { source: 'supabase' as const, capabilities: ['transfer_stock' as const] }
+      : options.live ? { source: 'supabase' as const, capabilities: ['transfer_stock' as const, 'inspect_quality' as const] } : {}) });
+    await user.click(await screen.findByRole('button', { name: /put away/i }));
+    const dialog = await screen.findByRole('dialog', { name: 'Put away stock' });
+    await user.type(within(dialog).getByLabelText('Enter stock code manually'), `${options.code ?? 'OCT19-EXT-WATCH-002'}{Enter}`);
+    await user.type(within(dialog).getByLabelText('Enter destination bin manually'), 'PASIG-A-01{Enter}');
+    return { user, dialog, confirm: within(dialog).getByRole('button', { name: 'Confirm putaway' }) };
+  }
+
+  it.each(['Damaged', 'Awaiting independent quality inspection'])('blocks an in-stock serial with a paginated active hold: %s', async (reason) => {
+    const { repo, hold } = await fixture();
+    const before = await repo.getData();
+    const holds = vi.spyOn(repo, 'listHolds').mockImplementation(async query => query.cursor
+      ? { rows: [{ ...hold, reason }] } : { rows: [], nextCursor: 'holds-2' });
+    const relocate = vi.spyOn(repo, 'relocate');
+    const { dialog, user, confirm } = await scanStock(repo);
+    expect(await within(dialog).findByText('0 eligible unit(s) in the general area')).toBeVisible();
+    const guidance = within(dialog).getByRole('alert');
+    expect(guidance).toHaveTextContent(/Quality/);
+    expect(guidance).toHaveTextContent(reason === 'Damaged' ? /hold/i : /independent.*inspection/i);
+    expect(confirm).toBeDisabled();
+    await user.type(within(dialog).getByLabelText('Enter destination bin manually'), 'PASIG-A-01{Enter}');
+    expect(guidance).toBeVisible();
+    await user.click(confirm);
+    expect(relocate).not.toHaveBeenCalled();
+    expect(holds).toHaveBeenCalledWith(expect.objectContaining({ status: 'active', cursor: 'holds-2' }));
+    expect(await repo.getData()).toEqual(before);
+  });
+
+  it('allows a clear serial despite released holds and holds for other exact stock identities', async () => {
+    const { repo, unit, hold } = await fixture();
+    vi.spyOn(repo, 'listHolds').mockResolvedValue({ rows: [
+      { ...hold, status: 'released' }, { ...hold, serialNumber: 'other-serial' },
+      { ...hold, productId: 'other-product' }, { ...hold, locationId: 'other-warehouse' },
+      { ...hold, binId: 'other-bin' }, { ...hold, lotId: 'other-lot' },
+    ] });
+    const { dialog, user, confirm } = await scanStock(repo);
+    await waitFor(() => expect(confirm).toBeEnabled());
+    await user.click(confirm);
+    await waitFor(async () => expect((await repo.getData()).units.find(row => row.id === unit.id)?.binId).toBe('bin-pasig-a1'));
+    expect(dialog).toBeInTheDocument();
+    expect(within(dialog).getByText('Selected PASIG-A-01')).toBeVisible();
+    expect(within(dialog).getByLabelText('Enter stock code manually')).toBeEnabled();
+    expect(confirm).toBeDisabled();
+  });
+
+  it('does not advertise eligibility or enable confirmation before the hold check completes', async () => {
+    const { repo, hold } = await fixture();
+    let resolve!: (value: { rows: InventoryHold[] }) => void;
+    vi.spyOn(repo, 'listHolds').mockImplementation(() => new Promise(done => { resolve = done; }));
+    const { dialog, confirm } = await scanStock(repo);
+    expect(confirm).toBeDisabled();
+    expect(within(dialog).getByText('Checking eligible stock...')).toBeVisible();
+    await act(async () => resolve({ rows: [hold] }));
+    expect(await within(dialog).findByText('0 eligible unit(s) in the general area')).toBeVisible();
+    expect(confirm).toBeDisabled();
+  });
+
+  it('fails closed when active holds cannot be read and can retry availability', async () => {
+    const { repo } = await fixture();
+    const holds = vi.spyOn(repo, 'listHolds').mockRejectedValue(new Error('Connection unavailable'));
+    const relocate = vi.spyOn(repo, 'relocate');
+    const { dialog, user, confirm } = await scanStock(repo);
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(/could not be verified/i);
+    expect(confirm).toBeDisabled();
+    expect(relocate).not.toHaveBeenCalled();
+    holds.mockResolvedValue({ rows: [] });
+    await user.click(within(dialog).getByRole('button', { name: 'Refresh stock availability' }));
+    await waitFor(() => expect(confirm).toBeEnabled());
+  });
+
+  it('does not mistake an RLS-hidden hold population for eligible live stock', async () => {
+    const { repo } = await fixture();
+    const holds = vi.spyOn(repo, 'listHolds');
+    const { dialog, confirm } = await scanStock(repo, { liveWithoutHoldAccess: true });
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(/current access.*Quality/i);
+    expect(confirm).toBeDisabled();
+    expect(holds).not.toHaveBeenCalled();
+  });
+
+  it('rechecks a newly added hold before submitting a previously eligible serial', async () => {
+    const { repo, hold } = await fixture();
+    vi.spyOn(repo, 'listHolds').mockResolvedValueOnce({ rows: [] }).mockResolvedValue({ rows: [hold] });
+    const relocate = vi.spyOn(repo, 'relocate');
+    const { dialog, user, confirm } = await scanStock(repo);
+    await waitFor(() => expect(confirm).toBeEnabled());
+    await user.click(confirm);
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(/Quality.*hold|hold.*Quality/i);
+    expect(confirm).toBeDisabled();
+    expect(relocate).not.toHaveBeenCalled();
+  });
+
+  it('keeps a specific hold message in the sheet after a server rejection', async () => {
+    const { repo, hold } = await fixture();
+    const holds = vi.spyOn(repo, 'listHolds').mockResolvedValue({ rows: [] });
+    const relocate = vi.spyOn(repo, 'relocate').mockImplementation(async () => {
+      holds.mockResolvedValue({ rows: [hold] });
+      throw new Error('Active Quality hold blocks relocation');
+    });
+    const { dialog, user, confirm } = await scanStock(repo);
+    await waitFor(() => expect(confirm).toBeEnabled());
+    await user.click(confirm);
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(/Quality.*hold|hold.*Quality/i);
+    expect(within(dialog).getByText('0 eligible unit(s) in the general area')).toBeVisible();
+    expect(confirm).toBeDisabled();
+    expect(relocate).toHaveBeenCalledOnce();
+    await user.type(within(dialog).getByLabelText('Enter destination bin manually'), 'PASIG-A-01{Enter}');
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(/Quality/);
+  });
+
+  it('refreshes bulk eligibility on scan and on request without closing the sheet', async () => {
+    const { repo } = await fixture();
+    const realPositions = repo.listInventoryPositions.bind(repo);
+    let available = 0;
+    const positions = vi.spyOn(repo, 'listInventoryPositions').mockImplementation(async query => {
+      const result = await realPositions(query);
+      return { ...result, rows: result.rows.map(row => row.productId === 'shirt-l' && !row.binId
+        ? { ...row, available } : row) };
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<StorageAreasPage />, { repo });
+    await user.click(await screen.findByRole('button', { name: /put away/i }));
+    const dialog = await screen.findByRole('dialog', { name: 'Put away stock' });
+    await waitFor(() => expect(positions).toHaveBeenCalled());
+    available = 7;
+    await user.type(within(dialog).getByLabelText('Enter stock code manually'), 'shirt-l{Enter}');
+    expect(await within(dialog).findByText('7 eligible unit(s) in the general area')).toBeVisible();
+    available = 0;
+    await user.click(within(dialog).getByRole('button', { name: 'Refresh stock availability' }));
+    expect(await within(dialog).findByText('0 eligible unit(s) in the general area')).toBeVisible();
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(/No eligible stock.*Quality/i);
+    expect(within(dialog).queryByText(/from 1 to 0/)).not.toBeInTheDocument();
+    available = 7;
+    await user.click(within(dialog).getByRole('button', { name: 'Refresh stock availability' }));
+    expect(await within(dialog).findByText('7 eligible unit(s) in the general area')).toBeVisible();
+    expect(dialog).toBeInTheDocument();
+  });
+
+  it('ignores an older availability response after a newer refresh completes', async () => {
+    const { repo } = await fixture();
+    const { dialog, user, confirm } = await scanStock(repo, { code: 'shirt-l' });
+    await waitFor(() => expect(confirm).toBeEnabled());
+    const rows = (await repo.listInventoryPositions({})).rows;
+    const position = rows.find(row => row.productId === 'shirt-l' && !row.binId)!;
+    let finishOlder!: (value: { rows: InventoryPosition[] }) => void;
+    vi.spyOn(repo, 'listInventoryPositions')
+      .mockImplementationOnce(() => new Promise(resolve => { finishOlder = resolve; }))
+      .mockResolvedValue({ rows: [{ ...position, available: 0 }] });
+    const refresh = within(dialog).getByRole('button', { name: 'Refresh stock availability' });
+    await user.click(refresh);
+    expect(confirm).toBeDisabled();
+    await user.click(refresh);
+    expect(await within(dialog).findByText('0 eligible unit(s) in the general area')).toBeVisible();
+    await act(async () => finishOlder({ rows: [{ ...position, available: 99 }] }));
+    expect(within(dialog).getByText('0 eligible unit(s) in the general area')).toBeVisible();
+    expect(confirm).toBeDisabled();
+  });
+
+  it('keeps a queued serial capture locked and reuses its command through offline replay', async () => {
+    _resetMemoryQueue();
+    try {
+      const { repo, unit } = await fixture();
+      vi.spyOn(repo, 'listHolds').mockResolvedValue({ rows: [] });
+      const relocate = vi.spyOn(repo, 'relocate').mockRejectedValueOnce(new Error('Failed to fetch'));
+      const { dialog, user, confirm } = await scanStock(repo, { live: true });
+      await waitFor(() => expect(confirm).toBeEnabled());
+      await user.click(confirm);
+      expect(await within(dialog).findByText(/Putaway queued for sync/)).toBeVisible();
+      expect(within(dialog).getByLabelText('Enter stock code manually')).toBeDisabled();
+      expect(within(dialog).getByLabelText('Enter destination bin manually')).toBeDisabled();
+      expect(within(dialog).getByRole('button', { name: 'Refresh stock availability' })).toBeDisabled();
+      const pending = (await allPending())[0]!;
+      expect(pending.input.serialNumbers).toEqual([unit.serialNumber]);
+      expect(pending.input.idempotencyKey).toBe(relocate.mock.calls[0]![0].idempotencyKey);
+      await user.click(confirm);
+      expect(relocate).toHaveBeenCalledOnce();
+      await act(async () => { expect(await replayEntry({ repo, actor: String(pending.input.actor) }, pending)).toBe(true); });
+      expect(relocate).toHaveBeenCalledTimes(2);
+      expect(relocate.mock.calls[1]![0].idempotencyKey).toBe(pending.input.idempotencyKey);
+      await user.click(confirm);
+      await waitFor(() => expect(within(dialog).queryByText(/Putaway queued for sync/)).not.toBeInTheDocument());
+      expect(relocate).toHaveBeenCalledTimes(2);
+      expect((await repo.getData()).units.find(row => row.id === unit.id)?.binId).toBe('bin-pasig-a1');
+    } finally {
+      _resetMemoryQueue();
+    }
+  });
+});
+
+describe('StorageAreasPage bin scanning', () => {
+  const localBin: StorageArea = { id: 'local-bin', locationId: 'loc-wh', code: 'A-01-01', label: 'Selected warehouse bin', active: true };
+  const foreignBin: StorageArea = { id: 'foreign-bin', locationId: 'loc-other', code: 'A-01-01', label: 'Other warehouse bin', active: true };
+
+  async function setupScan(storageAreas: StorageArea[], warehouseId = 'loc-wh') {
+    const seed = await makeRepo().getData();
+    seed.locations = [
+      { id: 'loc-wh', name: 'Main warehouse', type: 'warehouse' },
+      { id: 'loc-other', name: 'Other warehouse', type: 'warehouse' },
+    ];
+    seed.storageAreas = storageAreas;
+    const repo = makeRepo(seed);
+    const before = await repo.getData();
+    const user = userEvent.setup();
+    renderWithProviders(<StorageAreasPage />, { repo });
+    const warehouse = await screen.findByLabelText('Warehouse');
+    await user.selectOptions(warehouse, warehouseId);
+    await user.click(screen.getByRole('button', { name: 'Scan' }));
+    const scanner = await screen.findByRole('dialog', { name: 'Scan a storage area' });
+    const scan = async (value: string) => {
+      await user.type(within(scanner).getByLabelText('Enter barcode manually'), `${value}{Enter}`);
+    };
+    return { repo, before, warehouse, scan };
+  }
+
+  it.each(['loc-wh', 'loc-other'])('resolves a shared code only within selected warehouse %s', async (warehouseId) => {
+    const bins = warehouseId === 'loc-wh' ? [foreignBin, localBin] : [localBin, foreignBin];
+    const { repo, before, warehouse, scan } = await setupScan(bins, warehouseId);
+    await scan('  a-01-01  ');
+    const dialog = await screen.findByRole('dialog', { name: 'Bin A-01-01' });
+    expect(within(dialog).getByText(warehouseId === 'loc-wh' ? 'Selected warehouse bin' : 'Other warehouse bin')).toBeVisible();
+    expect(warehouse).toHaveValue(warehouseId);
+    expect(await repo.getData()).toEqual(before);
+  });
+
+  it('rejects a foreign bin ID without switching warehouses or opening its contents', async () => {
+    const { repo, before, warehouse, scan } = await setupScan([foreignBin, localBin]);
+    await scan('  FOREIGN-BIN  ');
+    expect(await screen.findByText(/belongs to another warehouse/i)).toBeVisible();
+    expect(warehouse).toHaveValue('loc-wh');
+    expect(screen.queryByRole('dialog', { name: /^Bin / })).not.toBeInTheDocument();
+    expect(await repo.getData()).toEqual(before);
+  });
+
+  it.each([
+    ['a-01-01', true],
+    ['a-01-01', false],
+    [' A-01-01 ', true],
+  ] as const)('rejects duplicate local code "%s" (active: %s)', async (code, active) => {
+    const duplicate = { ...localBin, id: 'duplicate-bin', code, active };
+    const { repo, before, warehouse, scan } = await setupScan([foreignBin, localBin, duplicate]);
+    await scan('A-01-01');
+    expect(await screen.findByText(/multiple storage areas.*selected warehouse/i)).toBeVisible();
+    expect(warehouse).toHaveValue('loc-wh');
+    expect(screen.queryByRole('dialog', { name: /^Bin / })).not.toBeInTheDocument();
+    expect(await repo.getData()).toEqual(before);
+  });
+
+  it('still resolves a unique local bin ID when its code is duplicated', async () => {
+    const duplicate = { ...localBin, id: 'duplicate-bin', label: 'Legacy duplicate' };
+    const { repo, before, warehouse, scan } = await setupScan([foreignBin, duplicate, localBin]);
+    await scan('  LOCAL-BIN  ');
+    const dialog = await screen.findByRole('dialog', { name: 'Bin A-01-01' });
+    expect(within(dialog).getByText('Selected warehouse bin')).toBeVisible();
+    expect(warehouse).toHaveValue('loc-wh');
+    expect(await repo.getData()).toEqual(before);
+  });
+
+  it.each(['FOREIGN-ONLY', 'UNKNOWN'])('does not fall back to another warehouse for code %s', async (code) => {
+    const { repo, before, warehouse, scan } = await setupScan([{ ...foreignBin, code: 'FOREIGN-ONLY' }, localBin]);
+    await scan(code);
+    expect(await screen.findByText(/no storage area matches.*selected warehouse/i)).toBeVisible();
+    expect(warehouse).toHaveValue('loc-wh');
+    expect(screen.queryByRole('dialog', { name: /^Bin / })).not.toBeInTheDocument();
+    expect(await repo.getData()).toEqual(before);
+  });
+});
 
 describe('StorageAreasPage', () => {
   it('keeps long bin identity above a separate zone and opens the same bin without changing stock', async () => {

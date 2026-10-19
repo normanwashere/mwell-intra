@@ -42,6 +42,7 @@ function makeMockClient(
     table: string;
     projection: string;
     limit?: number;
+    afterId?: string;
     orders: string[];
   }[] = [];
   const locationRows = seed.locations.map((l) => ({
@@ -57,7 +58,8 @@ function makeMockClient(
     zone: a.zone ?? null,
     active: a.active ?? true,
   }));
-  const stockRows = seed.stockLevels.map((s) => ({
+  const stockRows = seed.stockLevels.map((s, index) => ({
+    id: `stock-${index}`,
     product_id: s.productId,
     location_id: s.locationId,
     bin_id: s.binId ?? null,
@@ -350,13 +352,10 @@ function makeMockClient(
           table: string;
           projection: string;
           limit?: number;
+          afterId?: string;
           orders: string[];
         };
         queries.push(record);
-        const result = Promise.resolve({
-          data: tables[table] ?? [],
-          error: null,
-        });
         const query = {
           order: (column: string) => {
             record.orders.push(column);
@@ -364,11 +363,23 @@ function makeMockClient(
           },
           or: () => query,
           eq: () => query,
+          gt: (_column: string, value: string) => {
+            record.afterId = value;
+            return query;
+          },
           limit: (limit: number) => {
             record.limit = limit;
             return query;
           },
-          then: result.then.bind(result),
+          then: (resolve: (result: { data: unknown[]; error: null }) => unknown) => {
+            let data = tables[table] ?? [];
+            if (record.orders[0] === "id") {
+              data = [...data].sort((a, b) => String((a as { id: string }).id).localeCompare(String((b as { id: string }).id)));
+              if (record.afterId !== undefined) data = data.filter((row) => (row as { id: string }).id > record.afterId!);
+              data = data.slice(0, record.limit);
+            }
+            return Promise.resolve({ data, error: null }).then(resolve);
+          },
         };
         return query;
       },
@@ -606,14 +617,14 @@ describe("SupabaseRepository read model query shape", () => {
     expect(result.products).toHaveLength(seed.products.length);
     expect(result.units).toHaveLength(seed.units.length);
     expect(result.stockLevels).toHaveLength(seed.stockLevels.length);
-    expect(queries.map(query => query.table).sort()).toEqual(['inventory_units', 'products', 'stock_levels']);
+    expect([...new Set(queries.map(query => query.table))].sort()).toEqual(['inventory_units', 'products', 'stock_levels']);
   });
 
   it('does not load unrelated order and return histories before reserving stock', async () => {
     const seed = buildSeed();
     const { client, queries, calls } = makeMockClient(seed);
     await new SupabaseRepository(client).reserve({ eventId: 'evt-makati', productId: 'doctor-token', quantity: 1, actor: 'test' });
-    expect(queries.map(query => query.table).sort()).toEqual(['allocations', 'inventory_units', 'products', 'stock_levels']);
+    expect([...new Set(queries.map(query => query.table))].sort()).toEqual(['allocations', 'inventory_units', 'products', 'stock_levels']);
     expect(calls.at(-1)?.fn).toBe('reserve');
   });
 
@@ -629,28 +640,28 @@ describe("SupabaseRepository read model query shape", () => {
     const allocation = seed.allocations.find(row => row.status === 'reserved')!;
     const { client, queries, calls } = makeMockClient(seed);
     await new SupabaseRepository(client).cancelAllocation({ allocationId: allocation.id, actor: 'test' });
-    expect(queries.map(query => query.table)).toEqual(['allocations']);
+    expect([...new Set(queries.map(query => query.table))]).toEqual(['allocations']);
     expect(calls.at(-1)?.fn).toBe('cancel_allocation');
   });
 
   it('checks only products before rejecting an unknown product edit', async () => {
     const { client, queries, calls } = makeMockClient(buildSeed());
     await expect(new SupabaseRepository(client).updateProduct({ productId: 'missing', patch: { name: 'Changed' }, actor: 'test' })).rejects.toThrow('Product not found');
-    expect(queries.map(query => query.table)).toEqual(['products']);
+    expect([...new Set(queries.map(query => query.table))]).toEqual(['products']);
     expect(calls).toHaveLength(0);
   });
 
   it("uses explicit projections and bounds operational history", async () => {
     const { client, queries } = makeMockClient(buildSeed());
     await new SupabaseRepository(client).getData();
-    expect(queries).toHaveLength(23);
+    expect(queries.filter(query => query.afterId === undefined)).toHaveLength(23);
     expect(queries.every((query) => query.projection !== "*")).toBe(true);
     expect(queries.find((query) => query.table === "movements")?.limit).toBe(
       5000,
     );
     expect(
       queries.find((query) => query.table === "products")?.limit,
-    ).toBeUndefined();
+    ).toBe(1000);
     expect(
       queries.find((query) => query.table === "fulfillment_reservations")
         ?.projection,

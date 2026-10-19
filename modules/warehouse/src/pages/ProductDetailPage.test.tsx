@@ -31,6 +31,35 @@ function renderDetail(id: string, role: Role = "logistics_supervisor") {
 }
 
 describe("ProductDetailPage", () => {
+  it.each(["smart-watch", "shirt-l"])("shows governed availability for %s without changing on-hand breakdowns", async (productId) => {
+    const repo = makeRepo();
+    const load = vi.spyOn(repo, "listInventoryPositions").mockResolvedValue({ rows: [
+      { productId, locationId: "loc-wh", onHand: 10, committed: 2, held: 2, unavailable: 1, available: 5 },
+      { productId, locationId: "loc-wh", binId: "returned", onHand: 4, committed: 0, held: 1, unavailable: 2, available: 1 },
+    ], total: 2 });
+    renderWithProviders(<Routes><Route path="/inventory/:id" element={<ProductDetailPage />} /></Routes>, { repo, route: `/inventory/${productId}` });
+    const available = (await screen.findByText("available")).parentElement!;
+    expect(await within(available).findByText("6")).toBeVisible();
+    expect(load).toHaveBeenCalledWith({ limit: 100 });
+    expect(screen.getByRole("list", { name: "Stock by location" })).toBeVisible();
+  });
+
+  it("does not show snapshot availability while the governed read is pending or failed", async () => {
+    const user = userEvent.setup();
+    const repo = makeRepo();
+    let fail!: (error: Error) => void;
+    const load = vi.spyOn(repo, "listInventoryPositions").mockImplementationOnce(() => new Promise((_resolve, reject) => { fail = reject; }));
+    renderWithProviders(<Routes><Route path="/inventory/:id" element={<ProductDetailPage />} /></Routes>, { repo, route: "/inventory/smart-watch" });
+    const available = (await screen.findByText("available")).parentElement!;
+    expect(within(available).getByText("Checking")).toBeVisible();
+    await act(async () => fail(new Error("offline")));
+    expect(within(available).getByText("Unverified")).toBeVisible();
+    expect(screen.getByText(/Inventory availability could not be verified/)).toBeVisible();
+    load.mockResolvedValue({ rows: [], total: 0 });
+    await user.click(screen.getByRole("button", { name: "Refresh availability" }));
+    expect(await within(available).findByText("0")).toBeVisible();
+  });
+
   it("removes one relocation serial, allows rescanning it, and submits only remaining selections", async () => {
     const user = userEvent.setup();
     const repo = makeRepo();

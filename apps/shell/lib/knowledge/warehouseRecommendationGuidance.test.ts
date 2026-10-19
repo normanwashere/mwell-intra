@@ -40,13 +40,14 @@ describe("inventory recommendation guidance", () => {
     expect(roles.some(role => control("Save recommendation").ownerRoleIds!.includes(role))).toBe(expected);
   });
 
-  it("preserves the reader fallback for cancel and every unrelated control", () => {
+  it("preserves the reader fallback for cancel and existing unrelated controls", () => {
     expect(control("Cancel")).toBeDefined();
     expect(control("Cancel").ownerRoleIds).toBeUndefined();
     for (const item of feature.controls.filter(item => !["Recommend replenishment", "Save recommendation"].includes(item.name))) {
       expect(steps.find(step => step.title === item.name)!.ownerRoleIds).toEqual(feature.roleIds);
     }
-    for (const other of KNOWLEDGE_CONTENT.features.filter(item => item.id !== feature.id)) {
+    // External receiving independently documents its receiver and supervisor owners.
+    for (const other of KNOWLEDGE_CONTENT.features.filter(item => ![feature.id, "warehouse-external-receiving"].includes(item.id))) {
       expect(other.controls.every(item => item.ownerRoleIds === undefined)).toBe(true);
     }
     expect(feature.routes).toEqual(["/warehouse/inventory/:id"]);

@@ -81,6 +81,7 @@ export type WarehouseRouteId =
   | "inventory"
   | "product-detail"
   | "receiving"
+  | "external-receiving"
   | "allocations"
   | "fulfillment"
   | "returns"
@@ -191,6 +192,16 @@ export const MODULES: ModuleDef[] = [
     path: "/receiving",
     capabilities: ["receive_stock"],
     description: "Scan and tag incoming inventory.",
+    icon: "truck",
+    group: "operate",
+  },
+  {
+    id: "external-receiving",
+    label: "External PO receiving",
+    shortLabel: "Emailed POs",
+    path: "/external-receiving",
+    capabilities: ["receive_stock", "inspect_quality", "view_procurement"],
+    description: "Emailed PO confirmation and saved shipment arrivals.",
     icon: "truck",
     group: "operate",
   },
@@ -399,6 +410,7 @@ const ROUTE_CONTENT_DEPTH: Record<WarehouseModuleId, [number, number]> = {
   tasks: [3, 3],
   inventory: [5, 5],
   receiving: [5, 10],
+  "external-receiving": [4, 8],
   allocations: [5, 8],
   fulfillment: [8, 10],
   returns: [4, 7],

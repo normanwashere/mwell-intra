@@ -195,8 +195,11 @@ describe("AppShell navigation", () => {
     });
     const sidebar = await screen.findByRole("navigation", { name: "Primary" });
     expect(
-      within(sidebar).getByRole("link", { name: /receiving/i }),
-    ).toBeInTheDocument();
+      within(sidebar).getByRole("link", { name: "Receiving" }),
+    ).toHaveAttribute("href", "/receiving");
+    expect(
+      within(sidebar).getByRole("link", { name: "External PO receiving" }),
+    ).toHaveAttribute("href", "/external-receiving");
     expect(
       within(sidebar).getByRole("link", { name: /cycle counts/i }),
     ).toBeInTheDocument();
@@ -215,9 +218,10 @@ describe("AppShell navigation", () => {
   it("keeps Warehouse operations scoped and leaves Finance to the Intra shell", async () => {
     renderWithProviders(<AppShell>content</AppShell>, { role: "finance" });
     const sidebar = await screen.findByRole("navigation", { name: "Primary" });
-    expect(
-      within(sidebar).queryByRole("link", { name: /receiving/i }),
-    ).not.toBeInTheDocument();
+    for (const [name, href] of [["Receiving", "/receiving"], ["External PO receiving", "/external-receiving"]]) {
+      expect(within(sidebar).queryByRole("link", { name })).not.toBeInTheDocument();
+      expect(within(sidebar).getAllByRole("link").map(link => link.getAttribute("href"))).not.toContain(href);
+    }
     expect(
       within(sidebar).queryByRole("link", { name: /^finance$/i }),
     ).not.toBeInTheDocument();
@@ -240,6 +244,12 @@ describe("AppShell navigation", () => {
     expect(
       within(sidebar).queryByRole("link", { name: "Receiving" }),
     ).not.toBeInTheDocument();
+    expect(
+      within(sidebar).queryByRole("link", { name: "External PO receiving" }),
+    ).not.toBeInTheDocument();
+    const hrefs = within(sidebar).getAllByRole("link").map(link => link.getAttribute("href"));
+    expect(hrefs).not.toContain("/receiving");
+    expect(hrefs).not.toContain("/external-receiving");
     expect(
       within(sidebar).getByRole("link", { name: "Warehouse home" }),
     ).toBeInTheDocument();

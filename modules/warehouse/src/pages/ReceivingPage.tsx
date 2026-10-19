@@ -639,6 +639,9 @@ export function ReceivingPageSurface({
             Start from the approved PO queue whenever a supplier delivery has a
             PO or delivery receipt.
           </p>
+          <Link to="/external-receiving" className="mt-2 inline-flex min-h-11 items-center gap-2 text-sm text-link">
+            <Icon name="truck" className="h-4 w-4" /> Emailed PO or unconfirmed arrival? Open external PO receiving
+          </Link>
         </div>
         <ol className="grid gap-2 text-sm sm:grid-cols-2 xl:grid-cols-4">
           {[

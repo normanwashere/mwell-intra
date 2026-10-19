@@ -6,7 +6,7 @@ import { PGlite } from "@electric-sql/pglite";
 
 import { verifySecurityDatabaseLaunchBlockers } from "./verify-security-database-launch-blockers.mjs";
 import { QUALITY_CHAIN_CONTRACT_SQL } from "./quality-inspection-chain-contract.mjs";
-import { installActualQualityChain, installPriorReadVerifier, verifierMigration } from "./quality-inspection-verifier-fixture.mjs";
+import { installActualQualityChain, installExternalQualityChain, installLatestLaunchVerifier, installPriorReadVerifier, verifierMigration, externalVerifierMigration } from "./quality-inspection-verifier-fixture.mjs";
 
 const MIGRATION = resolve(
   import.meta.dirname,
@@ -243,14 +243,27 @@ test("convergence migration executes and enforces critical launch contracts", as
     await db.exec(migrationSql);
     await installActualQualityChain(db);
     await installPriorReadVerifier(db);
-    assert(verifierMigration.includes(QUALITY_CHAIN_CONTRACT_SQL.trim()), "local and installed verifier pin exactly the same chain");
     await db.exec("select set_config('request.jwt.claim.role','service_role',false)");
     const priorSummary = (await db.query("select core.verify_security_database_launch_blockers() result")).rows[0].result;
     assert((await db.query("select core.verify_launch_read_contracts() result")).rows[0].result.missing_grants.includes("warehouse.inspect_quality exact PO-line delegate"), "actual pre-repair validator falsely rejects current chain");
     await db.exec(verifierMigration);
     assert.deepEqual((await db.query("select core.verify_security_database_launch_blockers() result")).rows[0].result, priorSummary, "all existing security checks retained");
     assert.deepEqual((await db.query("select core.verify_launch_read_contracts() result")).rows[0].result.missing_grants, []);
-    assert.equal((await db.query(`select (${QUALITY_CHAIN_CONTRACT_SQL}) ok`)).rows[0].ok, true, "actual migrated bodies match reviewed UAT fingerprints");
+    await installLatestLaunchVerifier(db);
+    const latestSummary = (await db.query("select core.verify_security_database_launch_blockers() result")).rows[0].result;
+    assert.deepEqual(latestSummary.vendor_fixture_checklist.rows, [{ code: "fixture-requirement", title: "Fixture" }]);
+    await installExternalQualityChain(db);
+    assert.equal((await db.query("select private.quality_inspection_chain_is_current() ok")).rows[0].ok, false, "external dispatcher invalidates the old fingerprint");
+    assert((await db.query("select core.verify_security_database_launch_blockers() result")).rows[0].result.missing_objects.includes("warehouse.inspect_quality exact PO-line delegate"));
+    assert((await db.query("select core.verify_launch_read_contracts() result")).rows[0].result.missing_grants.includes("warehouse.inspect_quality exact PO-line delegate"));
+    const launchDefinitions = (await db.query("select oid::regprocedure::text signature,pg_get_functiondef(oid) body from pg_proc where oid in ('core.verify_security_database_launch_blockers()'::regprocedure,'core.verify_launch_read_contracts()'::regprocedure) order by oid")).rows;
+    await db.exec(externalVerifierMigration);
+    assert.equal((await db.query("select private.quality_inspection_chain_is_current() ok")).rows[0].ok, true, "forward migration certifies the actual external Quality chain");
+    assert(externalVerifierMigration.includes(QUALITY_CHAIN_CONTRACT_SQL.trim()), "local and installed verifier pin exactly the same chain");
+    assert.deepEqual((await db.query("select oid::regprocedure::text signature,pg_get_functiondef(oid) body from pg_proc where oid in ('core.verify_security_database_launch_blockers()'::regprocedure,'core.verify_launch_read_contracts()'::regprocedure) order by oid")).rows, launchDefinitions, "both launch verifiers remain unchanged");
+    assert.deepEqual((await db.query("select core.verify_security_database_launch_blockers() result")).rows[0].result, latestSummary);
+    assert.deepEqual((await db.query("select core.verify_launch_read_contracts() result")).rows[0].result.missing_grants, []);
+    assert.equal((await db.query(`select (${QUALITY_CHAIN_CONTRACT_SQL}) ok`)).rows[0].ok, true, "actual migrated bodies match reviewed fingerprints");
 
     const definitions = (await db.query("select oid::regprocedure::text signature,pg_get_functiondef(oid) body from pg_proc where oid in ('warehouse.inspect_quality(jsonb)'::regprocedure,'private.warehouse_inspect_quality_v3(jsonb)'::regprocedure)")).rows;
     const publicBody = definitions.find(row=>row.signature==='warehouse.inspect_quality(jsonb)').body;
@@ -264,8 +277,9 @@ test("convergence migration executes and enforces critical launch contracts", as
     for (const changed of [
       publicBody.replace('return private.warehouse_inspect_quality_v3(payload);','return private.warehouse_inspect_quality_v2(payload);'),
       publicBody.replace('return private.warehouse_inspect_quality_v3(payload);','return private.warehouse_inspect_quality(payload);'),
-      publicBody.replace('then return private.inspect_return_intake(payload); end if;', 'then return private.warehouse_inspect_quality_v3(payload); end if;'),
-      publicBody.replace("not core.has_live_cap('warehouse', 'inspect_quality')", "false"),
+      publicBody.replace('return private.inspect_return_intake(payload);', 'return private.warehouse_inspect_quality_v3(payload);'),
+      publicBody.replace('return private.external_po_inspect(payload);', 'return private.warehouse_inspect_quality_v3(payload);'),
+      publicBody.replace("not core.has_live_cap('warehouse','inspect_quality')", "false"),
     ]) {
       assert.notEqual(changed,publicBody);
       await db.exec(changed); await rejectChain(); await db.exec(publicBody);
@@ -280,6 +294,61 @@ test("convergence migration executes and enforces critical launch contracts", as
     await db.exec('grant execute on function private.inspect_return_intake(jsonb) to authenticated');
     await rejectChain();
     await db.exec('revoke execute on function private.inspect_return_intake(jsonb) from authenticated');
+    const rejectMutation = async sql => {
+      await db.exec('begin');
+      try { await db.exec(sql); await rejectChain(); }
+      finally { await db.exec('rollback'); }
+    };
+    const externalDefinitions = (await db.query(`select oid::regprocedure::text signature,pg_get_functiondef(oid) body
+      from pg_proc where oid in ('private.external_po_inspect(jsonb)'::regprocedure,
+        'private.external_po_check_evidence(jsonb,text,jsonb)'::regprocedure,'private.guard_external_po_hold()'::regprocedure)`)).rows;
+    const mutations = new Map([
+      ['private.external_po_inspect(jsonb)', [
+        ["not core.has_live_cap('warehouse','inspect_quality')", 'false'],
+        ['receipt.received_by=auth.uid()', 'false'],
+        ["inspection.quantity is distinct from (payload->>'quantity')::integer", 'false'],
+        ["i.lot_id is not distinct from nullif(payload->>'lot_id','')", 'true'],
+        ["perform private.external_po_check_evidence(evidence,'evidence');", ''],
+        ["perform private.lock_warehouse_products(array[payload->>'product_id']);", ''],
+      ]],
+      ['private.external_po_check_evidence(jsonb,text,jsonb)', [
+        ['coalesce(o.owner_id,o.owner::text)=auth.uid()::text', 'true'],
+      ]],
+      ['private.guard_external_po_hold()', [
+        ["if tg_op='DELETE'", 'if false'],
+        ['r.received_by<>auth.uid()', 'true'],
+        ['i.quantity=old.quantity', 'true'],
+        ['new.release_evidence_urls=i.evidence_urls', 'true'],
+      ]],
+    ]);
+    for (const { signature, body } of externalDefinitions) {
+      for (const [before, after] of mutations.get(signature)) {
+        const changed = body.replace(before, after);
+        assert.notEqual(changed, body, `mutation anchor exists for ${signature}: ${before}`);
+        await rejectMutation(changed);
+      }
+      await rejectMutation(`grant execute on function ${signature} to authenticated`);
+      await rejectMutation(`grant execute on function ${signature} to anon`);
+      await rejectMutation(`alter function ${signature} security invoker`);
+      await rejectMutation(`alter function ${signature} set search_path=public`);
+      await rejectMutation(`alter function ${signature} reset all`);
+      await rejectMutation(`alter function ${signature} owner to service_role`);
+      await rejectMutation(`drop function ${signature} cascade`);
+    }
+    const evidenceBody = externalDefinitions.find(row => row.signature === 'private.external_po_check_evidence(jsonb,text,jsonb)').body;
+    const unsafeDefault = evidenceBody.replace("DEFAULT '[]'::jsonb", `DEFAULT '["foreign/photo.png"]'::jsonb`);
+    assert.notEqual(unsafeDefault, evidenceBody);
+    await rejectMutation(unsafeDefault);
+    const holdTrigger = (await db.query("select pg_get_triggerdef(oid) definition from pg_trigger where tgrelid='warehouse.inventory_holds'::regclass and tgname='guard_external_po_hold'")).rows[0].definition;
+    for (const mutation of [
+      'alter table warehouse.inventory_holds disable trigger guard_external_po_hold',
+      'alter table warehouse.inventory_holds enable replica trigger guard_external_po_hold',
+      'drop trigger guard_external_po_hold on warehouse.inventory_holds',
+      `drop trigger guard_external_po_hold on warehouse.inventory_holds; ${holdTrigger.replace('BEFORE', 'AFTER')}`,
+      `drop trigger guard_external_po_hold on warehouse.inventory_holds; ${holdTrigger.replace('DELETE OR UPDATE', 'UPDATE')}`,
+      `drop trigger guard_external_po_hold on warehouse.inventory_holds; ${holdTrigger.replace('FOR EACH ROW', 'FOR EACH ROW WHEN (false)')}`,
+    ]) await rejectMutation(mutation);
+    assert.equal((await db.query(`select (${QUALITY_CHAIN_CONTRACT_SQL}) ok`)).rows[0].ok, true, 'all reviewed bodies and trigger restored after negative probes');
     assert.equal((await db.query("select has_function_privilege('authenticated','core.verify_security_database_launch_blockers()','EXECUTE') ok")).rows[0].ok,false);
     await db.exec("select set_config('request.jwt.claim.role','authenticated',false)");
 

@@ -33,6 +33,7 @@ export const CONTEXTUAL_FEATURE_GUIDES: ContextualFeatureGuide[] = [
     "/warehouse/inventory/:id",
   ),
   guide("warehouse-receiving", "Warehouse receiving", "/warehouse/receiving"),
+  guide("warehouse-external-receiving", "External PO receiving", "/warehouse/external-receiving"),
   guide("warehouse-allocations", "Stock allocations", "/warehouse/allocations"),
   guide(
     "warehouse-fulfillment",

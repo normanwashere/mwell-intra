@@ -2,7 +2,7 @@ import { userFacingError } from '@intra/ui';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { tasksReturnPath } from '@/domain/taskNavigation';
-import type { InventoryPosition } from '@intra/data-kit';
+import type { InventoryHold, InventoryPosition, InventoryUnit } from '@intra/data-kit';
 import { useWarehouse } from '@/app/store';
 import { WAREHOUSE_MUTATION_CAPABILITIES } from '@/app/authorization';
 import { toStockState } from '@/data/repository';
@@ -26,6 +26,20 @@ import { WarehouseScanFlow } from '@/components/camera/WarehouseScanFlow';
 import { knowledgeGuideReturnPath } from '@/lib/knowledgeGuide';
 import { loadCompleteControlQueue } from '@/domain/controlQueues';
 
+const holdAccessMessage = 'Active Quality holds cannot be verified with your current access. No putaway was submitted. Ask Quality or a warehouse supervisor to review this stock.';
+const availabilityReadMessage = 'Stock availability and active Quality holds could not be verified. Keep this capture and check your connection, then refresh stock availability before retrying.';
+
+function putawayHoldMessage(unit: InventoryUnit | undefined, holds: InventoryHold[]): string | null {
+  if (!unit) return null;
+  const hold = holds.find(row => row.status === 'active' && row.productId === unit.productId &&
+    row.locationId === unit.locationId && row.serialNumber === unit.serialNumber &&
+    (row.binId ?? '') === (unit.binId ?? '') && (row.lotId ?? '') === (unit.lotId ?? ''));
+  if (!hold) return null;
+  return hold.reason === 'Awaiting independent quality inspection'
+    ? `${unit.serialNumber} is awaiting independent quality inspection. Keep it in the receiving area and ask an authorized person other than the receiver to inspect it in Quality Control > Pending before putaway.`
+    : `${unit.serialNumber} has an active Quality hold${hold.reason ? `: ${hold.reason}` : ''}. Keep it in the receiving area and ask Quality or your warehouse supervisor to review the hold in Quality Control. Do not release a hold just to put stock away.`;
+}
+
 export function StorageAreasPage() {
   const [searchParams] = useSearchParams();
   const warehouse = useWarehouse();
@@ -39,10 +53,13 @@ export function StorageAreasPage() {
     loadWarehouseTasks,
     loadQualityInspections,
     loadInventoryPositions,
+    loadHolds,
+    source,
   } = warehouse;
   const toast = useToast();
   const canManage = can('manage_locations');
   const canPutAway = can(WAREHOUSE_MUTATION_CAPABILITIES.relocate);
+  const canReadHolds = source !== 'supabase' || can('inspect_quality') || can('view_exceptions') || can('view_finance');
   const guideReturnTo = knowledgeGuideReturnPath(searchParams);
 
   const warehouses = useMemo(
@@ -116,22 +133,35 @@ export function StorageAreasPage() {
   const command = useRef<{ signature: string; key: string } | null>(null);
   const [positions, setPositions] = useState<InventoryPosition[]>([]);
   const [positionsReady, setPositionsReady] = useState(false);
+  const [activeHolds, setActiveHolds] = useState<InventoryHold[]>([]);
+  const [availabilityError, setAvailabilityError] = useState<string | null>(null);
+  const [availabilityRefresh, setAvailabilityRefresh] = useState(0);
   const [scanSession, setScanSession] = useState(0);
   const sourceId = searchParams.get('source');
   const [sourceStatus, setSourceStatus] = useState<{ state: 'loading' | 'ready' | 'completed' | 'unavailable'; message: string } | null>(null);
   const appliedSource = useRef<string | null>(null);
-  const loaders = useRef({ loadWarehouseTasks, loadQualityInspections, loadInventoryPositions });
-  loaders.current = { loadWarehouseTasks, loadQualityInspections, loadInventoryPositions };
+  const loaders = useRef({ loadWarehouseTasks, loadQualityInspections, loadInventoryPositions, loadHolds });
+  loaders.current = { loadWarehouseTasks, loadQualityInspections, loadInventoryPositions, loadHolds };
 
   useEffect(() => {
     if (!putawayOpen) return;
     let active = true;
     setPositionsReady(false);
-    void loadCompleteControlQueue(loaders.current.loadInventoryPositions).then((rows) => {
-      if (active) { setPositions(rows); setPositionsReady(true); }
-    }).catch(() => { if (active) setPutawayError('Eligible stock could not be loaded. Close and reopen putaway to retry.'); });
+    setAvailabilityError(null);
+    if (putawayStock?.serialNumber && !canReadHolds) {
+      setAvailabilityError(holdAccessMessage);
+      return;
+    }
+    void Promise.all([
+      loadCompleteControlQueue(loaders.current.loadInventoryPositions),
+      putawayStock?.serialNumber
+        ? loadCompleteControlQueue(query => loaders.current.loadHolds({ ...query, status: 'active' }))
+        : Promise.resolve([] as InventoryHold[]),
+    ]).then(([rows, holds]) => {
+      if (active) { setPositions(rows); setActiveHolds(holds); setPositionsReady(true); }
+    }).catch(() => { if (active) setAvailabilityError(availabilityReadMessage); });
     return () => { active = false; };
-  }, [putawayOpen, data]);
+  }, [putawayOpen, data, putawayStock, availabilityRefresh, canReadHolds]);
 
   useEffect(() => {
     if (!sourceId) { appliedSource.current = null; setSourceStatus(null); return; }
@@ -267,15 +297,26 @@ export function StorageAreasPage() {
 
   const onScan = (raw: string) => {
     const codeStr = raw.trim().toLowerCase();
-    const match = (data?.storageAreas ?? []).find(
-      (b) => b.code.toLowerCase() === codeStr || b.id.toLowerCase() === codeStr,
-    );
+    const idMatches = data.storageAreas.filter((b) => b.id.toLowerCase() === codeStr);
+    const matches = idMatches.length > 0
+      ? idMatches
+      : bins.filter((b) => b.code.trim().toLowerCase() === codeStr);
     setScanOpen(false);
-    if (!match) {
-      toast.error(`No storage area matches "${raw.trim()}".`);
+    if (matches.length > 1) {
+      toast.error(idMatches.length > 0
+        ? 'Multiple storage areas match this bin ID. Ask Operations Lead to correct the bin identities.'
+        : 'Multiple storage areas match this code in the selected warehouse. Scan a unique bin ID or ask Operations Lead to correct the bin codes.');
       return;
     }
-    if (match.locationId !== activeWarehouse) setWarehouseId(match.locationId);
+    const [match] = matches;
+    if (!match) {
+      toast.error(`No storage area matches "${raw.trim()}" in the selected warehouse.`);
+      return;
+    }
+    if (match.locationId !== activeWarehouse) {
+      toast.error('This bin belongs to another warehouse. Select that warehouse before scanning it.');
+      return;
+    }
     setViewing(match);
   };
 
@@ -302,11 +343,15 @@ export function StorageAreasPage() {
     setPutawayBin(match);
   };
 
+  const putawayUnit = putawayStock?.serialNumber
+    ? data.units.find(unit => unit.serialNumber === putawayStock.serialNumber && unit.productId === putawayStock.productId)
+    : undefined;
+  const qualityIssue = putawayHoldMessage(putawayUnit, activeHolds);
   const eligibleQuantity = putawayStock?.serialNumber
-    ? (data.units.some((unit) => unit.serialNumber === putawayStock.serialNumber && unit.productId === putawayStock.productId && unit.locationId === activeWarehouse && !unit.binId && unit.status === 'in_stock') ? 1 : 0)
+    ? (putawayUnit && putawayUnit.locationId === activeWarehouse && !putawayUnit.binId && putawayUnit.status === 'in_stock' && !qualityIssue ? 1 : 0)
     : positions.filter((row) => row.productId === putawayStock?.productId && row.locationId === activeWarehouse && !row.binId).reduce((sum, row) => sum + row.available, 0);
   const quantity = putawayStock?.serialNumber ? 1 : Number(putawayQuantity);
-  const quantityValid = positionsReady && Number.isSafeInteger(quantity) && quantity > 0 && quantity <= eligibleQuantity;
+  const quantityValid = positionsReady && !availabilityError && Number.isSafeInteger(quantity) && quantity > 0 && quantity <= eligibleQuantity;
   const closePutaway = () => {
     if (putawayInFlight.current) return;
     if (queued) { setPutawayOpen(false); return; }
@@ -324,6 +369,20 @@ export function StorageAreasPage() {
     setUnconfirmed(false);
     setPutawayError(null);
     try {
+    const verifyHolds = async () => {
+      if (!canReadHolds) { setAvailabilityError(holdAccessMessage); return false; }
+      try {
+        const holds = await loadCompleteControlQueue(query => loaders.current.loadHolds({ ...query, status: 'active' }));
+        setActiveHolds(holds);
+        setAvailabilityError(null);
+        return !putawayHoldMessage(putawayUnit, holds);
+      } catch {
+        setAvailabilityError(availabilityReadMessage);
+        return false;
+      }
+    };
+    // Retained queued commands keep their original replay identity; new moves need a fresh hold check.
+    if (putawayStock.serialNumber && !queued && !(await verifyHolds())) return;
     const input = {
       productId: putawayStock.productId,
       locationId: activeWarehouse,
@@ -337,7 +396,13 @@ export function StorageAreasPage() {
     const signature = JSON.stringify(input);
     if (!command.current || command.current.signature !== signature) command.current = { signature, key: `putaway-${crypto.randomUUID()}` };
     const ok = await relocate({ ...input, idempotencyKey: command.current.key });
-    if (!ok) { const wasQueued = warehouse.lastActionStatus === 'queued'; setQueued((current) => current || wasQueued); setUnconfirmed(true); return; }
+    if (!ok) {
+      const wasQueued = warehouse.lastActionStatus === 'queued';
+      setQueued((current) => current || wasQueued);
+      setUnconfirmed(true);
+      if (putawayStock.serialNumber && !queued && !wasQueued) await verifyHolds();
+      return;
+    }
     command.current = null;
     setQueued(false);
     toast.success(`Put away ${quantity} unit(s) into ${putawayBin.code}`);
@@ -679,10 +744,19 @@ export function StorageAreasPage() {
           {putawayStock && <div className="space-y-2">
             <p className="break-words font-semibold">{data.products.find((product) => product.id === putawayStock.productId)?.name} / {putawayStock.serialNumber ?? putawayStock.code}</p>
             {putawayStock.serialNumber ? <p>1 serialized unit: {putawayStock.serialNumber}</p> : <Field label="Quantity to put away" htmlFor="putaway-quantity">
-              <input id="putaway-quantity" className="input" type="number" inputMode="numeric" min={1} max={eligibleQuantity} step={1} value={putawayQuantity} disabled={putawaySaving || queued} onChange={(event) => setPutawayQuantity(event.target.value)} />
+              <input id="putaway-quantity" className="input" type="number" inputMode="numeric" min={1} max={eligibleQuantity || undefined} step={1} value={putawayQuantity} disabled={putawaySaving || queued} onChange={(event) => setPutawayQuantity(event.target.value)} />
             </Field>}
-            <p role="status">{positionsReady ? `${eligibleQuantity} eligible unit(s) in the general area` : 'Checking eligible stock...'}</p>
-            {positionsReady && !quantityValid && <p role="alert">Enter a whole quantity from 1 to {eligibleQuantity}. Unavailable stock cannot be moved.</p>}
+            <div className="flex flex-wrap items-center gap-2">
+              <p role="status">{availabilityError ? 'Stock availability not verified.' : positionsReady ? `${eligibleQuantity} eligible unit(s) in the general area` : 'Checking eligible stock...'}</p>
+              <button type="button" className="btn-ghost min-h-11 min-w-11" title="Refresh stock availability" aria-label="Refresh stock availability"
+                disabled={putawaySaving || queued} onClick={() => { setPositionsReady(false); setAvailabilityRefresh(value => value + 1); }}>
+                <Icon name="rotate" />
+              </button>
+            </div>
+            {(availabilityError || qualityIssue) ? <p role="alert" className="break-words text-sm text-rose-600 dark:text-rose-300">{availabilityError || qualityIssue}</p>
+              : positionsReady && !quantityValid && <p role="alert">{eligibleQuantity === 0
+                ? 'No eligible stock is available in this warehouse general area. Check Quality inspection and hold status, then refresh stock availability after Quality acceptance.'
+                : `Enter a whole quantity from 1 to ${eligibleQuantity}. Unavailable stock cannot be moved.`}</p>}
             {putawayBin && quantityValid && <p className="font-semibold">Move {quantity} unit(s) to {putawayBin.code}</p>}
           </div>}
           <Field

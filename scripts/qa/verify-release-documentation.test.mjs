@@ -61,7 +61,7 @@ test("accepts operational releases with the complete documentation set", () => {
 });
 
 test("derives the current legacy-route count and rejects any declared count drift", () => {
-  assert.equal(LEGACY_ROUTES.length, 503);
+  assert.equal(LEGACY_ROUTES.length, 505);
   const documents = Object.fromEntries(
     LEGACY_ROUTE_COUNT_DOCUMENTS.map(({ file }) => [
       file,
@@ -83,6 +83,26 @@ test("retains all five reporting release source links without implying a connect
   }
   const note = readFileSync(path.join(root, "docs/releases/2026-09-23-REPORTING-FOUNDATION.md"), "utf8");
   assert.match(note, /All 30 dataset IDs remain unavailable/);
+});
+
+test("retains both external receiving transition headings without inherited certification", () => {
+  const article = "doc-manual-mwell-intra-user-manual-md";
+  for (const [heading, guideId] of [
+    ["october-19-transition-update", "source-references"],
+    ["external-po-receiving", "stock-receiving-putaway"],
+  ]) {
+    const routes = LEGACY_ROUTES.filter(route => route.legacyArticleId === article && route.legacyHeadingId === `${article}-${heading}`);
+    assert.equal(routes.length, 1);
+    assert.equal(routes[0].guideId, guideId);
+  }
+  const manual = readFileSync(path.join(root, "docs/manual/MWELL_INTRA_USER_MANUAL.md"), "utf8");
+  const external = manual.split("### External PO Receiving")[1].split("\n### ")[0];
+  assert.match(external, /verification.*release record/i);
+  assert.match(external, /does not establish live or certified status/);
+  assert.doesNotMatch(external, /local candidate|not deployed|is live|is certified/i);
+  assert.match(external, /transitional coexistence/);
+  assert.match(external, /Procurement is not removed or replaced/);
+  assert.match(external, /No automatic linking or reconciliation is implemented/);
 });
 
 test("retains the eight return and Quality display reference routes without screenshot credit", () => {

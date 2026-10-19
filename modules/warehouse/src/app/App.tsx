@@ -38,6 +38,9 @@ const ProductDetailPage = lazy(() =>
 const ReceivingPage = lazy(() =>
   import("@/pages/ReceivingPage").then((m) => ({ default: m.ReceivingPage })),
 );
+const ExternalReceivingPage = lazy(() =>
+  import("@/pages/ExternalReceivingPage").then((m) => ({ default: m.ExternalReceivingPage })),
+);
 const AllocationsPage = lazy(() =>
   import("@/pages/AllocationsPage").then((m) => ({
     default: m.AllocationsPage,
@@ -425,6 +428,14 @@ export function App() {
                 }}
               >
                 <ReceivingPage />
+              </Guard>
+            }
+          />
+          <Route
+            path={WAREHOUSE_ROUTE_BY_ID["external-receiving"].path}
+            element={
+              <Guard anyOf={WAREHOUSE_ROUTE_BY_ID["external-receiving"].gateCapabilityIds}>
+                <ExternalReceivingPage />
               </Guard>
             }
           />

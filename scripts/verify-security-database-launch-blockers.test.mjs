@@ -111,6 +111,19 @@ function functionBody(sql, qualifiedName) {
   return sql.slice(start, end + 3);
 }
 
+test("external PO migrations match the observed UAT versions without duplicate local history", () => {
+  const files = readdirSync(MIGRATIONS);
+  for (const file of [
+    "20261019142956_warehouse_external_po_receiving.sql",
+    "20261019143020_external_po_quality_verifier_chain.sql",
+    "20261019145212_external_po_shipment_evidence_access.sql",
+    "20261019153041_external_po_procurement_duplicate_guard.sql",
+  ]) {
+    assert.deepEqual(files.filter(name => name.endsWith(file.slice(14))), [file]);
+    assert.ok(readFileSync(resolve(MIGRATIONS, file), "utf8").trim(), `${file} must not be empty`);
+  }
+});
+
 test("adds one post-20260815 forward-only convergence migration", () => {
   const { sql } = convergenceMigration();
   assert.match(sql, /forward-only/i);
