@@ -6,7 +6,9 @@ Use the receipt's Storage handoff to retain its warehouse, product and receipt c
 
 For a Procurement receipt with a shortage or other controlled issue, open its review from Exceptions or **Approved POs > Controlled receipt decisions**. A separate authorized supervisor reviews the existing receipt evidence and records the decision. Starting work on an exception is not that decision. Accepting a shortage decision does not mean the missing goods arrived; receive a later physical delivery separately against the remaining PO balance. Fully received POs remain visible in Closed history and cannot be received again. Quality timestamps are shown in Philippine time; the actual delivery date remains the recorded delivery date.
 
-These instructions describe the candidate behavior. The dated release record contains deployment and live-test status. Procurement approvals, independent Quality inspection, hold restrictions and SMTP are unchanged.
+These instructions describe UAT application `67c9ddb39fb993893daf0da3ddf964942c0204de`, deployed on October 20 (Singapore/Philippine time). The dated release record contains the scoped live-test evidence and limits. Procurement approvals, independent Quality inspection, hold restrictions and SMTP are unchanged.
+
+The two source paths retain their existing bin behavior. An emailed arrival's custody bin is metadata; accepted stock starts in the general area and uses **Put away**. An original Procurement receipt saved into a staging bin is already in that actual inventory bin. After independent Quality acceptance, open the product in **Inventory**, choose **Relocate**, select the staging and final bins, then confirm **Move stock**. Zero eligible general-area stock does not mean the staged goods or their inspection are missing. Do not change a receipt or release a hold merely to use a different movement screen.
 
 ## October 19 Transition Update
 
