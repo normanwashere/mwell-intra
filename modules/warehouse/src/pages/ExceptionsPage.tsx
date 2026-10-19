@@ -13,6 +13,7 @@ function commandKey(exceptionId: string, action: string) {
 
 function sourceRoute(exception: WarehouseException) {
   const sourceId = encodeURIComponent(exception.sourceId);
+  if (exception.type === 'po_receipt' && exception.sourceType === 'receipt') return { path: `/purchase-orders?receipt=${sourceId}`, routeId: 'purchase-orders' as const };
   if (exception.sourceType === 'stock_change_request') return { path: `/approvals?request=${sourceId}`, routeId: 'approvals' as const };
   if (exception.sourceType === 'receipt') return { path: `/receiving?receipt=${sourceId}`, routeId: 'receiving' as const };
   if (exception.sourceType === 'import_job') return { path: `/imports?job=${sourceId}`, routeId: 'imports' as const };
@@ -130,9 +131,10 @@ export function ExceptionsPage() {
                   <Badge tone="slate">{exception.status.replace('_', ' ')}</Badge>
                 </div>
                 <p className="mt-1 text-xs text-faint">Opened {exception.createdAt.slice(0, 10)} · Owner {exception.ownerId ?? 'Unassigned'}</p>
+                {exception.type === 'po_receipt' && <p className="text-sm text-muted">An independent Lead must complete the controlled receipt decision before the next delivery. Beginning work alone does not release the PO line.</p>}
                 {canOpenRoute(source.routeId) && <Link className="mt-2 inline-block text-xs font-semibold text-brand-600 hover:underline dark:text-brand-300" to={source.path}>View source</Link>}
               </div>
-              {mayResolve && <button type="button" className="btn-primary btn-sm justify-center" onClick={() => setSelected(exception)}>Review exception</button>}
+              {mayResolve && exception.type !== 'po_receipt' && <button type="button" className="btn-primary btn-sm justify-center" onClick={() => setSelected(exception)}>Review exception</button>}
             </li>
             );
           })}

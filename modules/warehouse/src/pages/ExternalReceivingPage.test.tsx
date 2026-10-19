@@ -144,6 +144,30 @@ function savedShipment() {
 }
 
 describe("external receiving workflow", () => {
+  it('links each posted shipment product to its exact warehouse and receipt, not generic Storage', async () => {
+    savedShipment();
+    const shipment = workspace.orders[0]!.shipments[0]!;
+    shipment.status = 'posted';
+    shipment.receipt_id = 'external-receipt-one';
+    mount();
+    const dialog = await openOrder();
+    expect(within(dialog).getByRole('link', { name: 'Open Storage: Medical device' })).toHaveAttribute(
+      'href', '/warehouse/storage?warehouse=location&receipt=external-receipt-one&product=product',
+    );
+    expect(within(dialog).queryByRole('link', { name: 'Open Storage' })).not.toBeInTheDocument();
+    expect(mock.rpc.mock.calls.every(([name]) => name === 'external_po_workspace')).toBe(true);
+  });
+
+  it.each(['receive_stock', 'manage_locations'])('does not offer receipt putaway without transfer authority (%s)', async (cap) => {
+    savedShipment();
+    workspace.orders[0]!.shipments[0]!.status = 'posted';
+    workspace.orders[0]!.shipments[0]!.receipt_id = 'external-receipt-one';
+    mock.caps = ['receive_stock', cap];
+    mount();
+    const dialog = await openOrder();
+    expect(within(dialog).queryByRole('link', { name: /Open Storage/ })).not.toBeInTheDocument();
+  });
+
   it("links receiving users directly to Procurement PO receiving alongside registration", async () => {
     mock.caps = ["receive_stock"];
     mount();
@@ -446,9 +470,9 @@ describe("external receiving workflow", () => {
       "href",
       "/warehouse/quality",
     );
-    expect(screen.getByRole("link", { name: "Open Storage" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Open Storage: Medical device" })).toHaveAttribute(
       "href",
-      "/warehouse/storage",
+      "/warehouse/storage?warehouse=location&receipt=receipt-1&product=product",
     );
   });
   it("freezes uncertain writes, disables editing, and restores the same retry after remount", async () => {

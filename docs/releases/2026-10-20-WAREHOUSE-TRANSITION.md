@@ -2,6 +2,14 @@
 
 Scope: October 19-20, 2026, UAT only. Procurement remains available. SMTP is unchanged.
 
+## October 20 Receiving Audit Follow-Up
+
+The subsequent three-account live audit found four issues: multi-lot bulk putaway was blocked, controlled receipt decisions were hard to find, closed Procurement POs were missing from Warehouse history, and external receipt links lost their Storage context. It also found unclear Quality timestamps and overly long mobile metadata. These findings supersede any inference that the earlier targeted rollout checks certified the full receiving journey.
+
+The remediation candidate adds atomic lot-preserving bulk putaway, exact receipt-review navigation and retained-evidence selection, authorized closed-PO history, validated receipt-to-Storage context, Philippine Quality timestamps and clearer recovery messages. Existing Procurement receipt controls, independent reviewers, stock holds and duplicate-source protection remain intact. SMTP is untouched.
+
+Local database regression currently passes 9 checks covering multi-lot moves, partial holds, rollback, replay, invalid input, null-lot Procurement stock, serialized compatibility and private-function access. Live deployment and both three-account journeys are pending for this candidate; earlier screenshots are not post-fix evidence.
+
 ## Receiving Emailed POs
 
 Procurement can continue sending approved purchase documents by email. Warehouse registers their PO number, supplier, warehouse, email context, evidence and ordered lines under **Receive and inspect > Emailed POs and saved arrival drafts**. Operations Lead confirms the supporting document; this is not purchase approval. A creator cannot confirm their own document.

@@ -1,5 +1,13 @@
 # Mwell Intra Standalone Operating Handbook
 
+## Receiving Follow-Up: October 20
+
+Use the receipt's Storage handoff to retain its warehouse, product and receipt context. Check that context before selecting the destination; an unavailable or mismatched receipt must not silently send you to a different warehouse. Opening Storage does not move goods. After Quality acceptance, a quantity-tracked putaway may span eligible delivery batches in one atomic move. Each batch keeps its history and held stock stays in its current area. Refresh availability when the quantity has changed.
+
+For a Procurement receipt with a shortage or other controlled issue, open its review from Exceptions or **Approved POs > Controlled receipt decisions**. A separate authorized supervisor reviews the existing receipt evidence and records the decision. Starting work on an exception is not that decision. Accepting a shortage decision does not mean the missing goods arrived; receive a later physical delivery separately against the remaining PO balance. Fully received POs remain visible in Closed history and cannot be received again. Quality timestamps are shown in Philippine time; the actual delivery date remains the recorded delivery date.
+
+These instructions describe the candidate behavior. The dated release record contains deployment and live-test status. Procurement approvals, independent Quality inspection, hold restrictions and SMTP are unchanged.
+
 ## October 19 Transition Update
 
 **External PO receiving** at `/warehouse/external-receiving` records the PO and documents emailed by Procurement. This is transitional coexistence: Procurement is not removed or replaced, and existing in-app Procurement-issued PO receiving remains available. Deployment and verification are tracked in the release record; this procedure does not establish live or certified status, and earlier release verification does not certify this update. Required training, current permissions and independent review remain unchanged. This documentation does not grant access or record training completion. SMTP is unchanged.

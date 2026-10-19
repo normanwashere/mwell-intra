@@ -56,6 +56,40 @@ async function repositoryWithPendingReceipt() {
 }
 
 describe("QualityPage", () => {
+  it('labels inspection timestamps in Asia/Manila while preserving stored timestamps and collapsible traceability', async () => {
+    const { repo, rows } = await repositoryWithLinkedInspections();
+    rows[0]!.inspectedAt = '2026-10-19T17:15:00Z';
+    renderWithProviders(<QualityPage />, { repo, route: `/quality?source=${linkedReceipt}` });
+    const item = await screen.findByRole('listitem', { name: 'Inspection completed-0' });
+    const time = item.querySelector('time')!;
+    expect(time).toHaveTextContent('Oct 20, 2026, 1:15 AM (Asia/Manila)');
+    expect(time).toHaveAttribute('datetime', '2026-10-19T17:15:00Z');
+    const details = within(item).getByText('Traceability').closest('details')!;
+    expect(details).not.toHaveAttribute('open');
+    await userEvent.click(within(item).getByText('Traceability'));
+    expect(within(details).getByText(`receipt: ${linkedReceipt}`)).toBeVisible();
+    expect(within(details).getByText('Inspection: completed-0')).toBeVisible();
+    expect(rows[0]!.inspectedAt).toBe('2026-10-19T17:15:00Z');
+  });
+
+  it('uses the same Manila date/time for pending records and holds without changing the receipt delivery date', async () => {
+    const data = await makeRepo().getData();
+    data.receipts = [{ id: linkedReceipt, locationId: 'loc-wh', actualDeliveryDate: '2026-10-20',
+      lines: [{ productId: 'shirt-l', quantity: 1 }], actor: 'receiver', createdAt: '2026-10-19T17:15:00Z' }];
+    data.returns = [];
+    const repo = makeRepo(data);
+    vi.spyOn(repo, 'listQualityInspectionSummaries').mockResolvedValue({ rows: [] });
+    vi.spyOn(repo, 'listHolds').mockResolvedValue({ rows: [{ id: 'date-hold', inspectionId: 'date-inspection',
+      productId: 'shirt-l', locationId: 'loc-wh', quantity: 1, status: 'active', reason: 'Damaged',
+      createdBy: 'quality', createdAt: '2026-10-19T17:15:00Z' }] });
+    renderWithProviders(<QualityPage />, { repo });
+    const list = await screen.findByRole('list', { name: 'Pending inspections' });
+    expect(within(list).getByText(/Recorded:/)).toHaveTextContent('Oct 20, 2026, 1:15 AM (Asia/Manila)');
+    await userEvent.click(screen.getByRole('tab', { name: 'Holds' }));
+    expect(screen.getByText(/Hold created:/)).toHaveTextContent('Oct 20, 2026, 1:15 AM (Asia/Manila)');
+    expect((await repo.getData()).receipts[0]!.actualDeliveryDate).toBe('2026-10-20');
+  });
+
   it('hands a completed receipt source to all three exact inspections, not similarly named receipts', async () => {
     const { repo, save, batchSave } = await repositoryWithLinkedInspections(608);
     renderWithProviders(<QualityPage />, { repo, route: `/quality?source=${linkedReceipt}`, role: 'warehouse_operator' });
@@ -269,7 +303,7 @@ describe("QualityPage", () => {
     await userEvent.type(search, 'group-receipt-4');
     expect(screen.getByText('2 of 12 pending inspections')).toBeInTheDocument();
     const queue = screen.getByRole('list', { name: 'Pending inspections' });
-    expect(queue.querySelectorAll('details')).toHaveLength(1);
+    expect(queue.querySelectorAll(':scope > li > details')).toHaveLength(1);
     expect(queue.querySelector('details')).toHaveAttribute('open');
     await userEvent.click(within(queue).getAllByRole('button', { name: 'Inspect' })[0]!);
     const dialog = await screen.findByRole('dialog', { name: 'Inspect stock' });
@@ -283,7 +317,7 @@ describe("QualityPage", () => {
     expect(screen.getByText('2 of 12 pending inspections')).toBeInTheDocument();
     await userEvent.clear(search);
     expect(screen.getByText('12 pending inspections')).toBeInTheDocument();
-    expect(screen.getByRole('list', { name: 'Pending inspections' }).querySelectorAll('details')).toHaveLength(6);
+    expect(screen.getByRole('list', { name: 'Pending inspections' }).querySelectorAll(':scope > li > details')).toHaveLength(6);
   });
 
   it("opens the exact task inspection from a later queue page", async () => {
@@ -482,7 +516,7 @@ describe("QualityPage", () => {
     const sourceText = within(queue).getByText((content) =>
       content.includes(receipt.id),
     );
-    const sourceRow = sourceText.closest("details");
+    const sourceRow = sourceText.closest("li");
     expect(sourceRow).not.toBeNull();
     const inspect = within(sourceRow!).getByRole("button", { name: "Inspect" });
     await user.click(inspect);

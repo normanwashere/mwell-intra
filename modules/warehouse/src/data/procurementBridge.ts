@@ -19,6 +19,21 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { DataSource, ProcurementPOHandoff } from '@intra/data-kit';
+import type { ReceivingDraftClient } from './receivingDrafts';
+
+interface ReceiptHistoryQuery {
+  eq(column: string, value: string): ReceiptHistoryQuery;
+  order(column: string): ReceiptHistoryQuery;
+  range(from: number, to: number): PromiseLike<{ data: unknown; error: { message: string } | null }>;
+}
+
+interface ReceiptHistoryTable {
+  select(columns: string): ReceiptHistoryQuery;
+}
+
+interface ReceiptHistoryClient {
+  schema(name: 'warehouse'): { from(table: 'receipts'): unknown };
+}
 
 export const PROCUREMENT_PO_KEY = 'intra.procurement.v2.purchase_orders';
 /** Same-tab change event the procurement store dispatches on writes. */
@@ -42,7 +57,7 @@ export interface BridgedPO {
   readonly id: string;
   readonly poNumber: string;
   readonly vendorName: string;
-  readonly status: 'approved' | 'issued';
+  readonly status: 'approved' | 'issued' | 'closed';
   readonly expectedDate?: string;
   readonly createdAt: string;
   readonly lines: readonly BridgedPOLine[];
@@ -90,7 +105,7 @@ function mapPO(raw: unknown): BridgedPO | null {
   const po = raw as Record<string, unknown>;
   const id = asString(po.id);
   const status = asString(po.status);
-  if (!id || !RECEIVABLE_STATUSES.has(status)) return null;
+  if (!id || (!RECEIVABLE_STATUSES.has(status) && status !== 'closed')) return null;
   const lines = Array.isArray(po.lines)
     ? po.lines
         .map((l, i) => mapLine(l, i))
@@ -106,7 +121,7 @@ function mapPO(raw: unknown): BridgedPO | null {
     id,
     poNumber: asString(po.poNumber, id),
     vendorName: asString(po.vendorName, 'Unknown vendor'),
-    status: status as 'approved' | 'issued',
+    status: status as BridgedPO['status'],
     expectedDate:
       typeof po.expectedDate === 'string' ? po.expectedDate : undefined,
     createdAt: asString(po.createdAt, new Date(0).toISOString()),
@@ -117,6 +132,64 @@ function mapPO(raw: unknown): BridgedPO | null {
     href: `/procurement/purchase-orders/${encodeURIComponent(id)}`,
     warehouseHref: `/warehouse/purchase-orders?po=${encodeURIComponent(id)}`,
   };
+}
+
+export interface ProcurementReceiptHistory {
+  id: string;
+  createdAt: string;
+  qualityStatus: string;
+  evidenceUrls: string[];
+}
+
+export interface ClosedProcurementPO extends BridgedPO {
+  receipts: ProcurementReceiptHistory[];
+}
+
+export async function loadClosedProcurementPOs(
+  client: ReceivingDraftClient | null,
+  options: { search?: string; cursor?: string | null; poId?: string | null; limit?: number } = {},
+): Promise<{ rows: ClosedProcurementPO[]; nextCursor: string | null }> {
+  const limit = Math.max(1, Math.min(100, options.limit ?? 25));
+  if (!client) {
+    const search = options.search?.trim().toLowerCase() ?? '';
+    const rows = readProcurementPOs().filter(po => po.status === 'closed'
+      && (!options.poId || po.id === options.poId)
+      && (!options.cursor || po.id < options.cursor)
+      && (!search || `${po.poNumber} ${po.vendorName}`.toLowerCase().includes(search)))
+      .sort((a, b) => b.id.localeCompare(a.id));
+    return { rows: rows.slice(0, limit).map(po => ({ ...po, receipts: [] })), nextCursor: rows.length > limit ? rows[limit - 1]!.id : null };
+  }
+  const { data, error } = await client.schema('warehouse').rpc('closed_procurement_po_history', {
+    payload: { search: options.search?.trim() ?? '', cursor: options.cursor ?? null, po_id: options.poId ?? null, limit },
+  });
+  if (error) throw new Error(error.message);
+  const page = data as { rows?: unknown; nextCursor?: unknown } | null;
+  if (!page || !Array.isArray(page.rows)) throw new Error('Closed PO history is unavailable.');
+  return {
+    rows: (page.rows as Array<Record<string, unknown>>).flatMap(row => {
+      const po = mapPO(row);
+      return po?.status === 'closed' ? [{ ...po, receipts: (row.receipts ?? []) as ProcurementReceiptHistory[] }] : [];
+    }),
+    nextCursor: typeof page.nextCursor === 'string' ? page.nextCursor : null,
+  };
+}
+
+/** Targeted, RLS-governed reads avoid relying on the dashboard's recent-receipts window. */
+export async function loadProcurementReceiptHistory(client: ReceiptHistoryClient, filter: { poId?: string; receiptId?: string }): Promise<ProcurementReceiptHistory[]> {
+  if (!filter.poId && !filter.receiptId) throw new Error('A PO or receipt is required.');
+  const rows: ProcurementReceiptHistory[] = [];
+  for (let offset = 0; ; offset += 100) {
+    // Session's client has no generated Warehouse schema; narrow only this table boundary.
+    const receipts = client.schema('warehouse').from('receipts') as ReceiptHistoryTable;
+    let query = receipts.select('id,created_at,quality_status,evidence_urls');
+    if (filter.poId) query = query.eq('procurement_po_id', filter.poId);
+    if (filter.receiptId) query = query.eq('id', filter.receiptId);
+    const { data, error } = await query.order('id').range(offset, offset + 99);
+    if (error) throw new Error(error.message);
+    if (!Array.isArray(data)) throw new Error('Receipt history is unavailable.');
+    rows.push(...(data as Array<Record<string, unknown>>).map(row => ({ id: String(row.id), createdAt: String(row.created_at), qualityStatus: String(row.quality_status ?? 'pending'), evidenceUrls: (row.evidence_urls ?? []) as string[] })));
+    if (data.length < 100) return rows;
+  }
 }
 
 /**

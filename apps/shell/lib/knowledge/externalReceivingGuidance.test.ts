@@ -71,7 +71,9 @@ describe("external PO receiving transition guidance (verification tracked separa
       "Independent Quality inspection", "Normal putaway",
     ]);
     expect(steps[4]!.instruction).toMatch(/different.*receiver/i);
-    expect(steps[5]!.instruction).toContain("/warehouse/storage");
+    expect(steps[5]!.instruction).toMatch(/posted shipment's Open Storage link.*relevant product/);
+    expect(steps[5]!.instruction).toContain("retained warehouse, receipt and product context");
+    expect(steps[5]!.instruction).toContain("Invalid or unavailable receipt context does not select another warehouse");
     expect(JSON.stringify(procedure())).toMatch(/arrival bin.*custody.*not final putaway/i);
     expect(JSON.stringify(procedure())).toContain("SMTP is unchanged");
     expect(KNOWLEDGE_CONTENT.features.find(item => item.id === "procurement-purchase-orders")!.routes)

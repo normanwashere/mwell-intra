@@ -512,6 +512,34 @@ const REQUIRED_CONTRACTS = [
   ],
 ];
 
+function currentIssueFunctions(sql) {
+  const events = [];
+  // Match the closing dollar delimiter, including inline and tagged bodies.
+  for (const match of sql.matchAll(/(?:^|(?<=;))\s*create\s+(?:or\s+replace\s+)?function\s+((?:warehouse|private)\.(?:issue|issue_uncertified_impl|issue_pre_offline_identity|warehouse_issue_v1|warehouse_offline_action))\s*\([^)]*\)[^;]*?\bas\s+(\$(?:[a-z_][a-z0-9_]*)?\$)([\s\S]*?)\2\s*;/gim)) {
+    events.push({ index: match.index, name: match[1].toLowerCase(), body: match[3] });
+  }
+  for (const match of sql.matchAll(/(?:^|(?<=;))\s*alter\s+function\s+((?:warehouse|private)\.(?:issue|issue_uncertified_impl|issue_pre_offline_identity|warehouse_issue_v1))\s*\(\s*jsonb\s*\)\s+(?:rename\s+to\s+([a-z_][a-z0-9_]*)|set\s+schema\s+([a-z_][a-z0-9_]*))\s*;/gim)) {
+    const name = match[1].toLowerCase();
+    const [schema, identifier] = name.split('.');
+    events.push({ index: match.index, name, target: match[2] ? `${schema}.${match[2].toLowerCase()}` : `${match[3].toLowerCase()}.${identifier}` });
+  }
+  for (const match of sql.matchAll(/(?:^|(?<=;))\s*drop\s+function\s+(?:if\s+exists\s+)?((?:warehouse|private)\.(?:issue|issue_uncertified_impl|issue_pre_offline_identity|warehouse_issue_v1|warehouse_offline_action))\s*\([^)]*\)\s*(?:cascade|restrict)?\s*;/gim)) {
+    events.push({ index: match.index, name: match[1].toLowerCase(), drop: true });
+  }
+  const functions = new Map();
+  for (const event of events.sort((a, b) => a.index - b.index)) {
+    if (event.target) {
+      if (functions.has(event.name)) functions.set(event.target, functions.get(event.name));
+      functions.delete(event.name);
+    } else if (event.drop) {
+      functions.delete(event.name);
+    } else {
+      functions.set(event.name, event.body);
+    }
+  }
+  return functions;
+}
+
 export async function verifyPoReceiptAuthority(migrationUrl) {
   const directoryUrl = new URL("./", migrationUrl);
   const baseName = migrationUrl.pathname.split("/").at(-1);
@@ -654,28 +682,40 @@ export async function verifyPoReceiptAuthority(migrationUrl) {
     );
   }
 
-  const issueFunctions = [
-    ...sql.matchAll(
-      /create or replace function warehouse\.issue\(payload jsonb\)[\s\S]*?\n\$\$;/gi,
-    ),
-  ];
-  const latestIssue = issueFunctions.at(-1)?.[0] ?? "";
-  const delegatedIssue = [...issueFunctions]
-    .reverse()
-    .find(
-      ([definition]) =>
-        /update warehouse\.stock_levels set quantity=quantity\+v_delta/i.test(
-          definition,
-        ) &&
-        /update warehouse\.allocations set status='issued'/i.test(definition),
-    )?.[0];
-  const issueAuthority = delegatedIssue ?? latestIssue;
-  const latestIssueIsComplete = latestIssue === issueAuthority;
-  const latestIssueDelegatesSafely =
-    /alter function warehouse\.issue\(jsonb\) set schema private[\s\S]*?alter function private\.issue\(jsonb\) rename to warehouse_issue_v1/i.test(
-      sql,
-    ) && /return private\.warehouse_issue_v1\(payload\)/i.test(latestIssue);
-  if (!latestIssueIsComplete && !latestIssueDelegatesSafely) {
+  const issueFunctions = currentIssueFunctions(sql);
+  const latestIssue = issueFunctions.get("warehouse.issue") ?? "";
+  let issueAuthority = latestIssue;
+  let validIssueChain = Boolean(latestIssue);
+  const issueChain = [latestIssue];
+  const delegatesOnce = (body, pattern) =>
+    (body.match(/\breturn\b/gi) ?? []).length === 1 && pattern.test(body);
+
+  if (issueFunctions.has("warehouse.issue_pre_offline_identity") || issueFunctions.has("private.warehouse_offline_action")) {
+    const offline = issueFunctions.get("private.warehouse_offline_action") ?? "";
+    validIssueChain &&= /^\s*select\s+private\.warehouse_offline_action\('issue',\s*payload\);\s*$/i.test(issueAuthority)
+      && /case action_name when 'issue' then 'issue_items'/i.test(offline)
+      && /if auth\.role\(\) is distinct from 'service_role' and not coalesce\(core\.has_live_cap\('warehouse',\s*capability\),\s*false\) then\s*raise exception/i.test(offline)
+      && /actor_id\s*:=\s*auth\.uid\(\)::text/i.test(offline)
+      && /if saved\.command_input is distinct from payload->'command_input' then\s*raise exception[\s\S]*?end if;\s*return saved\.result;/i.test(offline)
+      && /if action_name\s*=\s*'issue' then\s*result\s*:=\s*warehouse\.issue_pre_offline_identity\(payload\);/i.test(offline)
+      && (offline.match(/\breturn\b/gi) ?? []).length === 3;
+    issueAuthority = issueFunctions.get("warehouse.issue_pre_offline_identity") ?? "";
+    issueChain.push(offline, issueAuthority);
+  }
+  if (issueFunctions.has("warehouse.issue_uncertified_impl")) {
+    validIssueChain &&= /if auth\.role\(\) <> 'service_role' and not core\.has_live_cap\('warehouse',\s*'issue_items'\) then\s*raise exception/i.test(issueAuthority)
+      && delegatesOnce(issueAuthority, /return warehouse\.issue_uncertified_impl\(payload\);\s*end;\s*$/i);
+    issueAuthority = issueFunctions.get("warehouse.issue_uncertified_impl");
+    issueChain.push(issueAuthority);
+  }
+  if (issueFunctions.has("private.warehouse_issue_v1")) {
+    validIssueChain &&= /if not core\.has_cap\('warehouse',\s*'issue_items'\) then\s*raise exception/i.test(issueAuthority)
+      && /perform private\.lock_warehouse_products\(array\[v_alloc\.product_id\]\)/i.test(issueAuthority)
+      && delegatesOnce(issueAuthority, /return private\.warehouse_issue_v1\(payload\);\s*end;\s*$/i);
+    issueAuthority = issueFunctions.get("private.warehouse_issue_v1");
+    issueChain.push(issueAuthority);
+  }
+  if (!validIssueChain || !/update warehouse\.stock_levels set quantity=quantity\+v_delta[\s\S]*?update warehouse\.allocations set status='issued'/i.test(issueAuthority)) {
     findings.push(
       "Latest Warehouse issue wrapper does not preserve the verified issue authority chain",
     );
@@ -692,7 +732,7 @@ export async function verifyPoReceiptAuthority(migrationUrl) {
   }
   if (
     /greatest\(0,\s*(?:s\.|warehouse\.stock_levels\.)?quantity\s*\+/i.test(
-      latestIssue,
+      issueChain.join("\n"),
     )
   ) {
     findings.push(

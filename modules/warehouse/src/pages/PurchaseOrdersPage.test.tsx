@@ -24,7 +24,8 @@ const camera = vi.hoisted(() => ({
 
 vi.mock("@intra/auth", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@intra/auth")>();
-  const client = { schema: () => ({ rpc: liveDrafts.rpc }) };
+  const receiptQuery = { select: () => receiptQuery, eq: () => receiptQuery, order: () => receiptQuery, range: async () => ({ data: [], error: null }) };
+  const client = { schema: () => ({ rpc: liveDrafts.rpc, from: () => receiptQuery }) };
   return {
     ...actual,
     useSession: () => {
@@ -895,6 +896,43 @@ describe("PurchaseOrdersPage", () => {
       repo.receivedInputs[0]!.idempotencyKey,
     );
     await screen.findByText("Procurement PO received into inspection staging");
+    expect((await repo.getData()).receipts).toHaveLength(initialReceipts + 1);
+  });
+
+  it('reconciles an unchanged committed shortage receipt with its frozen key despite its newly discovered blocker', async () => {
+    const user = userEvent.setup();
+    const repo = new LiveProcurementRepository();
+    const receive = repo.receiveProcurementPO.bind(repo);
+    let first = true;
+    const request = vi.spyOn(repo, 'receiveProcurementPO').mockImplementation(async input => {
+      const result = await receive(input);
+      if (first) { first = false; throw new Error('Shortage response lost'); }
+      return result;
+    });
+    const exceptions = vi.spyOn(repo, 'listExceptions').mockImplementation(async () => ({ rows: first ? [] : [{
+      id: 'committed-exception', type: 'po_receipt', sourceType: 'receipt',
+      sourceId: (await repo.getData()).receipts.find(receipt => receipt.procurementPoId === 'live-po-1')!.id,
+      severity: 'P2', status: 'open', ownerId: 'other-lead', createdAt: savedAt,
+    }] }));
+    const initialReceipts = (await repo.getData()).receipts.length;
+    renderReceiving(repo);
+    const dialog = await openReceiving(user);
+    completeReceipt(dialog);
+    fireEvent.change(within(dialog).getByLabelText('clean quantity for Smart watches'), { target: { value: '1' } });
+    fireEvent.change(within(dialog).getByLabelText('short quantity for Smart watches'), { target: { value: '1' } });
+    fireEvent.change(within(dialog).getByLabelText('clean serials for Smart watches'), { target: { value: 'RECEIVE-1' } });
+    fireEvent.change(within(dialog).getByLabelText('Exception reason'), { target: { value: 'One unit missing' } });
+    await user.click(within(dialog).getByRole('button', { name: 'Confirm governed receipt' }));
+    await screen.findByText('Shortage response lost');
+    await within(dialog).findByText(/pending controlled receipt decision/i);
+    expect(exceptions).toHaveBeenCalled();
+    fireEvent.change(within(dialog).getByLabelText(/delivery evidence url/i), { target: { value: 'evidence/changed.jpg' } });
+    expect(within(dialog).getByRole('button', { name: 'Confirm governed receipt' })).toBeDisabled();
+    fireEvent.change(within(dialog).getByLabelText(/delivery evidence url/i), { target: { value: 'evidence/delivery.jpg' } });
+    expect(within(dialog).getByRole('button', { name: 'Confirm governed receipt' })).toBeEnabled();
+    await user.click(within(dialog).getByRole('button', { name: 'Confirm governed receipt' }));
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+    expect(request.mock.calls[1]![0]).toEqual(request.mock.calls[0]![0]);
     expect((await repo.getData()).receipts).toHaveLength(initialReceipts + 1);
   });
 

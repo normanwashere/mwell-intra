@@ -1396,14 +1396,15 @@ export class InMemoryRepository implements WarehouseControlRepository {
   }
 
   async relocate(input: RelocateInput): Promise<Movement[]> {
-    if (input.quantity <= 0)
-      throw new Error("Quantity must be greater than zero.");
+    if (!Number.isSafeInteger(input.quantity) || input.quantity <= 0)
+      throw new Error("Quantity must be a safe whole number greater than zero.");
     if ((input.fromBinId ?? undefined) === (input.toBinId ?? undefined)) {
       throw new Error("Source and destination bins must differ.");
     }
     const product = this.data.products.find((p) => p.id === input.productId);
     if (!product) throw new Error("Product not found.");
     const createdAt = this.now();
+    const plan: { source: StockLevel; quantity: number }[] = [];
 
     if (product.serialized) {
       const serials = input.serialNumbers ?? [];
@@ -1423,33 +1424,55 @@ export class InMemoryRepository implements WarehouseControlRepository {
         toMove--;
       }
     } else {
-      const fromLevel = this.stockRow(
-        product.id,
-        input.locationId,
-        input.fromBinId,
-        false,
-      );
-      const available = fromLevel?.quantity ?? 0;
-      if (available < input.quantity) {
+      const sources = this.data.stockLevels
+        .filter(
+          (level) =>
+            level.productId === product.id &&
+            level.locationId === input.locationId &&
+            (level.binId ?? undefined) === (input.fromBinId ?? undefined),
+        )
+        .sort((a, b) => {
+          if (a.lotId == null) return b.lotId == null ? 0 : -1;
+          if (b.lotId == null) return 1;
+          return a.lotId < b.lotId ? -1 : a.lotId > b.lotId ? 1 : 0;
+        });
+      let remaining = input.quantity;
+      // Plan the entire drawdown before mutating any source or destination lot.
+      for (const source of sources) {
+        if (remaining <= 0) break;
+        const held = this.holds
+          .filter(
+            (hold) =>
+              hold.status === "active" &&
+              hold.serialNumber == null &&
+              hold.productId === source.productId &&
+              hold.locationId === source.locationId &&
+              (hold.binId ?? undefined) === (source.binId ?? undefined) &&
+              (hold.lotId ?? undefined) === (source.lotId ?? undefined),
+          )
+          .reduce((sum, hold) => sum + hold.quantity, 0);
+        const quantity = Math.min(remaining, Math.max(0, source.quantity - held));
+        if (quantity > 0) {
+          plan.push({ source, quantity });
+          remaining -= quantity;
+        }
+      }
+      if (remaining > 0) {
         throw new Error(
-          `Cannot move ${input.quantity} — only ${available} in the source bin.`,
+          `Cannot move ${input.quantity} - only ${input.quantity - remaining} in the source bin.`,
         );
       }
-      fromLevel!.quantity -= input.quantity;
-      const toLevel = this.stockRow(
-        product.id,
-        input.locationId,
-        input.toBinId,
-        true,
-      )!;
-      toLevel.quantity += input.quantity;
     }
 
-    const movement: Movement = {
+    const movedLots = product.serialized
+      ? [{ quantity: input.quantity, lotId: undefined }]
+      : plan.map(({ source, quantity }) => ({ quantity, lotId: source.lotId }));
+    const movements: Movement[] = movedLots.map(({ quantity, lotId }) => ({
       id: uid("mv"),
       type: "transfer",
       productId: product.id,
-      quantity: input.quantity,
+      quantity,
+      lotId,
       fromLocationId: input.locationId,
       toLocationId: input.locationId,
       fromBinId: input.fromBinId,
@@ -1457,10 +1480,31 @@ export class InMemoryRepository implements WarehouseControlRepository {
       reason: "bin relocation",
       actor: input.actor,
       createdAt,
-    };
-    this.data.movements.push(movement);
+    }));
+    for (const { source, quantity } of plan) {
+      let destination = this.data.stockLevels.find(
+        (level) =>
+          level.productId === source.productId &&
+          level.locationId === source.locationId &&
+          (level.binId ?? undefined) === (input.toBinId ?? undefined) &&
+          (level.lotId ?? undefined) === (source.lotId ?? undefined),
+      );
+      if (!destination) {
+        destination = {
+          productId: source.productId,
+          locationId: source.locationId,
+          binId: input.toBinId,
+          lotId: source.lotId,
+          quantity: 0,
+        };
+        this.data.stockLevels.push(destination);
+      }
+      source.quantity -= quantity;
+      destination.quantity += quantity;
+    }
+    this.data.movements.push(...movements);
     this.persist();
-    return clone([movement]);
+    return clone(movements);
   }
 
   async setProductPrice(input: SetProductPriceInput) {

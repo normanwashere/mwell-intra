@@ -3,6 +3,9 @@ import { userFacingError } from './userFacingError';
 
 describe('plain-language error messages', () => {
   it.each([
+    ['Ambiguous source inventory; lot_id is required', 'separate delivery batches'],
+    ['Transfer destination must preserve the source lot_id', 'delivery batch'],
+    ['Inventory covered by an active hold cannot be transferred', 'Quality Control'],
     ['A governed receipt decision already reserves this procurement PO line', 'Warehouse Supervisor'],
     ['Pending independent inspection holds cannot be released directly', 'Quality Control'],
     ['The receiving Operator cannot approve their own exception, including through delegation', 'another authorized'],

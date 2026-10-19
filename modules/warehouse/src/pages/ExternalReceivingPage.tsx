@@ -850,6 +850,19 @@ function LiveExternalReceiving() {
                               Review Quality
                             </Link>
                           )}
+                        {shipment.status === 'posted' && shipment.receipt_id && can('transfer_stock') && (
+                          <div className="flex flex-wrap gap-2">
+                            {shipment.lines.filter(line => line.quantity > 0).map(line => {
+                              const productId = selected.lines.find(item => item.id === line.po_line_id)?.product_id;
+                              const product = data?.products.find(item => item.id === productId);
+                              if (!product) return null;
+                              const query = new URLSearchParams({ warehouse: selected.location_id, receipt: shipment.receipt_id!, product: product.id });
+                              return <Link key={line.po_line_id} to={`/storage?${query}`} className="btn-outline min-w-0 whitespace-normal [overflow-wrap:anywhere]">
+                                Open Storage: {product.name}
+                              </Link>;
+                            })}
+                          </div>
+                        )}
                       </li>
                     );
                   })}
@@ -858,8 +871,8 @@ function LiveExternalReceiving() {
               <p className="text-sm text-muted">
                 Posting sends the delivery to Quality, not to available stock.
                 After independent acceptance, complete normal putaway in
-                Storage. The arrival bin records receiving custody, not final
-                putaway.
+                Storage. The arrival custody bin is not final inventory placement;
+                accepted stock remains in the warehouse general area until putaway.
               </p>
               <nav
                 aria-label="Next receiving steps"
@@ -870,13 +883,6 @@ function LiveExternalReceiving() {
                   can("manage_returns")) && (
                   <Link to="/quality" className="btn-outline">
                     Open Quality
-                  </Link>
-                )}
-                {(can("transfer_stock") ||
-                  can("manage_locations") ||
-                  can("cycle_count")) && (
-                  <Link to="/storage" className="btn-outline">
-                    Open Storage
                   </Link>
                 )}
               </nav>
@@ -1308,7 +1314,7 @@ function ShipmentEditor({
             value={draft.actual_delivery_date}
             onChange={(value) => field("actual_delivery_date", value)}
           />
-          <Field label="Arrival bin" htmlFor="external-bin">
+          <Field label="Arrival bin" htmlFor="external-bin" hint="Receiving custody only, not final inventory placement.">
             <select
               id="external-bin"
               className="input"

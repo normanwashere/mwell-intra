@@ -34,6 +34,7 @@ function makeMockClient(
     inventoryHolds?: Record<string, unknown>[];
     commitReceiveThenFail?: boolean;
     commitFloorThenFail?: boolean;
+    transferResult?: Record<string, unknown>;
   } = {},
 ) {
   const calls: { fn: string; payload: Record<string, unknown> }[] = [];
@@ -572,7 +573,9 @@ function makeMockClient(
         },
       };
       const response =
-        fn === "inspect_quality"
+        fn === "transfer" && options.transferResult
+          ? options.transferResult
+          : fn === "inspect_quality"
           ? { inspection: quality }
           : fn === "release_quality_hold"
             ? hold
@@ -1242,6 +1245,132 @@ describe("SupabaseRepository W1 control boundary", () => {
   });
 });
 
+describe("SupabaseRepository bulk relocation", () => {
+  const movementRows = [
+    {
+      id: "relocation-lot-a", type: "transfer", product_id: "bulk-product",
+      quantity: 2, lot_id: "lot-a", from_location_id: "loc-wh",
+      to_location_id: "loc-wh", from_bin_id: null, to_bin_id: "bin-pasig-c1",
+      serial_number: null, event_id: null, reason: "bin relocation",
+      reference: null, evidence_urls: [], actor: "server-actor",
+      created_at: "2026-10-20T01:00:00Z", unit_cost_at_movement: 12,
+    },
+    {
+      id: "relocation-lot-b", type: "transfer", product_id: "bulk-product",
+      quantity: 1, lot_id: "lot-b", from_location_id: "loc-wh",
+      to_location_id: "loc-wh", from_bin_id: null, to_bin_id: "bin-pasig-c1",
+      serial_number: null, event_id: null, reason: "bin relocation",
+      reference: null, evidence_urls: [], actor: "server-actor",
+      created_at: "2026-10-20T01:00:00Z", unit_cost_at_movement: 12,
+    },
+  ];
+  const input = {
+    idempotencyKey: "bulk-relocation-0001", productId: "bulk-product",
+    locationId: "loc-wh", toBinId: "bin-pasig-c1", quantity: 3, actor: "client-actor",
+  };
+  function bulkSeed() {
+    const seed = buildSeed();
+    seed.products = [...seed.products, { ...seed.products.find((product) => !product.serialized)!, id: "bulk-product" }];
+    seed.stockLevels = [
+      { productId: "bulk-product", locationId: "loc-wh", lotId: "lot-a", quantity: 2 },
+      { productId: "bulk-product", locationId: "loc-wh", lotId: "lot-b", quantity: 1 },
+    ];
+    return seed;
+  }
+
+  for (const serialized of [false, true]) {
+    it.each([NaN, 0.5, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1, 0, -1])(
+      `rejects invalid relocation quantity %s before stock reads or mutation (serialized: ${serialized})`,
+      async (quantity) => {
+        const seed = bulkSeed();
+        const unit = seed.units.find((row) => row.status === "in_stock" && row.locationId === "loc-wh")!;
+        const { client, calls, queries } = makeMockClient(seed);
+        await expect(new SupabaseRepository(client).relocate({
+          ...input, quantity,
+          productId: serialized ? unit.productId : input.productId,
+          fromBinId: serialized ? unit.binId : undefined,
+        })).rejects.toThrow(/whole.number.*greater than zero/i);
+        expect(queries).toEqual([]);
+        expect(calls.filter((call) => !call.payload.replay_only)).toEqual([]);
+      },
+    );
+  }
+
+  it.each([false, true])("delegates 2+1 lot allocation to the server (empty local stock: %s)", async (emptyStock) => {
+    const seed = bulkSeed();
+    if (emptyStock) seed.stockLevels = [];
+    const { client, calls } = makeMockClient(seed, { transferResult: { movements: movementRows } });
+    const movements = await new SupabaseRepository(client).relocate(input);
+    expect(calls).toEqual([
+      { fn: "transfer", payload: {
+        idempotency_key: "bulk-relocation-0001", replay_only: true,
+        command_input: { productId: "bulk-product", locationId: "loc-wh", toBinId: "bin-pasig-c1", quantity: 3 },
+      } },
+      { fn: "transfer", payload: {
+        idempotency_key: "bulk-relocation-0001", bulk_relocation: true,
+        command_input: { productId: "bulk-product", locationId: "loc-wh", toBinId: "bin-pasig-c1", quantity: 3 },
+      } },
+    ]);
+    expect(movements).toEqual([
+      expect.objectContaining({ id: "relocation-lot-a", lotId: "lot-a", quantity: 2 }),
+      expect.objectContaining({ id: "relocation-lot-b", lotId: "lot-b", quantity: 1 }),
+    ]);
+    for (const movement of movements) {
+      expect(movement).toMatchObject({
+        type: "transfer", productId: "bulk-product", fromLocationId: "loc-wh",
+        toLocationId: "loc-wh", fromBinId: undefined, toBinId: "bin-pasig-c1",
+        actor: "server-actor", createdAt: "2026-10-20T01:00:00Z", unitCostAtMovement: 12,
+      });
+    }
+  });
+
+  it.each(["legacy row", "movement envelope"])("normalizes a %s replay before rereading exhausted stock", async (shape) => {
+    const seed = bulkSeed();
+    seed.stockLevels[0]!.quantity = 3;
+    const transferResult = shape === "legacy row" ? movementRows[0]! : { movements: movementRows };
+    const { client, calls, queries } = makeMockClient(seed, { transferResult, commitFloorThenFail: true });
+    const repo = new SupabaseRepository(client);
+    await expect(repo.relocate(input)).rejects.toThrow("Failed to fetch after commit");
+    const reads = queries.length;
+    const replay = await repo.relocate(input);
+    expect(replay.map(({ id, quantity, lotId }) => ({ id, quantity, lotId }))).toEqual(
+      shape === "legacy row"
+        ? [{ id: "relocation-lot-a", quantity: 2, lotId: "lot-a" }]
+        : [{ id: "relocation-lot-a", quantity: 2, lotId: "lot-a" }, { id: "relocation-lot-b", quantity: 1, lotId: "lot-b" }],
+    );
+    expect(queries).toHaveLength(reads);
+    expect(calls.filter((call) => !call.payload.replay_only)).toHaveLength(1);
+  });
+
+  it("normalizes a null-lot movement from the server", async () => {
+    const { client } = makeMockClient(bulkSeed(), {
+      transferResult: { movements: [{ ...movementRows[0], lot_id: null, quantity: 1 }] },
+    });
+    expect(await new SupabaseRepository(client).relocate({ ...input, quantity: 1 })).toEqual([
+      expect.objectContaining({ id: "relocation-lot-a", lotId: undefined, quantity: 1 }),
+    ]);
+  });
+
+  it("keeps serialized relocation on the legacy unit payload and row result", async () => {
+    const seed = buildSeed();
+    const unit = seed.units.find((row) => row.status === "in_stock" && row.locationId === "loc-wh")!;
+    const row = { ...movementRows[0], product_id: unit.productId, quantity: 1, lot_id: unit.lotId ?? null };
+    const { client, calls } = makeMockClient(seed, { transferResult: row });
+    const result = await new SupabaseRepository(client).relocate({
+      productId: unit.productId, locationId: "loc-wh", fromBinId: unit.binId,
+      toBinId: "bin-pasig-c1", quantity: 1, serialNumbers: [unit.serialNumber], actor: "test",
+    });
+    expect(result).toEqual([expect.objectContaining({ id: "relocation-lot-a", productId: unit.productId, quantity: 1 })]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.payload).toMatchObject({
+      unit_ids: [unit.id], from_stock_delta: null, to_stock_delta: null,
+      from_location_id: "loc-wh", to_location_id: "loc-wh", to_bin_id: "bin-pasig-c1",
+      movement: expect.objectContaining({ quantity: 1, type: "transfer" }),
+    });
+    expect(calls[0]!.payload).not.toHaveProperty("bulk_relocation");
+  });
+});
+
 describe("SupabaseRepository concurrency-safe payloads (warehouse.* v8 RPCs)", () => {
   const seed = buildSeed();
   // Pick a non-serialized product with stock at loc-wh for delta assertions.
@@ -1626,7 +1755,7 @@ describe("SupabaseRepository concurrency-safe payloads (warehouse.* v8 RPCs)", (
     );
   });
 
-  it("relocate reuses the transfer RPC with same-location from/to deltas", async () => {
+  it("relocate sends only the bulk command to the transfer RPC", async () => {
     const { client, calls } = makeMockClient(seed);
     const repo = new SupabaseRepository(client);
     await repo.relocate({
@@ -1638,12 +1767,17 @@ describe("SupabaseRepository concurrency-safe payloads (warehouse.* v8 RPCs)", (
       actor: "test",
     });
     const call = calls.find((c) => c.fn === "transfer")!;
-    expect(call.payload.from_location_id).toBe("loc-wh");
-    expect(call.payload.to_location_id).toBe("loc-wh");
-    const from = call.payload.from_stock_delta as { delta: number };
-    const to = call.payload.to_stock_delta as { delta: number };
-    expect(from.delta).toBe(-2);
-    expect(to.delta).toBe(2);
+    expect(call.payload).toEqual({
+      idempotency_key: undefined,
+      command_input: {
+        productId: token.id,
+        locationId: "loc-wh",
+        fromBinId: undefined,
+        toBinId: "bin-pasig-c1",
+        quantity: 2,
+      },
+      bulk_relocation: true,
+    });
   });
 
   it("routes vendor return custody through the controlled RPC", async () => {

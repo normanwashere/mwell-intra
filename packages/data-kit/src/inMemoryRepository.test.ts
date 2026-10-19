@@ -1,10 +1,12 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { InMemoryRepository } from "./inMemoryRepository";
 import { availableForProduct } from "./domain/stock";
 import { uncommittedAvailable } from "./domain/allocations";
 import { stockByLocation } from "./domain/transfers";
 import { poTotalReceived } from "./domain/purchaseOrders";
 import { toStockState, type WarehouseData } from "./repository";
+import type { InventoryHold } from "./domain/warehouseControls";
+import type { StockLevel } from "./domain/types";
 
 describe("remaining staging putaway tasks", () => {
   it("hands accepted inspections to one staging task without historical duplicates", async () => {
@@ -1591,6 +1593,145 @@ describe("deleteLocation", () => {
     await repo.deleteLocation({ locationId: "loc-cebu" });
     const data = await repo.getData();
     expect(data.locations.some((l) => l.id === "loc-cebu")).toBe(false);
+  });
+});
+
+describe("atomic bulk relocation", () => {
+  const input = {
+    productId: "shirt", locationId: "loc-wh", fromBinId: "bin-a",
+    toBinId: "bin-b", quantity: 3, actor: "test",
+  };
+  const lotA = { productId: "shirt", locationId: "loc-wh", binId: "bin-a", lotId: "lot-a", quantity: 2 };
+  const lotB = { ...lotA, lotId: "lot-b", quantity: 1 };
+  const hold: InventoryHold = {
+    id: "hold-a", inspectionId: "inspection-a", productId: "shirt",
+    locationId: "loc-wh", binId: "bin-a", lotId: "lot-a", quantity: 1,
+    status: "active", reason: "Quality review", createdBy: "quality",
+    createdAt: "2026-10-20T00:00:00Z",
+  };
+  function fixture(stockLevels: StockLevel[] = [lotA, lotB], holds: InventoryHold[] = []) {
+    const persisted = {
+      ...miniData(), stockLevels,
+      qualityControlState: { inspections: [], holds, exceptions: [], commandResponses: [] },
+    };
+    const storage = { getItem: () => JSON.stringify(persisted), setItem: vi.fn() };
+    return { repository: new InMemoryRepository(undefined, { storage }), storage };
+  }
+
+  for (const productId of ["shirt", "ring"]) {
+    it.each([NaN, 0.5, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1, 0, -1])(
+      `rejects invalid relocation quantity %s for ${productId} without mutations`,
+      async (quantity) => {
+        const { repository, storage } = fixture();
+        const before = await repository.getData();
+        await expect(repository.relocate({
+          ...input, productId, quantity, fromBinId: productId === "ring" ? undefined : "bin-a",
+        })).rejects.toThrow(/whole.number.*greater than zero/i);
+        expect(await repository.getData()).toEqual(before);
+        expect(storage.setItem).not.toHaveBeenCalled();
+      },
+    );
+  }
+
+  it("allocates null-lot stock first, then ascending lot IDs regardless of source insertion order", async () => {
+    const noLot = { ...lotA, lotId: undefined, quantity: 1 };
+    for (const sources of [[lotB, lotA, noLot], [lotA, noLot, lotB]]) {
+      const { repository } = fixture(sources);
+      const movements = await repository.relocate({ ...input, quantity: 2 });
+      expect(movements.map(({ lotId, quantity }) => ({ lotId, quantity }))).toEqual([
+        { lotId: undefined, quantity: 1 }, { lotId: "lot-a", quantity: 1 },
+      ]);
+      const stock = (await repository.getData()).stockLevels;
+      expect(stock.filter((level) => level.binId === "bin-a")).toEqual(
+        sources.map((level) => ({ ...level, quantity: level.lotId === undefined ? 0 : 1 })),
+      );
+      expect(stock.filter((level) => level.binId === "bin-b")).toEqual([
+        { ...noLot, binId: "bin-b", quantity: 1 }, { ...lotA, binId: "bin-b", quantity: 1 },
+      ]);
+    }
+  });
+
+  it("moves 2+1 across lots and preserves separate destination stock and movement identities", async () => {
+    const { repository } = fixture([lotA, lotB, { ...lotB, binId: "bin-b", quantity: 4 }]);
+    const movements = await repository.relocate(input);
+    const data = await repository.getData();
+    expect(data.stockLevels).toEqual(expect.arrayContaining([
+      { ...lotA, quantity: 0 }, { ...lotB, quantity: 0 },
+      { ...lotA, binId: "bin-b", quantity: 2 }, { ...lotB, binId: "bin-b", quantity: 5 },
+    ]));
+    expect(data.stockLevels).toHaveLength(4);
+    expect(movements).toEqual([
+      expect.objectContaining({ lotId: "lot-a", quantity: 2 }),
+      expect.objectContaining({ lotId: "lot-b", quantity: 1 }),
+    ]);
+    for (const movement of movements) {
+      expect(movement).toMatchObject({
+        type: "transfer", productId: "shirt", fromLocationId: "loc-wh", toLocationId: "loc-wh",
+        fromBinId: "bin-a", toBinId: "bin-b", reason: "bin relocation", actor: "test",
+      });
+    }
+    expect(new Set(movements.map((movement) => movement.id)).size).toBe(2);
+    expect(data.movements).toEqual(movements);
+  });
+
+  it("subtracts active exact-lot holds while using the unheld remainder", async () => {
+    const { repository } = fixture([{ ...lotA, quantity: 3 }, lotB], [hold, { ...hold, id: "hold-a-2", quantity: 1 }]);
+    const beforeHolds = await repository.listHolds({});
+    const movements = await repository.relocate({ ...input, quantity: 2 });
+    expect(movements).toEqual([
+      expect.objectContaining({ lotId: "lot-a", quantity: 1 }),
+      expect.objectContaining({ lotId: "lot-b", quantity: 1 }),
+    ]);
+    expect((await repository.getData()).stockLevels).toEqual([
+      { ...lotA, quantity: 2 }, { ...lotB, quantity: 0 },
+      { ...lotA, binId: "bin-b", quantity: 1 }, { ...lotB, binId: "bin-b", quantity: 1 },
+    ]);
+    expect(await repository.listHolds({})).toEqual(beforeHolds);
+  });
+
+  it.each([
+    { status: "released" as const }, { status: "vendor_return" as const }, { status: "written_off" as const },
+    { productId: "other-product" }, { locationId: "loc-cebu" }, { binId: "bin-b" },
+    { lotId: "other-lot" }, { lotId: undefined }, { serialNumber: "SERIAL-1" },
+  ])("ignores holds outside the active exact bulk identity: %j", async (patch) => {
+    const { repository } = fixture([lotA], [{ ...hold, quantity: 2, ...patch }]);
+    expect(await repository.relocate({ ...input, quantity: 2 })).toEqual([
+      expect.objectContaining({ lotId: "lot-a", quantity: 2 }),
+    ]);
+  });
+
+  it("leaves stock, movements, holds and persistence unchanged when total unheld stock is short", async () => {
+    const { repository, storage } = fixture([{ ...lotA, quantity: 4 }, lotB], [{ ...hold, quantity: 3 }]);
+    const before = await repository.getData();
+    const beforeHolds = await repository.listHolds({});
+    await expect(repository.relocate(input)).rejects.toThrow(/only 2/i);
+    expect(await repository.getData()).toEqual(before);
+    expect(await repository.listHolds({})).toEqual(beforeHolds);
+    expect(storage.setItem).not.toHaveBeenCalled();
+  });
+
+  it("leaves every lot unchanged when a later lot cannot complete the plan", async () => {
+    const { repository, storage } = fixture();
+    const before = await repository.getData();
+    await expect(repository.relocate({ ...input, quantity: 4 })).rejects.toThrow(/only 3/i);
+    expect(await repository.getData()).toEqual(before);
+    expect(storage.setItem).not.toHaveBeenCalled();
+  });
+
+  it("keeps null-lot staging stock and holds separate from named lots", async () => {
+    const noLot = { ...lotA, binId: undefined, lotId: undefined, quantity: 2 };
+    const { repository } = fixture(
+      [noLot, { ...lotB, binId: undefined }, { ...lotB, binId: "bin-b", quantity: 4 }],
+      [{ ...hold, binId: undefined, lotId: undefined }],
+    );
+    const movements = await repository.relocate({ ...input, fromBinId: undefined, quantity: 2 });
+    expect(movements.map((movement) => ({ lotId: movement.lotId, quantity: movement.quantity }))).toEqual([
+      { lotId: undefined, quantity: 1 }, { lotId: "lot-b", quantity: 1 },
+    ]);
+    expect((await repository.getData()).stockLevels).toEqual([
+      { ...noLot, quantity: 1 }, { ...lotB, binId: undefined, quantity: 0 },
+      { ...lotB, binId: "bin-b", quantity: 5 }, { ...noLot, binId: "bin-b", quantity: 1 },
+    ]);
   });
 });
 

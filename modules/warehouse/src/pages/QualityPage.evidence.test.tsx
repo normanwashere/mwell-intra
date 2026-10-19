@@ -27,7 +27,7 @@ describe('Completed inspection evidence', () => {
       const list = await screen.findByRole('list', { name: 'Completed inspections' });
       const row = within(list).getByRole('listitem', { name: 'Inspection qc-accepted' });
       expect(within(row).getByText('receipt: receipt-long-source-001')).toHaveClass('break-all');
-      expect(within(row).getByText('2026-09-08')).toHaveAttribute('datetime', base.inspectedAt);
+      expect(within(row).getByText('Sep 8, 2026, 11:00 AM (Asia/Manila)')).toHaveAttribute('datetime', base.inspectedAt);
       expect(row).toHaveClass('min-w-0', 'sm:grid-cols-[minmax(0,1fr)_auto]');
       const thumbnail = await within(row).findByRole('img', { name: 'Evidence' });
       expect(thumbnail).toHaveAttribute('src', 'https://example.test/signed/quality/accepted.png');

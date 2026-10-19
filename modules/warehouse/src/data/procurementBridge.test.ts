@@ -1,8 +1,10 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   PROCUREMENT_PO_KEY,
   loadProcurementPOs,
   readProcurementPOs,
+  loadClosedProcurementPOs,
+  loadProcurementReceiptHistory,
 } from './procurementBridge';
 
 function seedStore(value: unknown): void {
@@ -70,7 +72,7 @@ describe('readProcurementPOs (procurement → warehouse bridge)', () => {
     expect(po!.warehouseHref).toBe('/warehouse/purchase-orders?po=ppo-1');
   });
 
-  it('only surfaces receivable statuses (approved / issued)', () => {
+  it('surfaces issued, approved and closed history without draft or cancelled POs', () => {
     seedStore([
       issuedPO,
       { ...issuedPO, id: 'ppo-2', status: 'approved' },
@@ -80,9 +82,41 @@ describe('readProcurementPOs (procurement → warehouse bridge)', () => {
       { ...issuedPO, id: 'ppo-6', status: 'cancelled' },
     ]);
     const ids = readProcurementPOs().map((p) => p.id);
-    expect(ids).toHaveLength(2);
+    expect(ids).toHaveLength(3);
     expect(ids).toContain('ppo-1');
     expect(ids).toContain('ppo-2');
+    expect(ids).toContain('ppo-5');
+  });
+
+  it('pages and searches closed local history without treating it as receivable', async () => {
+    seedStore([issuedPO, { ...issuedPO, id: 'closed-z', status: 'closed' }, { ...issuedPO, id: 'closed-a', status: 'closed' }]);
+    const page = await loadClosedProcurementPOs(null, { search: 'Acme', limit: 1 });
+    expect(page.rows.map(po => po.id)).toEqual(['closed-z']);
+    expect(page.rows[0]?.status).toBe('closed');
+    expect(page.nextCursor).toBe('closed-z');
+    const next = await loadClosedProcurementPOs(null, { search: 'Acme', limit: 1, cursor: page.nextCursor });
+    expect(next.rows.map(po => po.id)).toEqual(['closed-a']);
+    expect(next.nextCursor).toBeNull();
+  });
+
+  it('reads all authorized receipt pages for an exact PO and retains uploaded evidence references', async () => {
+    const query = { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), order: vi.fn().mockReturnThis(), range: vi.fn()
+      .mockResolvedValueOnce({ error: null, data: Array.from({ length: 100 }, (_, i) => ({ id: `r${i}`, created_at: '2026-10-20', quality_status: 'pending', evidence_urls: ['evidence/uploaded.jpg'] })) })
+      .mockResolvedValueOnce({ error: null, data: [{ id: 'r100', created_at: '2026-10-20', quality_status: 'accepted', evidence_urls: [] }] }) };
+    const client = { schema: vi.fn(() => ({ from: vi.fn(() => query) })) };
+    const rows = await loadProcurementReceiptHistory(client as unknown as Parameters<typeof loadProcurementReceiptHistory>[0], { poId: 'po-exact' });
+    expect(rows).toHaveLength(101);
+    expect(rows[0]?.evidenceUrls).toEqual(['evidence/uploaded.jpg']);
+    expect(rows[100]?.qualityStatus).toBe('accepted');
+    expect(query.eq).toHaveBeenCalledWith('procurement_po_id', 'po-exact');
+    expect(query.range).toHaveBeenLastCalledWith(100, 199);
+  });
+
+  it('does not turn an evidence permission failure into an empty successful read', async () => {
+    const query = { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), order: vi.fn().mockReturnThis(), range: vi.fn().mockResolvedValue({ error: { message: 'Permission denied' }, data: null }) };
+    const client = { schema: () => ({ from: () => query }) };
+    await expect(loadProcurementReceiptHistory(client as unknown as Parameters<typeof loadProcurementReceiptHistory>[0], { receiptId: 'receipt-exact' })).rejects.toThrow('Permission denied');
+    expect(query.eq).toHaveBeenCalledWith('id', 'receipt-exact');
   });
 
   it('ignores unknown fields the procurement sibling may add', () => {

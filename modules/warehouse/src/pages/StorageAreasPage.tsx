@@ -2,7 +2,7 @@ import { userFacingError } from '@intra/ui';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { tasksReturnPath } from '@/domain/taskNavigation';
-import type { InventoryHold, InventoryPosition, InventoryUnit } from '@intra/data-kit';
+import type { InventoryHold, InventoryPosition, InventoryUnit, QualityInspectionSummary } from '@intra/data-kit';
 import { useWarehouse } from '@/app/store';
 import { WAREHOUSE_MUTATION_CAPABILITIES } from '@/app/authorization';
 import { toStockState } from '@/data/repository';
@@ -52,6 +52,7 @@ export function StorageAreasPage() {
     relocate,
     loadWarehouseTasks,
     loadQualityInspections,
+    loadQualityInspectionSummaries,
     loadInventoryPositions,
     loadHolds,
     source,
@@ -61,13 +62,35 @@ export function StorageAreasPage() {
   const canPutAway = can(WAREHOUSE_MUTATION_CAPABILITIES.relocate);
   const canReadHolds = source !== 'supabase' || can('inspect_quality') || can('view_exceptions') || can('view_finance');
   const guideReturnTo = knowledgeGuideReturnPath(searchParams);
+  const requestedReceiptContext = useMemo(() => {
+    const keys = ['warehouse', 'receipt', 'product'] as const;
+    if (!keys.some(key => searchParams.has(key))) return null;
+    return {
+      key: searchParams.toString(), warehouseId: searchParams.get('warehouse') ?? '',
+      receiptId: searchParams.get('receipt') ?? '', productId: searchParams.get('product') ?? '',
+      valid: keys.every(key => searchParams.getAll(key).length === 1 && Boolean(searchParams.get(key)?.trim())) && !searchParams.has('source'),
+    };
+  }, [searchParams]);
+  const requestedSourceId = searchParams.get('source');
+  const [sourceLock, setSourceLock] = useState<{ context: typeof requestedReceiptContext; sourceId: string | null } | null>(null);
+  const receiptContext = sourceLock ? sourceLock.context : requestedReceiptContext;
+  const sourceId = sourceLock ? sourceLock.sourceId : requestedSourceId;
+  const sourceReceipt = receiptContext && data?.receipts.find(receipt => receipt.id === receiptContext.receiptId
+    && receipt.locationId === receiptContext.warehouseId && receipt.lines.some(line => line.productId === receiptContext.productId));
+  const receiptScopeValid = Boolean(receiptContext?.valid && sourceReceipt && canPutAway
+    && data?.products.some(product => product.id === receiptContext.productId)
+    && data?.locations.some(location => location.id === receiptContext.warehouseId && location.type === 'warehouse' && location.active !== false));
+  const [receiptStatus, setReceiptStatus] = useState<{ key: string; error?: string } | null>(null);
+  const receiptReady = Boolean(receiptContext && receiptScopeValid && receiptStatus?.key === receiptContext.key && !receiptStatus.error);
+  const [receiptInspections, setReceiptInspections] = useState<QualityInspectionSummary[]>([]);
 
   const warehouses = useMemo(
     () => (data?.locations ?? []).filter((l) => l.type === 'warehouse'),
     [data],
   );
   const [warehouseId, setWarehouseId] = useState('');
-  const activeWarehouse = warehouseId || warehouses[0]?.id || '';
+  const activeWarehouse = receiptContext ? (receiptReady ? receiptContext.warehouseId : '')
+    : warehouseId || (sourceId !== null ? '' : warehouses[0]?.id) || '';
 
   const state = useMemo(
     () => (data ? toStockState(data) : { products: [], units: [], stockLevels: [] }),
@@ -137,34 +160,72 @@ export function StorageAreasPage() {
   const [availabilityError, setAvailabilityError] = useState<string | null>(null);
   const [availabilityRefresh, setAvailabilityRefresh] = useState(0);
   const [scanSession, setScanSession] = useState(0);
-  const sourceId = searchParams.get('source');
   const [sourceStatus, setSourceStatus] = useState<{ state: 'loading' | 'ready' | 'completed' | 'unavailable'; message: string } | null>(null);
   const appliedSource = useRef<string | null>(null);
-  const loaders = useRef({ loadWarehouseTasks, loadQualityInspections, loadInventoryPositions, loadHolds });
-  loaders.current = { loadWarehouseTasks, loadQualityInspections, loadInventoryPositions, loadHolds };
+  const loaders = useRef({ loadWarehouseTasks, loadQualityInspections, loadQualityInspectionSummaries, loadInventoryPositions, loadHolds });
+  loaders.current = { loadWarehouseTasks, loadQualityInspections, loadQualityInspectionSummaries, loadInventoryPositions, loadHolds };
+
+  useEffect(() => {
+    if (!putawaySaving && !queued) setSourceLock(null);
+  }, [putawaySaving, queued]);
+
+  useEffect(() => {
+    // A route change must not replace an in-flight or queued command's capture.
+    if (putawayInFlight.current || queued) return;
+    if (!receiptContext && !receiptStatus) return;
+    setPutawayOpen(false);
+    setPutawayStock(null);
+    setPutawayBin(null);
+    setPutawayError(null);
+    setDiscardPutaway(false);
+    setQueued(false);
+    setUnconfirmed(false);
+    command.current = null;
+    setWarehouseId('');
+    setReceiptInspections([]);
+    setPositionsReady(false);
+    if (!receiptContext) { setReceiptStatus(null); return; }
+    if (!data) return;
+    if (!receiptScopeValid) {
+      setReceiptStatus({ key: receiptContext.key, error: 'The selected receipt context is invalid, unavailable or outside your access. No other warehouse or stock was selected.' });
+      return;
+    }
+    const product = data.products.find(row => row.id === receiptContext.productId)!;
+    setReceiptStatus({ key: receiptContext.key });
+    setPutawayStock(product.serialized ? null : { productId: product.id, code: product.sku });
+    setPutawayQuantity('1');
+    setPutawayOpen(true);
+    // Revalidate scope on bootstrap/authority changes without reopening after stock refreshes.
+  }, [receiptContext, receiptScopeValid, Boolean(data)]);
 
   useEffect(() => {
     if (!putawayOpen) return;
     let active = true;
     setPositionsReady(false);
     setAvailabilityError(null);
-    if (putawayStock?.serialNumber && !canReadHolds) {
+    if ((putawayStock?.serialNumber || receiptContext) && !canReadHolds) {
       setAvailabilityError(holdAccessMessage);
       return;
     }
     void Promise.all([
       loadCompleteControlQueue(loaders.current.loadInventoryPositions),
-      putawayStock?.serialNumber
+      putawayStock?.serialNumber || receiptContext
         ? loadCompleteControlQueue(query => loaders.current.loadHolds({ ...query, status: 'active' }))
         : Promise.resolve([] as InventoryHold[]),
-    ]).then(([rows, holds]) => {
-      if (active) { setPositions(rows); setActiveHolds(holds); setPositionsReady(true); }
+      receiptContext ? loadCompleteControlQueue(loaders.current.loadQualityInspectionSummaries) : Promise.resolve([] as QualityInspectionSummary[]),
+    ]).then(([rows, holds, inspections]) => {
+      if (active) {
+        setPositions(rows); setActiveHolds(holds); setPositionsReady(true);
+        setReceiptInspections(inspections.filter(row => row.sourceType === 'receipt'
+          && row.sourceId === receiptContext?.receiptId && row.productId === receiptContext?.productId));
+      }
     }).catch(() => { if (active) setAvailabilityError(availabilityReadMessage); });
     return () => { active = false; };
-  }, [putawayOpen, data, putawayStock, availabilityRefresh, canReadHolds]);
+  }, [putawayOpen, data, putawayStock, availabilityRefresh, canReadHolds, receiptContext]);
 
   useEffect(() => {
-    if (!sourceId) { appliedSource.current = null; setSourceStatus(null); return; }
+    if (putawaySaving || queued) return;
+    if (!sourceId || receiptContext) { appliedSource.current = null; setSourceStatus(null); return; }
     if (!data || appliedSource.current === sourceId) return;
     let active = true;
     setSourceStatus({ state: 'loading', message: 'Loading the selected putaway task...' });
@@ -217,7 +278,8 @@ export function StorageAreasPage() {
         ? data.receipts.find((row) => row.id === inspection.sourceId)?.locationId
         : returnLocations.length === 1 ? returnLocations[0] : undefined);
       const product = data.products.find((row) => row.id === productId);
-      if (!product || !locationId || (product.serialized && !stockUnit) || inspection?.binId) throw new Error(`${task.title}: exact unbinned stock identity could not be resolved. Return to tasks.`);
+      if (!product || !locationId || !data.locations.some(row => row.id === locationId && row.type === 'warehouse' && row.active !== false)
+        || (product.serialized && !stockUnit) || inspection?.binId) throw new Error(`${task.title}: exact unbinned stock identity could not be resolved. Return to tasks.`);
       setWarehouseId(locationId);
       setPutawayStock({ productId: product.id, code: stockUnit?.serialNumber ?? product.sku, serialNumber: stockUnit?.serialNumber });
       setPutawayQuantity(String(stockUnit ? 1 : inspection!.quantity));
@@ -229,7 +291,7 @@ export function StorageAreasPage() {
       if (active) { setSourceStatus({ state: 'unavailable', message: error instanceof Error ? error.message : 'The selected putaway task could not be loaded.' }); appliedSource.current = sourceId; }
     });
     return () => { active = false; };
-  }, [sourceId, data, canPutAway]);
+  }, [sourceId, data, canPutAway, receiptContext, putawaySaving, queued]);
 
   if (!data) return null;
 
@@ -323,6 +385,7 @@ export function StorageAreasPage() {
   const contents = viewing ? binContents(state, viewing.id) : [];
 
   const openPutaway = () => {
+    if (receiptContext && !receiptReady) return;
     setPutawayError(null);
     setDiscardPutaway(false);
     setPutawayOpen(true);
@@ -347,7 +410,12 @@ export function StorageAreasPage() {
     ? data.units.find(unit => unit.serialNumber === putawayStock.serialNumber && unit.productId === putawayStock.productId)
     : undefined;
   const qualityIssue = putawayHoldMessage(putawayUnit, activeHolds);
-  const eligibleQuantity = putawayStock?.serialNumber
+  const acceptedReceiptInspections = receiptInspections.filter(inspection => inspection.disposition === 'accepted'
+    && !inspection.binId && !activeHolds.some(hold => hold.status === 'active' && hold.inspectionId === inspection.id));
+  const receiptStockEligible = !receiptContext || (receiptReady && acceptedReceiptInspections.some(inspection =>
+    putawayStock?.serialNumber ? inspection.serialNumber === putawayStock.serialNumber
+      && (inspection.lotId ?? '') === (putawayUnit?.lotId ?? '') : !inspection.serialNumber));
+  const eligibleQuantity = !receiptStockEligible ? 0 : putawayStock?.serialNumber
     ? (putawayUnit && putawayUnit.locationId === activeWarehouse && !putawayUnit.binId && putawayUnit.status === 'in_stock' && !qualityIssue ? 1 : 0)
     : positions.filter((row) => row.productId === putawayStock?.productId && row.locationId === activeWarehouse && !row.binId).reduce((sum, row) => sum + row.available, 0);
   const quantity = putawayStock?.serialNumber ? 1 : Number(putawayQuantity);
@@ -360,11 +428,12 @@ export function StorageAreasPage() {
   };
 
   const confirmPutaway = async () => {
-    if (putawayInFlight.current || !putawayStock || !putawayBin || (!queued && !quantityValid)) return;
+    if (!canPutAway || (receiptContext && !receiptReady) || putawayInFlight.current || !putawayStock || !putawayBin || (!queued && !quantityValid)) return;
     if (putawayBin.locationId !== activeWarehouse || !bins.some((bin) => bin.id === putawayBin.id && bin.active !== false)) {
       setPutawayError('Scan an active destination bin in the selected warehouse.'); return;
     }
     putawayInFlight.current = true;
+    setSourceLock({ context: receiptContext, sourceId });
     setPutawaySaving(true);
     setUnconfirmed(false);
     setPutawayError(null);
@@ -438,19 +507,20 @@ export function StorageAreasPage() {
         action={
           <div className="flex gap-2">
             {canPutAway && (
-              <button type="button" className="btn-accent btn-sm" disabled={Boolean(sourceId && (sourceStatus?.state !== 'ready' || !putawayStock))} onClick={openPutaway}>
+              <button type="button" className="btn-accent btn-sm" disabled={Boolean(receiptContext && !receiptReady) || Boolean(sourceId && (sourceStatus?.state !== 'ready' || !putawayStock))} onClick={openPutaway}>
                 <Icon name="pin" /> Put away
               </button>
             )}
             <button
               type="button"
               className="btn-outline btn-sm"
+              disabled={!activeWarehouse}
               onClick={() => setScanOpen(true)}
             >
               <Icon name="scan" /> Scan
             </button>
             {canManage && (
-              <button type="button" className="btn-primary btn-sm" onClick={openAdd}>
+              <button type="button" className="btn-primary btn-sm" disabled={!activeWarehouse} onClick={openAdd}>
                 <Icon name="plus" /> Add bin
               </button>
             )}
@@ -458,7 +528,15 @@ export function StorageAreasPage() {
         }
       />
 
-      {sourceId && <div className="space-y-2 border-b border-line pb-3">
+      {receiptContext && <div className="space-y-2 border-b border-line pb-3 text-sm [overflow-wrap:anywhere]">
+        <p role={receiptStatus?.key === receiptContext.key && receiptStatus.error ? 'alert' : 'status'}>{receiptReady
+          ? `Selected receipt: ${sourceReceipt?.deliveryReference || receiptContext.receiptId}`
+          : receiptStatus?.key === receiptContext.key && receiptStatus.error || 'Validating selected receipt context...'}</p>
+        <Link to={`/quality?source=${encodeURIComponent(receiptContext.receiptId)}`} className="btn-ghost">Review receipt Quality</Link>
+        {!receiptReady && <Link to="/storage" className="btn-ghost">Clear receipt context</Link>}
+      </div>}
+
+      {sourceId && !receiptContext && <div className="space-y-2 border-b border-line pb-3">
         <p role={sourceStatus?.state === 'unavailable' ? 'alert' : 'status'}>{sourceStatus?.message ?? 'Loading the selected putaway task...'}</p>
         <Link to={tasksReturnPath(searchParams)} className="btn-ghost">Back to tasks</Link>
       </div>}
@@ -469,9 +547,10 @@ export function StorageAreasPage() {
             id="sa-wh"
             className="input"
             value={activeWarehouse}
-            disabled={putawaySaving || Boolean(putawayStock) || Boolean(sourceId)}
+            disabled={putawaySaving || Boolean(putawayStock) || Boolean(sourceId) || Boolean(receiptContext)}
             onChange={(e) => { setWarehouseId(e.target.value); setPutawayBin(null); }}
           >
+            {!activeWarehouse && <option value="">No warehouse selected</option>}
             {warehouses.map((w) => (
               <option key={w.id} value={w.id}>
                 {w.name}
@@ -481,7 +560,7 @@ export function StorageAreasPage() {
         </Field>
       )}
 
-      {bins.length === 0 ? (
+      {!activeWarehouse ? null : bins.length === 0 ? (
         <Card>
           <EmptyState
             icon="pin"
@@ -703,15 +782,17 @@ export function StorageAreasPage() {
 
       {/* Scan-to-putaway */}
       <Sheet
-        open={putawayOpen}
+        open={putawayOpen && (!receiptContext || receiptReady)}
         onOpenChange={(next) => { if (!next) closePutaway(); }}
         title="Put away stock"
-        description="Scan eligible stock from the general receiving area, then scan its destination bin."
+        description={receiptContext
+          ? `${warehouses.find(row => row.id === activeWarehouse)?.name} / ${sourceReceipt?.deliveryReference || receiptContext.receiptId} / General-area inventory`
+          : 'Scan eligible stock from the general receiving area, then scan its destination bin.'}
         footer={
           <button
             type="button"
             className="btn-primary w-full"
-            disabled={putawaySaving || !putawayStock || !putawayBin || (!queued && !quantityValid)}
+            disabled={!canPutAway || (Boolean(receiptContext) && !receiptReady) || putawaySaving || !putawayStock || !putawayBin || (!queued && !quantityValid)}
             onClick={() => void confirmPutaway()}
           >
             {putawaySaving ? 'Saving putaway...' : 'Confirm putaway'}
@@ -719,6 +800,22 @@ export function StorageAreasPage() {
         }
       >
         <div className="space-y-5">
+          {sourceLock && (sourceLock.context?.key !== requestedReceiptContext?.key || sourceLock.sourceId !== requestedSourceId) &&
+            <p role="status">Another source was requested. Finish or resolve this putaway before changing its source; its original capture is retained.</p>}
+          <div className="space-y-1 border-b border-line pb-3 text-sm [overflow-wrap:anywhere]">
+            <p className="font-semibold">Warehouse: {warehouses.find(row => row.id === activeWarehouse)?.name}</p>
+            {receiptContext && <>
+              <p>Selected receipt: {sourceReceipt?.deliveryReference || receiptContext.receiptId}</p>
+              <p>Product: {data.products.find(row => row.id === receiptContext.productId)?.name}</p>
+              <details><summary className="cursor-pointer">Receipt and Quality lot references</summary>
+                <p>Receipt: {receiptContext.receiptId}</p>
+                {receiptInspections.map(inspection => <p key={inspection.id}>Lot: {data.lots.find(lot => lot.id === inspection.lotId)?.lotCode ?? inspection.lotId ?? 'No lot reference'} / {inspection.disposition}{inspection.serialNumber ? ` / ${inspection.serialNumber}` : ''}</p>)}
+              </details>
+              <p>Source inventory: warehouse general area. Arrival custody bin is not final inventory placement.</p>
+              {!data.products.find(row => row.id === receiptContext.productId)?.serialized &&
+                <p>Bulk putaway uses eligible stock across receipt lots in this warehouse, not only this receipt. Lot allocation is validated when you confirm.</p>}
+            </>}
+          </div>
           {unconfirmed && <p role="status">{queued ? 'Putaway queued for sync, not yet committed. Capture is retained and locked until committed.' : 'Putaway was not committed. Capture is retained; review the error before retrying.'}</p>}
           {discardPutaway && <div role="alert" className="space-y-2">
             <p>Discard local putaway capture?</p>
@@ -732,13 +829,19 @@ export function StorageAreasPage() {
               context="putaway"
               expectedLocationId={activeWarehouse}
               expectedBinId={null}
-              expectedProductId={sourceId ? putawayStock?.productId : undefined}
-              complete={putawaySaving || queued || Boolean(sourceId && putawayStock)}
+              expectedProductId={receiptContext?.productId ?? (sourceId ? putawayStock?.productId : undefined)}
+              complete={putawaySaving || queued || Boolean((sourceId || receiptContext) && putawayStock)}
               scannedCodes={putawayStock ? [putawayStock.code] : []}
               label="Scan stock to put away"
               manualLabel="Enter stock code manually"
               manualActionLabel="Add stock"
-              onResolved={(stock) => { setPutawayStock(stock); setPutawayQuantity('1'); setPutawayError(null); }}
+              onResolved={(stock) => {
+                if (receiptContext && (!receiptReady || stock.productId !== receiptContext.productId
+                  || (stock.serialNumber && !sourceReceipt?.lines.some(line => line.productId === stock.productId && line.serialNumbers?.includes(stock.serialNumber!))))) {
+                  setPutawayError('This stock does not belong to the selected receipt. Scan a serial from this receipt.'); return;
+                }
+                setPutawayStock(stock); setPutawayQuantity('1'); setPutawayError(null);
+              }}
             />
           </Field>
           {putawayStock && <div className="space-y-2">

@@ -2,7 +2,8 @@ import { userFacingError } from '@intra/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { inboundQueue, isReceivableInbound } from "@/domain/workQueues";
 import { resolveProductScan } from "@/domain/productScan";
-import { deliveryToday, validateActualDeliveryDate } from "@intra/data-kit";
+import { deliveryToday, validateActualDeliveryDate, type WarehouseException } from "@intra/data-kit";
+import { loadCompleteControlQueue } from '@/domain/controlQueues';
 import { Link, useSearchParams } from "react-router-dom";
 import { useCan, useSession } from "@intra/auth";
 import { CertifiedAction } from "@intra/learning";
@@ -24,6 +25,9 @@ import {
   loadProcurementPOs,
   useInboundProcurementPOs,
   type BridgedPO,
+  loadClosedProcurementPOs,
+  loadProcurementReceiptHistory,
+  type ClosedProcurementPO,
 } from "@/data/procurementBridge";
 import type { POStatus, PurchaseOrder } from "@/domain/types";
 import {
@@ -145,11 +149,13 @@ export function PurchaseOrdersPage() {
     loadReceivableProcurementPOs,
     receiveProcurementPO,
     canOpenRoute,
+    loadExceptions,
   } = useWarehouse();
   const toast = useToast();
   const { mode, supabaseClient, profile, userRoles, roleCapabilities } = useSession();
   const [searchParams] = useSearchParams();
   const handoffPoId = searchParams.get("po");
+  const handoffReceiptId = searchParams.get('receipt');
   const openedHandoffRef = useRef<string | null>(null);
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -188,6 +194,35 @@ export function PurchaseOrdersPage() {
   const [receiveLoc, setReceiveLoc] = useState("");
   const [receiveBin, setReceiveBin] = useState("");
   const [filter, setFilter] = useState<POFilter>("all");
+  const [closedSearch, setClosedSearch] = useState('');
+  const [closedCursor, setClosedCursor] = useState<string | null>(null);
+  const [closedPage, setClosedPage] = useState<{ rows: ClosedProcurementPO[]; nextCursor: string | null }>({ rows: [], nextCursor: null });
+  const [closedLoading, setClosedLoading] = useState(false);
+  const [closedError, setClosedError] = useState('');
+  const [closedDetail, setClosedDetail] = useState<ClosedProcurementPO | null>(null);
+  const [closedReload, setClosedReload] = useState(0);
+  useEffect(() => {
+    if (filter !== 'closed' && !handoffPoId) return;
+    let active = true;
+    setClosedLoading(true); setClosedError('');
+    if (source === 'supabase' && !supabaseClient) {
+      setClosedLoading(false); setClosedError('A signed-in connection is required for closed PO history.');
+      return;
+    }
+    void loadClosedProcurementPOs(source === 'supabase' ? supabaseClient : null, {
+      search: closedSearch, cursor: closedCursor, poId: filter === 'closed' ? null : handoffPoId,
+    }).then(page => {
+      if (!active) return;
+      setClosedPage(page);
+      const selected = page.rows.find(po => po.id === handoffPoId);
+      if (selected && openedHandoffRef.current !== selected.id) {
+        openedHandoffRef.current = selected.id;
+        setClosedDetail(selected);
+      }
+    }).catch(error => { if (active) { setClosedPage({ rows: [], nextCursor: null }); setClosedError(error instanceof Error ? error.message : 'Closed PO history unavailable.'); } })
+      .finally(() => { if (active) setClosedLoading(false); });
+    return () => { active = false; };
+  }, [filter, handoffPoId, closedSearch, closedCursor, closedReload, bridgeReload, source, supabaseClient]);
   const [bridgeReceivePO, setBridgeReceivePO] = useState<BridgedPO | null>(
     null,
   );
@@ -197,9 +232,10 @@ export function PurchaseOrdersPage() {
     session: number;
     load: typeof loadReceivableProcurementPOs;
   } | null>(null);
-  const receiptAttemptRef = useRef<{ payload: string; key: string } | null>(
+  const receiptAttemptRef = useRef<{ payload: string; key: string; form: string } | null>(
     null,
   );
+  const [uncertainReceiptAttempt, setUncertainReceiptAttempt] = useState<{ payload: string; key: string; form: string } | null>(null);
   const [bridgeProducts, setBridgeProducts] = useState<Record<string, string>>(
     {},
   );
@@ -279,6 +315,15 @@ export function PurchaseOrdersPage() {
       : []),
   ];
   const [bridgeExceptionReason, setBridgeExceptionReason] = useState("");
+  const receiptFormSignature = JSON.stringify({
+    poId: bridgeReceivePO?.id, lines: bridgeReceivePO?.lines, location: bridgeLocation,
+    date: bridgeDeliveryDate, bin: bridgeBin, products: bridgeProducts, selected: bridgeSelected,
+    outcomes: bridgeOutcomes, serials: bridgeSerials, descriptions: bridgeObservedDescriptions,
+    identifiers: bridgeObservedIdentifiers, reason: bridgeExceptionReason, evidence: bridgeEvidenceUrls,
+  });
+  const canReconcileReceipt = Boolean(uncertainReceiptAttempt
+    && uncertainReceiptAttempt.form === receiptFormSignature
+    && uncertainReceiptAttempt.key === receiptAttemptRef.current?.key);
   const [exceptionDecisions, setExceptionDecisions] = useState<
     ReceiptExceptionDecisionItem[]
   >([]);
@@ -290,6 +335,46 @@ export function PurchaseOrdersPage() {
       data?.locations.filter((location) => location.type === "warehouse") ?? [],
     [data],
   );
+
+  const [receiptCheck, setReceiptCheck] = useState<{ poId: string; loading: boolean; error: string; blockers: WarehouseException[] }>({ poId: '', loading: false, error: '', blockers: [] });
+  const receiptCheckGeneration = useRef(0);
+  const receiptPoId = bridgeReceivePO?.id;
+  const refreshReceiptCheck = useCallback(async () => {
+    if (!receiptPoId) return false;
+    const generation = ++receiptCheckGeneration.current;
+    setReceiptCheck(current => ({ ...current, poId: receiptPoId, loading: true, error: '' }));
+    try {
+      const receipts = mode === 'supabase'
+        ? await loadProcurementReceiptHistory(supabaseClient!, { poId: receiptPoId })
+        : (data?.receipts ?? []).filter(receipt => receipt.procurementPoId === receiptPoId);
+      const ids = new Set(receipts.map(receipt => receipt.id));
+      const exceptions = ids.size ? await loadCompleteControlQueue(loadExceptions) : [];
+      const blockers = exceptions.filter(item => item.type === 'po_receipt' && ids.has(item.sourceId) && ['open', 'in_progress'].includes(item.status));
+      if (generation !== receiptCheckGeneration.current || !mountedRef.current) return false;
+      setReceiptCheck({ poId: receiptPoId, loading: false, error: '', blockers });
+      return blockers.length === 0;
+    } catch {
+      if (generation === receiptCheckGeneration.current && mountedRef.current) setReceiptCheck({ poId: receiptPoId, loading: false, error: 'Receipt decision status could not be verified. Refresh before confirming this delivery.', blockers: [] });
+      return false;
+    }
+  }, [receiptPoId, mode, supabaseClient, data?.receipts, loadExceptions]);
+  useEffect(() => {
+    void refreshReceiptCheck();
+    const refresh = () => { void refreshReceiptCheck(); };
+    window.addEventListener('focus', refresh);
+    return () => { receiptCheckGeneration.current++; window.removeEventListener('focus', refresh); };
+  }, [refreshReceiptCheck]);
+  const receiptBlocked = Boolean(receiptPoId && (receiptCheck.poId !== receiptPoId || receiptCheck.loading || receiptCheck.error || receiptCheck.blockers.length));
+
+  const loadDecisionEvidence = useCallback(async (receiptId: string) => {
+    if (mode === 'supabase') {
+      if (!supabaseClient) throw new Error('A signed-in connection is required.');
+      const rows = await loadProcurementReceiptHistory(supabaseClient, { receiptId });
+      if (!rows.length) throw new Error('Receipt evidence unavailable.');
+      return rows[0]!.evidenceUrls;
+    }
+    return data?.receipts.find(receipt => receipt.id === receiptId)?.evidenceUrls ?? [];
+  }, [mode, supabaseClient, data?.receipts]);
 
   useEffect(() => {
     if (!receivingRequest || !profile) return;
@@ -308,7 +393,7 @@ export function PurchaseOrdersPage() {
         const currentPO = (await loadProcurementPOs(source, load)).find(
           (current) => current.id === po.id,
         );
-        if (!currentPO)
+        if (!currentPO || !isReceivableInbound(currentPO))
           throw new Error("This PO is no longer available for receiving.");
         let record: ReceivingDraftRecord;
         if (mode === "supabase") {
@@ -501,7 +586,13 @@ export function PurchaseOrdersPage() {
             requestedBy: String(row.requested_by),
             requestedAt: String(row.requested_at),
             reason: String(row.reason ?? ""),
-            lines: (row.lines ?? []) as ReceiptExceptionDecisionItem["lines"],
+            lines: ((row.lines ?? []) as Array<Record<string, unknown>>).map(line => ({
+              poLineId: String(line.poLineId ?? line.po_line_id),
+              productId: (line.productId ?? line.product_id ?? undefined) as string | undefined,
+              actualQuantity: Number(line.actualQuantity ?? line.actual_quantity ?? 0),
+              expectedQuantity: Number(line.expectedQuantity ?? line.remaining_at_request ?? 0),
+              rawDescription: String(line.rawDescription ?? line.raw_description ?? 'Receipt line'),
+            })),
           })),
         );
       }
@@ -543,7 +634,8 @@ export function PurchaseOrdersPage() {
   const decideReceiptException = async (
     input: ReceiptExceptionDecisionInput,
   ) => {
-    if (!supabaseClient) return false;
+    const item = exceptionDecisions.find(item => item.decisionId === input.decisionId);
+    if (!supabaseClient || !mayResolveReceiptExceptions || !profile?.id || !item || item.requestedBy === profile.id) return false;
     const { error: rpcError } = await supabaseClient
       .schema("warehouse")
       .rpc("resolve_procurement_po_exception", {
@@ -567,6 +659,8 @@ export function PurchaseOrdersPage() {
     // Reconcile both receipt authority queues after either resolver; parent and custody
     // lifecycle transitions can make the other queue stale in the same transaction.
     if (!(await refreshReceiptAuthorityQueues())) return false;
+    await refreshReceiptCheck();
+    setBridgeReload(value => value + 1);
     toast.success(
       input.decision === "escalate"
         ? "Receipt remains actionable in the escalated queue"
@@ -601,7 +695,7 @@ export function PurchaseOrdersPage() {
   useEffect(() => {
     if (!handoffPoId || openedHandoffRef.current === handoffPoId) return;
     const handoff = bridgedPOs.find((po) => po.id === handoffPoId);
-    if (!handoff) return;
+    if (!handoff || !isReceivableInbound(handoff) || !canReceive || handoffReceiptId) return;
     openedHandoffRef.current = handoffPoId;
     setReceivingRequest({
       po: handoff,
@@ -610,6 +704,7 @@ export function PurchaseOrdersPage() {
     });
     setDraftLoading(true);
     receiptAttemptRef.current = null;
+    setUncertainReceiptAttempt(null);
     setBridgeReceivePO(handoff);
     setBridgeDeliveryDate("");
     setBridgeLocation(warehouses[0]?.id ?? "");
@@ -647,7 +742,7 @@ export function PurchaseOrdersPage() {
         handoff.lines.map((line) => [line.id, initialOutcomeSerials()]),
       ),
     );
-  }, [bridgedPOs, handoffPoId, warehouses, loadReceivableProcurementPOs]);
+  }, [bridgedPOs, handoffPoId, handoffReceiptId, canReceive, warehouses, loadReceivableProcurementPOs]);
 
   const poNumbers = useMemo(
     () => poNumberMap(data?.purchaseOrders ?? []),
@@ -812,8 +907,7 @@ export function PurchaseOrdersPage() {
           ? isReceivable(po)
           : !isOpenPO(po),
     );
-  // Bridged procurement POs are by definition open (issued/approved).
-  const shownBridged: BridgedPO[] = filter === "closed" ? bridgedPOs.filter(po => po.status === "issued" && !isReceivableInbound(po)) : filter === "open" ? inbound.receivable : bridgedPOs;
+  const shownBridged: BridgedPO[] = filter === "closed" ? closedPage.rows : filter === "open" ? inbound.receivable : bridgedPOs;
 
   const detailPO = detailPOId
     ? (warehousePOs.find((po) => po.id === detailPOId) ?? null)
@@ -864,7 +958,7 @@ export function PurchaseOrdersPage() {
   };
 
   const openBridgeReceive = (po: BridgedPO) => {
-    if (bridgeSubmitting.current) return;
+    if (bridgeSubmitting.current || !canReceive || !isReceivableInbound(po)) return;
     lastQuantityField.current = {};
     setRequirementsAnnouncement('');
     setReceivingRequest({
@@ -874,6 +968,7 @@ export function PurchaseOrdersPage() {
     });
     setDraftLoading(true);
     receiptAttemptRef.current = null;
+    setUncertainReceiptAttempt(null);
     setBridgeReceivePO(po);
     setBridgeDeliveryDate("");
     setBridgeLocation(warehouses[0]?.id ?? "");
@@ -1002,7 +1097,7 @@ export function PurchaseOrdersPage() {
   };
 
   const submitBridgeReceive = async () => {
-    if (evidenceBusy || deliveryDateError) return;
+    if (evidenceBusy || deliveryDateError || (receiptBlocked && !canReconcileReceipt) || !canReceive || !bridgeReceivePO || !isReceivableInbound(bridgeReceivePO)) return;
     if (
       !bridgeReceivePO ||
       !bridgeLocation ||
@@ -1085,15 +1180,20 @@ export function PurchaseOrdersPage() {
       evidenceUrls: bridgeEvidenceUrls,
     };
     const payload = JSON.stringify(input);
-    if (receiptAttemptRef.current?.payload !== payload) {
-      receiptAttemptRef.current = { payload, key: crypto.randomUUID() };
-    }
+    const reconcile = canReconcileReceipt && uncertainReceiptAttempt?.payload === payload;
     try {
+      // Replaying an uncertain command must precede blockers created by that very command.
+      // Only the unchanged, frozen payload may reuse its original idempotency key.
+      if (!reconcile && !(await refreshReceiptCheck())) return;
+      if (receiptAttemptRef.current?.payload !== payload) {
+        receiptAttemptRef.current = { payload, key: crypto.randomUUID(), form: receiptFormSignature };
+      }
+      const attempt = receiptAttemptRef.current;
       const ok = await receiveProcurementPO({
-        ...input,
-        idempotencyKey: receiptAttemptRef.current.key,
+        ...(reconcile ? JSON.parse(attempt.payload) as typeof input : input),
+        idempotencyKey: attempt.key,
       });
-      if (!ok) return;
+      if (!ok) { setUncertainReceiptAttempt(attempt); await refreshReceiptCheck(); return; }
       try {
         const remaining = receivingProgress();
         remaining.lines = remaining.lines.filter(
@@ -1111,6 +1211,7 @@ export function PurchaseOrdersPage() {
           : "Procurement PO received into inspection staging",
       );
       receiptAttemptRef.current = null;
+      setUncertainReceiptAttempt(null);
       closeBridgeReceive();
       setBridgeReload((value) => value + 1);
     } finally {
@@ -1189,6 +1290,9 @@ export function PurchaseOrdersPage() {
         <>
           <ReceiptExceptionDecisionPanel
             items={exceptionDecisions}
+            reviewerId={profile?.id}
+            receiptId={handoffReceiptId}
+            loadEvidence={loadDecisionEvidence}
             products={data.products}
             onDecision={decideReceiptException}
           />
@@ -1199,7 +1303,8 @@ export function PurchaseOrdersPage() {
         </>
       )}
 
-      {warehousePOs.length === 0 && bridgedPOs.length === 0 ? (
+      {handoffReceiptId && !mayResolveReceiptExceptions && <p role="status">An authorized Lead, separate from the receiver, must complete this controlled receipt decision. Share this receipt link with your Lead.</p>}
+      {warehousePOs.length === 0 && bridgedPOs.length === 0 && source === 'memory' && filter !== 'closed' && !handoffPoId ? (
         <EmptyState
           icon="cart"
           title="No purchase orders"
@@ -1243,6 +1348,15 @@ export function PurchaseOrdersPage() {
             </p>
           </div>
           {inboundState.error && <p role="alert">{inboundState.error} <button type="button" className="btn-ghost" onClick={() => setBridgeReload(value => value + 1)}>Retry inbound work</button></p>}
+          {filter === 'closed' && <div className="space-y-2">
+            <Field label="Search closed POs" htmlFor="closed-po-search"><input id="closed-po-search" type="search" className="input" value={closedSearch} onChange={event => { setClosedSearch(event.target.value); setClosedCursor(null); }} /></Field>
+            {closedLoading && <p role="status">Loading closed PO history...</p>}
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className="btn-ghost btn-sm" disabled={!closedCursor || closedLoading} onClick={() => setClosedCursor(null)}>First closed page</button>
+              <button type="button" className="btn-ghost btn-sm" disabled={!closedPage.nextCursor || closedLoading} onClick={() => setClosedCursor(closedPage.nextCursor)}>Next closed page</button>
+            </div>
+          </div>}
+          {(filter === 'closed' || handoffPoId) && closedError && <p role="alert">{closedError} <button type="button" className="btn-ghost" onClick={() => setClosedReload(value => value + 1)}>Retry closed history</button></p>}
           {shownPOs.length === 0 && shownBridged.length === 0 ? (
             <EmptyState icon="cart" title={`No ${filter} purchase orders`} />
           ) : (
@@ -1319,7 +1433,7 @@ export function PurchaseOrdersPage() {
                           <Badge
                             tone={po.status === "issued" ? "brand" : "emerald"}
                           >
-                            {po.totalReceived > 0
+                            {po.status === 'closed' ? 'Closed' : po.totalReceived > 0
                               ? "Partially received"
                               : (PO_STATUS_LABELS[po.status as POStatus] ??
                                 po.status)}
@@ -1336,7 +1450,7 @@ export function PurchaseOrdersPage() {
                         <span className="text-sm text-muted">
                           {po.lines.length} line(s) • {money(po.value)}
                         </span>
-                        {canReceive && isReceivableInbound(po) ? (
+                        {po.status === 'closed' ? <button type="button" className="btn-outline btn-sm" onClick={() => setClosedDetail(closedPage.rows.find(row => row.id === po.id) ?? { ...po, receipts: [] })}>View closed history</button> : canReceive && isReceivableInbound(po) ? (
                           <button
                             type="button"
                             className="btn-accent btn-sm shrink-0"
@@ -1361,6 +1475,20 @@ export function PurchaseOrdersPage() {
       )}
 
       {/* PO detail sheet — the row's single target; actions live here. */}
+      <Sheet open={Boolean(closedDetail)} onOpenChange={open => { if (!open) setClosedDetail(null); }} title="Closed procurement PO" description={closedDetail?.poNumber}>
+        {closedDetail && <div className="space-y-4">
+          <p className="text-sm">{closedDetail.vendorName}</p>
+          <p className="font-semibold">Received {closedDetail.totalReceived} / {closedDetail.totalOrdered}</p>
+          <p className="text-sm text-muted">Closed. No further receiving is permitted.</p>
+          <ul className="divide-y divide-line" aria-label="Closed PO lines">{closedDetail.lines.map(line => <li key={line.id} className="py-2 text-sm">{line.description}: {line.receivedQuantity} / {line.quantity}</li>)}</ul>
+          <h3 className="text-sm font-semibold">Receipt history</h3>
+          {closedDetail.receipts.length === 0 ? <p className="text-sm text-muted">No linked receipt history is available.</p> : <ul className="divide-y divide-line" aria-label="Receipt history">{closedDetail.receipts.map((receipt, index) => <li key={receipt.id} className="space-y-1 py-3 text-sm">
+            <p>Receipt {index + 1} · {formatWhen(receipt.createdAt)}</p>
+            <p>Quality: {receipt.qualityStatus ?? 'pending'}</p>
+            {canOpenRoute('quality') && <Link className="inline-flex min-h-11 items-center text-link underline" to={`/quality?source=${encodeURIComponent(receipt.id)}`}>Quality history for receipt {index + 1}</Link>}
+          </li>)}</ul>}
+        </div>}
+      </Sheet>
       <Sheet
         open={detailPO !== null}
         onOpenChange={(o) => {
@@ -1616,6 +1744,7 @@ export function PurchaseOrdersPage() {
               className="btn-primary w-full justify-center whitespace-normal sm:w-auto"
               disabled={
                 !bridgeLocation ||
+                (receiptBlocked && !canReconcileReceipt) ||
                 evidenceBusy ||
                 !bridgeEvidenceUrls.length ||
                 !!bridgeEvidenceError ||
@@ -1646,6 +1775,17 @@ export function PurchaseOrdersPage() {
             ].join(' ');
             setRequirementsAnnouncement(messages ? `Receipt requirements: ${messages}` : 'Receipt requirements satisfied.');
           }}>
+            {(receiptBlocked || receiptCheck.blockers.length > 0) && <div role="status" className="space-y-2 rounded-lg border border-amber-300 p-3 text-sm">
+              {receiptCheck.loading || receiptCheck.poId !== receiptPoId ? <p>Checking controlled receipt decisions...</p> : receiptCheck.error ? <p>{receiptCheck.error}</p> : <>
+                <p className="font-semibold">Pending controlled receipt decision. {canReconcileReceipt ? 'Retry the unchanged confirmation to reconcile its outcome.' : 'A new delivery cannot be confirmed yet.'}</p>
+                <p>Save progress, then ask an independent Lead to complete the decision. Missing goods remain outstanding.</p>
+                {receiptCheck.blockers.map(item => <div key={item.id}>
+                  <p>Owner: {item.ownerId ?? 'Unassigned'} · {item.status.replace('_', ' ')}</p>
+                  <Link className="inline-flex min-h-11 items-center text-link underline" to={`/purchase-orders?receipt=${encodeURIComponent(item.sourceId)}`} onClick={() => closeBridgeReceive()}>Decision handoff</Link>
+                </div>)}
+              </>}
+              <button type="button" className="btn-outline btn-sm" disabled={receiptCheck.loading} onClick={() => void refreshReceiptCheck()}>Refresh decision status</button>
+            </div>}
             {draftLoading && (
               <p role="status" className="text-sm text-muted">
                 Loading your saved receiving progress...

@@ -6,6 +6,289 @@ import { makeRepo, renderWithProviders } from '@/test/renderWithProviders';
 import { loadCompleteControlQueue } from '@/domain/controlQueues';
 import type { StorageArea } from '@/domain/types';
 import { _resetMemoryQueue, allPending, replayEntry, type InventoryHold, type InventoryPosition } from '@intra/data-kit';
+import { useNavigate } from 'react-router-dom';
+
+describe('StorageAreasPage receipt handoff', () => {
+  async function fixture() {
+    const data = await makeRepo().getData();
+    data.locations = [
+      { id: 'loc-wh', name: 'RBC warehouse', type: 'warehouse' },
+      { id: 'loc-other', name: 'Receipt warehouse', type: 'warehouse' },
+    ];
+    data.storageAreas = [
+      { id: 'rbc-bin', locationId: 'loc-wh', code: 'RBC-A', active: true },
+      { id: 'receipt-bin', locationId: 'loc-other', code: 'RECEIPT-A', active: true },
+    ];
+    data.receipts = [{ id: 'external-receipt', locationId: 'loc-other', deliveryReference: 'DR-42',
+      actualDeliveryDate: '2026-10-20', lines: [{ productId: 'shirt-l', quantity: 2 }], actor: 'receiver', createdAt: '2026-10-19T17:00:00Z' }];
+    data.stockLevels = [
+      { productId: 'shirt-l', locationId: 'loc-wh', quantity: 99 },
+      { productId: 'shirt-l', locationId: 'loc-other', quantity: 2, lotId: 'lot-one' },
+      { productId: 'shirt-l', locationId: 'loc-other', quantity: 1, lotId: 'lot-two' },
+    ];
+    const repo = makeRepo(data);
+    const inspections = vi.spyOn(repo, 'listQualityInspectionSummaries').mockResolvedValue({ rows: [{
+      id: 'inspection-one', sourceType: 'receipt', sourceId: 'external-receipt', productId: 'shirt-l',
+      lotId: 'lot-one', quantity: 2, disposition: 'accepted', inspectedBy: 'quality',
+      inspectedAt: '2026-10-19T18:00:00Z', evidenceCount: 0,
+    }] });
+    const relocate = vi.spyOn(repo, 'relocate');
+    return { data, repo, inspections, relocate };
+  }
+  const route = '/storage?warehouse=loc-other&receipt=external-receipt&product=shirt-l';
+
+  it('opens a copied receipt link in its warehouse with source details and no automatic movement', async () => {
+    const { repo, relocate } = await fixture();
+    const before = await repo.getData();
+    renderWithProviders(<StorageAreasPage />, { repo, route });
+    const dialog = await screen.findByRole('dialog', { name: 'Put away stock' });
+    expect(within(dialog).getByText('Warehouse: Receipt warehouse')).toBeVisible();
+    expect(dialog).toHaveAccessibleDescription('Receipt warehouse / DR-42 / General-area inventory');
+    expect(within(dialog).getByText(/Selected receipt: DR-42/)).toBeVisible();
+    await userEvent.click(within(dialog).getByText('Receipt and Quality lot references'));
+    expect(await within(dialog).findByText(/lot-one/)).toBeVisible();
+    expect(within(dialog).getByText(/Bulk putaway uses eligible stock across receipt lots/)).toBeVisible();
+    expect(await within(dialog).findByText('3 eligible unit(s) in the general area')).toBeVisible();
+    expect(within(dialog).getByRole('button', { name: 'Confirm putaway' })).toBeDisabled();
+    expect(relocate).not.toHaveBeenCalled();
+    expect(await repo.getData()).toEqual(before);
+  });
+
+  it('rejects another warehouse destination and preserves the existing relocate contract on explicit confirmation', async () => {
+    const { repo, relocate } = await fixture();
+    relocate.mockRejectedValue(new Error('Offline test: no stock changes'));
+    const user = userEvent.setup();
+    renderWithProviders(<StorageAreasPage />, { repo, route });
+    const dialog = await screen.findByRole('dialog', { name: 'Put away stock' });
+    const input = within(dialog).getByLabelText('Enter destination bin manually');
+    const confirm = within(dialog).getByRole('button', { name: 'Confirm putaway' });
+    await user.type(input, 'RBC-A{Enter}');
+    expect(confirm).toBeDisabled();
+    await user.clear(input);
+    await user.type(input, 'RECEIPT-A{Enter}');
+    await waitFor(() => expect(confirm).toBeEnabled());
+    expect(relocate).not.toHaveBeenCalled();
+    await user.click(confirm);
+    await waitFor(() => expect(relocate).toHaveBeenCalledOnce());
+    expect(relocate.mock.calls[0]![0]).toMatchObject({ productId: 'shirt-l', locationId: 'loc-other', toBinId: 'receipt-bin', quantity: 1 });
+    expect(relocate.mock.calls[0]![0]).not.toHaveProperty('lotId');
+  });
+
+  it.each([
+    'warehouse=loc-wh&receipt=external-receipt&product=shirt-l',
+    'warehouse=hidden&receipt=external-receipt&product=shirt-l',
+    'warehouse=loc-other&receipt=hidden&product=shirt-l',
+    'warehouse=loc-other&receipt=external-receipt&product=smart-watch',
+    'warehouse=loc-other&receipt=external-receipt',
+    'warehouse=loc-other&warehouse=loc-wh&receipt=external-receipt&product=shirt-l',
+  ])('rejects invalid context without silently selecting RBC: %s', async (query) => {
+    const { repo, relocate } = await fixture();
+    renderWithProviders(<StorageAreasPage />, { repo, route: `/storage?${query}` });
+    expect(await screen.findByRole('alert')).toHaveTextContent(/unavailable|invalid|access/i);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Warehouse')).toHaveValue('');
+    expect(screen.getByRole('button', { name: 'Put away' })).toBeDisabled();
+    expect(relocate).not.toHaveBeenCalled();
+  });
+
+  it('does not use other accepted stock to unblock a held receipt', async () => {
+    const { repo, inspections, relocate } = await fixture();
+    inspections.mockResolvedValue({ rows: [] });
+    renderWithProviders(<StorageAreasPage />, { repo, route });
+    const dialog = await screen.findByRole('dialog', { name: 'Put away stock' });
+    expect(await within(dialog).findByText('0 eligible unit(s) in the general area')).toBeVisible();
+    expect(within(dialog).getByRole('button', { name: 'Confirm putaway' })).toBeDisabled();
+    expect(relocate).not.toHaveBeenCalled();
+  });
+
+  it('clears the old capture when navigating from a valid receipt to inaccessible context', async () => {
+    const { repo, relocate } = await fixture();
+    let navigate!: ReturnType<typeof useNavigate>;
+    function RoutedStorage() { navigate = useNavigate(); return <StorageAreasPage />; }
+    renderWithProviders(<RoutedStorage />, { repo, route });
+    await screen.findByRole('dialog', { name: 'Put away stock' });
+    await act(async () => navigate('/storage?warehouse=loc-wh&receipt=hidden&product=shirt-l'));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/unavailable|access/i);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Warehouse')).toHaveValue('');
+    expect(relocate).not.toHaveBeenCalled();
+  });
+
+  it('fails closed without transfer authority', async () => {
+    const { repo, relocate } = await fixture();
+    renderWithProviders(<StorageAreasPage />, { repo, route, source: 'supabase', capabilities: ['receive_stock'] });
+    expect(await screen.findByRole('alert')).toHaveTextContent(/access/i);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(relocate).not.toHaveBeenCalled();
+  });
+
+  it('switches between exact receipt warehouses with the same SKU and reopens the copied link on remount', async () => {
+    const { data } = await fixture();
+    data.receipts.push({ ...data.receipts[0]!, id: 'rbc-receipt', locationId: 'loc-wh', deliveryReference: 'RBC delivery' });
+    const repo = makeRepo(data);
+    const relocate = vi.spyOn(repo, 'relocate');
+    let navigate!: ReturnType<typeof useNavigate>;
+    function RoutedStorage() { navigate = useNavigate(); return <StorageAreasPage />; }
+    const view = renderWithProviders(<RoutedStorage />, { repo, route });
+    let dialog = await screen.findByRole('dialog', { name: 'Put away stock' });
+    expect(within(dialog).getByText('Warehouse: Receipt warehouse')).toBeVisible();
+    const rbcRoute = '/storage?warehouse=loc-wh&receipt=rbc-receipt&product=shirt-l';
+    await act(async () => navigate(rbcRoute));
+    dialog = await screen.findByRole('dialog', { name: 'Put away stock' });
+    expect(within(dialog).getByText('Warehouse: RBC warehouse')).toBeVisible();
+    expect(within(dialog).getByText('Selected receipt: RBC delivery')).toBeVisible();
+    view.unmount();
+    renderWithProviders(<StorageAreasPage />, { repo, route: rbcRoute });
+    dialog = await screen.findByRole('dialog', { name: 'Put away stock' });
+    expect(within(dialog).getByText('Warehouse: RBC warehouse')).toBeVisible();
+    expect(within(dialog).getByRole('button', { name: 'Confirm putaway' })).toBeDisabled();
+    expect(relocate).not.toHaveBeenCalled();
+  });
+
+  it('rejects a different receipt serial and retains the Quality hold on the selected serial', async () => {
+    const { data } = await fixture();
+    const unit = data.units.find(row => row.serialNumber === 'SMART-WATCH-SN0001')!;
+    unit.locationId = 'loc-other'; unit.binId = undefined; unit.status = 'in_stock';
+    data.units.push({ ...unit, id: 'unrelated-unit', serialNumber: 'UNRELATED-SERIAL' });
+    data.receipts[0]!.lines = [{ productId: unit.productId, quantity: 1, serialNumbers: [unit.serialNumber] }];
+    const repo = makeRepo(data);
+    vi.spyOn(repo, 'listQualityInspectionSummaries').mockResolvedValue({ rows: [{
+      id: 'serial-inspection', sourceType: 'receipt', sourceId: 'external-receipt', productId: unit.productId,
+      lotId: unit.lotId, serialNumber: unit.serialNumber, quantity: 1, disposition: 'accepted', inspectedBy: 'quality',
+      inspectedAt: '2026-10-19T18:00:00Z', evidenceCount: 0,
+    }] });
+    vi.spyOn(repo, 'listHolds').mockResolvedValue({ rows: [{ id: 'serial-hold', inspectionId: 'serial-inspection',
+      productId: unit.productId, locationId: unit.locationId, lotId: unit.lotId, serialNumber: unit.serialNumber,
+      quantity: 1, status: 'active', reason: 'Damaged', createdBy: 'quality', createdAt: '2026-10-19T18:30:00Z' }] });
+    const relocate = vi.spyOn(repo, 'relocate');
+    renderWithProviders(<StorageAreasPage />, { repo, route: `/storage?warehouse=loc-other&receipt=external-receipt&product=${unit.productId}` });
+    const dialog = await screen.findByRole('dialog', { name: 'Put away stock' });
+    const user = userEvent.setup();
+    const input = within(dialog).getByLabelText('Enter stock code manually');
+    await user.type(input, 'UNRELATED-SERIAL{Enter}');
+    expect(await within(dialog).findByText(/does not belong to the selected receipt/)).toBeVisible();
+    await user.clear(input);
+    await user.type(input, `${unit.serialNumber}{Enter}`);
+    expect(await within(dialog).findByText('0 eligible unit(s) in the general area')).toBeVisible();
+    await user.type(within(dialog).getByLabelText('Enter destination bin manually'), 'RECEIPT-A{Enter}');
+    expect(within(dialog).getByRole('button', { name: 'Confirm putaway' })).toBeDisabled();
+    expect(relocate).not.toHaveBeenCalled();
+  });
+
+  it('keeps receipt capture blocked on a Quality read failure and recovers only after refresh', async () => {
+    const { repo, inspections } = await fixture();
+    inspections.mockRejectedValue(new Error('Quality unavailable'));
+    renderWithProviders(<StorageAreasPage />, { repo, route });
+    const dialog = await screen.findByRole('dialog', { name: 'Put away stock' });
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(/could not be verified/);
+    expect(within(dialog).getByRole('button', { name: 'Confirm putaway' })).toBeDisabled();
+    inspections.mockResolvedValue({ rows: [] });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Refresh stock availability' }));
+    expect(await within(dialog).findByText('0 eligible unit(s) in the general area')).toBeVisible();
+  });
+
+  it.each(['saving', 'queued'] as const)('pins a %s putaway command and capture when the receipt URL changes', async (status) => {
+    _resetMemoryQueue();
+    let reject: ((error: Error) => void) | undefined;
+    try {
+      const { repo, relocate } = await fixture();
+      if (status === 'saving') relocate.mockImplementation(() => new Promise((_resolve, fail) => { reject = fail; }));
+      else relocate.mockRejectedValueOnce(new Error('Failed to fetch'));
+      let navigate!: ReturnType<typeof useNavigate>;
+      function RoutedStorage() { navigate = useNavigate(); return <StorageAreasPage />; }
+      renderWithProviders(<RoutedStorage />, { repo, route, source: 'supabase', capabilities: ['transfer_stock', 'inspect_quality'] });
+      const user = userEvent.setup();
+      const dialog = await screen.findByRole('dialog', { name: 'Put away stock' });
+      await user.type(within(dialog).getByLabelText('Enter destination bin manually'), 'RECEIPT-A{Enter}');
+      const confirm = within(dialog).getByRole('button', { name: 'Confirm putaway' });
+      await waitFor(() => expect(confirm).toBeEnabled());
+      await user.click(confirm);
+      await waitFor(() => expect(relocate).toHaveBeenCalledOnce());
+      const original = relocate.mock.calls[0]![0];
+      if (status === 'queued') await within(dialog).findByText(/Putaway queued for sync/);
+      await act(async () => navigate('/storage?warehouse=loc-wh&receipt=hidden&product=shirt-l'));
+      expect(screen.getByRole('dialog', { name: 'Put away stock' })).toBe(dialog);
+      expect(within(dialog).getByText('Warehouse: Receipt warehouse')).toBeVisible();
+      expect(within(dialog).getByText('Selected RECEIPT-A')).toBeVisible();
+      expect(within(dialog).getByLabelText('Enter destination bin manually')).toBeDisabled();
+      expect(within(dialog).getByLabelText('Quantity to put away')).toBeDisabled();
+      if (status === 'queued') {
+        await user.click(confirm);
+        expect(relocate).toHaveBeenCalledOnce();
+        expect((await allPending())[0]!.input).toMatchObject({ idempotencyKey: original.idempotencyKey,
+          productId: 'shirt-l', locationId: 'loc-other', toBinId: 'receipt-bin', quantity: 1 });
+      } else expect(confirm).toBeDisabled();
+    } finally {
+      if (reject) await act(async () => reject!(new Error('Offline test: rejected')));
+      _resetMemoryQueue();
+    }
+  });
+
+  it.each(['saving', 'queued'] as const)('pins a %s task-source capture until the pending command resolves', async (status) => {
+    _resetMemoryQueue();
+    let reject: ((error: Error) => void) | undefined;
+    try {
+      const { data } = await fixture();
+      data.products.push({ ...data.products.find(row => row.id === 'shirt-l')!, id: 'other-product', sku: 'OTHER-SKU', name: 'Other product' });
+      data.stockLevels.push({ productId: 'other-product', locationId: 'loc-wh', quantity: 9 });
+      const repo = makeRepo(data);
+      const tasks = vi.spyOn(repo, 'listWarehouseTasks').mockResolvedValue({ rows: [
+        { id: 'task-a', type: 'putaway', sourceId: 'staging:["shirt-l","loc-other"]', title: 'Put away A', status: 'due' },
+        { id: 'task-b', type: 'putaway', sourceId: 'staging:["other-product","loc-wh"]', title: 'Put away B', status: 'due' },
+      ] });
+      const relocate = vi.spyOn(repo, 'relocate');
+      if (status === 'saving') relocate.mockImplementation(() => new Promise((_resolve, fail) => { reject = fail; }));
+      else relocate.mockRejectedValueOnce(new Error('Failed to fetch'));
+      let navigate!: ReturnType<typeof useNavigate>;
+      function RoutedStorage() { navigate = useNavigate(); return <StorageAreasPage />; }
+      renderWithProviders(<RoutedStorage />, { repo, route: '/storage?source=task-a', source: 'supabase', capabilities: ['transfer_stock', 'inspect_quality'] });
+      const user = userEvent.setup();
+      const dialog = await screen.findByRole('dialog', { name: 'Put away stock' });
+      const quantity = within(dialog).getByLabelText('Quantity to put away');
+      fireEvent.change(quantity, { target: { value: '1' } });
+      await user.type(within(dialog).getByLabelText('Enter destination bin manually'), 'RECEIPT-A{Enter}');
+      const confirm = within(dialog).getByRole('button', { name: 'Confirm putaway' });
+      await waitFor(() => expect(confirm).toBeEnabled());
+      await user.click(confirm);
+      await waitFor(() => expect(relocate).toHaveBeenCalledOnce());
+      const original = relocate.mock.calls[0]![0];
+      if (status === 'queued') await within(dialog).findByText(/Putaway queued for sync/);
+      const readsBeforeNavigation = tasks.mock.calls.length;
+      await act(async () => navigate('/storage?source=task-b'));
+      expect(within(dialog).getByText('Warehouse: Receipt warehouse')).toBeVisible();
+      expect(within(dialog).getByText('Selected RECEIPT-A')).toBeVisible();
+      expect(within(dialog).queryByText(/Other product/)).not.toBeInTheDocument();
+      expect(quantity).toHaveValue(1);
+      expect(quantity).toBeDisabled();
+      expect(within(dialog).getByLabelText('Enter destination bin manually')).toBeDisabled();
+      expect(tasks).toHaveBeenCalledTimes(readsBeforeNavigation);
+      if (status === 'queued') {
+        await user.click(confirm);
+        expect(relocate).toHaveBeenCalledOnce();
+        const pending = (await allPending())[0]!;
+        expect(pending.input).toMatchObject({ idempotencyKey: original.idempotencyKey,
+          productId: 'shirt-l', locationId: 'loc-other', toBinId: 'receipt-bin', quantity: 1 });
+        await act(async () => { expect(await replayEntry({ repo, actor: String(pending.input.actor) }, pending)).toBe(true); });
+        await user.click(confirm);
+        expect(relocate).toHaveBeenCalledTimes(2);
+        expect(relocate.mock.calls[1]![0]).toEqual(original);
+      } else {
+        expect(confirm).toBeDisabled();
+        await act(async () => reject!(new Error('Insufficient eligible stock')));
+        reject = undefined;
+      }
+      expect(await screen.findByText('Warehouse: RBC warehouse')).toBeVisible();
+      const nextDialog = screen.getByRole('dialog', { name: 'Put away stock' });
+      expect(within(nextDialog).getByLabelText('Quantity to put away')).toHaveValue(9);
+      expect(within(nextDialog).queryByText('Selected RECEIPT-A')).not.toBeInTheDocument();
+      expect(within(nextDialog).getByRole('button', { name: 'Confirm putaway' })).toBeDisabled();
+      expect((await repo.getData()).stockLevels.find(row => row.productId === 'other-product')?.quantity).toBe(9);
+    } finally {
+      if (reject) await act(async () => reject!(new Error('Offline test: rejected')));
+      _resetMemoryQueue();
+    }
+  });
+});
 
 describe('StorageAreasPage putaway availability', () => {
   async function fixture() {

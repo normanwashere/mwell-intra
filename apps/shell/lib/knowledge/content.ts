@@ -585,7 +585,7 @@ const procedureArticles: KnowledgeArticle[] = [
     [
       [
         "Select PO and destination",
-        "Confirm supplier, warehouse, and remaining quantities.",
+        "Confirm supplier, warehouse, and remaining quantities. Closed POs are read-only history. If a prior receipt still reserves this PO line, open its review link or Approved POs > Controlled receipt decisions; an independent authorized supervisor must review the existing receipt evidence. Starting exception work is not a decision, and accepting a shortage does not receive missing goods.",
       ],
       [
         "Record lines",
@@ -593,7 +593,7 @@ const procedureArticles: KnowledgeArticle[] = [
       ],
       [
         "Inspect",
-        "Choose disposition and provide evidence/reason when required.",
+        "Choose disposition and provide evidence/reason when required. Quality inspection timestamps use Philippine time; the actual delivery date remains the saved delivery date.",
       ],
       [
         "Preview an attached photo",
@@ -665,8 +665,8 @@ const procedureArticles: KnowledgeArticle[] = [
           {
             title: "Normal putaway",
             ownerRoleIds: ["warehouse_operator", "warehouse_supervisor", "warehouse_logistics_supervisor", "warehouse_admin"],
-            instruction: "After independent Quality acceptance, use Open Storage at /warehouse/storage and the existing putaway queue. An authorized operator moves the accepted, unheld stock to a permitted final bin and verifies the saved destination.",
-            expectedOutcome: "Normal putaway completes the warehouse handoff. The arrival bin never substitutes for final putaway, and navigating to Storage does not move stock.",
+            instruction: "After independent Quality acceptance, use the posted shipment's Open Storage link for the relevant product. Check the retained warehouse, receipt and product context, select the final bin, and confirm the normal putaway. Invalid or unavailable receipt context does not select another warehouse. An authorized operator moves accepted, unheld stock and verifies the saved destination.",
+            expectedOutcome: "Normal putaway completes the warehouse handoff. Quantity-tracked stock can be moved across eligible delivery batches in one action; each batch keeps its own history and Quality-held quantities stay behind. The arrival bin never substitutes for final putaway, and navigating to Storage does not move stock.",
             exception: "Current transfer_stock permission, required training and a valid destination are still required. Do not move held or pending-inspection stock into available inventory.",
           },
         ],

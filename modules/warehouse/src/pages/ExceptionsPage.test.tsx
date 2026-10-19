@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ExceptionsPage } from './ExceptionsPage';
@@ -28,6 +28,18 @@ async function repositoryWithException(unitCost: number) {
 }
 
 describe('ExceptionsPage', () => {
+  it('routes a PO receipt exception to its controlled receipt and does not offer generic resolution', async () => {
+    const repo = makeRepo();
+    vi.spyOn(repo, 'listExceptions').mockResolvedValue({ rows: [{
+      id: 'exception-1', type: 'po_receipt', severity: 'P2', sourceType: 'receipt',
+      sourceId: 'receipt/1', status: 'in_progress', ownerId: 'lead-1', createdAt: '2026-10-20',
+    }] });
+    renderWithProviders(<ExceptionsPage />, { repo, role: 'logistics_supervisor', route: '/exceptions?status=all' });
+    expect(await screen.findByRole('link', { name: 'View source' })).toHaveAttribute('href', '/purchase-orders?receipt=receipt%2F1');
+    expect(screen.queryByRole('button', { name: 'Review exception' })).not.toBeInTheDocument();
+    expect(screen.getByText(/independent Lead.*controlled receipt decision/i)).toBeVisible();
+  });
+
   it('offers a clear recovery path when filters hide existing exceptions', async () => {
     const user = userEvent.setup();
     const repo = await repositoryWithException(100);

@@ -142,6 +142,11 @@ function uid(prefix: string): string {
 /** Snake-case row shape passed to / returned from the SQL layer. */
 type Row = Record<string, unknown>;
 
+function relocationMovements(result: Row): Movement[] {
+  const rows = Array.isArray(result.movements) ? result.movements : [result];
+  return rows.map(rowToMovement);
+}
+
 const TABLE_PROJECTIONS: Record<string, string> = {
   products:
     "id,sku,name,category,item_class,serialization_policy,uom,device_type,merchandise_type,serialized,attributes,unit_cost,price,reorder_point,promotional,barcode,expiry_tracked,shelf_life_warning_days",
@@ -2075,68 +2080,48 @@ export class SupabaseRepository implements WarehouseControlRepository {
       const replay = await this.callRpc("transfer", {
         idempotency_key: idempotencyKey, command_input: commandInput, replay_only: true,
       });
-      if (replay) return [rowToMovement(replay)];
+      if (replay) return relocationMovements(replay);
     }
-    if (input.quantity <= 0)
-      throw new Error("Quantity must be greater than zero.");
+    if (!Number.isSafeInteger(input.quantity) || input.quantity <= 0)
+      throw new Error("Quantity must be a safe whole number greater than zero.");
     if ((input.fromBinId ?? undefined) === (input.toBinId ?? undefined)) {
       throw new Error("Source and destination bins must differ.");
     }
     const data = await this.getStockState();
     const product = data.products.find((p) => p.id === input.productId);
     if (!product) throw new Error("Product not found.");
+    if (!product.serialized) {
+      // The server allocates exact lots and checks holds atomically.
+      const result = await this.callRpc("transfer", {
+        idempotency_key: idempotencyKey,
+        command_input: commandInput,
+        bulk_relocation: true,
+      });
+      return relocationMovements(result);
+    }
     const createdAt = new Date().toISOString();
 
     const unitIds: string[] = [];
-    let fromStockDelta: Row | null = null;
-    let toStockDelta: Row | null = null;
-    if (product.serialized) {
-      const serials = input.serialNumbers ?? [];
-      const candidates = data.units.filter(
-        (u) =>
-          u.productId === product.id &&
-          u.status === "in_stock" &&
-          u.locationId === input.locationId &&
-          (u.binId ?? undefined) === (input.fromBinId ?? undefined),
+    const serials = input.serialNumbers ?? [];
+    const candidates = data.units.filter(
+      (u) =>
+        u.productId === product.id &&
+        u.status === "in_stock" &&
+        u.locationId === input.locationId &&
+        (u.binId ?? undefined) === (input.fromBinId ?? undefined),
+    );
+    let toMove = input.quantity;
+    for (const unit of candidates) {
+      if (toMove <= 0) break;
+      if (serials.length > 0 && !serials.includes(unit.serialNumber))
+        continue;
+      unitIds.push(unit.id);
+      toMove--;
+    }
+    if (toMove > 0) {
+      throw new Error(
+        `Only ${input.quantity - toMove} of ${input.quantity} unit(s) available in the source bin.`,
       );
-      let toMove = input.quantity;
-      for (const unit of candidates) {
-        if (toMove <= 0) break;
-        if (serials.length > 0 && !serials.includes(unit.serialNumber))
-          continue;
-        unitIds.push(unit.id);
-        toMove--;
-      }
-      if (toMove > 0) {
-        throw new Error(
-          `Only ${input.quantity - toMove} of ${input.quantity} unit(s) available in the source bin.`,
-        );
-      }
-    } else {
-      // Confirm the source bin can cover the move before crediting the target.
-      const fromLevel = data.stockLevels.find(
-        (s) =>
-          s.productId === product.id &&
-          s.locationId === input.locationId &&
-          (s.binId ?? undefined) === (input.fromBinId ?? undefined),
-      );
-      if (!fromLevel || fromLevel.quantity < input.quantity) {
-        throw new Error(
-          `Insufficient stock in the source bin to move ${input.quantity}.`,
-        );
-      }
-      fromStockDelta = {
-        product_id: product.id,
-        location_id: input.locationId,
-        bin_id: input.fromBinId ?? null,
-        delta: -input.quantity,
-      };
-      toStockDelta = {
-        product_id: product.id,
-        location_id: input.locationId,
-        bin_id: input.toBinId ?? null,
-        delta: input.quantity,
-      };
     }
 
     const movement: Movement = {
@@ -2159,11 +2144,11 @@ export class SupabaseRepository implements WarehouseControlRepository {
       from_location_id: input.locationId,
       to_location_id: input.locationId,
       to_bin_id: input.toBinId ?? null,
-      from_stock_delta: fromStockDelta,
-      to_stock_delta: toStockDelta,
+      from_stock_delta: null,
+      to_stock_delta: null,
       movement: movementToRow(movement),
     });
-    return [rowToMovement(row)];
+    return relocationMovements(row);
   }
 }
 

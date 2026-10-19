@@ -16,6 +16,18 @@ import { loadQualityControlPopulation } from '@/domain/qualityControlLoad';
 
 type QualityTab = 'pending' | 'holds' | 'completed';
 
+const qualityTimeFormat = new Intl.DateTimeFormat('en-PH', {
+  timeZone: 'Asia/Manila', day: 'numeric', month: 'short', year: 'numeric',
+  hour: 'numeric', minute: '2-digit', hour12: true,
+});
+
+function QualityTime({ value, label }: { value: string; label: string }) {
+  const date = new Date(value);
+  return <span>{label}: <time dateTime={value}>{Number.isNaN(date.getTime())
+    ? 'Time unavailable (Asia/Manila)'
+    : `${qualityTimeFormat.format(date)} (Asia/Manila)`}</time></span>;
+}
+
 export function QualityPage() {
   const {
     data,
@@ -224,8 +236,9 @@ export function QualityPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Quality control" icon="clipboard" subtitle="Inspect receipts, control holds, and preserve custody" />
-      <div className="rounded-xl border border-line bg-inset/50 px-4 py-3 text-sm text-muted">
+      <PageHeader title="Quality control" icon="clipboard" />
+      <details className="border-b border-line pb-2 text-sm text-muted">
+        <summary className="cursor-pointer">Inspection responsibilities</summary>
         {!mayRelease ? (
           <>
             <p className="font-semibold text-ink">Record inspection facts.</p>
@@ -237,7 +250,7 @@ export function QualityPage() {
             <p className="mt-0.5 text-xs">Review holds, quarantine, rejection, and release without approving your own request.</p>
           </>
         )}
-      </div>
+      </details>
       <SegmentedControl<QualityTab>
         ariaLabel="Quality status"
         value={tab}
@@ -260,8 +273,8 @@ export function QualityPage() {
         <button type="button" className="btn-primary min-h-11" disabled={inspectionPending || selectedItems.length !== selectedIds.length || !selectedItems.length} onClick={() => setBatchOpen(true)}>Review selected inspections</button>
         {selectedItems.length !== selectedIds.length && <p role="status" className="w-full text-sm">{inspectionPending ? 'An inspection still needs confirmation. Review the unconfirmed inspection before selecting more items.' : 'Some selected items changed. Clear the selection and choose the remaining inspections.'}</p>}
       </div>}
-      {selectedSource && <div className="space-y-1 rounded-lg border border-line p-3 text-sm">
-        <p className="break-all">Selected source: {selectedSource}</p>
+      {selectedSource && <div className="space-y-1 border-y border-line py-2 text-sm">
+        <details><summary className="cursor-pointer">Selected source reference</summary><p className="break-all">Selected source: {selectedSource}</p></details>
         {!queueBlocked && <>
           <p role="status">{sourceAvailable
             ? `${sourceMatches.pending.length} pending inspections / ${sourceMatches.holds.length} active holds / ${sourceMatches.completed.length} completed inspections`
@@ -282,9 +295,12 @@ export function QualityPage() {
         shownPending.length === 0 ? <EmptyState icon="clipboard" title={search ? 'No matching inspections' : 'No inspections waiting'} /> : (
           <ul className="space-y-3" aria-label="Pending inspections">
             {[...groups.entries()].map(([key, items]) => <li key={key}><details open={Boolean(search) || groups.size < 5} className="rounded-lg border border-line bg-surface">
-              <summary className="cursor-pointer p-4 text-sm font-semibold">{productName(items[0]!.productId)} <span className="ml-2 font-normal text-muted">{items.length} inspection(s) · {items[0]!.recordedAt.slice(0, 10)}</span><span className="mt-1 block break-all text-xs font-normal text-muted">{items[0]!.sourceType} {items[0]!.sourceId}</span></summary>
+              <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">{productName(items[0]!.productId)} <span className="ml-2 font-normal text-muted">{items.length} inspection(s)</span></summary>
               <div className="flex flex-wrap items-center justify-between gap-2 border-y border-line bg-inset px-4 py-2 text-xs">
-                <span className="min-w-0 break-words">{[items[0]!.procurementPoLineId && `PO line ${items[0]!.procurementPoLineId}`, items[0]!.binId && `Bin ${items[0]!.binId}`, items[0]!.lotId && `Lot ${items[0]!.lotId}`].filter(Boolean).join(' / ') || 'General receiving area'}</span>
+                <details className="min-w-0 [overflow-wrap:anywhere]"><summary className="cursor-pointer">Source and lot references</summary>
+                  <p>{items[0]!.sourceType}: {items[0]!.sourceId}</p>
+                  <p>{[items[0]!.procurementPoLineId && `PO line ${items[0]!.procurementPoLineId}`, items[0]!.binId && `Inventory bin ${items[0]!.binId}`, items[0]!.lotId && `Lot ${items[0]!.lotId}`].filter(Boolean).join(' / ') || 'General receiving area'}</p>
+                </details>
                 {mayInspect && <button type="button" className="btn-ghost min-h-11" disabled={inspectionPending} onClick={() => setSelectedIds(items.slice(0, 50).map(item => item.id))}>{items.length > 50 ? 'Select first 50' : 'Select group'}</button>}
               </div>
               <ul className="divide-y divide-line">
@@ -298,7 +314,8 @@ export function QualityPage() {
                   </label>}
                   <div className="min-w-0">
                   <p className="break-words text-sm font-semibold text-ink">{item.serialNumber ? `Serial ${item.serialNumber}` : productName(item.productId)}</p>
-                  <p className="text-xs text-muted">{item.quantity} unit(s) · {item.recordedAt.slice(0, 10)}</p>
+                  <p className="text-xs text-muted">{item.quantity} unit(s)</p>
+                  <p className="text-xs text-muted"><QualityTime value={item.recordedAt} label="Recorded" /></p>
                   </div>
                 </div>
                 {mayInspect && <button type="button" className="btn-primary btn-sm min-h-11 justify-center" disabled={inspectionPending} onClick={() => setSelectedPending(item)}>Inspect</button>}
@@ -316,7 +333,8 @@ export function QualityPage() {
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2"><p className="truncate text-sm font-semibold text-ink">{productName(hold.productId)}</p><Badge tone="amber">On hold</Badge></div>
                   <p className="mt-1 text-sm text-muted">{hold.reason}</p>
-                  <p className="mt-1 text-xs text-faint">Created by {hold.createdBy} · {hold.createdAt.slice(0, 10)}</p>
+                  <p className="mt-1 text-xs text-faint"><QualityTime value={hold.createdAt} label="Hold created" /></p>
+                  <details className="text-xs text-muted [overflow-wrap:anywhere]"><summary className="cursor-pointer">Traceability</summary><p>Created by {hold.createdBy}</p><p>Hold: {hold.id}</p><p>Inspection: {hold.inspectionId}</p></details>
                 </div>
                 {mayReviewHold(hold) && <button type="button" className="btn-ghost btn-sm justify-center" disabled={inspectionPending} onClick={() => setSelectedHold(hold)}>Review hold</button>}
               </li>
@@ -340,9 +358,14 @@ export function QualityPage() {
             <li key={inspection.id} aria-label={`Inspection ${inspection.id}`} className="grid min-w-0 gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
               <div className="min-w-0">
                 <p className="break-words text-sm font-semibold text-ink">{productName(inspection.productId)}</p>
-                <p className="text-xs text-faint">{inspection.quantity} unit(s) · <time dateTime={inspection.inspectedAt}>{inspection.inspectedAt.slice(0, 10)}</time></p>
+                <p className="text-xs text-faint">{inspection.quantity} unit(s){inspection.serialNumber ? ` / ${inspection.serialNumber}` : ''}</p>
+                <p className="text-xs text-faint"><QualityTime value={inspection.inspectedAt} label="Inspected" /></p>
+                <details className="text-xs text-muted [overflow-wrap:anywhere]"><summary className="cursor-pointer">Traceability</summary>
                 <p className="break-all text-xs text-muted">{inspection.sourceType}: {inspection.sourceId}</p>
                 <p className="break-all text-xs text-muted">Inspection: {inspection.id}</p>
+                {inspection.lotId && <p>Lot: {inspection.lotId}</p>}
+                {inspection.procurementPoLineId && <p>PO line: {inspection.procurementPoLineId}</p>}
+                </details>
               </div>
               <div className="flex min-w-0 flex-wrap items-center gap-3">
                 <Badge tone={inspection.disposition === 'accepted' ? 'emerald' : 'amber'}>{inspection.disposition.replace('_', ' ')}</Badge>

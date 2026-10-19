@@ -122,7 +122,7 @@ it('UX03: 150 serial tasks across three receipts retain group search and submit 
   const inspect = vi.spyOn(repo, 'inspectQuality');
   renderWithProviders(<QualityPage />, { repo, role: 'warehouse_operator' });
   await screen.findByText('150 pending inspections');
-  expect(screen.getByRole('list', { name: 'Pending inspections' }).querySelectorAll('details')).toHaveLength(3);
+  expect(screen.getByRole('list', { name: 'Pending inspections' }).querySelectorAll(':scope > li > details')).toHaveLength(3);
   const search = screen.getByRole('searchbox');
   await userEvent.type(search, 'POP-2-049');
   expect(screen.getByText('1 of 150 pending inspections')).toBeInTheDocument();
