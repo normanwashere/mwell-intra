@@ -33,7 +33,8 @@ test.describe("accessible onboarding coach", () => {
     });
 
     await page.goto("/onboarding");
-    const launcher = page.getByRole("button", { name: "Start Role orientation" });
+    const requirement = page.locator('[id="onboarding-requirement-internal.general_employee.orientation.v1"]');
+    const launcher = requirement.getByRole("button", { name: "Start Role orientation", exact: true });
     await launcher.focus();
     await page.keyboard.press("Enter");
 
@@ -65,12 +66,12 @@ test.describe("accessible onboarding coach", () => {
     await dialog.getByRole("button", { name: "Resume later" }).focus();
     await page.keyboard.press("Enter");
     await expect(dialog).toHaveCount(0);
-    await page.getByRole("button", { name: "Resume", exact: true }).focus();
+    await requirement.getByRole("button", { name: "Resume Role orientation", exact: true }).focus();
     await page.keyboard.press("Enter");
     await expect(dialog).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
-    await page.getByRole("button", { name: "Resume", exact: true }).focus();
+    await requirement.getByRole("button", { name: "Resume Role orientation", exact: true }).focus();
     await page.keyboard.press("Enter");
     await expect(dialog).toBeVisible();
     await dialog.getByRole("button", { name: "Continue" }).focus();
@@ -85,12 +86,11 @@ test.describe("accessible onboarding coach", () => {
     await page.keyboard.press("Enter");
     await expect(dialog).toHaveCount(0);
     await expect(page.getByRole("region", { name: "Training mode" })).toHaveCount(0);
-    await expect(page.getByText("Complete", { exact: true })).toBeVisible();
-    await expect(
-      page.getByRole("button", {
-        name: "Start Warehouse Business Unit guided practice",
-      }),
-    ).toBeFocused();
+    await expect(page.locator("[data-next-requirement]").getByRole("button", {
+      name: "Start Create a governed request and handoff", exact: true,
+    })).toBeFocused();
+    await page.getByText(/Completed learning history/).click();
+    await expect(requirement.getByText("Complete", { exact: true })).toBeVisible();
     expect(operationalWrites).toEqual([]);
 
     const layout = await auditWarehouseLayout(page);
@@ -106,7 +106,8 @@ test.describe("accessible onboarding coach", () => {
     test.skip(testInfo.project.name !== "desktop-1440", "One desktop zoom proof is sufficient.");
     await installEmployee(page);
     await page.goto("/onboarding");
-    await page.getByRole("button", { name: "Start Role orientation" }).click();
+    await page.locator('[id="onboarding-requirement-internal.general_employee.orientation.v1"]')
+      .getByRole("button", { name: "Start Role orientation", exact: true }).click();
     await page.setViewportSize({ width: 720, height: 450 });
 
     const dialog = page.getByRole("dialog");

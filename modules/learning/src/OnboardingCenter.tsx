@@ -709,6 +709,7 @@ export function OnboardingCenter({
             }
             assignmentRequirementId={activeTraining.assignmentRequirementId}
             attemptId={activeTraining.attemptId}
+            resumeKey={activeTraining.resumeKey}
             scenarioId={activeTraining.simulationId}
             launcherRef={launcherRef}
             onCheckpoint={recordCheckpoint}

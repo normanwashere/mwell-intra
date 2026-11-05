@@ -6,7 +6,9 @@ const source = (page: string) => readFileSync(new URL(`./pages/${page}.tsx`, imp
 describe('Procurement workspace layout', () => {
   it.each(['RequestsPage', 'PurchaseOrdersPage'])('keeps %s filters next to a compact table', (page) => {
     const text = source(page);
-    expect(text).toContain('<QueueFilters items={filterCards} value={filter} onChange={applyFilter} />');
+    expect(text).toContain(page === 'PurchaseOrdersPage'
+      ? '<QueueFilters items={filterCards} value={filter} onChange={applyFilter} className="auto-rows-fr" />'
+      : '<QueueFilters items={filterCards} value={filter} onChange={applyFilter} />');
     expect(text).toContain('density="compact"');
     expect(text).not.toContain('<StatCard');
   });

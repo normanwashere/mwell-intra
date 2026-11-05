@@ -22,16 +22,15 @@ test.describe("dashboard access and brand truthfulness", () => {
       page.getByText("Welcome back, Alex", { exact: true }),
     ).toBeVisible();
 
-    const hero = page
-      .getByText("Areas available", { exact: true })
-      .locator("xpath=ancestor::*[contains(@class, 'hero-surface')][1]");
+    const hero = page.locator('[data-workspace-header="true"]').filter({
+      has: page.getByRole('heading', { name: 'Your Intra workspace', exact: true }),
+    });
     await expect(hero).toContainText(/4\s*areas/);
     await expect(hero.getByRole("link", { name: "My Work" })).toBeVisible();
-    await expect(hero.getByRole("link", { name: "Warehouse" })).toBeVisible();
-    await expect(hero.getByRole("link", { name: "Finance" })).toBeVisible();
     await expect(
-      hero.getByRole("link", { name: "+1 more below" }),
+      hero.getByRole("link", { name: "Browse all areas" }),
     ).toBeVisible();
+    await expect(hero.getByRole('link', { name: 'Browse all areas' })).toHaveAttribute('href', '#workspace-areas');
 
     const areaCards = page.locator("#workspace-area-cards");
     await expect(areaCards).toBeVisible();

@@ -520,7 +520,7 @@ function MobileTab({
       aria-label={entry.label}
       aria-current={active ? "page" : undefined}
       className={cx(
-        "relative flex min-h-16 min-w-0 flex-col items-center justify-center gap-0.5 px-1 py-2.5 text-[0.65rem] font-medium transition",
+        "relative flex min-h-16 min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 py-2.5 text-[0.65rem] font-medium transition",
         active ? "text-brand-700 dark:text-brand-300" : "text-faint",
       )}
     >

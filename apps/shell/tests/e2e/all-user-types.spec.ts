@@ -243,6 +243,7 @@ const WAREHOUSE_CAPS: Record<string, readonly string[]> = {
     "view_dashboard",
     "view_inventory",
     "request_stock",
+    "reserve_allocate",
   ],
   procurement: [
     "view_dashboard",

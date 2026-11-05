@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { auditWarehouseLayout } from "../helpers/warehouseLayoutAudit";
+import { installMemoryAssessmentScoring } from "../helpers/memoryAssessment";
 
 const SESSION_KEY = "intra.memory-session.v1";
 
@@ -86,6 +87,7 @@ test.describe("Warehouse receiving onboarding pilot", () => {
     page,
   }, testInfo) => {
     await installWarehouseOperator(page);
+    const scores = await installMemoryAssessmentScoring(page);
     const operationalWrites: string[] = [];
     const pageErrors: string[] = [];
     page.on("pageerror", (error) => pageErrors.push(error.message));
@@ -103,6 +105,7 @@ test.describe("Warehouse receiving onboarding pilot", () => {
       page.locator("main").getByText("Operations Associate", { exact: true }),
     ).toBeVisible();
     await completeOrientationPrerequisites(page);
+    expect(scores).toEqual([100]);
     await page
       .getByRole("button", {
         name: "Start Receive and inspect controlled stock",

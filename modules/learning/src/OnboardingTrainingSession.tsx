@@ -21,12 +21,14 @@ interface PreparationState {
 function Runtime({
   assignmentRequirementId,
   attemptId,
+  resumeKey,
   scenarioId,
   onEvaluateChoice,
   onClose,
 }: {
   assignmentRequirementId: string;
   attemptId: string;
+  resumeKey?: string;
   scenarioId: string;
   onEvaluateChoice(
     input: SimulationChoiceSubmission,
@@ -34,6 +36,12 @@ function Runtime({
   onClose(): void;
 }) {
   const training = useTraining<PreparationState>();
+  const previousResumeKey = useRef(resumeKey);
+  useEffect(() => {
+    if (previousResumeKey.current === resumeKey) return;
+    previousResumeKey.current = resumeKey;
+    training.resume();
+  }, [resumeKey, training]);
   const command = training.currentStep.allowedCommands[0] ?? null;
   const [choiceFeedback, setChoiceFeedback] = useState<string | null>(null);
   const [selectedChoiceId, setSelectedChoiceId] = useState<string | null>(null);
@@ -135,6 +143,7 @@ export function OnboardingTrainingSession({
   requiredCheckpointIds,
   assignmentRequirementId,
   attemptId,
+  resumeKey,
   scenarioId,
   launcherRef,
   onCheckpoint,
@@ -145,6 +154,7 @@ export function OnboardingTrainingSession({
   requiredCheckpointIds?: readonly string[];
   assignmentRequirementId: string;
   attemptId: string;
+  resumeKey?: string;
   scenarioId: string;
   launcherRef: RefObject<HTMLElement | null>;
   onCheckpoint: Parameters<typeof TrainingModeProvider>[0]["onCheckpoint"];
@@ -305,6 +315,7 @@ export function OnboardingTrainingSession({
       <Runtime
         assignmentRequirementId={assignmentRequirementId}
         attemptId={attemptId}
+        resumeKey={resumeKey}
         scenarioId={scenarioId}
         onEvaluateChoice={onEvaluateChoice}
         onClose={onClose}

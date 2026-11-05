@@ -129,6 +129,7 @@ test.describe("nonblocking role onboarding", () => {
     await page.getByRole("link", { name: "Continue to vendor onboarding" }).click();
     await expect(page).toHaveURL(/\/vendor\/onboarding$/);
     await expect(page.getByRole("heading", { level: 1, name: "Vendor onboarding" })).toBeVisible();
+    await page.getByText("Action roles", { exact: true }).click();
     await expect(page.getByText("Core / Vendor Portal User", { exact: true })).toBeVisible();
     await expect(page.getByRole("main").getByText("Acme Medical Supplies", { exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "Vendor portal", exact: true })).toBeVisible();
@@ -156,6 +157,7 @@ test.describe("nonblocking role onboarding", () => {
     await expect(dialog.getByRole("heading", { name: "Guided practice complete", exact: true })).toBeVisible();
     await dialog.getByRole("button", { name: "Finish review", exact: true }).click();
     await expect(dialog).toHaveCount(0);
+    await page.getByText(/Completed learning history/).click();
     for (const id of ["vendor.vendor_representative.orientation.v1", "vendor.vendor_representative.evidence-and-acknowledgments.v1"]) {
       const requirement = page.locator(`[id="onboarding-requirement-${id}"]`);
       await expect(requirement.getByText("Complete", { exact: true })).toBeVisible();

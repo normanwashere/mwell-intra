@@ -916,7 +916,7 @@ function RequestWizard({ replenishment }: { replenishment?: ReplenishmentRequest
                         <label
                           key={c.code}
                           className={[
-                            'group relative flex min-h-11 cursor-pointer flex-col rounded-2xl border p-2.5 transition focus-within:ring-2 focus-within:ring-brand-500 focus-within:ring-offset-2 sm:p-3',
+                            'group relative flex min-h-12 cursor-pointer flex-col rounded-2xl border p-2.5 transition focus-within:ring-2 focus-within:ring-brand-500 focus-within:ring-offset-2 sm:p-3',
                             active
                               ? 'border-brand-500 bg-brand-500/10 ring-2 ring-brand-500/40'
                               : 'border-line bg-surface hover:border-brand-500/40',

@@ -117,7 +117,7 @@ test("event requester validates, creates, opens, and hands off an event", async 
   await installSession(page, sessions.requester);
   await page.goto("/events");
   await expect(
-    page.getByRole("heading", { name: "Event planning and fulfillment" }),
+    page.getByRole("heading", { name: "Events", exact: true, level: 1 }),
   ).toBeVisible();
   await captureKnowledgeScreen(
     page,
@@ -173,8 +173,8 @@ test("event requester validates, creates, opens, and hands off an event", async 
   await fulfillmentDialog
     .getByLabel("Business purpose")
     .fill("Community wellness event stock");
-  await fulfillmentDialog.getByLabel("Product").selectOption({ index: 1 });
-  await fulfillmentDialog.getByLabel("Quantity").fill("2");
+  await fulfillmentDialog.getByLabel("Product 1", { exact: true }).selectOption({ index: 1 });
+  await fulfillmentDialog.getByLabel("Quantity 1", { exact: true }).fill("2");
   await fulfillmentDialog
     .getByRole("button", { name: "Submit for approval" })
     .click();
@@ -190,7 +190,7 @@ test("event viewer is read-only", async ({ page }) => {
   await installSession(page, sessions.viewer);
   await page.goto("/events");
   await expect(
-    page.getByRole("heading", { name: "Event planning and fulfillment" }),
+    page.getByRole("heading", { name: "Events", exact: true, level: 1 }),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "New event" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Event guide" })).toBeVisible();
@@ -273,15 +273,16 @@ test("My Work filters and opens the authoritative source", async ({
   await installSession(page, sessions.coordinator);
   await page.goto("/work");
   await expect(page.getByRole("heading", { name: "My Work" })).toBeVisible();
-  await page.getByRole("tab", { name: "Events" }).click();
+  await page.getByRole("combobox", { name: "Module", exact: true }).selectOption('events');
   await expect(page.getByText("Confirm Cebu event fulfillment")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Open source" })).toHaveAttribute(
+  const source = page.getByRole("link", { name: "Open record: Confirm Cebu event fulfillment", exact: true });
+  await expect(source).toHaveAttribute(
     "href",
     "/events/evt-demo-wellness-caravan",
   );
   await captureKnowledgeScreen(
     page,
-    page.getByRole("link", { name: "Open source" }),
+    source,
     "my-work",
     testInfo.project.name,
   );
@@ -290,6 +291,8 @@ test("My Work filters and opens the authoritative source", async ({
     path: testInfo.outputPath(`my-work-${testInfo.project.name}.png`),
     fullPage: true,
   });
+  await source.click();
+  await expect(page).toHaveURL(/\/events\/evt-demo-wellness-caravan$/);
 });
 
 test("legacy top-level routes redirect without trapping the detail handoff", async ({

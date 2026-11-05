@@ -94,6 +94,9 @@ test('filtered transitions retain one readable confirmation after the order leav
   await expect(allocation).toContainText(reference);
   await allocation.scrollIntoViewIfNeeded();
   await capture(page, info, 'filtered-allocation-confirmation');
+  if ((page.viewportSize()?.width ?? 0) < 768) {
+    await page.getByRole('button', { name: 'Filters', exact: true }).click();
+  }
   await page.getByRole('combobox', { name: 'Status', exact: true }).selectOption('allocated');
   await expect(row).toBeVisible();
   await expect(allocation).toHaveCount(1);
@@ -197,6 +200,9 @@ test('packing success remains inline with independent release responsibility', a
   await expect(page.getByRole('region', { name: 'Notifications', exact: true }).getByRole('status')).toHaveCount(0);
   await notice.scrollIntoViewIfNeeded();
   await capture(page, info, 'packing-filtered-confirmation');
+  if ((page.viewportSize()?.width ?? 0) < 768) {
+    await page.getByRole('button', { name: 'Filters', exact: true }).click();
+  }
   await page.getByLabel('Status', { exact: true }).selectOption('ready');
   await expect(row.getByRole('status')).toContainText('Packing confirmed.');
   const responsibility = row.getByText('Awaiting release by a second warehouse operator.', { exact: true });

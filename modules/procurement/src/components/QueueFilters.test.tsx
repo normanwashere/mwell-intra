@@ -31,6 +31,10 @@ it('keeps named count buttons and dispatches the existing filter keys', async ()
     expect(host.firstElementChild?.className).toContain('grid-cols-2');
     expect(host.firstElementChild?.className).toContain('lg:grid-cols-4');
     expect(all.className).toContain('min-h-11');
+    await act(async () => root.render(<QueueFilters items={items} value="submitted" onChange={onChange} className="auto-rows-fr" />));
+    expect(host.firstElementChild?.classList.contains('auto-rows-fr')).toBe(true);
+    expect(host.firstElementChild?.classList.contains('grid-cols-2')).toBe(true);
+    expect(submitted.getAttribute('aria-pressed')).toBe('true');
   } finally {
     await act(async () => root.unmount());
     host.remove();

@@ -65,8 +65,13 @@ async function installSession(
 }
 
 async function completeRequestIntake(page: Page, amount = "999999.99", kind: 'materials' | 'services' = 'materials') {
-  await page.getByText("Goods", { exact: true }).click();
-  await page.getByRole('group', { name: 'Requirement classification' }).getByText(kind === 'materials' ? 'Goods / materials' : 'Services', { exact: true }).click();
+  const category = page.getByRole('radio', { name: 'Goods', exact: true });
+  await category.check();
+  await expect(category).toBeChecked();
+  const classification = page.getByRole('group', { name: 'Requirement classification' })
+    .getByRole('radio', { name: kind === 'materials' ? 'Goods / materials' : 'Services', exact: true });
+  await classification.check();
+  await expect(classification).toBeChecked();
   await page.getByLabel("Title").fill("Policy routing verification");
   await page.getByLabel("Line 1 description").fill("Cold-chain supplies");
   await page.getByLabel("Line 1 unit price").fill(amount);
@@ -126,7 +131,9 @@ test("mobile DOA save action remains tappable above shell navigation", async ({
   expect(geometry.ownsHitTarget).toBe(true);
 
   await saveDraft.click();
-  await expect(page.getByText("Department and version are required.")).toBeVisible();
+  await expect(page.getByText("Select an active department.", { exact: true })).toBeVisible();
+  await expect(page.getByRole('combobox', { name: 'Department', exact: true })).toHaveAttribute('aria-invalid', 'true');
+  await expect(page.getByRole('combobox', { name: 'Department', exact: true })).toBeFocused();
 });
 
 test("policy governance controls are available to Admin and Legal but denied to an operations requester", async ({
@@ -177,6 +184,8 @@ test("requester can inspect but cannot author the governed procurement route", a
   await expectMobileActionsClearOfNavigation(page);
   await completeRequestIntake(page);
 
+  await expect(page.getByText('Request for Quotation', { exact: true })).toBeVisible();
+  await expect(page.locator('dt', { hasText: 'Governance tier' }).locator('..')).toContainText('Standard controls');
   await expect(page.getByLabel("Requested procurement mode")).toBeDisabled();
   await expect(
     page.getByRole("button", { name: "Confirm procurement route" }),
@@ -187,14 +196,14 @@ test("requester can inspect but cannot author the governed procurement route", a
   await expect(
     page.getByText("Procurement confirms the route."),
   ).toBeVisible();
-  await expect(page.getByLabel("Intended responses")).toHaveAttribute(
+  await expect(page.getByLabel("Invitation target (3 or 4)")).toHaveAttribute(
     "readonly",
     "",
   );
   await expectNoPageOverflow(page);
 });
 
-test("Procurement sees all three route axes and a high-value goods RFQ", async ({
+test("Procurement sees all three route axes and an RFP at the PHP1M boundary", async ({
   page,
 }) => {
   await installSession(page, {
@@ -205,30 +214,31 @@ test("Procurement sees all three route axes and a high-value goods RFQ", async (
   await completeRequestIntake(page, "1000000");
 
   await expect(page.getByLabel("Requested procurement mode")).toBeEnabled();
-  await expect(page.getByText("Request for Quotation")).toBeVisible();
+  await expect(page.getByText("Request for Proposal", { exact: true })).toBeVisible();
   await expect(page.locator('dt', { hasText: 'Governance tier' }).locator('..').getByText('Formal bid controls', { exact: true })).toBeVisible();
-  await expect(page.getByText("Request for Proposal")).toHaveCount(0);
+  await expect(page.getByText("Request for Quotation", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Competitive response record")).toBeVisible();
-  await page.getByLabel("Intended responses").fill("3");
+  await page.getByLabel("Invitation target (3 or 4)").fill("3");
   await page.getByLabel("Vendors invited").fill("3");
   await page.getByLabel("Usable responses").fill("2");
-  await expect(page.getByText("Exception required")).toBeVisible();
-  await page
-    .getByText(
-      "Approved insufficient-bids exception is attached to the sourcing record",
-      { exact: true },
-    )
-    .click();
+  await expect(page.getByText("Exception workflow required", { exact: true })).toBeVisible();
+  await expect(page.getByText(/this form cannot approve it\./)).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: 'Approved insufficient-bids exception is attached to the sourcing record' })).toHaveCount(0);
+  await expect(page.getByText("Ready for evaluation", { exact: true })).toHaveCount(0);
+  await page.getByLabel("Usable responses").fill("3");
   await expect(page.getByText("Ready for evaluation")).toBeVisible();
 
   await expectNoPageOverflow(page);
 });
 
-test("Procurement sees the service RFP brief with focusable structured fields", async ({ page }) => {
+test("Procurement sees the complex service RFP brief with focusable structured fields", async ({ page }) => {
   await installSession(page, { profileId: 'demo-procurement', roles: { core: ['staff'], procurement: ['procurement_officer'] } });
   await page.goto('/procurement/requests/new');
   await completeRequestIntake(page, '250000', 'services');
+  await expect(page.getByText('Request for Quotation', { exact: true })).toBeVisible();
+  await page.getByRole('checkbox', { name: 'Complex scope or delivery', exact: true }).check();
   await expect(page.getByText('Request for Proposal')).toBeVisible();
+  await expect(page.locator('dt', { hasText: 'Governance tier' }).locator('..')).toContainText('High-risk controls');
   const scope = page.getByLabel('Scope of work');
   await scope.focus();
   await expect(scope).toBeFocused();

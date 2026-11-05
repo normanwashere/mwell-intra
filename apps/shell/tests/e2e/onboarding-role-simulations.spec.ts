@@ -229,8 +229,11 @@ test.describe("role-specific guided simulations", () => {
       await installPreparedSession(page, canonicalCase, requirement.id);
       await page.goto(roleCase.route ?? "/onboarding");
 
-      const start = page.locator("button:enabled").filter({ hasText: /^Start / });
+      const start = page
+        .locator(`[id="onboarding-requirement-${encodeURIComponent(requirement.id)}"]`)
+        .getByRole("button", { name: `Start ${requirement.title}`, exact: true });
       await expect(start).toHaveCount(1);
+      await expect(start).toBeEnabled();
       await start.click();
       const dialog = page.getByRole("dialog");
       await expect(dialog.getByRole("heading", { name: steps[0]!.title, exact: true })).toBeVisible();

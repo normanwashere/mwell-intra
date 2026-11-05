@@ -94,9 +94,20 @@ test('Platform Admin can configure department DOA without gaining approval autho
     page.getByRole('heading', { name: /Delegation of Authority/i }),
   ).toBeVisible();
   await expect(
-    page.getByRole('textbox', { name: 'Department', exact: true }),
+    page.getByRole('combobox', { name: 'Department', exact: true }),
   ).toBeVisible();
   await expectStableViewport(page);
+});
+
+test('Legal approver is redirected away from the new-request route', async ({ page }) => {
+  await installSession(page, 'demo-legal', {
+    core: ['staff'],
+    legal: ['legal_reviewer', 'compliance', 'admin'],
+  });
+  await page.goto('/procurement/requests/new');
+  await expect(page).toHaveURL(/\/procurement\/approvals\/?$/);
+  await expect(page.getByRole('heading', { name: 'Approval inbox', exact: true })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Title', exact: true })).toHaveCount(0);
 });
 
 test('Legal Admin can configure department DOA', async ({

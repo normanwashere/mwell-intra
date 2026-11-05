@@ -5,9 +5,9 @@ import { OnboardingTrainingSession } from "./OnboardingTrainingSession";
 import { LEARNING_CATALOG } from "./catalog";
 import { evaluateSimulationChoice } from "./simulationChoiceAuthority.server";
 
-function anchor() {
+function anchor(name = "onboarding-required-steps") {
   const element = document.createElement("section");
-  element.dataset.onboardingAnchor = "onboarding-required-steps";
+  element.dataset.onboardingAnchor = name;
   document.body.append(element);
   vi.spyOn(element, "getClientRects").mockReturnValue({
     0: element.getBoundingClientRect(),
@@ -21,6 +21,37 @@ function anchor() {
 }
 
 describe("OnboardingTrainingSession", () => {
+  it("reopens a paused attempt only for a new launch request without losing its step or back history", async () => {
+    const target = anchor();
+    const context = anchor("onboarding-role-context");
+    const props = {
+      requirementTitle: "Role orientation",
+      assignmentRequirementId: "paused-orientation-assignment",
+      attemptId: "paused-orientation-attempt",
+      scenarioId: "internal.general_employee.orientation.v1",
+      launcherRef: createRef<HTMLElement>(),
+      onCheckpoint: vi.fn(),
+      onEvaluateChoice: vi.fn(),
+      onClose: vi.fn(),
+    };
+    const view = render(<OnboardingTrainingSession {...props} resumeKey="launch-1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Continue", exact: true }));
+    expect(await screen.findByRole("heading", { name: "Role orientation", exact: true })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Resume later" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    view.rerender(<OnboardingTrainingSession {...props} resumeKey="launch-1" />);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    view.rerender(<OnboardingTrainingSession {...props} resumeKey="launch-2" />);
+    expect(await screen.findByRole("heading", { name: "Role orientation", exact: true })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Back", exact: true }));
+    expect(await screen.findByRole("heading", { name: "Confirm why this step is assigned" })).toBeInTheDocument();
+    expect(props.onCheckpoint).not.toHaveBeenCalled();
+    expect(props.onEvaluateChoice).not.toHaveBeenCalled();
+    expect(props.onClose).not.toHaveBeenCalled();
+    context.remove();
+    target.remove();
+  });
+
   it("requires all six seller decisions without client checkpoint or certification shortcuts", async () => {
     const target = anchor();
     const simulation = LEARNING_CATALOG.simulations.find(item => item.id === "event-seller-custody-v1")!;

@@ -200,6 +200,10 @@ export function ProcurementApp({
               element={<ApprovalInboxPage />}
             />
             <Route
+              path={PROCUREMENT_ROUTE_BY_ID["create-request"].path}
+              element={<Navigate to="/approvals" replace />}
+            />
+            <Route
               path={PROCUREMENT_ROUTE_BY_ID["request-detail"].path}
               element={<RequestDetailPage />}
             />

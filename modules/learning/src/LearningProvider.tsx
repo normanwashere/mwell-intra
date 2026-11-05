@@ -164,6 +164,7 @@ export interface ActiveTrainingRequirement {
   assignmentRequirementId: string;
   attemptId: string;
   mode: LearningAttemptMode;
+  resumeKey?: string;
   simulationId: string;
   requiredCheckpointIds?: readonly string[];
 }
@@ -485,6 +486,7 @@ export function LearningProvider({
           assignmentRequirementId: progress.assignmentRequirementId,
           attemptId: result.attempt.id,
           mode: result.attempt.mode,
+          resumeKey: createIdempotencyKey(),
           simulationId: requirement.simulationId!,
           requiredCheckpointIds: requirement.requiredCheckpointIds,
         });

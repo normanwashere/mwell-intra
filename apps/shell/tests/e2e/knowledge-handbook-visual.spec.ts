@@ -41,6 +41,27 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+test("guide tools remain below reachable shared header controls when scrolled", async ({ page }, testInfo) => {
+  await page.goto("/knowledge?article=admin-doa");
+  const tools = page.getByRole("complementary", { name: "Knowledge guide tools" });
+  await expect(tools).toBeVisible();
+  const control = page.getByRole("button", {
+    name: page.viewportSize()!.width >= 768 ? "Hide side navigation" : "Account menu",
+    exact: true,
+  });
+  await expect(control).toBeVisible();
+  const toolsBox = (await tools.boundingBox())!;
+  const controlBox = (await control.boundingBox())!;
+  await page.evaluate(y => window.scrollTo(0, y), toolsBox.y - controlBox.y);
+  await expect.poll(() => control.evaluate(element => {
+    const rect = element.getBoundingClientRect();
+    const target = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+    return Boolean(target && (target === element || element.contains(target)));
+  })).toBe(true);
+  await control.click({ trial: true });
+  await page.screenshot({ path: testInfo.outputPath("guide-tools-header-hit-test.png") });
+});
+
 async function assertVisualIntegrity(page: Page) {
   const problems = await page.evaluate(() => {
     const visible = (el: Element) => {

@@ -29,6 +29,21 @@ async function editTitle(value='Unsaved test request'){
     input.dispatchEvent(new Event('input',{bubbles:true}));
   });
 }
+it('keeps category radio targets inside labels with a 48px minimum height', async () => {
+  await mount();
+  const radios = [...host.querySelectorAll<HTMLInputElement>('input[type="radio"][name="category"]')];
+  expect(radios.length).toBeGreaterThan(0);
+  for (const radio of radios) {
+    expect(radio.closest('label')?.classList.contains('min-h-12')).toBe(true);
+    expect(radio.classList.contains('h-full')).toBe(true);
+    expect(radio.classList.contains('w-full')).toBe(true);
+  }
+  const goods = radios.find(radio => radio.getAttribute('aria-label') === 'Goods');
+  expect(goods).toBeDefined();
+  await act(async () => goods!.click());
+  expect(goods!.checked).toBe(true);
+  expect(add).not.toHaveBeenCalled();
+});
 it('warns on browser exit only after an edit and preserves the form when Cancel is chosen',async()=>{
   await mount();
   const initial=new Event('beforeunload',{cancelable:true});window.dispatchEvent(initial);expect(initial.defaultPrevented).toBe(false);

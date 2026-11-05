@@ -1,12 +1,13 @@
 import { Badge, Icon, type IconName, type Tone } from '@intra/ui';
 
-export function QueueFilters<Key extends string>({ items, value, onChange }: {
+export function QueueFilters<Key extends string>({ items, value, onChange, className = '' }: {
   items: ReadonlyArray<{ key: Key; label: string; value: number; icon: IconName; tone: Tone; hint: string }>;
   value: Key;
   onChange: (key: Key) => void;
+  className?: string;
 }) {
   return (
-    <div className="grid min-w-0 grid-cols-2 gap-2 border-y border-line py-3 lg:grid-cols-4">
+    <div className={`grid min-w-0 grid-cols-2 gap-2 border-y border-line py-3 lg:grid-cols-4 ${className}`}>
       {items.map((item) => (
         <button
           key={item.key}

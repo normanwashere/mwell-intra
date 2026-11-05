@@ -17,6 +17,9 @@ export async function auditWarehouseLayout(
   return page.evaluate(({ minimumTarget }) => {
     const visible = (element: Element): element is HTMLElement => {
       if (!(element instanceof HTMLElement)) return false;
+      for (let disclosure = element.closest('details:not([open])'); disclosure; disclosure = disclosure.parentElement?.closest('details:not([open])') ?? null) {
+        if (disclosure !== element && !disclosure.querySelector(':scope > summary')?.contains(element)) return false;
+      }
       const style = getComputedStyle(element);
       const rect = element.getBoundingClientRect();
       return style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) > 0 && rect.width > 0 && rect.height > 0 && !element.closest('[hidden], [aria-hidden="true"]');
@@ -86,12 +89,71 @@ export async function auditWarehouseLayout(
       }
       return false;
     }).map(label).slice(0, 20);
+    const exposedBounds = (element: HTMLElement) => {
+      const bounds = element.getBoundingClientRect();
+      let left = Math.max(0, bounds.left);
+      let right = Math.min(viewportWidth, bounds.right);
+      let top = Math.max(0, bounds.top);
+      let bottom = Math.min(viewportHeight, bounds.bottom);
+      let fixedEscape = getComputedStyle(element).position === 'fixed';
+      for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+        const style = getComputedStyle(parent);
+        const fixedContainingBlock = style.transform !== 'none' || style.perspective !== 'none'
+          || style.filter !== 'none' || style.backdropFilter !== 'none'
+          || /\b(layout|paint|strict|content)\b/.test(style.contain)
+          || /\b(transform|perspective|filter)\b/.test(style.willChange)
+          || style.contentVisibility === 'auto';
+        // Viewport-fixed descendants escape ordinary overflow ancestors, but
+        // transformed/contained ancestors establish a new fixed containing block.
+        if (fixedEscape && !fixedContainingBlock) continue;
+        fixedEscape = style.position === 'fixed';
+        const clip = parent.getBoundingClientRect();
+        if (/^(auto|scroll|hidden|clip)$/.test(style.overflowX)) {
+          left = Math.max(left, clip.left + parent.clientLeft);
+          right = Math.min(right, clip.left + parent.clientLeft + parent.clientWidth);
+        }
+        if (/^(auto|scroll|hidden|clip)$/.test(style.overflowY)) {
+          top = Math.max(top, clip.top + parent.clientTop);
+          bottom = Math.min(bottom, clip.top + parent.clientTop + parent.clientHeight);
+        }
+      }
+      return right > left && bottom > top ? { left, right, top, bottom } : null;
+    };
+    const targetBounds = (element: HTMLElement) => {
+      const ownBounds = element.getBoundingClientRect();
+      if (!(element instanceof HTMLInputElement) || !['checkbox', 'radio'].includes(element.type)) return ownBounds;
+      // Native checkbox/radio labels retain the intrinsic size threshold;
+      // only their scroll-exposed area is available for activation hit tests.
+      for (const labelElement of Array.from(element.labels ?? []).filter(visible)) {
+        if (Array.from(labelElement.querySelectorAll('a[href], button, input, select, textarea, [role="button"], [role="link"]'))
+          .some(control => control !== element && visible(control))) continue;
+        const bounds = labelElement.getBoundingClientRect();
+        if (bounds.width < minimumTarget || bounds.height < minimumTarget) continue;
+        const exposed = exposedBounds(labelElement);
+        if (!exposed) continue;
+        const insetX = Math.min(2, (exposed.right - exposed.left) / 2);
+        const insetY = Math.min(2, (exposed.bottom - exposed.top) / 2);
+        const points = [
+          [exposed.left + insetX, exposed.top + insetY], [exposed.right - insetX, exposed.top + insetY],
+          [exposed.left + insetX, exposed.bottom - insetY], [exposed.right - insetX, exposed.bottom - insetY],
+          [(exposed.left + exposed.right) / 2, (exposed.top + exposed.bottom) / 2],
+        ];
+        if (points.every(([x, y]) => {
+          const hit = document.elementFromPoint(x!, y!);
+          return hit === labelElement || (hit !== null && labelElement.contains(hit));
+        })) return bounds;
+      }
+      return ownBounds;
+    };
     const undersizedTargets = controls.filter((element) => {
       if (element.matches('input[type="file"].sr-only')) return false;
       if (element.matches('a[href]') && !element.matches('[role="button"], nav a')) return false;
       const rect = element.getBoundingClientRect();
       if (rect.bottom <= 0 || rect.top >= viewportHeight) return false;
-      return rect.width < minimumTarget || rect.height < minimumTarget;
+      if (element instanceof HTMLInputElement && ['checkbox', 'radio'].includes(element.type)
+        && !exposedBounds(element) && !Array.from(element.labels ?? []).filter(visible).some(exposedBounds)) return false;
+      const target = targetBounds(element);
+      return target.width < minimumTarget || target.height < minimumTarget;
     }).map((element) => `${label(element)} (${Math.round(element.getBoundingClientRect().width)}x${Math.round(element.getBoundingClientRect().height)})`).slice(0, 20);
     const deadEnds = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href]')).filter(visible).filter((link) => {
       const href = link.getAttribute('href') ?? '';

@@ -48,19 +48,37 @@ test('conflict inspection, order context, return reference and alerts preserve t
   };
   await page.goto('/warehouse/fulfillment?tab=orders');
   const counters = page.getByRole('group', { name: 'Order counters' });
-  await expect(counters).toBeVisible({ timeout: 60000 });
-  const counterBoxes = await counters.getByRole('button').evaluateAll(elements => elements.map(element => ({ top: element.getBoundingClientRect().top, height: element.getBoundingClientRect().height })));
-  expect(counterBoxes).toHaveLength(6);
-  if ((page.viewportSize()?.width ?? 0) >= 1024) expect(new Set(counterBoxes.map(box => Math.round(box.top))).size).toBe(1);
-  expect(counterBoxes.every(box => box.height >= 44)).toBe(true);
+  const compact = (page.viewportSize()?.width ?? 0) < 640;
+  if (compact) {
+    await expect(counters).toBeHidden();
+  } else {
+    await expect(counters).toBeVisible({ timeout: 60000 });
+    const counterBoxes = await counters.getByRole('button').evaluateAll(elements => elements.map(element => ({ top: element.getBoundingClientRect().top, height: element.getBoundingClientRect().height })));
+    expect(counterBoxes).toHaveLength(6);
+    if ((page.viewportSize()?.width ?? 0) >= 1280) expect(new Set(counterBoxes.map(box => Math.round(box.top))).size).toBe(1);
+    expect(counterBoxes.every(box => box.height >= 44)).toBe(true);
+  }
+  if ((page.viewportSize()?.width ?? 0) < 768) {
+    const filters = page.getByRole('button', { name: 'Filters', exact: true });
+    await expect(filters).toHaveAttribute('aria-expanded', 'false');
+    await filters.click();
+    await expect(filters).toHaveAttribute('aria-expanded', 'true');
+  }
+  const statusFilter = page.getByRole('combobox', { name: 'Status', exact: true });
   for (const [label, status] of [['Waiting allocation', 'received'], ['Picking', 'pick_queue'], ['Packing', 'packing'], ['Ready for release', 'ready'], ['Released follow-up', 'released']] as const) {
-    const counter = counters.getByRole('button', { name: new RegExp(label) });
-    await expect(counter).toContainText('1');
-    await counter.click();
-    await expect(page.getByLabel('Status', { exact: true })).toHaveValue(status);
+    if (compact) {
+      await expect(statusFilter.locator(`option[value="${status}"]`)).toContainText('(1)');
+      await statusFilter.selectOption(status);
+    } else {
+      const counter = counters.getByRole('button', { name: new RegExp(label) });
+      await expect(counter).toContainText('1');
+      await counter.click();
+    }
+    await expect(statusFilter).toHaveValue(status);
     await expect(page.getByRole('button', { name: 'View order details' })).toHaveCount(1);
   }
-  await counters.getByRole('button', { name: /Active work/ }).click();
+  if (compact) await statusFilter.selectOption('active');
+  else await counters.getByRole('button', { name: /Active work/ }).click();
   await capture('orders-counters');
   const conflict = page.getByRole('button', { name: /1 conflict.*View details/ });
   await conflict.click();
@@ -96,8 +114,8 @@ test('conflict inspection, order context, return reference and alerts preserve t
   await dialog.getByLabel('Resolution', { exact: true }).selectOption('vendor_return');
   await page.keyboard.press('Escape');
   await expect(page.getByRole('list', { name: 'Customer return cases' })).toContainText('Pending');
-  await page.getByRole('button', { name: /Module alerts/ }).click();
-  dialog = page.getByRole('dialog', { name: 'Notifications' });
+  await page.getByRole('button', { name: /^Warehouse alerts \(/ }).click();
+  dialog = page.getByRole('dialog', { name: 'Warehouse alerts', exact: true });
   await expect(dialog).toBeVisible();
   await capture('warehouse-alerts');
   await page.keyboard.press('Escape');

@@ -409,6 +409,13 @@ describe("LearningProvider", () => {
         requiredCheckpointIds: ["assigned-checkpoint"],
         assignmentRequirementId: "assignment-pending",
       });
+      const firstResumeKey = observedLearning!.activeTraining!.resumeKey;
+      expect(firstResumeKey).toEqual(expect.any(String));
+      await act(async () =>
+        observedLearning!.resume("receiving-scenario", "assignment-pending"),
+      );
+      expect(observedLearning!.activeTraining?.attemptId).toBe(attempt.id);
+      expect(observedLearning!.activeTraining?.resumeKey).not.toBe(firstResumeKey);
     },
   );
 

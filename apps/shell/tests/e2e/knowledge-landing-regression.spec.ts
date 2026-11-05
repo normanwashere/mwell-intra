@@ -1,5 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
+import { KNOWLEDGE_CONTENT } from "../../lib/knowledge/content";
+import { OPERATING_PERSONA_GUIDES, OPERATING_WORKFLOWS } from "../../lib/knowledge/operatingPersonas";
 
 const MEMORY_SESSION_KEY = "intra.memory-session.v1";
 
@@ -25,8 +27,10 @@ test("legacy future URLs render roadmap entries", async ({ page }) => {
   await page.goto("/knowledge?type=future");
 
   await expect(
-    page.getByRole("heading", { name: "Explore a feature" }),
+    page.getByRole("heading", { name: "Reference", exact: true }),
   ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Reference", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("combobox", { name: "Availability", exact: true })).toHaveValue("coming_soon");
   await expect(page.locator("#principal-flow-title")).toBeHidden();
   await expect(
     page.getByRole("button", {
@@ -35,61 +39,29 @@ test("legacy future URLs render roadmap entries", async ({ page }) => {
   ).toBeVisible();
 });
 
-test("lean operating model exposes all personas and opens governed decision trees", async ({
+test("task search opens all five cross-department governed decision trees", async ({
   page,
 }) => {
-  await page.goto("/knowledge");
-
-  await expect(
-    page.getByRole("heading", {
-      name: "See who acts, decides, and receives the handoff",
-    }),
-  ).toBeVisible();
-  await expect(page.getByText("11 personas", { exact: true })).toBeVisible();
-
-  const workflowTabs = page.getByRole("tablist", {
-    name: "Cross-department workflow",
-  });
-  const tabs = workflowTabs.getByRole("tab");
-  await expect(tabs).toHaveCount(5);
-  for (const label of [
-    "Procure to pay",
-    "Vendor accreditation",
-    "Receive to issue",
-    "Event fulfillment",
-    "Governance and insights",
-  ]) {
-    await workflowTabs.getByRole("tab", { name: label }).click();
-    await expect(
-      workflowTabs.getByRole("tab", { name: label }),
-    ).toHaveAttribute("aria-selected", "true");
+  expect(OPERATING_WORKFLOWS).toHaveLength(5);
+  for (const workflow of OPERATING_WORKFLOWS) {
+    const flow = KNOWLEDGE_CONTENT.flows.find((item) => item.id === workflow.flowId)!;
+    await page.goto("/knowledge");
+    await expect(page.getByRole("button", { name: "Task", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await page.getByRole("searchbox", { name: "Search all handbook content" }).fill(flow.title);
+    const result = page.getByRole("region", { name: "Search results" }).getByRole("button")
+      .filter({ has: page.getByText(flow.title, { exact: true }) })
+      .filter({ hasText: "Workflow" });
+    await expect(result).toHaveCount(1);
+    await result.click();
+    await expect.poll(() => new URL(page.url()).searchParams.get("flow")).toBe(flow.id);
+    await expect(page.getByRole("heading", { name: flow.title, exact: true })).toBeVisible();
   }
-
-  await page
-    .getByText("View all 11 personas and responsibilities", { exact: true })
-    .click();
-  await expect(
-    page.getByText("Vendor Representative", { exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByText("Operations Associate", { exact: true }),
-  ).toBeVisible();
-
-  await page.getByRole("button", { name: /Open full decision tree/ }).click();
-  await expect(page).toHaveURL(/flow=doa-governance/);
-  await expect(
-    page.getByRole("heading", { name: /DOA governance/i }),
-  ).toBeVisible();
 });
 
-test("job persona directory opens an exact task-first guide", async ({
+test("legacy job persona deep links retain the exact task-first guide", async ({
   page,
 }) => {
-  await page.goto("/knowledge?mode=role");
-
-  await page
-    .getByRole("button", { name: /Operations Associate Operations/ })
-    .click();
+  await page.goto("/knowledge?mode=role&article=persona-operations_associate");
   await expect(page).toHaveURL(
     /mode=role&article=persona-operations_associate/,
   );
@@ -99,13 +71,16 @@ test("job persona directory opens an exact task-first guide", async ({
   await expect(
     page.getByRole("heading", { name: "What do you need to do?" }),
   ).toBeVisible();
-  await expect(page.getByRole("link", { name: "Open workspace" })).toHaveCount(
-    5,
-  );
-  await expect(page.getByRole("button", { name: "Show me how" })).toHaveCount(
-    5,
-  );
-  await expect(page.getByText("Receive stock", { exact: true })).toBeVisible();
+  const tasks = OPERATING_PERSONA_GUIDES.operations_associate!.tasks;
+  expect(tasks).toHaveLength(7);
+  await expect(page.getByRole("link", { name: "Open workspace" })).toHaveCount(tasks.length);
+  await expect(page.getByRole("button", { name: "Show me how" })).toHaveCount(tasks.length);
+  for (const task of tasks) {
+    const region = page.getByRole("region", { name: task.title, exact: true });
+    await expect(region.getByRole("link", { name: "Open workspace" })).toHaveAttribute("href", task.workspaceHref);
+    await expect(region.getByRole("button", { name: "Show me how" })).toBeVisible();
+  }
+  await expect(page.getByText("Review the queue and receive stock", { exact: true })).toBeVisible();
   await expect(
     page.getByText("Perform a cycle count", { exact: true }),
   ).toBeVisible();
@@ -130,7 +105,7 @@ test("landing interactions preserve URL state and accessible targets", async ({
   await page.goto("/knowledge");
 
   const searchSection = page.locator("#handbook-search-title");
-  const flowSection = page.locator("#principal-flow-title");
+  const flowSection = page.locator("#handbook-results-title");
   await expect(searchSection).toBeVisible();
   await expect(flowSection).toBeVisible();
   const sectionOrder = await page.evaluate(
@@ -140,39 +115,47 @@ test("landing interactions preserve URL state and accessible targets", async ({
       if (!search || !flows) return null;
       return search.compareDocumentPosition(flows);
     },
-    ["handbook-search-title", "principal-flow-title"],
+    ["handbook-search-title", "handbook-results-title"],
   );
   expect(sectionOrder).not.toBeNull();
   expect(sectionOrder! & 4).toBeTruthy();
 
-  const recommendations = page.locator("section").filter({
-    has: page.getByRole("heading", { name: "Recommended for your work" }),
-  });
+  const recommendations = page.getByRole("region", { name: "Task", exact: true });
+  await expect(page.getByRole("combobox", { name: "Guidance scope" })).toHaveValue("mine");
   await expect(
     recommendations.getByText("Procurement officer").first(),
   ).toBeVisible();
 
-  const roleMode = page.getByRole("button", { name: /Understand a role/ });
-  await roleMode.focus();
-  await page.evaluate(() => window.scrollTo(0, 700));
+  // Leave through a reachable result below the fold, not a focused tab that
+  // the browser must scroll back into view before activating with Enter.
+  const historyTarget = recommendations.locator("li").nth(6).getByRole("button");
+  await historyTarget.click({ trial: true });
+  await historyTarget.focus();
+  await expect(historyTarget).toBeInViewport();
   const savedScroll = await page.evaluate(() => window.scrollY);
-  expect(savedScroll).toBeGreaterThan(600);
+  expect(savedScroll).toBeGreaterThan(0);
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/[?&](article|flow)=/);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/knowledge$/);
+  await expect.poll(async () => Math.abs((await page.evaluate(() => window.scrollY)) - savedScroll)).toBeLessThanOrEqual(20);
+
+  const roleMode = page.getByRole("button", { name: "Role", exact: true });
+  await roleMode.focus();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/knowledge\?mode=role$/);
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
-
   await page.goBack();
   await expect(page).toHaveURL(/\/knowledge$/);
-  await expect
-    .poll(() => page.evaluate(() => window.scrollY))
-    .toBeGreaterThan(savedScroll - 20);
 
   const search = page.getByRole("searchbox", {
     name: "Search all handbook content",
   });
   await search.fill("Place hold");
   await expect(page).toHaveURL(/\?q=Place\+hold$/);
-  await expect(flowSection).toBeHidden();
+  await expect(flowSection).toHaveText("Search results");
+  await expect(page.getByRole("combobox", { name: "Guidance scope" })).toBeDisabled();
   const qualityResult = page.getByRole("button", {
     name: /Quality control.*Feature.*Live/,
   });
@@ -192,56 +175,64 @@ test("landing interactions preserve URL state and accessible targets", async ({
   await clear.click();
   await expect(page).toHaveURL(/\/knowledge$/);
 
-  await page.getByText("Govern and secure", { exact: true }).click();
+  await search.fill("Identity and access");
   await page
-    .getByRole("button", { name: /Identity and access 7 steps/ })
+    .getByRole("region", { name: "Search results" })
+    .getByRole("button", { name: /Identity and access.*Workflow/ })
     .click();
   await expect(page).toHaveURL(
-    /\?flow=identity-and-access&view=flow&step=access-authorized$/,
+    /flow=identity-and-access&view=flow&step=access-authorized$/,
   );
 });
 
-test("tablet workflow carousel keeps visible card centers reachable", async ({
-  page,
-}, testInfo) => {
-  test.skip(testInfo.project.name !== "tablet-768");
-
+test("pointer navigation preserves the outgoing bookmark across shorter guide reflow", async ({ page }, testInfo) => {
   await page.goto("/knowledge");
+  const target = page.getByRole("region", { name: "Task", exact: true })
+    .locator("li").nth(6).getByRole("button");
+  await target.click({ trial: true });
+  await expect(target).toBeInViewport();
+  await target.evaluate(element => element.addEventListener("click", () => {
+    sessionStorage.setItem("qa3-scroll-at-activation", String(window.scrollY));
+  }, { once: true, capture: true }));
+  if (testInfo.project.name.startsWith("mobile")) await target.tap();
+  else await target.click();
+  await expect(page).toHaveURL(/[?&](article|flow)=/);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  const activationY = await page.evaluate(() => Number(sessionStorage.getItem("qa3-scroll-at-activation")));
+  expect(activationY).toBeGreaterThan(0);
+  expect(await page.evaluate(() => sessionStorage.getItem("knowledge-scroll:/knowledge"))).toBe(String(activationY));
+  await page.goBack();
+  await expect(page).toHaveURL(/\/knowledge$/);
+  await expect.poll(async () => Math.abs((await page.evaluate(() => window.scrollY)) - activationY)).toBeLessThanOrEqual(20);
+  await page.screenshot({ path: testInfo.outputPath("knowledge-pointer-history-restored.png") });
+});
 
-  const carousel = page.getByTestId("principal-flow-carousel");
-  await carousel.scrollIntoViewIfNeeded();
-  const cards = carousel.getByRole("button");
-  const unreachable = await cards.evaluateAll((elements) => {
-    const bounds = elements[0]?.parentElement?.getBoundingClientRect();
-    if (!bounds) return [];
-
-    return elements.flatMap((element) => {
+test("task result controls keep their centers reachable", async ({
+  page,
+}) => {
+  await page.goto("/knowledge");
+  const results = page.getByRole("region", { name: "Task", exact: true });
+  await expect(results).toBeVisible();
+  const cards = results.getByRole("button");
+  expect(await cards.count()).toBeGreaterThan(0);
+  for (const card of await cards.all()) {
+    await card.click({ trial: true });
+    expect(await card.evaluate((element) => {
       const rect = element.getBoundingClientRect();
       const x = rect.left + rect.width / 2;
       const y = rect.top + rect.height / 2;
-      if (
-        x < bounds.left ||
-        x > bounds.right ||
-        y < 0 ||
-        y > window.innerHeight
-      )
-        return [];
       const target = document.elementFromPoint(x, y);
-      return target && (target === element || element.contains(target))
-        ? []
-        : [element.textContent?.trim() ?? "unknown workflow"];
-    });
-  });
-
-  expect(unreachable).toEqual([]);
+      return Boolean(target && (target === element || element.contains(target)));
+    })).toBe(true);
+  }
 });
 
 test("knowledge landing stays accessible, reachable, and free of horizontal overflow", async ({
   page,
-}) => {
+}, testInfo) => {
   await page.goto("/knowledge");
   await expect(
-    page.getByRole("heading", { name: "Find the right next step" }),
+    page.getByRole("heading", { name: "Knowledge Base", exact: true }),
   ).toBeVisible();
 
   const geometry = await page.locator("main").evaluate((main) => {
@@ -249,7 +240,9 @@ test("knowledge landing stays accessible, reachable, and free of horizontal over
       ...main.querySelectorAll<HTMLElement>("a, button, input, select"),
     ].filter((element) => {
       const rect = element.getBoundingClientRect();
-      return rect.width > 0 && rect.height > 0;
+      const closed = element.closest("details:not([open])");
+      return (!closed || Boolean(closed.querySelector(":scope > summary")?.contains(element))) &&
+        getComputedStyle(element).visibility !== "hidden" && rect.width > 0 && rect.height > 0;
     });
 
     return {
@@ -258,7 +251,8 @@ test("knowledge landing stays accessible, reachable, and free of horizontal over
         document.documentElement.clientWidth,
       undersized: controls.flatMap((element) => {
         const rect = element.getBoundingClientRect();
-        return rect.width < 44 || rect.height < 44
+        // DOMRect doubles can report a 44px CSS control as 43.99997px.
+        return rect.width < 44 - 0.001 || rect.height < 44 - 0.001
           ? [
               {
                 label:
@@ -305,6 +299,14 @@ test("knowledge landing stays accessible, reachable, and free of horizontal over
     unreachable: [],
   });
 
+  await page.screenshot({ path: testInfo.outputPath("knowledge-landing-viewport.png") });
+  await page.getByText("Common tasks", { exact: true }).click();
+  for (const label of ["Create a purchase request", "Accredit a vendor", "Receive stock", "Resolve an exception"]) {
+    await page.getByRole("button", { name: label, exact: true }).click({ trial: true });
+  }
+  await page.getByText("Help and recovery", { exact: true }).first().click();
+  await expect(page.getByRole("heading", { name: "When work does not go as planned" })).toBeVisible();
+
   const accessibility = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa"])
     .analyze();
@@ -315,4 +317,5 @@ test("knowledge landing stays accessible, reachable, and free of horizontal over
       nodes: nodes.length,
     })),
   ).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath("knowledge-landing-disclosures.png"), fullPage: true });
 });

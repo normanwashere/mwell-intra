@@ -187,8 +187,9 @@ test("clears branch history when leaving and switching flows", async ({
   await expect(page).toHaveURL(/\/knowledge$/);
   await expect(page).not.toHaveURL(/branch=|step=|flow=/);
 
-  await page.getByRole("button", { name: /Operate inventory/ }).click();
-  await page.getByRole("button", { name: /Receive to putaway/ }).click();
+  await page.getByRole("searchbox", { name: "Search all handbook content" }).fill("Receive to putaway");
+  await page.getByRole("region", { name: "Search results" })
+    .getByRole("button", { name: /Receive to putaway.*Workflow/ }).click();
   await expect(page).toHaveURL(
     /flow=receive-to-putaway&view=flow&step=receive-po-eligible$/,
   );

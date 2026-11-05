@@ -7,9 +7,10 @@
 // smoke command is self-contained locally and in CI.
 
 import { defineConfig, devices } from "@playwright/test";
+import { sameOriginTestBaseUrl } from "./tests/helpers/playwrightOrigin";
 
 const PORT = Number(process.env.PORT ?? 3000);
-const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${PORT}`;
+const BASE_URL = sameOriginTestBaseUrl(process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${PORT}`);
 const IS_CI = Boolean(process.env.CI);
 const REUSE_EXISTING_SERVER = process.env.PLAYWRIGHT_REUSE_SERVER === "1";
 
@@ -25,7 +26,11 @@ export default defineConfig({
   forbidOnly: IS_CI,
   retries: IS_CI ? 1 : 0,
   workers: IS_CI ? 2 : undefined,
-  reporter: IS_CI ? [["github"], ["list"]] : "list",
+  reporter: IS_CI ? [
+    ["github"], ["list"],
+    ["json", { outputFile: "playwright-report/results.json" }],
+    ["html", { outputFolder: "playwright-report/html", open: "never" }],
+  ] : "list",
   timeout: 30_000,
   expect: { timeout: 10_000 },
 

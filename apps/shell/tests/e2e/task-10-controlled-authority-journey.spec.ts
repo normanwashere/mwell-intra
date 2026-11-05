@@ -1,6 +1,4 @@
 import { expect, test, type Browser, type BrowserContext, type Page, type TestInfo } from '@playwright/test';
-import { mkdirSync } from 'node:fs';
-import { resolve } from 'node:path';
 import {
   actor,
   ControlledProcurementRpcFixture,
@@ -17,7 +15,6 @@ type ControlledSession = {
   controlledResponses: string[];
   close: () => Promise<void>;
 };
-const evidenceDirectory = resolve(process.cwd(), '../../docs/qa/evidence');
 
 async function settleCleanup(operation: Promise<void>) {
   await Promise.race([
@@ -83,9 +80,8 @@ async function controlledSession(browser: Browser, fixture: ControlledProcuremen
     close: async () => {
       if (closed) return;
       closed = true;
-      mkdirSync(evidenceDirectory, { recursive: true });
       if (captureTrace) {
-        await settleCleanup(context.tracing.stop({ path: resolve(evidenceDirectory, `task-10-${traceName}-${testInfo.project.name}.zip`) }));
+        await settleCleanup(context.tracing.stop({ path: testInfo.outputPath(`task-10-${traceName}-${testInfo.project.name}.zip`) }));
       }
       await settleCleanup(context.close());
     },
@@ -137,8 +133,7 @@ test('Task 10 controlled signed-in authority journey proves Legal recovery throu
   await legalDecider.page.getByRole('button', { name: 'Record independent clearance decision' }).click();
   await expect(legalDecider.page.getByText('Legal/VMO authority record saved.')).toBeVisible();
   await expect(legalDecider.page.getByRole('region', { name: 'Vendor eligibility projection' })).toContainText(/temporary clearance/i);
-  mkdirSync(evidenceDirectory, { recursive: true });
-  await legalDecider.page.screenshot({ path: resolve(evidenceDirectory, `task-10-legal-recovery-${testInfo.project.name}.png`), fullPage: true });
+  await legalDecider.page.screenshot({ path: testInfo.outputPath(`task-10-legal-recovery-${testInfo.project.name}.png`), fullPage: true });
   await legalDecider.close();
   mark('independent Legal clearance activated');
 
@@ -217,7 +212,7 @@ test('Task 10 controlled signed-in authority journey proves Legal recovery throu
   await expect(approver.page.getByText('issue', { exact: true })).toHaveCount(0);
   await expect(approver.page.getByText('not_received', { exact: true })).toHaveCount(0);
   await expect(approver.page.getByRole('button', { name: 'Approve governed closure' })).toHaveCount(0);
-  await approver.page.screenshot({ path: resolve(evidenceDirectory, `task-10-governed-closure-${testInfo.project.name}.png`), fullPage: true });
+  await approver.page.screenshot({ path: testInfo.outputPath(`task-10-governed-closure-${testInfo.project.name}.png`), fullPage: true });
   await approver.close();
   mark('independent approver completed closure');
 

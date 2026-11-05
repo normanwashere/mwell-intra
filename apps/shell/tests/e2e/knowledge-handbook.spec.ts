@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { KNOWLEDGE_CONTENT } from "../../lib/knowledge/content";
 import { edgeChoiceId } from "../../lib/knowledge/graph";
 import { COMING_SOON_ROLES } from "../../lib/knowledge/roles";
+import { DEMO_PROFILES } from "../../lib/demoProfiles";
 import type {
   KnowledgeFlow,
   KnowledgeFlowEdge,
@@ -11,16 +12,12 @@ const MEMORY_SESSION_KEY = "intra.memory-session.v1";
 
 async function installSession(
   page: Page,
-  roles = {
-    core: ["admin"],
-    legal: ["legal_admin"],
-    warehouse: ["admin"],
-    procurement: ["admin"],
-  },
+  profileId = "demo-admin",
 ) {
+  const profile = DEMO_PROFILES.find((item) => item.id === profileId)!;
   await page.addInitScript(
     ({ key, session }) => sessionStorage.setItem(key, JSON.stringify(session)),
-    { key: MEMORY_SESSION_KEY, session: { profileId: "demo-admin", roles } },
+    { key: MEMORY_SESSION_KEY, session: { profileId, roles: profile.roles } },
   );
 }
 
@@ -85,19 +82,17 @@ function choicePathToNode(flow: KnowledgeFlow, targetNodeId: string) {
 
 test.beforeEach(async ({ page }) => installSession(page));
 
-test("first-time orientation remains legible in dark mode", async ({
+test("task guidance and assigned-learning entry remain legible in dark mode", async ({
   page,
 }) => {
   await page.addInitScript(() => localStorage.setItem("intra-theme", "dark"));
   await page.goto("/knowledge");
   await expect(
-    page.getByRole("region", { name: "Getting started" }),
+    page.getByRole("region", { name: "Task", exact: true }),
   ).toBeVisible();
   const checkpointContrast = await page
-    .getByText(
-      "Start with your assigned learning and the work your role performs.",
-      { exact: true },
-    )
+    .getByRole("region", { name: "Task", exact: true })
+    .getByText("Workflows and procedures", { exact: true })
     .evaluate((element) => {
       const parseRgb = (value: string) =>
         value
@@ -126,20 +121,24 @@ test("first-time orientation remains legible in dark mode", async ({
     });
   expect(checkpointContrast).toBeGreaterThanOrEqual(4.5);
 
-  await expect(page.getByRole("link", { name: "My learning", exact: true })).toHaveAttribute("href", "/onboarding");
+  await page.getByRole("searchbox", { name: "Search all handbook content" }).fill("Review an access request");
+  await expect(page.locator('a[href^="/onboarding?task="]').first()).toBeVisible();
+  await expect(page.locator('a[href^="/onboarding?task="]').first()).toHaveAttribute("href", /[?&]next=/);
   await expect(page.getByText("Orientation complete", { exact: true })).toHaveCount(0);
 });
 
-test("first-time orientation, personal library, and feedback remain available", async ({
+test("task guidance, personal library, and feedback remain available", async ({
   page,
 }) => {
   await page.goto("/knowledge");
   await expect(
-    page.getByRole("region", { name: "Getting started" }),
+    page.getByRole("region", { name: "Task", exact: true }),
   ).toBeVisible();
-  await expect(page.getByRole("link", { name: "My learning", exact: true })).toBeVisible();
+  await page.getByRole("searchbox", { name: "Search all handbook content" }).fill("Review an access request");
+  await expect(page.locator('a[href^="/onboarding?task="]').first()).toBeVisible();
 
   await page.goto("/knowledge?article=feature-warehouse-receiving");
+  await page.getByText("Guide actions", { exact: true }).click();
   await page.getByRole("button", { name: "Save guide" }).click();
   await page.getByRole("button", { name: "Helpful" }).click();
   await expect(
@@ -147,6 +146,7 @@ test("first-time orientation, personal library, and feedback remain available", 
   ).toContainText(/feedback recorded/i);
 
   await page.goto("/knowledge");
+  await page.getByText("Saved and recent guides", { exact: true }).click();
   await expect(
     page.getByRole("region", { name: "Your Knowledge Base library" }),
   ).toContainText(/Warehouse receiving/i);
@@ -168,10 +168,10 @@ test("task, role, and feature search supports recovery and browser history", asy
       .getByRole("button", {
         name: new RegExp(
           mode === "task"
-            ? "Do a task"
+            ? "^Task$"
             : mode === "role"
-              ? "Understand a role"
-              : "Explore a feature",
+              ? "^Role$"
+              : "^Reference$",
           "i",
         ),
       })
@@ -206,7 +206,7 @@ test("task, role, and feature search supports recovery and browser history", asy
   await expect(page).toHaveURL(/q=/);
   await page.goForward();
   await expect(
-    page.getByRole("heading", { name: "Find the right next step" }),
+    page.getByRole("heading", { name: "Knowledge Base", exact: true }),
   ).toBeVisible();
 });
 
@@ -470,12 +470,18 @@ test("recommended guidance changes with the signed-in user's access", async ({
 }) => {
   const context = await browser.newContext();
   const page = await context.newPage();
-  await installSession(page, { core: ["staff"], warehouse: ["operations"] });
-  await page.goto("/knowledge");
-  const recommended = page.locator("section").filter({
-    has: page.getByRole("heading", { name: /Recommended for your work/i }),
-  });
-  await expect(recommended).toContainText(/receiv|warehouse/i);
-  await expect(recommended).not.toContainText(/Legal administrator/i);
-  await context.close();
+  try {
+    await installSession(page, "demo-warehouse-operator");
+    await page.goto("/knowledge");
+    await expect(page.getByRole("combobox", { name: "Guidance scope" })).toHaveValue("mine");
+    const recommended = page.getByRole("region", { name: "Task", exact: true });
+    await expect(recommended).toContainText(/receiv|warehouse/i);
+    await expect(recommended).not.toContainText(/Legal administrator/i);
+    await page.getByRole("button", { name: "Role", exact: true }).click();
+    await expect(page.getByRole("region", { name: "Role", exact: true })).not.toContainText(/Legal administrator/i);
+    await page.getByRole("searchbox", { name: "Search all handbook content" }).fill("Legal administrator");
+    await expect(page.getByRole("region", { name: "Search results" })).toContainText("Legal administrator");
+  } finally {
+    await context.close();
+  }
 });

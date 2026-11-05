@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { auditWarehouseLayout } from "../helpers/warehouseLayoutAudit";
+import { installMemoryAssessmentScoring } from "../helpers/memoryAssessment";
 
 const SESSION_KEY = "intra.memory-session.v1";
 
@@ -43,6 +44,7 @@ test.describe("certified action recovery", () => {
     page,
   }, testInfo) => {
     await installWarehouseOperator(page);
+    const scores = await installMemoryAssessmentScoring(page);
     const pageErrors: string[] = [];
     page.on("pageerror", (error) => pageErrors.push(error.message));
     await page.goto("/onboarding");
@@ -89,6 +91,7 @@ test.describe("certified action recovery", () => {
     await expect(
       page.getByRole("button", { name: "Start Receive and inspect controlled stock" }).first(),
     ).toBeEnabled();
+    expect(scores).toEqual([0, 100]);
     expect(pageErrors).toEqual([]);
   });
 

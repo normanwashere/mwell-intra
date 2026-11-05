@@ -154,6 +154,10 @@ jobs:
         run: pnpm verify:launch-artifacts
       - name: Verify release and effective authority boundaries
         run: node --test scripts/qa/release-workflow-boundaries.test.mjs scripts/verify-procurement-legal-authority.test.mjs
+      - name: Verify disposable browser sourcing fixture
+        run: node --experimental-strip-types --test scripts/qa/governed-sourcing-fixture.test.mjs
+      - name: Verify complete E2E runtime partition
+        run: node --test scripts/qa/e2e-runtime-partition.test.mjs
       - name: Verify authenticated export SQL and Storage authority
         run: node --test scripts/verify-warehouse-export-authority.pglite.test.mjs
       - name: Verify serialized transfer and lot-aware putaway SQL authority
@@ -349,7 +353,10 @@ jobs:
   e2e:
     name: E2E (playwright shard ${{ matrix.shard }}/3)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # e3 passing attempts averaged 4.2-5.2s: 634 tests / 2 workers need
+    # 22-28m before setup, teardown and retries. Bound the suite separately
+    # so a failing run can finish reports before the runner kills the job.
+    timeout-minutes: 85
     needs:
       [
         knowledge-base,
@@ -373,11 +380,30 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Install Playwright browsers
+        timeout-minutes: 10
         run: pnpm --filter @intra/shell exec playwright install --with-deps
-      - name: E2E
-        run: pnpm --filter @intra/shell exec playwright test tests/smoke tests/e2e --shard=${{ matrix.shard }}/3
-      - name: Upload Playwright failures and traces
-        if: failure()
+      - name: E2E memory
+        timeout-minutes: 43
+        env:
+          PLAYWRIGHT_CI_RUNTIME: memory
+        run: |
+          set -o pipefail
+          mkdir -p apps/shell/playwright-report
+          pnpm --filter @intra/shell exec playwright test tests/smoke tests/e2e --config=playwright.ci.config.ts --shard=${{ matrix.shard }}/3 --global-timeout=2400000 2>&1 | tee apps/shell/playwright-report/memory-runner.log
+      # Sequential builds share .next only after Playwright stops its owned
+      # server. reuseExistingServer:false fails before building if it remains.
+      - name: E2E controlled RPC
+        if: ${{ !cancelled() }}
+        timeout-minutes: 18
+        env:
+          PLAYWRIGHT_CI_RUNTIME: controlled
+        run: |
+          set -o pipefail
+          mkdir -p apps/shell/playwright-report
+          pnpm --filter @intra/shell exec playwright test tests/smoke tests/e2e --config=playwright.ci.config.ts --shard=${{ matrix.shard }}/3 --global-timeout=900000 2>&1 | tee apps/shell/playwright-report/controlled-runner.log
+      - name: Upload Playwright results and traces
+        if: always()
+        timeout-minutes: 3
         uses: actions/upload-artifact@v6
         with:
           name: playwright-failures-${{ matrix.shard }}

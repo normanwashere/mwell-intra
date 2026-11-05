@@ -1,6 +1,4 @@
 import { expect, test, type Page } from '@playwright/test';
-import { mkdirSync } from 'node:fs';
-import { resolve } from 'node:path';
 import {
   actor,
   ControlledProcurementRpcFixture,
@@ -48,8 +46,6 @@ test('Task 8 governed exception workspace is usable across independent desktop a
   fixture.failNextExceptionSubmit();
   const requestPath = `/procurement/requests/${fixture.requestId}`;
   const consoleErrors: string[] = [];
-  const evidenceDir = resolve(process.cwd(), '../../docs/qa/evidence');
-  mkdirSync(evidenceDir, { recursive: true });
 
   async function actorPage(actorKey: ExceptionActor) {
     const context = await browser.newContext({ viewport: testInfo.project.use.viewport });
@@ -69,7 +65,7 @@ test('Task 8 governed exception workspace is usable across independent desktop a
   await expect(submitter.page.getByText('Controlled server validation failed; correct the evidence and try again.')).toBeVisible();
   await submitter.page.getByRole('button', { name: 'Submit governed evidence' }).click();
   await expect(submitter.page.getByText('under review', { exact: true })).toBeVisible();
-  await submitter.page.screenshot({ path: resolve(evidenceDir, `task-8-exception-submitter-${testInfo.project.name}.png`), fullPage: true });
+  await submitter.page.screenshot({ path: testInfo.outputPath(`task-8-exception-submitter-${testInfo.project.name}.png`), fullPage: true });
   await submitter.context.close();
 
   const procurement = await actorPage('exceptionReviewer');
@@ -96,7 +92,7 @@ test('Task 8 governed exception workspace is usable across independent desktop a
   await expect(doa.page.getByText('Controlled workspace refresh failure')).toBeVisible();
   await doa.page.getByRole('button', { name: 'Refresh exception workspace' }).click();
   await expect(doa.page.getByRole('heading', { name: 'Decision history' })).toBeVisible();
-  await doa.page.screenshot({ path: resolve(evidenceDir, `task-8-exception-history-${testInfo.project.name}.png`), fullPage: true });
+  await doa.page.screenshot({ path: testInfo.outputPath(`task-8-exception-history-${testInfo.project.name}.png`), fullPage: true });
   await doa.context.close();
 
   fixture.markExceptionStale();
@@ -110,12 +106,12 @@ test('Task 8 governed exception workspace is usable across independent desktop a
   await recovery.page.getByLabel('Liquidation recorded').uncheck();
   await recovery.page.getByLabel('Liquidation recorded').check();
   const replacementSubmit = await assertActionableInViewport(recovery.page, 'Submit governed evidence');
-  await recovery.page.screenshot({ path: resolve(evidenceDir, `task-8-exception-recovery-${testInfo.project.name}.png`), fullPage: true });
+  await recovery.page.screenshot({ path: testInfo.outputPath(`task-8-exception-recovery-${testInfo.project.name}.png`), fullPage: true });
   await replacementSubmit.click();
   await expect(recovery.page.getByText('under review', { exact: true })).toBeVisible();
   await expect(recovery.page.getByText('Evidence submitted: submitted')).toBeVisible();
   await expect(recovery.page.getByText('policy profile changed restart exception')).toHaveCount(0);
-  await recovery.page.screenshot({ path: resolve(evidenceDir, `task-8-exception-recovery-submitted-${testInfo.project.name}.png`), fullPage: true });
+  await recovery.page.screenshot({ path: testInfo.outputPath(`task-8-exception-recovery-submitted-${testInfo.project.name}.png`), fullPage: true });
   await recovery.context.close();
 
   // These are the two deliberate 400 responses exercised above: submit

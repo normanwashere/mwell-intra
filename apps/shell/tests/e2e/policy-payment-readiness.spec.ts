@@ -1,6 +1,4 @@
 import { expect, test, type Page } from '@playwright/test';
-import { mkdirSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { LEARNING_CATALOG, ROLE_CURRICULA } from '../../../../modules/learning/src/catalog';
 import { DEMO_PROFILES } from '../../lib/demoProfiles';
 
@@ -127,7 +125,5 @@ test('PO acceptance and Finance readiness persist across the governed role flow'
   });
   expect(persisted?.status).toBe('issued');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  const evidenceDir = resolve(process.cwd(), '../../docs/qa/evidence');
-  mkdirSync(evidenceDir, { recursive: true });
-  await page.screenshot({ path: resolve(evidenceDir, `task-10-finance-recovery-${testInfo.project.name}.png`), fullPage: true });
+  await page.screenshot({ path: testInfo.outputPath(`task-10-finance-recovery-${testInfo.project.name}.png`), fullPage: true });
 });

@@ -1,7 +1,37 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Locator } from '@playwright/test';
-import { mkdir } from 'node:fs/promises';
+import { expect, test as base, type Locator } from '@playwright/test';
+import { mkdir, readFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
+
+// Serve the real offline artifact, not the authenticated shell at '/'. A tiny
+// worker-owned HTTP fixture avoids embedding its 25 MB body in route.fulfill
+// protocol traces. It never starts Next or touches another test server.
+const test = base.extend<{}, { handbookURL: string }>({
+  handbookURL: [async ({}, use) => {
+    const body = await readFile(new URL('../../../../docs/manual/index.html', import.meta.url));
+    const server = createServer((request, response) => {
+      const root = new URL(request.url ?? '/', 'http://127.0.0.1').pathname === '/';
+      const allowed = request.method === 'GET' || request.method === 'HEAD';
+      response.writeHead(root && allowed ? 200 : 404, {
+        'content-type': root && allowed ? 'text/html; charset=utf-8' : 'text/plain',
+        'cache-control': 'no-store', 'x-content-type-options': 'nosniff',
+      });
+      response.end(request.method === 'HEAD' ? undefined : root && allowed ? body : 'Not found');
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, '127.0.0.1', resolve);
+    });
+    try { await use(`http://127.0.0.1:${(server.address() as AddressInfo).port}`); }
+    finally {
+      server.closeAllConnections();
+      await new Promise<void>(resolve => server.close(() => resolve()));
+    }
+  }, { scope: 'worker' }],
+  baseURL: async ({ handbookURL }, use) => { await use(handbookURL); },
+});
 
 async function expectFocusedBelowStickyChrome(target: Locator) {
   await expect(target).toBeFocused();
@@ -185,12 +215,15 @@ const requiredRoleSections = [
 ] as const;
 
 test('first-use Home leads with outcomes, role entry, and governed support', async ({ page }) => {
+  // The complete 25 MB offline artifact's whole-document Axe pass measured
+  // 56s locally; preserve all rules and allow the scan to finish.
+  test.setTimeout(90_000);
   await page.addInitScript(() => localStorage.clear());
   await page.goto('/');
 
   await expect(page).toHaveURL(/#mode=home&guide=home$/);
   const home = page.locator('[data-guide-id="home"][data-guide-type="home"]');
-  await expect(home.getByRole('heading', { level: 1 })).toHaveText('What do you need to do?');
+  await expect(home.getByRole('heading', { level: 1 })).toHaveText('Find the answer, then do the work.');
   await expect(home.locator('[data-home-section="start-a-task"] a[data-guide-id]')).toHaveCount(6);
   await expect(home.locator('[data-role-entry] option')).toHaveCount(canonicalRoleGuides.length + 1);
   await expect(home.locator('[data-home-section="manage-support"]')).toBeVisible();
@@ -220,28 +253,33 @@ test('all canonical task guides expose complete stages, decisions, evidence, and
     const guide = page.locator(`article[data-guide-id="${guideId}"]`);
     await expect(guide).toBeVisible();
     await expect(guide.getByRole('heading', { level: 1 })).toBeVisible();
-    for (const sectionId of requiredTaskSections) {
-      await expect(guide.locator(`[data-guide-section="${sectionId}"]`), `${guideId} must render ${sectionId}`).toHaveCount(1);
-    }
-
-    await expect(guide.locator('[data-task-stage]'), `${guideId} must retain its four operating stages`).toHaveCount(4);
-    await expect(guide.locator('[data-screen-evidence="certified"]'), `${guideId} must pair every stage with certified evidence`).toHaveCount(4);
-    await expect(guide.locator('[data-screen-evidence="pending"]')).toHaveCount(0);
+    // Batch immutable document counts, retaining every exact assertion without
+    // recording hundreds of duplicate full-document protocol snapshots.
+    const structure = await guide.evaluate((element, sections) => {
+      const count = (selector: string) => element.querySelectorAll(selector).length;
+      const branches = [...element.querySelectorAll('[data-task-decision] [data-decision-branch]')];
+      return {
+        sections: Object.fromEntries(sections.map(id => [id, count(`[data-guide-section="${id}"]`)])),
+        stages: count('[data-task-stage]'), certified: count('[data-screen-evidence="certified"]'), pending: count('[data-screen-evidence="pending"]'),
+        decisions: count('[data-task-decision]'), branches: branches.length,
+        terminal: branches.filter(branch => branch.textContent?.includes('Terminal outcome; this task instance does not resume.')).length,
+        labels: Object.fromEntries(['Outcome', 'Recovery action', 'Destination'].map(label => [label,
+          branches.reduce((total, branch) => total + [...branch.querySelectorAll('dt')].filter(dt => dt.textContent?.includes(label)).length, 0)])),
+        policyOpen: element.querySelector('details[data-guide-section="policy-basis"]')?.hasAttribute('open'),
+        controlsOpen: element.querySelector('details[data-guide-section="document-controls"]')?.hasAttribute('open'),
+      };
+    }, requiredTaskSections);
+    expect(structure, `${guideId} complete governed structure`).toEqual({
+      sections: Object.fromEntries(requiredTaskSections.map(id => [id, 1])),
+      stages: 4, certified: 4, pending: 0, decisions: decisionCount, branches: decisionCount * 2, terminal: terminalCount,
+      labels: { Outcome: decisionCount * 2, 'Recovery action': decisionCount * 2, Destination: decisionCount * 2 },
+      policyOpen: false, controlsOpen: false,
+    });
+    await guide.locator('details.full-decision-map > summary').click();
     await expect(guide.getByRole('region', { name: 'Task flow diagram' })).toBeVisible();
     await expect(guide.locator('.flow-text-equivalent')).toBeVisible();
 
-    const decisions = guide.locator('[data-task-decision]');
-    const branches = decisions.locator('[data-decision-branch]');
-    const terminalBranches = branches.filter({ hasText: 'Terminal outcome; this task instance does not resume.' });
-    await expect(decisions, `${guideId} decision count`).toHaveCount(decisionCount);
-    await expect(branches, `${guideId} decision branch count`).toHaveCount(decisionCount * 2);
-    await expect(terminalBranches, `${guideId} terminal outcome count`).toHaveCount(terminalCount);
-    await expect(branches.locator('dt', { hasText: 'Outcome' })).toHaveCount(decisionCount * 2);
-    await expect(branches.locator('dt', { hasText: 'Recovery action' })).toHaveCount(decisionCount * 2);
-    await expect(branches.locator('dt', { hasText: 'Destination' })).toHaveCount(decisionCount * 2);
     await expect(guide.locator('[data-guide-section="completion-checklist"] li').first()).toBeVisible();
-    await expect(guide.locator('details[data-guide-section="policy-basis"]')).not.toHaveAttribute('open', '');
-    await expect(guide.locator('details[data-guide-section="document-controls"]')).not.toHaveAttribute('open', '');
 
     totalDecisions += decisionCount;
     totalBranches += decisionCount * 2;
@@ -262,9 +300,9 @@ test('all canonical role guides expose authority, handoffs, recovery, and guided
     const guide = page.locator(`article[data-guide-id="${guideId}"]`);
     await expect(guide).toBeVisible();
     await expect(guide.getByRole('heading', { level: 1 })).toBeVisible();
-    for (const sectionId of requiredRoleSections) {
-      await expect(guide.locator(`[data-guide-section="${sectionId}"]`), `${guideId} must render ${sectionId}`).toHaveCount(1);
-    }
+    const sections = await guide.evaluate((element, ids) => Object.fromEntries(ids.map(id =>
+      [id, element.querySelectorAll(`[data-guide-section="${id}"]`).length])), requiredRoleSections);
+    expect(sections, `${guideId} complete role sections`).toEqual(Object.fromEntries(requiredRoleSections.map(id => [id, 1])));
     const simulation = guide.locator('[data-guide-section="guided-simulation"]');
     await expect(simulation.getByText('Start route:', { exact: true })).toBeVisible();
     await expect(simulation.getByRole('heading', { name: 'Success criteria' })).toBeVisible();
@@ -846,6 +884,7 @@ test('fits visible Mermaid content inside its viewport and preserves dark contra
   if (!['desktop-1440', 'desktop-1280', 'desktop-1024', 'tablet-768', 'mobile-430', 'mobile-390', 'mobile-360', 'mobile-320'].includes(testInfo.project.name)) test.skip();
   await page.goto('/#mode=tasks&guide=procurement-request-approval');
   const shell = page.locator('article[data-guide-id="procurement-request-approval"] .diagram-shell').first();
+  await shell.locator('..').locator(':scope > summary').click();
   await expect(shell).toHaveAttribute('data-diagram-scale', 'fit');
 
   const diagramMetrics = async () => shell.evaluate((element) => {
@@ -1308,6 +1347,7 @@ test('captures all eight acceptance viewports for strict visual review when requ
   const captureDir = fileURLToPath(new URL('../../../../outputs/handbook-visual-review/', import.meta.url));
   await mkdir(captureDir, { recursive: true });
   await page.goto('/#mode=tasks&guide=procurement-request-approval');
+  await page.locator('article[data-guide-id="procurement-request-approval"] details.full-decision-map > summary').click();
   await expect(page.getByRole('region', { name: 'Task flow diagram' })).toBeVisible();
   const projectViewport = page.viewportSize()!;
   const shell = page.locator('article[data-guide-id="procurement-request-approval"] .diagram-shell').first();

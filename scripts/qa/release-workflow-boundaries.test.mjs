@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -88,6 +88,77 @@ test('coverage browser installation is bounded without skipping tests or weakeni
   assert.equal(install.run, 'pnpm --filter @intra/shell exec playwright install --with-deps chromium');
   assert.ok(ci.jobs.test.steps.some(step => step.name === 'Run tests with coverage'));
   assert.ok(ci.jobs.e2e.needs.includes('test'));
+});
+
+test('all three E2E shards retain coverage and reserve report upload time before the job deadline', () => {
+  const e2e = workflow('ci').jobs.e2e;
+  assert.deepEqual(e2e.strategy.matrix.shard, [1, 2, 3]);
+  assert.equal(e2e.strategy['fail-fast'], false);
+  const run = e2e.steps.find(step => step.name === 'E2E memory');
+  const controlled = e2e.steps.find(step => step.name === 'E2E controlled RPC');
+  assert.ok(run && controlled, 'both runtimes must execute within each required shard gate');
+  const upload = e2e.steps.find(step => step.uses?.startsWith('actions/upload-artifact@'));
+  assert.match(run.run, /set -o pipefail/);
+  assert.match(run.run, /playwright test tests\/smoke tests\/e2e --config=playwright.ci.config.ts --shard=\$\{\{ matrix\.shard \}\}\/3 --global-timeout=2400000/);
+  assert.doesNotMatch(run.run, /--grep|--max-failures|--retries=0|\|\| true/);
+  assert.equal(run['continue-on-error'], undefined);
+  assert.equal(run['timeout-minutes'], 43);
+  assert.equal(run.env.PLAYWRIGHT_CI_RUNTIME, 'memory');
+  assert.equal(controlled.env.PLAYWRIGHT_CI_RUNTIME, 'controlled');
+  assert.equal(controlled.if, '${{ !cancelled() }}');
+  assert.equal(controlled['continue-on-error'], undefined);
+  assert.match(controlled.run, /--config=playwright.ci.config.ts --shard=\$\{\{ matrix\.shard \}\}\/3 --global-timeout=900000/);
+  assert.doesNotMatch(controlled.run, /--grep|--max-failures|--retries=0|\|\| true/);
+  assert.equal(controlled['timeout-minutes'], 18);
+  assert.ok(e2e['timeout-minutes'] >= run['timeout-minutes'] + controlled['timeout-minutes'] + 20);
+  assert.equal(upload.if, 'always()');
+  assert.equal(upload['timeout-minutes'], 3);
+  assert.match(upload.with.path, /playwright-report/);
+  assert.match(run.run, /tee apps\/shell\/playwright-report\/memory-runner\.log/);
+  assert.match(controlled.run, /tee apps\/shell\/playwright-report\/controlled-runner\.log/);
+  const config = readFileSync(new URL('../../apps/shell/playwright.config.ts', import.meta.url), 'utf8');
+  assert.match(config, /\["json", \{ outputFile: "playwright-report\/results.json" \}\]/);
+  assert.match(config, /\["html", \{ outputFolder: "playwright-report\/html", open: "never" \}\]/);
+  assert.match(config, /retries: IS_CI \? 1 : 0/);
+  assert.match(config, /workers: IS_CI \? 2 : undefined/);
+});
+
+test('installed Playwright fails a suite budget and still emits its final JSON report', () => {
+  const directory = mkdtempSync(path.join(tmpdir(), 'mwell-playwright-budget-'));
+  let primaryError;
+  try {
+    const reportPath = path.join(directory, 'results.json');
+    writeFileSync(path.join(directory, 'budget.spec.cjs'), `
+      const { test } = require(${JSON.stringify(require.resolve('@playwright/test'))});
+      test('held synthetic case', async () => { await new Promise(() => {}); });
+    `);
+    writeFileSync(path.join(directory, 'playwright.config.cjs'), `module.exports = ${JSON.stringify({
+      testDir: directory, testMatch: 'budget.spec.cjs', workers: 1, retries: 0,
+      outputDir: path.join(directory, 'test-results'),
+      reporter: [['json', { outputFile: reportPath }]],
+    })};`);
+    const result = spawnSync(process.execPath, [require.resolve('@playwright/test/cli'), 'test',
+      '--config', path.join(directory, 'playwright.config.cjs'), '--global-timeout=3000'], {
+      // A child/worker must not retain the directory we remove on Windows.
+      // Absolute config, test and report paths keep the fixture isolated.
+      cwd: fileURLToPath(new URL('../../apps/shell/', import.meta.url)), encoding: 'utf8', timeout: 20000,
+      env: { ...process.env, CI: '1' }, windowsHide: true,
+    });
+    assert.equal(result.error, undefined, 'Playwright must exit itself, not need a runner kill');
+    assert.equal(result.status, 1, result.stderr);
+    const report = JSON.parse(readFileSync(reportPath, 'utf8'));
+    assert.ok(report.errors.some(error => /Timed out waiting.*test suite/i.test(error.message)), JSON.stringify(report.errors));
+    assert.equal(report.stats.expected, 0, 'an interrupted run cannot report a passing case');
+  } catch (error) {
+    primaryError = error;
+    throw error;
+  } finally {
+    try { rmSync(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); }
+    catch (cleanupError) {
+      if (!primaryError) throw cleanupError;
+      console.error(`Budget fixture cleanup also failed; original assertion retained. Evidence: ${directory}`, cleanupError.message);
+    }
+  }
 });
 
 test('job env contexts reject valid-YAML runner expressions before runner allocation', () => {

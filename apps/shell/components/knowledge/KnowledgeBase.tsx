@@ -189,7 +189,8 @@ export function KnowledgeBase({ content }: { content: KnowledgeContent }) {
     };
     animationFrame = requestAnimationFrame(restorePosition);
     const save = () => {
-      if (restorationComplete)
+      // Destination reflow can clamp scroll before the outgoing effect cleans up.
+      if (restorationComplete && key === `knowledge-scroll:${window.location.pathname}${window.location.search}`)
         sessionStorage.setItem(key, String(window.scrollY));
     };
     window.addEventListener("scroll", save, { passive: true });

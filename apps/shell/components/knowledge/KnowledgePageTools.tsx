@@ -76,7 +76,7 @@ export function KnowledgePageTools({
   return (
     <aside
       aria-label="Knowledge guide tools"
-      className="relative z-20 mx-auto mb-2 flex max-w-6xl justify-end"
+      className="relative z-10 mx-auto mb-2 flex max-w-6xl justify-end"
     >
       <details className="group relative">
         <summary className="btn-ghost btn-sm min-h-11 cursor-pointer list-none [&::-webkit-details-marker]:hidden">

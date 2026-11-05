@@ -3,8 +3,8 @@ import { GovernedSourcingPglite, governedSourcing } from '../helpers/governed-so
 
 test('disposable governed database executes sourcing controls through browser actions', async ({ page }) => {
   const database = new GovernedSourcingPglite();
-  await database.start();
   try {
+    await database.start();
     await database.db.exec('set role service_role');
     await expect(database.db.query(`insert into procurement.sourcing_events(request_id, route_decision_id, submission_deadline, original_submission_deadline) values ('${database.requestId}', (select id from procurement.route_decisions limit 1), statement_timestamp(), statement_timestamp())`)).rejects.toThrow(/permission denied/i);
     await expect(database.db.query(`insert into procurement.solicitation_communications(request_id, communication_type, content_hash) values ('${database.requestId}', 'invitation', 'forged')`)).rejects.toThrow(/permission denied/i);
@@ -70,6 +70,21 @@ test('disposable governed database executes sourcing controls through browser ac
     expect((await call('procurement', 'review_insufficient_bid_exception', { id: pack.rows[0]!.id, decision: 'approved', note: 'Self approval attempt.' })).ok).toBe(false);
     expect((await call('reviewer', 'review_insufficient_bid_exception', { id: pack.rows[0]!.id, decision: 'approved', note: 'Independent approval.' })).ok).toBe(true);
     expect((await call('procurement', 'transition_sourcing_event', { id: requoteEventId, action: 'evaluation' })).ok).toBe(true);
+    const prematureAward = await call('procurement', 'transition_sourcing_event', { id: requoteEventId, action: 'award', selected_vendor_id: database.vendorIds[0], closure_note: 'Exception approval alone is not award evidence.' });
+    expect(prematureAward).toMatchObject({ ok: false, error: expect.stringMatching(/approved best-value recommendation/i) });
+    const tabulation = await call('procurement', 'save_commercial_tabulation', { sourcing_event_id: requoteEventId,
+      evidence_reference: 'fixture/tabulation.xlsx', entries: [{ vendor_id: database.vendorIds[0], quoted_amount: 100, evidence_reference: 'fixture/proposal.pdf' }] });
+    expect(tabulation.ok).toBe(true);
+    const evaluation = await call('procurement', 'submit_technical_evaluation', { sourcing_event_id: requoteEventId,
+      vendor_id: database.vendorIds[0], evidence_reference: 'fixture/technical.pdf',
+      criteria: ['technicalCompliance', 'quality', 'leadTime', 'totalLifecycleCost', 'warranty', 'support', 'price', 'paymentTerms', 'training']
+        .map(criterion => ({ criterion, score: 90, evidence_reference: `fixture/${criterion}.pdf` })) });
+    expect(evaluation.ok).toBe(true);
+    const recommendation = await call('procurement', 'submit_award_recommendation', { sourcing_event_id: requoteEventId,
+      evaluated_vendor_id: database.vendorIds[0], recommended_vendor_id: database.vendorIds[0],
+      commercial_tabulation_id: (tabulation.result as { id: string }).id, technical_evaluation_id: (evaluation.result as { id: string }).id,
+      rationale: 'Complete best-value evidence supports this vendor.' });
+    expect(recommendation.ok).toBe(true);
     expect((await call('procurement', 'transition_sourcing_event', { id: requoteEventId, action: 'award', selected_vendor_id: database.vendorIds[0], closure_note: 'Controlled exception path evaluated and awarded.' })).result).toMatchObject({ status: 'awarded' });
     expect(workspace.ok).toBe(true);
     await expect(page.locator('#result')).not.toBeEmpty();

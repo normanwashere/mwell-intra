@@ -484,6 +484,17 @@ async function assertNoKnownDeadLinks(page: Page, path: string): Promise<void> {
   ).toEqual([]);
 }
 
+test('styled native choices retain visible labels and reachable touch targets', async ({ page }, testInfo) => {
+  await page.setContent(`<label style="display:block;position:relative;width:180px;height:48px">
+    <input type="radio" aria-label="Goods" style="position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0">Goods
+  </label>`);
+  await assertControlsAreReachable(page, 'styled-native-choice', testInfo);
+  await page.getByRole('radio', { name: 'Goods', exact: true }).check();
+  await expect(page.getByRole('radio', { name: 'Goods', exact: true })).toBeChecked();
+  await page.locator('label').evaluate(element => element.style.opacity = '0');
+  await expect(assertControlsAreReachable(page, 'hidden-choice-label', testInfo)).rejects.toThrow(/hidden\/transparent ancestor/);
+});
+
 async function assertControlsAreReachable(
   page: Page,
   path: string,
@@ -555,7 +566,23 @@ async function assertControlsAreReachable(
               const style = window.getComputedStyle(current);
               if (style.display === "none" || style.visibility === "hidden")
                 return true;
-              if (Number(style.opacity) === 0) return true;
+              if (Number(style.opacity) === 0) {
+                // A styled native choice may cover its visible label. Its
+                // label, ancestors, dimensions and hit target still get checked.
+                const isLabelledChoice = current === element &&
+                  current instanceof HTMLInputElement && ['radio', 'checkbox'].includes(current.type) &&
+                  Array.from(current.labels ?? []).some(label => {
+                    const labelStyle = getComputedStyle(label);
+                    const bounds = label.getBoundingClientRect();
+                    const inputBounds = element.getBoundingClientRect();
+                    return Boolean(label.textContent?.trim()) && labelStyle.display !== 'none' &&
+                      labelStyle.visibility !== 'hidden' && Number(labelStyle.opacity) > 0 &&
+                      bounds.width >= minSize && bounds.height >= minSize &&
+                      inputBounds.left >= bounds.left - 1 && inputBounds.right <= bounds.right + 1 &&
+                      inputBounds.top >= bounds.top - 1 && inputBounds.bottom <= bounds.bottom + 1;
+                  });
+                if (!isLabelledChoice) return true;
+              }
               if (
                 current.hasAttribute("hidden") ||
                 current.getAttribute("aria-hidden") === "true"

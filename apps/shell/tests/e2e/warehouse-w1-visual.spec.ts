@@ -25,7 +25,10 @@ async function auditRoute(
 ) {
   await installWarehouseSession(page, role, theme);
   await page.goto(route, { waitUntil: 'networkidle' });
-  await expect(page).toHaveURL(new RegExp(`${route.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/?$`));
+  await expect(page).toHaveURL(url => url.pathname.replace(/\/$/, '') === route.replace(/\/$/, ''));
+  if (route === '/warehouse/fulfillment') {
+    await expect(page).toHaveURL(url => url.searchParams.get('tab') === 'orders');
+  }
   await expect(page.locator('body')).not.toContainText(/configuration missing|no (?:warehouse|events|insights) access|access denied/i);
   await expect(page.locator('main')).toBeVisible();
   await expect(page.locator('main h1').first()).toBeVisible();
@@ -40,16 +43,41 @@ async function auditRoute(
     expect(audit.deadEnds, `${route} ${state} dead ends`).toEqual([]);
     expect(audit.undersizedTargets, `${route} ${state} undersized targets`).toEqual([]);
   };
+  const assertAccessibility = async () => {
+    const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
+    expect(
+      axe.violations.map(({ id, impact, nodes }) => ({
+        id,
+        impact,
+        nodes: nodes.map(({ target, failureSummary }) => ({ target, failureSummary })),
+      })),
+      `${route} axe violations`,
+    ).toEqual([]);
+  };
   await assertLayout('top');
-  const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
-  expect(
-    axe.violations.map(({ id, impact, nodes }) => ({
-      id,
-      impact,
-      nodes: nodes.map(({ target, failureSummary }) => ({ target, failureSummary })),
-    })),
-    `${route} axe violations`,
-  ).toEqual([]);
+  if (route === '/warehouse/quality') {
+    const group = page.locator('main details').filter({ has: page.locator('input[type="checkbox"]') }).first();
+    const initiallyOpen = await group.evaluate(element => (element as HTMLDetailsElement).open);
+    if (!initiallyOpen) {
+      await group.locator(':scope > summary').click();
+    }
+    const selection = group.getByRole('checkbox').first();
+    const selectionLabel = selection.locator('..');
+    await expect(selection).toBeVisible();
+    await selectionLabel.scrollIntoViewIfNeeded();
+    await selectionLabel.click({ trial: true });
+    await selectionLabel.click();
+    await expect(selection).toBeChecked();
+    await selectionLabel.click();
+    await expect(selection).not.toBeChecked();
+    await assertLayout('top');
+    await assertAccessibility();
+    // Keep the route baseline for its top/bottom sweep after the scoped interaction.
+    if (!initiallyOpen) await group.locator(':scope > summary').click();
+    await expect(group).toHaveJSProperty('open', initiallyOpen);
+    await assertLayout('top');
+  }
+  await assertAccessibility();
   const output = path.resolve(
     'test-results',
     'warehouse-w1',

@@ -381,7 +381,7 @@ export function PurchaseOrdersPage() {
         }
       />
 
-      <QueueFilters items={filterCards} value={filter} onChange={applyFilter} />
+      <QueueFilters items={filterCards} value={filter} onChange={applyFilter} className="auto-rows-fr" />
 
       <div>
         <SectionTitle
