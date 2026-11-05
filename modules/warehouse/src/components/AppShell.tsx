@@ -414,12 +414,12 @@ export function AppShell({ children }: { children: ReactNode }) {
         >
           <div
             className={clsx(
-              "flex items-center justify-between gap-3 px-4 sm:px-6 transition-[padding]",
+              "flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 transition-[padding] md:flex-nowrap",
               scrolled ? "py-2" : "py-3",
             )}
           >
             <div
-              className="flex min-w-0 items-center gap-1.5 md:hidden"
+              className="flex w-36 shrink-0 items-center gap-1.5 md:hidden"
               aria-label="Mwell Intra Warehouse"
             >
               <Logo className="h-5 w-auto shrink-0" />
@@ -443,7 +443,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               Intra <span className="text-faint">|</span> Warehouse
             </p>
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="ml-auto flex shrink-0 items-center gap-1.5">
               <span
                 className={clsx(
                   "chip hidden sm:inline-flex",

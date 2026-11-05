@@ -189,6 +189,21 @@ describe("AppShell navigation", () => {
       /^Intra · WarehouseAdministrator$/,
     );
   });
+  it('wraps narrow header controls without shrinking the mobile brand or touch targets', async () => {
+    renderWithProviders(<AppShell>content</AppShell>, { role: 'warehouse_supervisor' });
+    const mobileBrand = await screen.findByLabelText('Mwell Intra Warehouse');
+    expect(mobileBrand).toHaveClass('w-36', 'shrink-0');
+    expect(mobileBrand.parentElement).toHaveClass('flex-wrap', 'md:flex-nowrap');
+    expect(mobileBrand).toHaveTextContent('Intra · WarehouseSupervisor');
+    const banner = screen.getByRole('banner');
+    const alerts = within(banner).getByRole('button', { name: /^Warehouse alerts/ });
+    const controls = alerts.parentElement!;
+    expect(controls).toHaveClass('ml-auto', 'shrink-0');
+    expect(within(controls).getByRole('link', { name: /^Help for/ })).toBeInTheDocument();
+    expect(within(controls).getByRole('button', { name: 'Account' })).toBeInTheDocument();
+    expect(alerts).toHaveClass('h-11', 'w-11');
+    expect(within(controls).getByRole('button', { name: 'Quick scan' })).toHaveClass('h-11', 'w-11');
+  });
   it("shows logistics modules including Receiving", async () => {
     renderWithProviders(<AppShell>content</AppShell>, {
       role: "logistics_supervisor",
