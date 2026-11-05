@@ -108,6 +108,7 @@ export const TROUBLESHOOTING_GUIDES: TroubleshootingGuide[] = [
       "Clear filters and search by governed ID",
       "Refresh once",
       "Check upstream status and activity",
+      "If My Work cannot load a source, a failed source is not an empty queue. Retry loading without creating a duplicate request, then verify the original source record before acting",
       "Ask the upstream owner to complete the system handoff",
     ],
     dataImpact:
@@ -229,6 +230,7 @@ export const TROUBLESHOOTING_GUIDES: TroubleshootingGuide[] = [
     safeRecovery: [
       "Stop clicking",
       "Restore connectivity",
+      "Keep queued work while reconnecting. Use the same account and check the saved result before retrying the original action; do not delete pending work just to clear an error",
       "If the warehouse banner shows conflicts, select View details. Read Why it needs attention and check the affected product, bin, quantity, serials or receipt lines. This opens a read-only view; it does not retry the change",
       "Check history before discarding a queued copy. Discard queued copy only removes that copy from this device; it does not undo a change already saved on the server",
       "Refresh the record from its queue",
@@ -417,6 +419,8 @@ export const TROUBLESHOOTING_GUIDES: TroubleshootingGuide[] = [
       "Warehouse update and install notices stay behind open forms. Finish or deliberately close the form before using Reload; do not reload during submission or assume unsaved edits will survive",
       "Refresh once only when the page does not provide Retry",
       "Sign in again if prompted",
+      "Offline access is limited to public assets and the offline screen, not access to private records. After sign-out, account change or access loss, reconnect and verify the active account before reopening private work",
+      "Do not clear all browser data to repair access. Keep queued work with the account that created it and check the saved result before retrying an uncertain action",
       "Reopen the record from its queue",
       "Verify activity before repeating an action",
     ],

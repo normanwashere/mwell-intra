@@ -4,6 +4,8 @@ import type { SessionValue } from "@intra/auth";
 import { ToastProvider } from "@intra/ui";
 import { FINANCE_DEMO_DATA } from "./seed";
 import type { FinanceData } from "./types";
+import { mkdirSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 
 const state = vi.hoisted(() => ({
   session: null as unknown as SessionValue,
@@ -117,6 +119,41 @@ describe("FinanceApp", () => {
     expect(
       screen.getByRole("link", { name: /review next payment pack/i }),
     ).toHaveAttribute("href", "/procurement/purchase-orders/po_seed_004?section=payment&from=finance#payment");
+  });
+
+  it('scopes period metrics without hiding older activity, payments or close work', () => {
+    state.data.data = {
+      ...FINANCE_DEMO_DATA,
+      totals: { committedValue: 14, receivedValue: 24, returnedValue: 3, periodStart: '2026-11-01', periodEnd: '2026-11-05' },
+    };
+    const view = renderFinanceApp();
+    expect(screen.getByText('Committed POs and net received: 2026-11-01 to 2026-11-05')).toBeInTheDocument();
+    expect(screen.queryByText(/^Activity period:/)).not.toBeInTheDocument();
+    expect(screen.getByText('Inventory value: current balance. Needs review, payment reviews, Finance close and activity: all time.')).toBeInTheDocument();
+    const activity = screen.getByRole('table', { name: 'Cross-module financial activity' });
+    expect(within(activity).getByRole('link', { name: 'po_seed_004' })).toBeInTheDocument();
+    expect(within(activity).getByRole('link', { name: 'po_seed_005' })).toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: 'Payment readiness' })).getAllByRole('link', { name: 'PO-2026-0004' })).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Post' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /review next payment pack/i })).toHaveAttribute('href', '/procurement/purchase-orders/po_seed_004?section=payment&from=finance#payment');
+    if (process.env.QA2_RENDER_DIR) {
+      mkdirSync(process.env.QA2_RENDER_DIR, { recursive: true });
+      writeFileSync(path.join(process.env.QA2_RENDER_DIR, 'finance-render.html'), view.container.innerHTML);
+    }
+  });
+
+  it('does not invent a date-bounded metric scope when period totals are absent', () => {
+    renderFinanceApp();
+    expect(screen.getByText('Committed POs and net received: all available activity')).toBeInTheDocument();
+    expect(screen.queryByText(/^Activity period:/)).not.toBeInTheDocument();
+  });
+
+  it('does not label unavailable activity totals as a complete all-time summary', () => {
+    state.data.data = { ...FINANCE_DEMO_DATA, sourceStates: { activity: 'error', inventory: 'complete', payments: 'complete', close: 'complete' } };
+    renderFinanceApp();
+    expect(screen.getByText('Committed POs and net received: unavailable')).toBeInTheDocument();
+    expect(screen.queryByText('Committed POs and net received: all available activity')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /review next payment pack/i })).toBeInTheDocument();
   });
 
   it('uses effective live grants, withholding uncertified close actions while retaining reads', () => {

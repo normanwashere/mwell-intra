@@ -1,5 +1,7 @@
 # WMS audit remediation - November 5, 2026
 
+**Current release authority:** See the [current release manifest](../handoffs/current/release-status.json). The original 19-finding WMS audit evidence below remains attributed to its recorded builds. The later 20-finding four-QA review is a separate scope; its candidate deployment and retest are pending. The appended follow-up does not retroactively certify or replace the original evidence. September handoff/CI212 results are historical, not authority for this release.
+
 ## Release status
 
 Fixes for all 19 findings in the November 5 WMS checklist audit are deployed to UAT as application commit `4dbde805faf71f700e729adc5ef986489b122699`. All seven database migrations are applied. The UAT alias and health endpoint confirm the expected commit and database project. This note is not department acceptance or go-live approval.
@@ -56,3 +58,24 @@ The affected business-journey retests are complete on `4dbde80`. Full hosted cro
 Isolated synthetic fixtures remain identified in their owned manifests. Cleanup was not executed; no broad reset was performed and no concurrent tester transaction was reverted. Damaged synthetic stock deliberately remains held as evidence of the control.
 
 The original audit and remediation evidence are retained separately; failed baseline results are not overwritten. Local evidence folder: `outputs/wms-uat-remediation-20261105` in the parent workspace.
+
+**Four-QA follow-up: pending deployment and retest**
+
+This addendum concerns `outputs/four-qa-review-20261105`, not the earlier 19-finding WMS checklist. The main release worker must supply the exact new SHA, actual UAT deployment and same-commit retest evidence before any following behavior is described as deployed or any evidence gap is closed. Original review reports remain immutable.
+
+| Finding | Candidate change / required acceptance |
+| --- | --- |
+| QA4-001 | Public-only response caching; private API/page/document data must not survive logout/access loss through worker caches. Purge legacy private responses without deleting queued commands. Worker-upgrade, account/access-change and offline-denial evidence pending. |
+| QA1-WMS-001 | Valid alternate source bins for unconstrained picking, with explicit source-bin, warehouse, exact serial, hold/reservation and server validation preserved. Alternate-bin success and protected negative paths pending. |
+| QA3-001 | My Work uses database cursor order rather than JavaScript lexical comparison; mixed-case pages, repeat-cursor denial, retry and account-scope tests pending. |
+| QA2-F01 | CSV unknown quantity totals become blank numeric cells with appended `Ordered Units Availability` / `Received Units Availability` states; verified zero remains numeric. Governed download and UI parity pending. |
+| QA2-F02 | Finance distinguishes period-based committed/received totals, current inventory value and all-time review/activity. Scope/read-failure desktop/mobile verification pending. |
+| QA3-002 | Product workflow landmark names identify record/version/product. Desktop/mobile assistive-navigation and accessibility retest pending. |
+| QA4-002 | Anonymous protected APIs return JSON 401 private/no-store instead of redirecting; signed-in 403 and page sign-in behavior retained. Deployed HTTP checks pending. |
+| QA4-003 | Effective authority-wrapper/delegation tests replace obsolete inline-source expectations. These failures did not establish a live authorization bypass; actual results pending. |
+| REL-01, REL-02, REL-03 | Same-SHA hosted certification, aligned actual coverage execution and promotion denial for failed/wrong-SHA checks require retained results. Build/deploy success alone is not closure. |
+| REL-04 | One current manifest now links Data, Technical, Tester and handbook sources; historical snapshots stay unchanged. Generated-document checks are separate from the pending actual deployed handoff verification. |
+| QA1-WMS-002 through QA1-WMS-005; QA2-G01 through QA2-G03 | Isolated live WMS variants, independent-review denials, transfer/event return, daily reconciliation/export, Legal-to-Finance, current Product handoff and seller-to-settlement evidence remain pending. |
+| SCOPE-01 | Reporting API/connector remains undelivered and disabled. It is explicitly a separate implementation phase, not a falsely closed app fix. |
+
+See the [candidate operator guidance](../manual/MWELL_INTRA_USER_MANUAL.md), [tester acceptance checklist](../handoffs/current/testers.md) and [separate API implementation phase](../integrations/reporting-api/SEPARATE-IMPLEMENTATION-PHASE.md). Existing workflows, tester data, policies, approvals, training and both receiving paths must be preserved. SMTP is excluded. No production, departmental or physical-device acceptance is granted by this addendum.

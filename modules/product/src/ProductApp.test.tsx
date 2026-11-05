@@ -144,7 +144,7 @@ describe("ProductApp", () => {
     state.workspace.error = 'Read failed';
     const view = render(<ProductApp />);
     const article = screen.getByRole('article', { name: 'Remote care launch readiness package' });
-    const summary = within(article).getByRole('region', { name: 'Workflow status' });
+    const summary = within(article).getByRole('region', { name: 'Workflow status: Remote care launch (version 2, product prod-1)' });
     expect(summary).toHaveTextContent('Readiness status unavailable');
     expect(within(article).getByRole('link', { name: 'Link to this record' })).toHaveAttribute('href', '#readiness-ready-1');
     state.workspace.error = null;
@@ -168,6 +168,26 @@ describe("ProductApp", () => {
     }
     expect(screen.queryByText('Record and decision history')).not.toBeInTheDocument();
     expect(screen.queryByText(/Evidence, decision history/)).not.toBeInTheDocument();
+  });
+
+  it('distinguishes readiness status landmarks across packages, versions, and products', () => {
+    state.workspace.data = { ...DATA, readiness: [
+      DATA.readiness[0]!,
+      { ...DATA.readiness[0]!, id: 'ready-2', version: 3 },
+      { ...DATA.readiness[0]!, id: 'ready-3', productId: 'prod-2' },
+    ] };
+    render(<ProductApp />);
+    const names = [
+      'Workflow status: Remote care launch (version 2, product prod-1)',
+      'Workflow status: Remote care launch (version 3, product prod-1)',
+      'Workflow status: Remote care launch (version 2, product prod-2)',
+    ];
+    expect(screen.getAllByRole('region', { name: /^Workflow status/ })).toHaveLength(3);
+    for (const name of names) {
+      const summary = screen.getByRole('region', { name });
+      expect(summary).toHaveTextContent('Go-live decision pending');
+      expect(summary).toHaveTextContent('Product decision maker');
+    }
   });
 
   it('renders exact rejected reasons and completed Operations attribution after reload', () => {

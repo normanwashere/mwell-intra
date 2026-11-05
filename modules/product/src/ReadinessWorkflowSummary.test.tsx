@@ -149,7 +149,7 @@ describe("readiness workflow summary", () => {
     expect(summary.blocker).toBeUndefined();
     expect(summary.nextStep).toContain("only if applicable");
     render(createElement(ReadinessWorkflowSummary, { item }));
-    const region = screen.getByRole("region", { name: "Workflow status" });
+    const region = screen.getByRole("region", { name: "Workflow status: Client go-live (version 1, product product-1)" });
     expect(region).toHaveTextContent("Operations acknowledged");
     expect(region).not.toHaveTextContent("Needs attention");
     expect(
@@ -183,7 +183,7 @@ describe("readiness workflow summary", () => {
     const view = render(
       createElement(ReadinessWorkflowSummary, { item: base, readFailed: true }),
     );
-    const summary = screen.getByRole("region", { name: "Workflow status" });
+    const summary = screen.getByRole("region", { name: "Workflow status: Release package (version 1, product product-1)" });
     expect(
       within(summary).getByText("Next responsibility"),
     ).toBeInTheDocument();

@@ -19,10 +19,18 @@ export function quantityLabel(value: unknown): string {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? String(value) : 'Unknown';
 }
 
+export function poQuantityTotals(lines: ReadonlyArray<{ quantity: number; receivedQuantity: number }>): { ordered: number | undefined; received: number | undefined } {
+  const sum = (key: 'quantity' | 'receivedQuantity') => {
+    if (!lines.length || lines.some(line => quantityLabel(line[key]) === 'Unknown')) return undefined;
+    const total = lines.reduce((value, line) => value + line[key], 0);
+    return Number.isFinite(total) ? total : undefined;
+  };
+  return { ordered: sum('quantity'), received: sum('receivedQuantity') };
+}
+
 export function poReceiptSummary(lines: ReadonlyArray<{ quantity: number; receivedQuantity: number }>): string {
-  const sum = (key: 'quantity' | 'receivedQuantity') => lines.length && lines.every(line => quantityLabel(line[key]) !== 'Unknown')
-    ? lines.reduce((total, line) => total + line[key], 0) : Number.NaN;
-  return `${lines.length} · ${receiptQuantityLabel(sum('receivedQuantity'), sum('quantity'))} received`;
+  const { ordered, received } = poQuantityTotals(lines);
+  return `${lines.length} · ${receiptQuantityLabel(received, ordered)} received`;
 }
 
 export function attachmentSizeLabel(bytes: unknown): string {

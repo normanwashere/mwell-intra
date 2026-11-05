@@ -46,3 +46,58 @@ it('does not publish a partial count or disclose database details after a contin
   expect(result.errors).toHaveLength(1);
   expect(result.errors.join()).not.toContain('Private');
 });
+
+function serverPages(pages: string[][]) {
+  const calls: { schema: string; table: string; ownerColumn: string; owner: string; after: string; limit: number; filter: string; closed: string[]; orders: unknown[] }[] = [];
+  let page = 0;
+  const client = { schema: (schema: string) => ({ from: (table: string) => {
+    const call = { schema, table, ownerColumn: '', owner: '', after: '', limit: 0, filter: '', closed: [] as string[], orders: [] as unknown[] };
+    calls.push(call);
+    const query = {
+      select: () => query,
+      eq: (column: string, owner: string) => { call.ownerColumn = column; call.owner = owner; return query; },
+      or: (filter: string) => { call.filter = filter; return query; },
+      gt: (_column: string, after: string) => { call.after = after; return query; },
+      in: (_column: string, statuses: string[]) => { call.closed = statuses; return query; },
+      order: (column: string, options: unknown) => { call.orders.push([column, options]); return query; },
+      limit: async (limit: number) => {
+        call.limit = limit;
+        const ids = call.closed.length ? [] : pages[page++];
+        if (!ids) throw new Error('Unexpected continuation after supplied pages');
+        return { data: ids.map(id => ({ id, status: 'approved', requester_id: 'actor', updated_at: '2026-09-20' })), error: null };
+      },
+    };
+    return query;
+  } }) };
+  return { client, calls };
+}
+
+it('retains all 104 requests when a database-ordered cursor sorts earlier in JavaScript', async () => {
+  // Match the live page boundary without imposing JavaScript order on the second page.
+  const first = Array.from({ length: 100 }, (_, i) => `perf-sep12-request-${i + 1}`).sort();
+  const second = ['req_9b26a575109949debb74ac92329d71ca', 'UAT-AUG24-REQ-0001', 'UAT-AUG24-REQ-0002', 'UAT-AUG24-REQ-0003'];
+  const { client, calls } = serverPages([first, second, []]);
+  const result = await readTrackingSource(client as never, 'procurement', 'actor');
+  expect(result.errors).toEqual([]);
+  expect(result.items).toHaveLength(104);
+  expect(new Set(result.items.map(item => item.id))).toEqual(new Set([...first, ...second].map(id => `procurement:${id}`)));
+  expect(result.items.every(item => item.bucket === 'waiting')).toBe(true);
+  expect(calls.map(call => call.after)).toEqual(['', 'perf-sep12-request-99', 'UAT-AUG24-REQ-0003', '']);
+  expect(calls.every(call => call.schema === 'procurement' && call.table === 'requests' && call.ownerColumn === 'requester_id' && call.owner === 'actor' && call.limit === 100)).toBe(true);
+  expect(calls.slice(0, 3).every(call => call.filter === 'status.is.null,status.not.in.(rejected,cancelled)')).toBe(true);
+  expect(calls.slice(0, 3).map(call => call.orders)).toEqual(Array.from({ length: 3 }, () => [['id', { ascending: true }]]));
+  expect(calls[3]).toMatchObject({ closed: ['rejected', 'cancelled'], orders: [['updated_at', { ascending: false, nullsFirst: false }], ['id', { ascending: false }]] });
+});
+
+it.each([
+  { name: 'immediately repeated', pages: [['cursor-a'], ['cursor-a']] },
+  { name: 'previously seen', pages: [['cursor-a'], ['cursor-b'], ['cursor-a']] },
+])('rejects a $name cursor without publishing a partial result or continuing the loop', async ({ pages }) => {
+  const { client, calls } = serverPages([...pages, []]);
+  const result = await readTrackingSource(client as never, 'procurement', 'actor');
+  expect(result.items).toEqual([]);
+  expect(result.errors).toHaveLength(1);
+  expect(result.errors[0]).toContain('Procurement requests tracking unavailable');
+  expect(calls).toHaveLength(pages.length);
+  expect(calls.every(call => call.closed.length === 0)).toBe(true);
+});

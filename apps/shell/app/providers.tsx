@@ -8,6 +8,7 @@
 
 import { useEffect, useMemo, type ReactNode } from "react";
 import { SafeServiceWorker } from "@shell/components/SafeServiceWorker";
+import { SessionCacheBoundary } from "@shell/components/SessionCacheBoundary";
 import { SessionProvider, type AuthConfig } from "@intra/auth";
 import { LearningProvider } from "@intra/learning";
 import { registerWarehouseTrainingAdapters } from "@intra/warehouse/training";
@@ -105,6 +106,7 @@ export function Providers({ children }: { children: ReactNode }) {
   const tree = (
     <MotionProvider>
       <SessionProvider config={config}>
+        <SessionCacheBoundary />
         <LearningProvider>
           <ConnectivityProvider>
             <DemoSeeder />

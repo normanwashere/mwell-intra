@@ -31,6 +31,7 @@ function isPublicPath(pathname: string): boolean {
   if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
     return true;
   }
+  if (pathname === '/api' || pathname.startsWith('/api/')) return false;
   // Static assets (the matcher already skips most; belt-and-suspenders for
   // service-worker/scripts and any extension the matcher regex misses).
   return /\.(?:svg|png|jpg|jpeg|gif|webp|ico|js|mjs|css|map|txt|json|woff2?)$/i.test(pathname);
@@ -82,6 +83,14 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
   if (!user && !isPublicPath(pathname)) {
+    if (pathname === '/api' || pathname.startsWith('/api/')) {
+      const denial = NextResponse.json({ error: 'Authentication required.' }, {
+        status: 401,
+        headers: { 'Cache-Control': 'private, no-store' },
+      });
+      for (const cookie of response.cookies.getAll()) denial.cookies.set(cookie);
+      return denial;
+    }
     const loginUrl = new URL('/login', request.url);
     const redirectTo = localDestination(pathname + request.nextUrl.search);
     if (redirectTo !== '/') loginUrl.searchParams.set('redirect', redirectTo);

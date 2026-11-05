@@ -4,6 +4,7 @@
 // browser side-effect.
 
 import type { PurchaseOrder } from './types';
+import { poQuantityTotals } from './evidencePresentation';
 
 function csvCell(value: string | number | undefined | null): string {
   const s = value == null ? '' : String(value);
@@ -29,13 +30,14 @@ const PO_HEADERS = [
   'Updated',
   'Approved',
   'Approved By',
+  'Ordered Units Availability',
+  'Received Units Availability',
 ] as const;
 
 /** Build a finance-ready CSV extract of purchase orders. */
 export function purchaseOrdersToCsv(pos: readonly PurchaseOrder[]): string {
   const rows = pos.map((po) => {
-    const ordered = po.lines.reduce((s, l) => s + l.quantity, 0);
-    const received = po.lines.reduce((s, l) => s + l.receivedQuantity, 0);
+    const { ordered, received } = poQuantityTotals(po.lines);
     return csvRow([
       po.poNumber,
       po.vendorName,
@@ -49,6 +51,8 @@ export function purchaseOrdersToCsv(pos: readonly PurchaseOrder[]): string {
       po.updatedAt,
       po.approvedAt ?? '',
       po.approvedByEmail ?? '',
+      ordered === undefined ? 'unknown' : 'available',
+      received === undefined ? 'unknown' : 'available',
     ]);
   });
   return [csvRow([...PO_HEADERS]), ...rows].join('\n');

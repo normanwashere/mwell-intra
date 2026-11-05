@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "authority": "current-release",
+  "asOf": "2026-11-05",
+  "timezone": "Asia/Singapore",
+  "summary": "Last verified UAT identity retained. Four-QA remediation is pending deployment and retest; documentation preparation is not certification.",
+  "deployed": {
+    "commit": "13d91e4fd95d8b33fda5828b7ac310686adc4704",
+    "environment": "uat",
+    "url": "https://mwell-intra-uat.vercel.app/",
+    "supabaseProjectRef": "kkoitlvydytdhlpxhuah",
+    "deploymentId": null,
+    "observedAt": "2026-11-05T11:20:01.264Z",
+    "evidence": {
+      "workspace": "parent mwell-intra-warehouse checkout",
+      "path": "outputs/four-qa-review-20261105/release-check.json",
+      "sha256": "9e437637d944f5c137991fb69e1929520785a1ef5f55e33f99e7c0b0e9833637",
+      "scope": "Retained health and release review, not a fresh probe by the documentation worker. Deployment ID was not supplied. No same-commit hosted run was found at this observation."
+    }
+  },
+  "candidate": {
+    "status": "pending-deploy-and-retest",
+    "commit": null,
+    "deploymentId": null,
+    "deployedAt": null,
+    "evidence": [],
+    "scope": "Four-QA remediation; immutable candidate identity and actual deployment evidence must be supplied by the main release worker."
+  },
+  "acceptance": {
+    "sameCommitHostedCi": { "status": "pending", "commit": null, "evidence": [] },
+    "nonSmtpUatRetest": { "status": "pending", "commit": null, "evidence": [] },
+    "dataAndWorkflowPreservation": { "status": "pending", "commit": null, "evidence": [] },
+    "rel04DeployedHandoff": { "status": "pending", "commit": null, "evidence": [] },
+    "humanAndPhysicalDeviceAcceptance": { "status": "not-recorded", "commit": null, "evidence": [] },
+    "productionGoNoGo": { "status": "not-granted", "commit": null, "evidence": [] }
+  },
+  "reportingApi": {
+    "enabled": false,
+    "phase": "separate-implementation",
+    "acceptance": "not-delivered",
+    "finding": "SCOPE-01",
+    "plan": "docs/integrations/reporting-api/SEPARATE-IMPLEMENTATION-PHASE.md",
+    "scope": "Do not enable routes, publish datasets, issue clients or share operational credentials in this remediation. Provider, dictionary, recipient and named-owner approvals remain pending."
+  },
+  "smtp": { "status": "excluded", "scope": "No configuration or delivery certification; excluded checks are not passes." },
+  "history": [
+    {
+      "manifest": "docs/handoffs/2026-09-22/release-status.json",
+      "status": "historical-not-current-certification",
+      "asOf": "2026-09-23",
+      "commit": "223144f3ffbf315d112accac376fa3e187f1d301",
+      "scope": "September snapshot and CI212 apply only to their recorded build; preserve the dated pack and original reports unchanged."
+    }
+  ]
+}

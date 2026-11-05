@@ -3,15 +3,19 @@ name: UAT Live Certification
 on:
   workflow_dispatch:
     inputs:
+      run_mutating_certification:
+        description: Explicitly approve isolated UAT identity, training, transaction and run-scoped cleanup writes
+        required: true
+        default: false
+        type: boolean
       certify_vendor_email_delivery:
         description: Run the rate-limited external vendor email delivery canary
         required: false
         default: false
         type: boolean
-  push:
-    branches:
-      - codex/uat-launch-blockers
-      - main
+
+# Even prepare/routes provision users and complete training. Never run this
+# suite on push; non-mutating source checks belong to CI on the current branch.
 
 concurrency:
   group: uat-live-certification
@@ -25,6 +29,7 @@ permissions:
 jobs:
   prepare:
     name: Verify contracts and reconcile UAT personas
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_mutating_certification }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     environment: uat
@@ -503,7 +508,7 @@ jobs:
 
   bundle:
     name: Bundle certification evidence
-    if: always()
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.run_mutating_certification }}
     needs: [prepare, routes, transactions, cleanup]
     runs-on: ubuntu-latest
     steps:
@@ -525,15 +530,7 @@ jobs:
           --manifest certification-artifacts/documentation-release-manifest.json
           --evidence-dir certification-artifacts
       - name: Add maintained manuals and release notes to the evidence bundle
-        shell: bash
-        run: |
-          mkdir -p certification-artifacts/documentation
-          cp docs/manual/MWELL_INTRA_USER_MANUAL.md certification-artifacts/documentation/
-          cp docs/manual/index.html certification-artifacts/documentation/MWELL_INTRA_COMPLETE_DOCUMENTATION.html
-          cp docs/USER_TRAINING_AND_OPERATIONS_MANUAL.md certification-artifacts/documentation/
-          cp docs/TECHNICAL_AND_FUNCTIONAL_SPECIFICATION.md certification-artifacts/documentation/
-          cp docs/TRAINING_AND_HANDOVER_CONTENT.md certification-artifacts/documentation/
-          cp -R docs/releases certification-artifacts/documentation/releases
+        run: node scripts/qa/bundle-release-documentation.mjs --output certification-artifacts/documentation
       - uses: actions/upload-artifact@v6
         if: always()
         with:

@@ -1,0 +1,223 @@
+import assert from 'node:assert/strict';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import test from 'node:test';
+import { marked } from 'marked';
+
+const require = createRequire(new URL('../../apps/shell/package.json', import.meta.url));
+const yaml = createRequire(require.resolve('eslint'))('js-yaml');
+const workflow = name => yaml.load(readFileSync(new URL(`../../.github/workflows/${name}.yml`, import.meta.url), 'utf8'));
+const sha = 'a'.repeat(40);
+const repository = 'example/intra';
+const requiredJobs = [
+  'Learning source checks (fast, non-authoritative)', 'Learning applied PostgreSQL release authority',
+  'Knowledge Base contract', 'Typecheck (node 22)', 'Lint (node 22)', 'Test + coverage (node 22)',
+  'Build shell (node 22)', 'Accessibility (axe + playwright)',
+  ...[1, 2, 3].map(n => `E2E (playwright shard ${n}/3)`),
+];
+const successfulRun = () => ({ id: 10, run_number: 10, run_attempt: 1, head_sha: sha, head_branch: 'main',
+  path: '.github/workflows/ci.yml', event: 'push', status: 'completed', conclusion: 'success',
+  head_repository: { full_name: repository } });
+
+async function gate({ event = 'workflow_dispatch', ref = 'refs/heads/main', runs = [successfulRun()],
+  jobs = requiredJobs.map(name => ({ name, conclusion: 'success', status: 'completed', head_sha: sha })), apiError = false } = {}) {
+  const step = workflow('deploy-vercel').jobs['verify-ci']?.steps.find(item => item.id === 'gate');
+  assert.ok(step?.with?.script, 'deployment must have an executable same-commit gate');
+  const outputs = {};
+  const context = { eventName: event, ref, sha: event === 'workflow_run' ? 'b'.repeat(40) : sha, repo: { owner: 'example', repo: 'intra' },
+    payload: event === 'workflow_run' ? { workflow_run: successfulRun() } : {} };
+  const github = { rest: { actions: { listWorkflowRuns: Symbol('runs'), listJobsForWorkflowRun: Symbol('jobs') } },
+    paginate: async (method, args) => {
+      if (apiError) throw new Error('GitHub unavailable');
+      assert.equal(args.owner, 'example'); assert.equal(args.repo, 'intra');
+      if (method === github.rest.actions.listWorkflowRuns) {
+        assert.equal(args.workflow_id, 'ci.yml'); assert.equal(args.head_sha, sha);
+        assert.equal(args.branch, 'main');
+        return runs;
+      }
+      assert.equal(method, github.rest.actions.listJobsForWorkflowRun);
+      assert.equal(args.run_id, 10); assert.equal(args.filter, 'latest');
+      return jobs;
+    } };
+  const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+  await new AsyncFunction('github', 'context', 'core', step.with.script)(github, context, {
+    setOutput: (name, value) => { outputs[name] = value; }, info: () => {},
+  });
+  return outputs;
+}
+
+test('CI covers current checkout branch without invoking live business certification', () => {
+  const ci = workflow('ci');
+  assert.ok(ci.on.push.branches.includes('codex/reporting-security-foundation'));
+  assert.ok(ci.on.push.branches.includes('main'));
+  assert.ok(Object.hasOwn(ci.on, 'workflow_dispatch'));
+  assert.doesNotMatch(JSON.stringify(ci), /provision:test:uat|certify:onboarding-live|cleanup-uat-live-run|test:intra-live/);
+  assert.doesNotMatch(JSON.stringify(ci), /secrets\.|SUPABASE_SERVICE_ROLE_KEY|UAT_AUDIT|SMTP/);
+});
+
+test('deploy required names cover every actual CI job and matrix expansion', () => {
+  const names = Object.values(workflow('ci').jobs).flatMap(job => {
+    const matrix = job.strategy?.matrix;
+    if (!matrix) return [job.name];
+    const entries = Object.entries(matrix);
+    assert.equal(entries.length, 1, 'extend this regression when adding another matrix axis');
+    const [axis, values] = entries[0];
+    return values.map(value => job.name.replace(new RegExp(`\\$\\{\\{\\s*matrix\\.${axis}\\s*\\}\\}`, 'g'), value));
+  });
+  assert.deepEqual(names.sort(), [...requiredJobs].sort());
+  const sourceCi = workflow('ci');
+  assert.deepEqual(sourceCi.permissions, { contents: 'read' });
+  assert.ok(!JSON.stringify(sourceCi).includes('github/codeql-action'));
+  const live = workflow('uat-live-certification');
+  assert.equal(live.permissions['security-events'], 'write');
+  assert.equal(live.permissions.actions, 'read');
+  assert.equal(live.permissions.contents, 'read');
+  assert.ok(live.jobs.prepare.steps.some(step => step.uses?.startsWith('github/codeql-action/init@')));
+});
+
+test('coverage provider is frozen with the same version as every Vitest workspace', () => {
+  const version = require('vitest/package.json').version;
+  const manifest = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
+  assert.equal(manifest.devDependencies['@vitest/coverage-v8'], version);
+  const lock = yaml.load(readFileSync(new URL('../../pnpm-lock.yaml', import.meta.url), 'utf8'));
+  assert.equal(lock.importers['.'].devDependencies['@vitest/coverage-v8'].specifier, version);
+  assert.equal(lock.importers['.'].devDependencies['@vitest/coverage-v8'].version.split('(')[0], version);
+  assert.equal(lock.importers['apps/shell'].devDependencies.vitest.version.split('(')[0], version);
+  for (const [name, importer] of Object.entries(lock.importers)) {
+    const vitest = importer.devDependencies?.vitest;
+    if (vitest) assert.equal(vitest.version.split('(')[0], version, `${name} must match the shared coverage provider`);
+  }
+  const steps = workflow('ci').jobs.test.steps;
+  assert.ok(steps.some(step => step.run === 'pnpm install --frozen-lockfile'));
+  assert.ok(!steps.some(step => /pnpm add|COVERAGE_PKG/.test(step.run ?? '')), 'coverage job must not mutate the manifest or lockfile');
+});
+
+test('service-worker privacy acceptance is mandatory after Chromium installation in safe CI', () => {
+  const steps = workflow('ci').jobs.axe.steps;
+  const install = steps.findIndex(step => step.name === 'Install Playwright browsers');
+  const privacy = steps.findIndex(step => step.run === 'node --test scripts/qa/service-worker-privacy.mjs');
+  assert.ok(install >= 0 && privacy > install);
+  assert.match(steps[install].run, /pnpm --filter @intra\/shell exec playwright install --with-deps chromium/);
+  assert.equal(steps[privacy].if, undefined);
+  assert.equal(steps[privacy]['continue-on-error'], undefined);
+});
+
+test('deploy waits for CI and checks out the verified source SHA, never workflow_run default-branch SHA', () => {
+  const deploy = workflow('deploy-vercel');
+  assert.equal(deploy.on.push, undefined);
+  assert.deepEqual(deploy.on.workflow_run, { workflows: ['CI'], types: ['completed'], branches: ['main'] });
+  assert.equal(deploy.permissions.actions, 'read');
+  assert.equal(deploy.jobs.deploy.needs, 'verify-ci');
+  assert.equal(deploy.jobs.deploy.steps.find(step => step.uses?.startsWith('actions/checkout@')).with.ref, '${{ needs.verify-ci.outputs.source_sha }}');
+  assert.equal(deploy.jobs['verify-ci']['continue-on-error'], undefined);
+  assert.equal(deploy.jobs.deploy.if, undefined, 'failed CI gate must not be bypassed with always()');
+});
+
+for (const event of ['workflow_dispatch', 'workflow_run']) {
+  test(`${event} accepts only a same-repository successful CI with all required jobs`, async () => {
+    assert.equal((await gate({ event })).source_sha, sha);
+  });
+}
+
+for (const [label, change] of [
+  ['different SHA', run => { run.head_sha = 'b'.repeat(40); }],
+  ['different repository', run => { run.head_repository.full_name = 'fork/intra'; }],
+  ['wrong workflow', run => { run.path = '.github/workflows/other.yml'; }],
+  ['PR merge checks', run => { run.event = 'pull_request'; }],
+  ['different branch', run => { run.head_branch = 'feature'; }],
+  ['failure', run => { run.conclusion = 'failure'; }],
+  ['unfinished', run => { run.status = 'in_progress'; run.conclusion = null; }],
+]) {
+  test(`manual deployment rejects ${label}`, async () => {
+    const run = successfulRun(); change(run);
+    await assert.rejects(gate({ runs: [run] }));
+  });
+}
+
+test('manual deployment rejects missing CI, a newer failure, and GitHub API failure', async () => {
+  await assert.rejects(gate({ runs: [] }));
+  await assert.rejects(gate({ runs: [{ ...successfulRun(), id: 11, run_number: 11, conclusion: 'failure' }, successfulRun()] }));
+  await assert.rejects(gate({ apiError: true }));
+  await assert.rejects(gate({ ref: 'refs/heads/codex/reporting-security-foundation' }));
+});
+
+test('missing, skipped, failed or wrong-SHA required jobs cannot be replaced by overall success', async () => {
+  for (const name of requiredJobs) {
+    const jobs = requiredJobs.filter(item => item !== name).map(name => ({ name, status: 'completed', conclusion: 'success', head_sha: sha }));
+    await assert.rejects(gate({ jobs }));
+    for (const patch of [{ conclusion: 'skipped' }, { conclusion: 'failure' }, { head_sha: 'b'.repeat(40) }]) {
+      await assert.rejects(gate({ jobs: [...jobs, { name, status: 'completed', conclusion: 'success', head_sha: sha, ...patch }] }));
+    }
+  }
+});
+
+test('live mutations require manual consent while preserving the original separate SMTP opt-in', () => {
+  const live = workflow('uat-live-certification');
+  assert.equal(live.on.push, undefined, 'push must not provision or change training');
+  assert.equal(live.on.workflow_dispatch.inputs.run_mutating_certification.default, false);
+  for (const id of ['prepare', 'bundle']) {
+    assert.match(live.jobs[id].if, /github.event_name == 'workflow_dispatch'/);
+    assert.match(live.jobs[id].if, /inputs.run_mutating_certification/);
+    assert.doesNotMatch(live.jobs[id].if, /certify_vendor_email_delivery/);
+  }
+  assert.equal(live.on.workflow_dispatch.inputs.certify_vendor_email_delivery.default, false);
+  assert.equal(live.jobs.transactions.env.AUDIT_REQUIRE_VENDOR_DELIVERY,
+    "${{ github.event_name == 'workflow_dispatch' && inputs.certify_vendor_email_delivery && matrix.viewport == 'desktop-1440' }}");
+  assert.equal(live.jobs.routes.needs, 'prepare');
+  assert.match(live.jobs.transactions.if, /needs.prepare.result == 'success'/);
+  assert.match(live.jobs.cleanup.if, /needs.prepare.result == 'success'/);
+});
+
+test('both release bundles preserve the documentation tree and current linked handoff sources', async () => {
+  const { bundleReleaseDocumentation } = await import('./bundle-release-documentation.mjs');
+  const root = fileURLToPath(new URL('../../', import.meta.url));
+  const destination = mkdtempSync(path.join(tmpdir(), 'qa4-documentation-bundle-'));
+  try {
+    bundleReleaseDocumentation({ root, destination });
+    for (const name of ['deploy-vercel', 'uat-live-certification']) {
+      const job = workflow(name).jobs[name === 'deploy-vercel' ? 'deploy' : 'bundle'];
+      assert.ok(job.steps.some(step => /node scripts\/qa\/bundle-release-documentation\.mjs --output /.test(step.run ?? '')));
+      assert.ok(!job.steps.some(step => /cp docs\/manual\/index\.html/.test(step.run ?? '')));
+    }
+    const entries = [
+      'manual/MWELL_INTRA_USER_MANUAL.md', 'handoffs/current/README.md', 'handoffs/current/data.md',
+      'handoffs/current/technical.md', 'handoffs/current/testers.md',
+      'integrations/reporting-api/SEPARATE-IMPLEMENTATION-PHASE.md',
+    ];
+    const targets = new Set();
+    const visited = new Set();
+    for (const entry of entries) {
+      if (visited.has(entry)) continue;
+      visited.add(entry);
+      marked.walkTokens(marked.lexer(readFileSync(path.join(destination, entry), 'utf8')), token => {
+        if (token.type !== 'link' || /^(?:[a-z][a-z0-9+.-]*:|#)/i.test(token.href)) return;
+        const target = path.resolve(destination, path.dirname(entry), decodeURIComponent(token.href.split(/[?#]/)[0]));
+        // Repository source-code links are not documentation payloads. Keep
+        // checking every linked document, including transitive historical ones.
+        if (!target.startsWith(destination + path.sep) && /\.(?:[cm]?[jt]sx?|sql|ya?ml)$/.test(target)) return;
+        assert.ok(target.startsWith(destination + path.sep), `link escapes artifact: ${entry} -> ${token.href}`);
+        assert.ok(existsSync(target), `missing packaged target: ${entry} -> ${token.href}`);
+        const relative = path.relative(destination, target).replaceAll(path.sep, '/');
+        targets.add(relative);
+        if (relative.endsWith('.md') && !visited.has(relative)) entries.push(relative);
+      });
+    }
+    for (const required of ['handoffs/current/release-status.json', 'handoffs/2026-09-22/release-status.json',
+      'integrations/reporting-api/RELEASE-READINESS.md', 'superpowers/specs/2026-09-20-reporting-api-design.md',
+      'superpowers/plans/2026-09-20-reporting-api-implementation.md']) assert.ok(targets.has(required), required);
+    assert.deepEqual(readFileSync(path.join(destination, 'handoffs/current/release-status.json')),
+      readFileSync(path.join(root, 'docs/handoffs/current/release-status.json')), 'bundling must not advance deployment or acceptance claims');
+    const html = readFileSync(path.join(destination, 'manual/index.html'), 'utf8');
+    const hrefs = [...html.matchAll(/href="([^"]*handoffs\/current\/release-status\.json)"/g)];
+    assert.ok(hrefs.length >= 5);
+    for (const [, href] of hrefs) assert.equal(path.resolve(destination, 'manual', href), path.join(destination, 'handoffs/current/release-status.json'));
+    assert.match(readFileSync(path.join(destination, 'MWELL_INTRA_COMPLETE_DOCUMENTATION.html'), 'utf8'), /manual\/index\.html/);
+    assert.match(readFileSync(path.join(destination, 'MWELL_INTRA_USER_MANUAL.md'), 'utf8'), /manual\/MWELL_INTRA_USER_MANUAL\.md/);
+    assert.match(readFileSync(path.join(destination, 'manual/USER_TRAINING_AND_OPERATIONS_MANUAL.md'), 'utf8'), /\.\.\/USER_TRAINING_AND_OPERATIONS_MANUAL\.md/);
+  } finally {
+    rmSync(destination, { recursive: true, force: true });
+  }
+});

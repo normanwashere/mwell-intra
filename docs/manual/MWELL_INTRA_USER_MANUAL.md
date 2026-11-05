@@ -1,5 +1,19 @@
 # Mwell Intra Standalone Operating Handbook
 
+**Current release authority:** Read the [current release manifest](../handoffs/current/release-status.json) and [Data, Technical and Tester handoff](../handoffs/current/README.md). It records the last verified UAT build separately from the new candidate. The September handoff snapshot and dated checks below are historical; they do not certify this remediation. **Pending deployment and retest:** the main release worker must supply the immutable candidate and actual deployment evidence before these four-QA changes are described as live. SMTP is excluded. The [Reporting API remains disabled in a separate implementation phase](../integrations/reporting-api/SEPARATE-IMPLEMENTATION-PHASE.md).
+
+**Four-QA candidate operating guidance:**
+
+- **Shared-device privacy:** Response caches are public-only. Private API, page and document data must not reappear offline after sign-out, account change or access loss. The public offline screen is not access to private work. Reconnect and verify your account before continuing. Cache cleanup must preserve actor-scoped queued commands; do not clear all browser data to repair access or resubmit an uncertain command without checking its recorded result.
+- **Picking:** Scan a valid source bin for the order's warehouse and item. An unconstrained order must not force an insufficient first bin when another eligible bin can supply it. An explicitly assigned source bin still applies. Exact serial, hold, reservation and server stock checks remain mandatory; an enabled control or suggested bin is not a saved pick. This correction does not introduce split-bin picking or relax the existing fulfillment sequence.
+- **My Work:** Mixed-case legacy request IDs across multiple pages must remain visible when authorized. A failed source is not an empty queue. Retry loading without creating a duplicate request; verify the source record before acting.
+- **Procurement/Finance CSV:** Unknown ordered or received totals use blank numeric cells, not `NaN` or invented zero. Appended `Ordered Units Availability` and `Received Units Availability` columns distinguish `unknown` from `available`. A verified zero remains `0`. Keep unknowns explicit in downstream analysis and match the UI's receipt state; export access and payment authority remain separate.
+- **Finance scope:** Committed POs and net received use the displayed period when available. Inventory value is a current balance. Needs review, payment reviews, Finance close and activity remain **all time**. Match periods before reconciling detail to totals; a failed source is not zero activity.
+- **Accessible status:** Product workflow regions identify their record, version and product so assistive navigation can distinguish them. Their labels do not approve a package or complete Operations handoff.
+- **API access:** Anonymous protected API requests return JSON 401 with private/no-store rather than a sign-in redirect; signed-in capability denials remain 403. Page navigation still uses sign-in. This is the app's denial contract, not a new Reporting API.
+
+These are candidate instructions, not completed live checks. The [current tester checklist](../handoffs/current/testers.md) retains per-finding acceptance and the outstanding cross-module journeys. Preserve existing records, training, approvals, Quality independence and both Procurement-PO and emailed-PO receiving paths.
+
 ## Receiving Follow-Up: October 20
 
 Use the receipt's Storage handoff to retain its warehouse, product and receipt context. Check that context before selecting the destination; an unavailable or mismatched receipt must not silently send you to a different warehouse. Opening Storage does not move goods. After Quality acceptance, a quantity-tracked putaway may span eligible delivery batches in one atomic move. Each batch keeps its history and held stock stays in its current area. Refresh availability when the quantity has changed.
@@ -210,11 +224,11 @@ Task guides lead with outcome/access and prerequisites, then the existing decisi
 
 **Reviewed:** August 28, 2026 for the August 27 WMS feedback; other sections retain their documented acceptance boundaries
 
-**Current UAT operating baseline:** August 26, 2026; includes the August 24/25 WMS feedback scenarios, governed mixed PO receiving, exact serialized Quality custody, and corrected cross-role operational visibility
+**Historical UAT operating baseline:** August 26, 2026; includes the August 24/25 WMS feedback scenarios, governed mixed PO receiving, exact serialized Quality custody, and corrected cross-role operational visibility. Current identity and acceptance are in the release manifest linked above.
 
 **Procurement application behavior baseline:** `32170e425e125c63597ea8e05c6287a7cd256f5b`; schema boundary verified on UAT and commit-bound browser certification pending
 
-**Release authority:** Use the commit-bound manifest packaged with this handbook.
+**Release authority:** Use the [current release manifest](../handoffs/current/release-status.json), distributed with this handbook and its linked handoff sources. A dated or previously downloaded copy is a snapshot, not proof of today's deployment.
 
 **September 5 UAT follow-up:** Operations users may inspect an authorized purchase order and complete their acceptance work without receiving access to private payment documents. Payment-document lookup is reserved for employees with effective Procurement authoring, administration, or Finance-read capability. A scope message is expected for other PO viewers; do not request extra Finance access merely to remove that message. Putaway shows the selected stock identity once inside its capture dialog. Receiving progress, correction links, independent stock approval, and queued-versus-committed recovery are described in the September 5 operating guides. These UAT changes are not a promotion of the main production app, and full transaction certification is still pending.
 

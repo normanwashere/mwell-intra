@@ -184,9 +184,8 @@ function compatibilityGuideHash({ modeId, guideId, headingId }) {
 }
 
 function resolveDocumentLink(href, sourceFile, sourceIds, sourceRoutes) {
-  if (/^(https?:|mailto:|#)/i.test(href)) return href;
+  if (/^(?:[a-z][a-z0-9+.-]*:|\/|#)/i.test(href)) return href;
   const [filePart, fragment] = href.split("#", 2);
-  if (!filePart.toLowerCase().endsWith(".md")) return href;
   const target = normalize(
     path.relative(root, path.resolve(root, path.dirname(sourceFile), filePart)),
   );
@@ -194,7 +193,13 @@ function resolveDocumentLink(href, sourceFile, sourceIds, sourceRoutes) {
   const route =
     sourceRoutes.get(`${target}#${slug(fragment ?? "")}`) ??
     sourceRoutes.get(target);
-  return id && route ? canonicalGuideHash(route) : href;
+  if (id && route) return canonicalGuideHash(route);
+  // Linked handoff manifests live outside the embedded source catalogue.
+  if (existsSync(path.join(root, target))) {
+    const relative = normalize(path.relative(path.dirname(path.join(root, outputFile)), path.join(root, target)));
+    return fragment ? `${relative}#${fragment}` : relative;
+  }
+  return href;
 }
 
 function flowDiagramMetadata(text) {

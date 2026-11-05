@@ -4,7 +4,9 @@
 
 The security foundation is partial implementation. The operational app can be released separately; the Reporting API must remain unavailable until the gates below are verified. No environment variable, database role membership or client credential is supplied to bypass these gates. SMTP is not a dependency and remains excluded.
 
-The handoff-owned `docs/handoffs/2026-09-22/release-status.json` records the exact app build and current live checks. `FOUNDATION-PROGRESS.md`, `AUTHORITY-FOUNDATION.md`, `DEPENDENCY-REMEDIATION.md` and `source-map.md` record component evidence. A component pass does not close an integration gate.
+The [current release manifest](../../handoffs/current/release-status.json) records the last verified app deployment separately from the pending remediation candidate and acceptance gates. The [September snapshot](../../handoffs/2026-09-22/release-status.json) and CI212 are historical, not current certification. `FOUNDATION-PROGRESS.md`, `AUTHORITY-FOUNDATION.md`, `DEPENDENCY-REMEDIATION.md` and `source-map.md` record component evidence. A component pass does not close an integration gate.
+
+The Reporting API is a [separate implementation phase](SEPARATE-IMPLEMENTATION-PHASE.md) from the November 5 four-QA app remediation. Keep it disabled. Provider, dictionary, recipient and named-owner approvals remain pending; SCOPE-01 is not delivered or closed. The current app's deployment/retest is also pending until the main release worker supplies exact candidate evidence.
 
 ## Next Steps in Order
 

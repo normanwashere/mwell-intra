@@ -1,21 +1,83 @@
 name: Deploy to Vercel
 
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: vercel-production
+  cancel-in-progress: false
 
 env:
   VERCEL_ORG_ID: team_xHVECeOWiH6TGFfPGLc4Ej2J
   VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
 jobs:
+  verify-ci:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push') }}
+    outputs:
+      source_sha: ${{ steps.gate.outputs.source_sha }}
+    steps:
+      - name: Require successful same-source CI including every release job
+        id: gate
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const repository = `${context.repo.owner}/${context.repo.repo}`;
+            const trigger = context.payload.workflow_run;
+            const sourceSha = context.eventName === 'workflow_run' ? trigger?.head_sha : context.sha;
+            const branch = context.eventName === 'workflow_run' ? trigger?.head_branch : context.ref?.replace(/^refs\/heads\//, '');
+            if (!['workflow_dispatch', 'workflow_run'].includes(context.eventName) || branch !== 'main' || !/^[a-f0-9]{40}$/.test(sourceSha ?? '')) {
+              throw new Error('Deployment requires an exact main source commit.');
+            }
+            if (trigger && (trigger.head_repository?.full_name !== repository || trigger.event !== 'push' || trigger.conclusion !== 'success')) {
+              throw new Error('Deployment trigger is not trusted successful CI.');
+            }
+            const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
+              ...context.repo, workflow_id: 'ci.yml', head_sha: sourceSha, branch: 'main', per_page: 100,
+            });
+            // Do not resurrect an earlier success when the newest eligible run failed or is pending.
+            const run = runs.filter(item => item.head_sha === sourceSha && item.head_branch === 'main'
+              && item.head_repository?.full_name === repository && item.path === '.github/workflows/ci.yml'
+              && ['push', 'workflow_dispatch'].includes(item.event))
+              .sort((a, b) => b.run_number - a.run_number || b.run_attempt - a.run_attempt)[0];
+            if (!run || run.status !== 'completed' || run.conclusion !== 'success' || (trigger && run.id !== trigger.id)) {
+              throw new Error('Latest same-source CI must have completed successfully.');
+            }
+            const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+              ...context.repo, run_id: run.id, filter: 'latest', per_page: 100,
+            });
+            const required = [
+              'Learning source checks (fast, non-authoritative)', 'Learning applied PostgreSQL release authority',
+              'Knowledge Base contract', 'Typecheck (node 22)', 'Lint (node 22)', 'Test + coverage (node 22)',
+              'Build shell (node 22)', 'Accessibility (axe + playwright)',
+              ...[1, 2, 3].map(n => `E2E (playwright shard ${n}/3)`),
+            ];
+            for (const name of required) {
+              const matches = jobs.filter(job => job.name === name);
+              if (matches.length !== 1 || matches[0].head_sha !== sourceSha || matches[0].status !== 'completed' || matches[0].conclusion !== 'success') {
+                throw new Error(`Required same-source CI job did not succeed: ${name}`);
+              }
+            }
+            core.setOutput('source_sha', sourceSha);
+            core.info(`Verified CI run ${run.id} for ${sourceSha}`);
+
   deploy:
+    needs: verify-ci
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          ref: ${{ needs.verify-ci.outputs.source_sha }}
 
       - uses: pnpm/action-setup@v6
 
@@ -30,6 +92,7 @@ jobs:
       - name: Verify release documentation is synchronized
         env:
           DOCUMENTATION_BASE_SHA: ${{ github.event.before }}
+          GITHUB_SHA: ${{ needs.verify-ci.outputs.source_sha }}
         run: >-
           node scripts/qa/verify-release-documentation.mjs
           --manifest release-documentation/documentation-release-manifest.json
@@ -48,18 +111,7 @@ jobs:
 
       - name: Bundle maintained release documentation
         if: always()
-        shell: bash
-        run: |
-          mkdir -p release-documentation/manual release-documentation/releases
-          cp docs/manual/MWELL_INTRA_USER_MANUAL.md release-documentation/manual/
-          cp docs/manual/index.html release-documentation/MWELL_INTRA_COMPLETE_DOCUMENTATION.html
-          cp docs/USER_TRAINING_AND_OPERATIONS_MANUAL.md release-documentation/manual/
-          cp docs/TECHNICAL_AND_FUNCTIONAL_SPECIFICATION.md release-documentation/
-          cp docs/TRAINING_AND_HANDOVER_CONTENT.md release-documentation/
-          cp -R docs/releases/. release-documentation/releases/
-          if [ -d apps/shell/public/knowledge/screenshots ]; then
-            cp -R apps/shell/public/knowledge/screenshots release-documentation/screenshots
-          fi
+        run: node scripts/qa/bundle-release-documentation.mjs --output release-documentation
 
       - name: Upload release documentation bundle
         if: always()

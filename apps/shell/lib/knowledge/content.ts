@@ -756,7 +756,7 @@ const procedureArticles: KnowledgeArticle[] = [
       ],
       [
         "Allocate, split if short, and pick",
-        "Create an explicit reservation for available stock. If demand cannot be completed together, split the remaining quantity into a linked backorder. The picker first scans the recommended rack or bin, then uses camera or manual capture for every serialized unit. The screen reports missing bin and serial scans before submission. Optional line evidence supports bundles, damage, or exceptions; a serial or quantity found in another bin is rejected.",
+        "Create an explicit reservation for available stock. If demand cannot be completed together, split the remaining quantity into a linked backorder. Scan the source rack or bin before capturing each serialized unit. If the order has no assigned bin and the recommendation is insufficient, scan another valid source bin; an explicit source-bin assignment still applies. Current warehouse, exact serial, active hold and reservation checks remain mandatory. Do not combine picks from different bins in one pick. Resolve missing scans and verify the saved pick before packing. Optional line evidence supports bundles, damage or exceptions; stock outside the confirmed source bin is rejected.",
       ],
       [
         "Prepare shipment or handover",
@@ -818,10 +818,10 @@ const procedureArticles: KnowledgeArticle[] = [
     [
       ["Confirm cost basis", "Review PO, freight, duty, and allocation basis."],
       ["Propose price", "Record value, effective date, and reason."],
-      ["Review impact", "Finance validates valuation and margin impact."],
+      ["Review impact", "Finance validates valuation and margin impact. Committed POs and net received use the displayed period when available. Inventory value is a current balance. Needs review, payment reviews, Finance close and activity remain all time. Match scopes before reconciling detail to totals; a failed source is not zero activity."],
       [
         "Use governed report",
-        "Export only authorized data and preserve report context.",
+        "Export only authorized data and preserve report context. Viewing a report does not grant export permission. In the Procurement/Finance CSV, unknown ordered or received totals use blank numeric cells. Check Ordered Units Availability and Received Units Availability: unknown means the quantity is unavailable; verified zero remains 0 with available. Do not replace blanks with zero or calculate a complete total from partially known quantities. Compare the file with the receipt state before using it. An export does not confirm payment or complete daily reconciliation.",
       ],
     ],
   ),
@@ -982,8 +982,8 @@ const productOperatingArticles: KnowledgeArticle[] = [
       },
       {
         id: "current-evidence-status",
-        title: "Current evidence status",
-        body: "Reviewed against the Product workspace implementation on 2026-07-23. Current operational evidence is the persisted record metadata: record ID, product ID, version, status, evidence references, conditions or commercial basis, proposer or preparer, independent decision actor, decision note, effective date, Operations acknowledgement, and timestamps. No Product-specific desktop or mobile screenshot set has completed capture and independent review, so this article intentionally presents no screenshots and makes no screenshot certification claim.",
+        title: "Check the saved record",
+        body: "Check the record title, version and product when navigating between workflow status regions. Review the saved status, evidence, conditions, independent decision, effective date and Operations acknowledgement before acting. Reading a status label does not approve a package or complete Operations handoff. If the record or evidence is unavailable, refresh or ask the record owner to verify it; do not repeat an approval to repair the display.",
       },
     ],
     relatedArticleIds: [

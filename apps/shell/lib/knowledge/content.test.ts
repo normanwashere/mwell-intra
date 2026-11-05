@@ -941,7 +941,7 @@ describe("Knowledge Base content", () => {
       article?.sections.find(
         (section) => section.id === "current-evidence-status",
       )?.body,
-    ).toMatch(/no Product-specific desktop or mobile screenshot set/i);
+    ).toMatch(/verify it; do not repeat an approval to repair the display/i);
   });
 
   it("contains no credential-like documentation content", () => {

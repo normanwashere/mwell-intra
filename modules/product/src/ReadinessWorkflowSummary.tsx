@@ -153,5 +153,8 @@ export function ReadinessWorkflowSummary({
   item: ReadinessPackage;
   readFailed?: boolean;
 }) {
-  return <WorkflowSummary {...readinessWorkflowSummary(item, readFailed)} />;
+  return <WorkflowSummary
+    {...readinessWorkflowSummary(item, readFailed)}
+    ariaLabel={`Workflow status: ${item.title} (version ${item.version}, product ${item.productId})`}
+  />;
 }

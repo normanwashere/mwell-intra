@@ -18,12 +18,21 @@ const request = vi.fn(), rpc = vi.fn(), schema = vi.fn(), from = vi.fn(), select
 const id = '11111111-1111-4111-8111-111111111111';
 const operationCaps = warehouseModule.roles.operations.capabilities;
 const combinedCaps = [...new Set([...operationCaps, ...warehouseModule.roles.warehouse_operator.capabilities])];
+const position = (overrides: Partial<InventoryPosition> = {}): InventoryPosition => ({
+  productId: 'doctor-token', locationId: 'loc-wh', onHand: 200, committed: 0, held: 0, unavailable: 0,
+  available: 200, productAvailable: 200, putawayAvailable: 200, unscopedCommitted: 0, availabilityVerified: true,
+  ...overrides,
+});
 function Detail() {
   const [, refresh] = useState(0);
   return <><button onClick={() => refresh(n => n + 1)}>Refresh session</button>
     <Routes><Route path="/inventory/:id" element={<ProductDetailPage />} /></Routes></>;
 }
 function mount(capabilities = operationCaps, source: 'supabase' | 'memory' = 'supabase', repo?: ReturnType<typeof makeRepo>) {
+  if (!repo && source === 'supabase') {
+    repo = makeRepo();
+    vi.spyOn(repo, 'listInventoryPositions').mockResolvedValue({ rows: [position()], total: 1 });
+  }
   return renderWithProviders(<Detail />, { route: '/inventory/doctor-token', role: 'operations', source, capabilities, repo });
 }
 async function open() {
@@ -33,7 +42,7 @@ async function open() {
   return within(await screen.findByRole('dialog', { name: 'Recommend replenishment' }));
 }
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
   request.mockResolvedValue({ data: [], count: 0, error: null });
   rpc.mockResolvedValue({ data: { id, product_id: 'doctor-token', status: 'recommended' }, error: null });
   inStatus.mockReturnValue({ limit: request }); eq.mockReturnValue({ in: inStatus });
@@ -54,14 +63,39 @@ describe('Inventory recommendation entry', () => {
     await waitFor(() => expect(button).toBeDisabled());
     expect(screen.queryByRole('dialog', { name: 'Recommend replenishment' })).not.toBeInTheDocument();
     expect(schema).not.toHaveBeenCalled();
-    await act(async () => finish({ rows: [{ productId: 'doctor-token', locationId: 'loc-wh',
-      onHand: 10, committed: 0, held: 3, unavailable: 0, available: 7 }], total: 1 }));
+    await act(async () => finish({ rows: [position({ onHand: 10, held: 3, available: 7,
+      productAvailable: 7, putawayAvailable: 7 })], total: 1 }));
     const dialog = await opening;
     expect(await dialog.findByText('No active recommendation')).toBeVisible();
     expect(dialog.getByTestId('recommendation-available')).toHaveTextContent('7');
     fireEvent.click(screen.getByText('Refresh session'));
     expect(screen.getByRole('dialog', { name: 'Recommend replenishment' })).toBeVisible();
     expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('keeps legacy live positions unverified and prevents recommendation reads', async () => {
+    const repo = makeRepo();
+    const rows = [{ productId: 'doctor-token', locationId: 'loc-wh', onHand: 200,
+      committed: 0, held: 0, unavailable: 0, available: 200 }];
+    vi.spyOn(repo, 'listInventoryPositions').mockResolvedValue({ rows, total: rows.length });
+    mount(operationCaps, 'supabase', repo);
+    const entry = await screen.findByRole('button', { name: 'Recommend replenishment' });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh availability' })).toBeEnabled());
+    expect(screen.getByText('Unverified')).toBeVisible();
+    expect(entry).toBeDisabled(); fireEvent.click(entry);
+    expect(schema).not.toHaveBeenCalled(); expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('permits an explicit verified zero without private Quality access', async () => {
+    const repo = makeRepo();
+    vi.spyOn(repo, 'listInventoryPositions').mockResolvedValue({ rows: [position({ onHand: 0, available: 0,
+      productAvailable: 0, putawayAvailable: 0 })], total: 1 });
+    const holds = vi.spyOn(repo, 'listHolds').mockRejectedValue(new Error('Private hold read forbidden'));
+    mount(operationCaps, 'supabase', repo);
+    const dialog = await open(); await dialog.findByText('No active recommendation');
+    expect(dialog.getByTestId('recommendation-available')).toHaveTextContent(/^0$/);
+    expect(dialog.getByRole('button', { name: 'Save recommendation' })).toBeEnabled();
+    expect(holds).not.toHaveBeenCalled(); expect(rpc).not.toHaveBeenCalled();
   });
 
   it('uses the shared outlined button style for the icon and tap target', async () => {

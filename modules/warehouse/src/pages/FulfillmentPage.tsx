@@ -15,6 +15,7 @@ import type {
   FulfillmentAction,
   FulfillmentOrder,
   InventoryUnit,
+  InventoryPosition,
   KitDefinition,
   Product,
   ReKitWorkOrder,
@@ -25,6 +26,8 @@ import type {
 import { classifyRecord, normalizeSafeHttpsUrl, readRecordVisibility, recordIsVisible, RECORD_VIEWS } from "@intra/data-kit";
 import { useWarehouse } from "@/app/store";
 import { receiptAcknowledgmentBlockReason } from "@/domain/fulfillmentAcknowledgment";
+import { fulfillmentPickBins, recommendedFulfillmentBin } from '@/domain/fulfillmentPick';
+import { loadCompleteControlQueue } from '@/domain/controlQueues';
 import { FLOOR_WORK_PATH, isFloorWork, isReleasedFollowUp } from "@/domain/workQueues";
 import { isStockQuantity, resolveProductScan } from "@/domain/productScan";
 import {
@@ -1668,12 +1671,28 @@ function PickSheet({
 }) {
   const warehouse = useWarehouse();
   const { advanceFulfillmentOrder } = warehouse;
+  const positionLoader = useRef(warehouse.loadInventoryPositions);
+  positionLoader.current = warehouse.loadInventoryPositions;
+  const [positions, setPositions] = useState<InventoryPosition[]>([]);
+  const orderId = order?.id;
+  useEffect(() => {
+    if (!orderId || warehouse.source !== 'supabase') return;
+    let active = true;
+    setPositions([]);
+    // Public inventory positions enrich routing only. Failed/unavailable reads
+    // must not introduce a new picker permission or bypass server validation.
+    void loadCompleteControlQueue(query => positionLoader.current(query))
+      .then(rows => { if (active) setPositions(rows); })
+      .catch(() => { if (active) setPositions([]); });
+    return () => { active = false; };
+  }, [orderId, warehouse.identityId, warehouse.source]);
   const toast = useToast();
   const [serials, setSerials] = useState<Record<string, string>>({});
   const [productCodes, setProductCodes] = useState<Record<string, string>>({});
   const [pickedQuantities, setPickedQuantities] = useState<Record<string, string>>({});
   const pendingCommand = useRef<Parameters<typeof advanceFulfillmentOrder>[0] | null>(null);
   const [binCodes, setBinCodes] = useState<Record<string, string>>({});
+  const [selectedBins, setSelectedBins] = useState<Record<string, string>>({});
   const [pickEvidence, setPickEvidence] = useState<Record<string, string[]>>(
     {},
   );
@@ -1689,23 +1708,19 @@ function PickSheet({
   const [unconfirmed, setUnconfirmed] = useState(false);
   const [queued, setQueued] = useState(false);
   if (!order) return null;
-  const recommendedBin = (productId: string) => {
-    const unitBin = units.find(
-      (unit) =>
-        unit.productId === productId &&
-        unit.status === "in_stock" &&
-        unit.binId &&
-        (!order.sourceLocationId || unit.locationId === order.sourceLocationId),
-    )?.binId;
-    const stockBin = stockLevels.find(
-      (level) =>
-        level.productId === productId &&
-        level.quantity > 0 &&
-        level.binId &&
-        (!order.sourceLocationId ||
-          level.locationId === order.sourceLocationId),
-    )?.binId;
-    return storageAreas.find((area) => area.id === (unitBin ?? stockBin));
+  const pickStock = {
+    products, units, stockLevels, storageAreas,
+    fulfillmentReservations: warehouse.data?.fulfillmentReservations ?? [],
+  };
+  const binOptions = (productId: string) => fulfillmentPickBins(pickStock, order, productId, [], positions);
+  const recommendedBin = (productId: string) => selectedBins[productId]
+    ? binOptions(productId).find(candidate => candidate.bin.id === selectedBins[productId])?.bin
+    : recommendedFulfillmentBin(pickStock, order, productId, [], positions);
+  const requiresBin = (productId: string) => {
+    const stock = products.find(product => product.id === productId)?.serialized
+      ? units.filter(unit => unit.status === 'in_stock') : stockLevels.filter(level => level.quantity > 0);
+    return Boolean(order.sourceBinId || stock.some(row => row.productId === productId && row.binId
+      && (!order.sourceLocationId || row.locationId === order.sourceLocationId)));
   };
   const captured = (productId: string) => (serials[productId] ?? "").split(/[\n,]/).map((value) => value.trim()).filter(Boolean);
   const verifiedBin = (productId: string) => {
@@ -1717,7 +1732,7 @@ function PickSheet({
   };
   const serialError = (productId: string, code: string, existing: string[]) => {
     const normalized = code.trim().toLowerCase();
-    if (recommendedBin(productId) && !verifiedBin(productId)) return "Scan the correct source bin before scanning items.";
+    if (requiresBin(productId) && !verifiedBin(productId)) return "Scan the correct source bin before scanning items.";
     if (existing.some((value) => value.toLowerCase() === normalized)) return `${code} was already scanned.`;
     const unit = units.find((row) => row.serialNumber.toLowerCase() === normalized);
     if (!unit) return `Unknown serial: ${code}.`;
@@ -1739,10 +1754,14 @@ function PickSheet({
     for (const line of pendingCommand.current ? [] : order.lines) {
       const product = products.find((row) => row.id === line.productId);
       const suggestion = recommendedBin(line.productId);
-      if (suggestion && !verifiedBin(line.productId)) {
+      if (requiresBin(line.productId) && !verifiedBin(line.productId)) {
         setValidationError(
           `Scan the source rack or bin for ${product?.name ?? line.productId} before scanning items.`,
         );
+        return;
+      }
+      if (suggestion && (binOptions(line.productId).find(candidate => candidate.bin.id === suggestion.id)?.available ?? 0) < line.quantity) {
+        setValidationError(`No single source bin has ${line.quantity} available units of ${product?.name ?? line.productId}. Use split backorder or relocate stock before picking.`);
         return;
       }
       const capturedSerials = (serials[line.productId] ?? "")
@@ -1880,6 +1899,11 @@ function PickSheet({
               <p className="text-xs text-muted">
                 Required quantity: {line.quantity}
               </p>
+              {requiresBin(line.productId) && !binOptions(line.productId).some(candidate => candidate.available >= line.quantity) && (
+                <p role="status" className="mt-2 text-sm text-amber-800 dark:text-amber-300">
+                  No single source bin has {line.quantity} available units. Use split backorder or relocate stock before picking.
+                </p>
+              )}
               {suggestion ? (
                 <div className="mt-3 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 dark:border-brand-800 dark:bg-brand-900/30">
                   <p className="text-xs font-semibold text-brand-800 dark:text-brand-200">
@@ -1904,7 +1928,7 @@ function PickSheet({
                     1. Scan source rack or bin
                   </p>
                   <p className="mt-1 text-xs text-muted">
-                    Required before item scanning. Expected code:{" "}
+                    Required before item scanning. Suggested code:{" "}
                     <span className="font-mono font-semibold">
                       {suggestion.code}
                     </span>
@@ -1916,15 +1940,18 @@ function PickSheet({
                       manualActionLabel="Use bin"
                       disabled={saving || evidence.pending}
                       onDetected={(code) => {
-                        if (code.trim().toLowerCase() !== suggestion.code.toLowerCase() || suggestion.active === false || (order.sourceLocationId && suggestion.locationId !== order.sourceLocationId)) {
+                        const candidate = binOptions(line.productId).find(option => option.bin.code.toLowerCase() === code.trim().toLowerCase()
+                          && option.available >= line.quantity);
+                        if (!candidate) {
                           setBinCodes((current) => ({ ...current, [line.productId]: "" }));
-                          setValidationError(`Wrong source bin. Scan ${suggestion.code} for ${product?.name ?? line.productId}.`);
+                          setValidationError(`Wrong source bin. Scan an active source bin with ${line.quantity} available units of ${product?.name ?? line.productId}.`);
                           return;
                         }
                         setValidationError("");
+                        setSelectedBins(current => ({ ...current, [line.productId]: candidate.bin.id }));
                         setBinCodes((current) => ({
                           ...current,
-                          [line.productId]: suggestion.code,
+                          [line.productId]: candidate.bin.code,
                         }));
                       }}
                     />

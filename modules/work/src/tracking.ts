@@ -110,6 +110,7 @@ export async function readTrackingSource(client: Client, source: TrackingSource,
   const closed = source === 'procurement' ? ['rejected', 'cancelled'] : ['rejected', 'cancelled', 'closed'];
   try {
     const rows: unknown[] = [];
+    const seenCursors = new Set<string>();
     let after = '';
     // Immutable IDs keep updates from shifting an offset window. Only open work is exhausted.
     while (accepts()) {
@@ -123,7 +124,9 @@ export async function readTrackingSource(client: Client, source: TrackingSource,
       if (!data.length) break;
       const last = data[data.length - 1] as unknown;
       const next = text(last && typeof last === 'object' ? (last as Row).id : undefined);
-      if (!next || (after && next <= after)) throw new Error('Tracking cursor did not advance');
+      // Database collation owns ordering; JavaScript lexical comparison can reject valid pages.
+      if (!next || seenCursors.has(next)) throw new Error('Tracking cursor did not advance');
+      seenCursors.add(next);
       after = next;
       // Continue to an empty page, even when a server-side cap is smaller than ours.
     }

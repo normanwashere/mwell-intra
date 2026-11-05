@@ -4,6 +4,13 @@ import { describe, expect, it } from 'vitest';
 import { WorkflowSummary } from './WorkflowSummary';
 
 describe('WorkflowSummary', () => {
+  it('names a contextual status landmark and preserves the default for standalone summaries', () => {
+    const props = { status: 'Awaiting review', owner: 'Product', nextStep: 'Review the evidence.' };
+    const contextual = renderToStaticMarkup(createElement(WorkflowSummary, { ...props, ariaLabel: 'Workflow status: Release package' }));
+    expect(contextual).toContain('aria-label="Workflow status: Release package"');
+    const standalone = renderToStaticMarkup(createElement(WorkflowSummary, props));
+    expect(standalone).toContain('aria-label="Workflow status"');
+  });
   it('keeps status, next responsibility, and next step ahead of supplementary links', () => {
     const html = renderToStaticMarkup(createElement(WorkflowSummary, {
       status: 'Awaiting review', owner: 'Procurement / Finance', nextStep: 'Confirm the current evidence.',

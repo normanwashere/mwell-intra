@@ -144,7 +144,10 @@ export function FinanceApp() {
         <a className="inline-flex min-h-11 items-center" href="#finance-close">Finance close</a>
         <a className="inline-flex min-h-11 items-center" href="#finance-activity">Activity</a>
       </nav>
-      {data.totals && <p className="text-sm text-muted">Activity period: {data.totals.periodStart} to {data.totals.periodEnd}</p>}
+      <div className="space-y-1 text-sm text-muted" aria-label="Finance reporting scope">
+        <p>Committed POs and net received: {data.sourceStates?.activity === 'error' ? 'unavailable' : data.totals ? `${data.totals.periodStart} to ${data.totals.periodEnd}` : 'all available activity'}</p>
+        <p>Inventory value: current balance. Needs review, payment reviews, Finance close and activity: all time.</p>
+      </div>
       <FinanceOverview summary={summary} states={data.sourceStates} procurement={procurementFinance} warehouse={warehouseFinance} />
       {data.sourceStates?.inventory === 'error' && <button className="btn-outline" disabled={retryingSources.inventory} onClick={() => void retrySource('inventory')}>Retry inventory source</button>}
 

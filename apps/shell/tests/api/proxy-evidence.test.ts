@@ -40,7 +40,7 @@ it.each([
   expect(state.sessionUser).not.toHaveBeenCalled();
 });
 
-it.each(['/warehouse/allocations', '/api/evidence-other', '/api/evidence/private']) (
+it.each(['/warehouse/allocations']) (
   'retains the existing session gate outside the exact self-authenticating route: %s', async (path) => {
     const { proxy } = await import('@shell/proxy');
     const response = await proxy(new NextRequest(`https://intra.test${path}`));
@@ -50,6 +50,21 @@ it.each(['/warehouse/allocations', '/api/evidence-other', '/api/evidence/private
     expect(destination.searchParams.get('redirect')).toBe(path);
   },
 );
+
+it.each(['/api/admin/audit?limit=1', '/api/evidence-other', '/api/evidence/private', '/api/private.json'])('returns private JSON 401 for anonymous API %s', async path => {
+  const { proxy } = await import('@shell/proxy');
+  const response = await proxy(new NextRequest(`https://intra.test${path}`));
+  expect(response.status).toBe(401);
+  expect(response.headers.get('location')).toBeNull();
+  expect(response.headers.get('cache-control')).toBe('private, no-store');
+  expect(await response.json()).toEqual({ error: 'Authentication required.' });
+});
+
+it('keeps public health reachable without a session', async () => {
+  const { proxy } = await import('@shell/proxy');
+  const response = await proxy(new NextRequest('https://intra.test/api/health'));
+  expect(response.headers.get('x-middleware-next')).toBe('1');
+});
 
 it('continues to admit authenticated page requests', async () => {
   state.sessionUser.mockResolvedValue({ data: { user: { id: 'actor-A' } } });

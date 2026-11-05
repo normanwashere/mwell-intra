@@ -207,9 +207,13 @@ test('migration changes only the acknowledgment guard and preserves OIDs, grants
   const before = await definitions(db);
   await db.exec(sql.migration);
   const after = await definitions(db);
-  const guard = extract(sql.migration, '    if v_order.delivery_method is null', '    end if;');
+  // Reverse only the migration's exact replacement, including its native line
+  // endings. Removing an LF-prefixed guard from CRLF SQL left an extra CR.
+  const oldText = extract(sql.migration, '$old$  if', '$old$;').slice('$old$'.length, -'$old$;'.length);
+  const newText = extract(sql.migration, '$new$  if', '$new$;').slice('$new$'.length, -'$new$;'.length);
+  assert.equal(after.find(row => row.proname === 'warehouse_advance_fulfillment_order_v2').prosrc.split(newText).length - 1, 1);
   assert.deepEqual(after.map(row => row.proname === 'warehouse_advance_fulfillment_order_v2'
-    ? { ...row, prosrc: row.prosrc.replace(`\n${guard}`, '') } : row), before);
+    ? { ...row, prosrc: row.prosrc.replace(newText, oldText) } : row), before);
   const grants = (await rows(db, `select
     has_function_privilege('authenticated', 'warehouse.advance_fulfillment_order(jsonb)', 'execute') as exposed,
     has_function_privilege('anon', 'warehouse.advance_fulfillment_order(jsonb)', 'execute') as anonymous,

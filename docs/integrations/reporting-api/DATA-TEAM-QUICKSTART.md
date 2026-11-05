@@ -1,5 +1,7 @@
 # Connect and Sync: Data-Team Handoff
 
+Current release authority: [release manifest](../../handoffs/current/release-status.json). This is a [separate, disabled implementation phase](SEPARATE-IMPLEMENTATION-PHASE.md), not part of the four-QA app fixes. September engineering checks below are historical component evidence. Provider/dictionary approval and named recipient ownership remain unconfirmed; proposed commands are not a working connection.
+
 September 20, 2026 design; status clarified September 23. **There is no working API or connector yet.** Tested security helpers and a draft field dictionary are engineering inputs, not a dashboard connection. Commands below define the eventual delivery; do not run them as if they are available today. See [current implementation evidence](FOUNDATION-PROGRESS.md).
 
 ## What You Will Receive

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Icon } from './Icon';
 
 export interface WorkflowSummaryProps {
+  ariaLabel?: string;
   status: string;
   owner: string;
   nextStep: string;
@@ -11,13 +12,13 @@ export interface WorkflowSummaryProps {
 }
 
 /** Describes the source workflow; never grants access or decides a transition. */
-export function WorkflowSummary({ status, owner, nextStep, blocker, tone = 'neutral', children }: WorkflowSummaryProps) {
+export function WorkflowSummary({ ariaLabel = 'Workflow status', status, owner, nextStep, blocker, tone = 'neutral', children }: WorkflowSummaryProps) {
   const blockingReason = blocker?.trim();
   const statusTone = blockingReason || tone === 'warning'
     ? 'text-amber-800 dark:text-amber-200'
     : tone === 'success' ? 'text-emerald-800 dark:text-emerald-200' : 'text-ink';
   return (
-    <section aria-label="Workflow status" className="my-4 min-w-0 border-y border-line py-3 sm:my-5 sm:py-4">
+    <section aria-label={ariaLabel} className="my-4 min-w-0 border-y border-line py-3 sm:my-5 sm:py-4">
       <dl className="grid min-w-0 grid-cols-2 gap-x-5 gap-y-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,2fr)]">
         <div className="min-w-0">
           <dt className="text-xs font-semibold text-muted">Current status</dt>
