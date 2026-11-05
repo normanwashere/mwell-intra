@@ -258,6 +258,16 @@ test('serialized transfer and lot-aware putaway SQL regressions are mandatory in
   assert.equal(job['continue-on-error'], undefined);
 });
 
+test('QC-to-putaway conversion provenance is mandatory in required CI', () => {
+  const job = workflow('ci').jobs.lint;
+  const step = job.steps.find(item => item.run === 'node --test scripts/verify-stock-conversion-putaway.pglite.test.mjs');
+  assert.ok(step, 'run the real SQL and production repository payload regressions');
+  assert.equal(step.if, undefined);
+  assert.equal(step['continue-on-error'], undefined);
+  assert.equal(job.if, undefined);
+  assert.equal(job['continue-on-error'], undefined);
+});
+
 test('applied PostgreSQL executes verified canonical baseline and complete forward source without bypass', () => {
   const job = workflow('ci').jobs['learning-applied-postgres'];
   const steps = job.steps;

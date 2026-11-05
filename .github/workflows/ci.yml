@@ -164,6 +164,8 @@ jobs:
         env:
           QA_TRANSFER_BASELINE: "0"
         run: node --test --test-concurrency=1 scripts/verify-serialized-transfer-authority.pglite.test.mjs scripts/verify-lot-aware-putaway.pglite.test.mjs
+      - name: Verify Quality-to-putaway conversion provenance
+        run: node --test scripts/verify-stock-conversion-putaway.pglite.test.mjs
       - name: Lint
         run: pnpm lint
 

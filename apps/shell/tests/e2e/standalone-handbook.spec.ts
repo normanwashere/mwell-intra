@@ -8,8 +8,8 @@ import { fileURLToPath } from 'node:url';
 // Serve the real offline artifact, not the authenticated shell at '/'. A tiny
 // worker-owned HTTP fixture avoids embedding its 25 MB body in route.fulfill
 // protocol traces. It never starts Next or touches another test server.
-const test = base.extend<{}, { handbookURL: string }>({
-  handbookURL: [async ({}, use) => {
+const test = base.extend<{ baseURL: string }, { handbookURL: string }>({
+  handbookURL: [async ({ browserName: _browserName }, use) => {
     const body = await readFile(new URL('../../../../docs/manual/index.html', import.meta.url));
     const server = createServer((request, response) => {
       const root = new URL(request.url ?? '/', 'http://127.0.0.1').pathname === '/';
@@ -337,7 +337,8 @@ test('governed source controls remain collapsed, unique, and canonically address
 });
 
 test('every legacy deep link migrates to an existing canonical destination', async ({ page }, testInfo) => {
-  test.setTimeout(180_000);
+  // Traverse all 525 maintained routes, including traced layout work for each destination.
+  test.setTimeout(240_000);
   if (testInfo.project.name !== 'desktop-1440') test.skip();
   await page.goto('/');
 
@@ -374,7 +375,7 @@ test('every legacy deep link migrates to an existing canonical destination', asy
     return { count: routes.length, failures };
   });
 
-  expect(failures.count).toBe(309);
+  expect(failures.count).toBe(525);
   expect(failures.failures).toEqual([]);
   await expect(page.locator('#route-notice')).toContainText(/link has moved/i);
 });
@@ -854,9 +855,11 @@ test('keeps the current mode label synchronized across activation history recove
   await expect(label).toHaveText('Home');
   await page.getByRole('tab', { name: 'Tasks', exact: true }).click();
   await expect(label).toHaveText('Tasks');
+  await page.getByRole('searchbox').fill('stock');
   await page.getByRole('button', { name: 'This mode', exact: true }).click();
   await expect(page.getByRole('button', { name: 'This mode', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(label).toHaveText('Tasks');
+  await page.getByRole('searchbox').fill('');
   await page.getByRole('tab', { name: 'Roles', exact: true }).click();
   await expect(label).toHaveText('Roles');
   await page.getByRole('tab', { name: 'System', exact: true }).click();
@@ -877,6 +880,7 @@ test('keeps the current mode label synchronized across activation history recove
   });
   await page.reload();
   await expect(label).toHaveText('Roles');
+  await page.getByRole('searchbox').fill('stock');
   await expect(page.getByRole('button', { name: 'This mode', exact: true })).toHaveAttribute('aria-pressed', 'true');
 });
 
@@ -885,6 +889,8 @@ test('fits visible Mermaid content inside its viewport and preserves dark contra
   await page.goto('/#mode=tasks&guide=procurement-request-approval');
   const shell = page.locator('article[data-guide-id="procurement-request-approval"] .diagram-shell').first();
   await shell.locator('..').locator(':scope > summary').click();
+  await expect(shell).toHaveAttribute('data-diagram-scale', '1');
+  await shell.getByRole('button', { name: 'Fit diagram to available space', exact: true }).click();
   await expect(shell).toHaveAttribute('data-diagram-scale', 'fit');
 
   const diagramMetrics = async () => shell.evaluate((element) => {
@@ -1015,7 +1021,13 @@ test('mobile starts with a compact brand search menu row and vertical modes', as
   await page.goto('/#mode=tasks&guide=stock-receiving-putaway');
 
   const firstRow = page.locator('.topbar-first-row');
-  await expect(firstRow.getByText('mwell', { exact: true })).toBeVisible();
+  const brand = firstRow.getByRole('link', { name: 'Mwell Intra operating handbook home', exact: true });
+  await expect(brand).toBeVisible();
+  await expect(brand).toHaveAttribute('href', '#mode=home&guide=home');
+  const logo = brand.locator('img');
+  await expect(logo).toBeVisible();
+  await expect(logo).toHaveAttribute('src', /^data:image\//);
+  await expect.poll(() => logo.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0 && image.naturalHeight > 0)).toBe(true);
   await expect(firstRow.getByRole('searchbox')).toBeVisible();
   const menu = firstRow.getByRole('button', { name: 'Menu', exact: true });
   await expect(menu).toBeVisible();
@@ -1093,14 +1105,18 @@ test('keeps every mobile toolbar control touch-safe', async ({ page }, testInfo)
 
   await page.keyboard.press('Escape');
   await expectTouchSafeGroup([
-    page.getByRole('link', { name: 'Steps', exact: true }),
+    page.getByRole('link', { name: 'Start at step 1', exact: true }),
     page.getByRole('button', { name: 'In this guide', exact: true }),
   ], 'guide jump');
+  const decisionMap = page.locator('article[data-guide-id="stock-receiving-putaway"] .full-decision-map');
+  await expect(decisionMap).not.toHaveAttribute('open');
+  await decisionMap.locator(':scope > summary').click();
+  await expect(decisionMap).toHaveAttribute('open');
   await expectTouchSafeGroup([
-    page.getByRole('button', { name: 'Fit diagram to available space' }),
-    page.getByRole('button', { name: 'Show diagram at 100 percent' }),
-    page.getByRole('button', { name: 'Zoom diagram out' }),
-    page.getByRole('button', { name: 'Zoom diagram in' }),
+    decisionMap.getByRole('button', { name: 'Fit diagram to available space' }),
+    decisionMap.getByRole('button', { name: 'Show diagram at 100 percent' }),
+    decisionMap.getByRole('button', { name: 'Zoom diagram out' }),
+    decisionMap.getByRole('button', { name: 'Zoom diagram in' }),
   ], 'diagram toolbar');
 
   await page.goto('/#mode=system&guide=source-references&heading=source-user-manual');
@@ -1118,10 +1134,11 @@ test('mobile task controls expose stable stage navigation without covering conte
 
   const guideControls = page.locator('article[data-guide-id="stock-receiving-putaway"] .guide-jump-controls');
   const guideHeader = page.locator('article[data-guide-id="stock-receiving-putaway"] .article-header');
-  const category = guideHeader.locator('.category');
   const title = guideHeader.locator('h1');
   await expect(title).toBeFocused();
-  await expect(guideControls.getByRole('link', { name: 'Steps', exact: true })).toBeVisible();
+  const startStep = guideControls.getByRole('link', { name: 'Start at step 1', exact: true });
+  await expect(startStep).toBeVisible();
+  await expect(startStep).toHaveAttribute('href', '#mode=tasks&guide=stock-receiving-putaway&heading=step-1');
   await expect(guideControls.getByRole('button', { name: 'In this guide', exact: true })).toBeVisible();
   const guideGeometry = await page.evaluate(() => {
     const header = document.querySelector('article[data-guide-id="stock-receiving-putaway"] .article-header') as HTMLElement;
@@ -1146,6 +1163,9 @@ test('mobile task controls expose stable stage navigation without covering conte
   expect(guideGeometry.heading.top).toBeGreaterThanOrEqual(guideGeometry.badge.bottom);
   expect(guideGeometry.jumps.top).toBeGreaterThanOrEqual(guideGeometry.header.bottom - 1);
   expect(guideGeometry.jumps.bottom).toBeLessThanOrEqual(guideGeometry.viewportHeight);
+  await startStep.click();
+  await expect(page).toHaveURL(/heading=step-1/);
+  await expectFocusedBelowStickyChrome(page.locator('#stock-receiving-putaway-step-1 h3'));
   const firstStage = page.locator('article[data-guide-id="stock-receiving-putaway"] [data-task-stage]').first();
   const nextStage = firstStage.getByRole('link', { name: /^Next:/ });
   await expect(nextStage).toBeVisible();
@@ -1190,7 +1210,7 @@ test('mobile and desktop certified screenshot viewer traps focus and returns foc
   await expect(guide.locator('[data-screen-evidence="certified"] [data-open-screenshot-surface]')).toHaveCount(4);
 });
 
-test('completes the keyboard-only handbook journey without drawer or diagram traps', async ({ page }, testInfo) => {
+test('completes the keyboard-only handbook journey without drawer or diagram traps', async ({ page }) => {
   test.setTimeout(60_000);
   await page.goto('/#mode=tasks&guide=procurement-request-approval');
   const compact = (page.viewportSize()?.width ?? 1440) <= 1180;

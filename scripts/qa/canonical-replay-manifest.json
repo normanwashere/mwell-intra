@@ -1481,6 +1481,11 @@
       "file": "20261105141930_serialized_transfer_quantity_identity.sql",
       "sha256": "8704110436a8bce29b577c067dd584c24e993d96b32508d3ff430977ab4224ef",
       "action": "execute-forward"
+    },
+    {
+      "file": "20261105195433_stock_conversion_qc_putaway_bridge.sql",
+      "sha256": "cbe9d3eac2522c750bf8dc79e3ec35f3b142fc123d59481e114302cb935d1aaf",
+      "action": "execute-forward"
     }
   ]
 }

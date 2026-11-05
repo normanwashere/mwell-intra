@@ -10,6 +10,15 @@ import type {
 
 const MEMORY_SESSION_KEY = "intra.memory-session.v1";
 
+function workspaceOutcomeName(flow: KnowledgeFlow, edge: KnowledgeFlowEdge) {
+  const target = flow.nodes.find((node) => node.id === edge.to);
+  expect(target, `${flow.id}:${edge.to} outcome destination`).toBeDefined();
+  const owners = target!.ownerRoleIds
+    .map((id) => KNOWLEDGE_CONTENT.roles.find((role) => role.id === id)?.label ?? id)
+    .join(", ");
+  return [edge.label ?? "Next step", owners].filter(Boolean).join(" ");
+}
+
 async function installSession(
   page: Page,
   profileId = "demo-admin",
@@ -304,8 +313,10 @@ test("all principal workflows, decision outcomes, and terminal nodes are navigab
           ).toBeVisible();
           await page
             .getByRole("region", { name: decision.title, exact: true })
-            .getByRole("button", { name: outcome.label!, exact: true })
-            .first()
+            .getByRole("button", {
+              name: workspaceOutcomeName(flow, outcome),
+              exact: true,
+            })
             .click();
           const choiceId = edgeChoiceId(flow, outcome);
           await expect
@@ -338,16 +349,28 @@ test("branch backtracking and four workflow views share one selected node", asyn
   const edge = flow.edges.find((item) => item.from === decision.id)!;
   await page.goto(`/knowledge?flow=${flow.id}&view=steps&step=${decision.id}`);
   await page.getByRole("tab", { name: "Flow" }).click();
-  await page.getByRole("button", { name: edge.label!, exact: true }).click();
+  const mobileFlow = (page.viewportSize()?.width ?? 0) < 640;
+  await page
+    .getByRole("region", { name: decision.title, exact: true })
+    .getByRole("button", {
+      name: mobileFlow ? edge.label! : workspaceOutcomeName(flow, edge),
+      exact: true,
+    })
+    .click();
   await expect(page).toHaveURL(/branch=/);
-  if ((page.viewportSize()?.width ?? 0) < 640)
+  if (mobileFlow)
     await page.getByRole("button", { name: "Backtrack" }).click();
   else await page.goBack();
   await expect(page).toHaveURL(new RegExp(`step=${decision.id}`));
   for (const tab of ["Step-by-step", "Roles involved", "Exceptions"] as const) {
     await page.getByRole("tab", { name: tab }).click();
-    await expect(page).toHaveURL(/step=/);
+    await expect
+      .poll(() => new URL(page.url()).searchParams.get("step"))
+      .toBe(decision.id);
     await expect(page.getByRole("tabpanel", { name: tab })).toBeVisible();
+    await expect(
+      page.getByRole("region", { name: decision.title, exact: true }),
+    ).toBeVisible();
   }
 });
 
@@ -410,10 +433,17 @@ test("deep links, refresh, scroll restoration, and every evidence hotspot remain
       candidate.nodes.some(
         (candidateNode) => candidateNode.evidenceId === item.id,
       ),
-    )!;
-    const evidenceNode = evidenceFlow.nodes.find(
+    );
+    const evidenceNode = evidenceFlow?.nodes.find(
       (candidateNode) => candidateNode.evidenceId === item.id,
-    )!;
+    );
+    const evidenceFeature = KNOWLEDGE_CONTENT.features.find(
+      (feature) => feature.id === item.featureId,
+    );
+    expect(
+      evidenceNode ?? evidenceFeature,
+      `${item.id} must belong to a workflow node or feature guide`,
+    ).toBeDefined();
     for (const src of [item.desktopSrc, item.mobileSrc]) {
       const response = await request.get(src);
       expect(response.ok(), `${item.id} ${src}`).toBeTruthy();
@@ -425,17 +455,24 @@ test("deep links, refresh, scroll restoration, and every evidence hotspot remain
     ] as const) {
       await page.setViewportSize({ width, height });
       await page.goto(
-        `/knowledge?flow=${evidenceFlow.id}&view=steps&step=${evidenceNode.id}`,
+        evidenceFlow && evidenceNode
+          ? `/knowledge?flow=${evidenceFlow.id}&view=steps&step=${evidenceNode.id}`
+          : `/knowledge?article=feature-${encodeURIComponent(evidenceFeature!.id)}`,
       );
       const region = page.getByRole("region", {
-        name: evidenceNode.title,
+        name: evidenceNode?.title ?? "Screen guide",
         exact: true,
       });
       await expect(region).toBeVisible();
-      const image = region.locator("img");
+      const image = region.getByRole("img", { name: item.alt, exact: true });
+      await expect(image).toHaveCount(1);
       await expect(image).toBeVisible();
+      await expect(image).toHaveJSProperty("complete", true);
+      await expect.poll(() => image.evaluate((element: HTMLImageElement) => element.naturalWidth)).toBeGreaterThan(0);
+      // Each picture and its markers share a canvas, even in multi-image guides.
+      const canvas = image.locator("..").locator("..");
       for (const hotspot of item.hotspots) {
-        const marker = region.getByRole("button", {
+        const marker = canvas.getByRole("button", {
           name: `${hotspot.number}. ${hotspot.label}`,
           exact: true,
         });

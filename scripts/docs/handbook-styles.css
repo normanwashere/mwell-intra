@@ -1362,10 +1362,6 @@ html[data-theme="dark"] .diagram-shell figcaption {
     grid-template-columns: minmax(96px, max-content);
   }
 
-  .article-body table {
-    display: table;
-  }
-
   .article-body thead th {
     position: sticky;
     top: var(--handbook-header-height);
@@ -2231,6 +2227,10 @@ html[data-theme="dark"] .diagram-shell figcaption {
 
   html[data-theme="dark"] .guide-jump-controls {
     background: var(--surface);
+  }
+
+  html[data-theme="dark"] .guide-jump-controls a {
+    color: var(--surface);
   }
 
   .article-body {

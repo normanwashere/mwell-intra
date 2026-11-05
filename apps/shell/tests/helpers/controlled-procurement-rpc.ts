@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 export const CONTROLLED_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'http://127.0.0.1:54321';
 export const CONTROLLED_ANON_KEY = 'controlled-rpc-anon-key';
 
-export type ActorKey = 'procurement' | 'vendor' | 'unrelatedVendor' | 'admin' | 'legal' | 'legalMaker' | 'legalDecider' | 'operations' | 'deptHead' | 'finance' | 'financeNoCapability' | 'unrelated' | 'exceptionReviewer' | 'exceptionFinance' | 'exceptionDoa';
+export type ActorKey = 'procurement' | 'vendor' | 'unrelatedVendor' | 'admin' | 'legal' | 'legalMaker' | 'legalDecider' | 'operations' | 'deptHead' | 'finance' | 'varianceDeptHead' | 'varianceFinance' | 'financeNoCapability' | 'unrelated' | 'exceptionReviewer' | 'exceptionFinance' | 'exceptionDoa';
 type Actor = {
   id: string;
   email: string;
@@ -91,6 +91,16 @@ const ACTORS: Record<ActorKey, Actor> = {
     roles: { core: ['staff'], finance: ['controller'] },
     capabilities: { core: ['view_directory', 'view_vendors'] },
   },
+  varianceDeptHead: {
+    id: 'controlled-variance-department-head', email: 'variance.department.head@mwell.test', name: 'Controlled Variance Department Head', title: 'Operations Department Head',
+    roles: { core: ['staff'], operations: ['department_head'] },
+    capabilities: { core: ['view_directory', 'view_vendors'] },
+  },
+  varianceFinance: {
+    id: 'controlled-variance-finance', email: 'variance.finance@mwell.test', name: 'Controlled Variance Finance Reviewer', title: 'Finance Controller',
+    roles: { core: ['staff'], finance: ['controller'] },
+    capabilities: { core: ['view_directory', 'view_vendors'], procurement: ['view_finance'] },
+  },
   unrelated: {
     id: 'controlled-unrelated', email: 'unrelated.controlled@mwell.test', name: 'Controlled Unrelated Employee', title: 'Customer Service Associate',
     roles: { core: ['staff'], operations: ['customer_service'] },
@@ -112,6 +122,12 @@ const ACTORS: Record<ActorKey, Actor> = {
     capabilities: { core: ['view_directory', 'view_vendors'], procurement: ['view_dashboard'] },
   },
 };
+
+const TASK10_PAYMENT_DOCUMENTS = [
+  { id: 'controlled-invoice-10', filename: 'invoice-10.pdf', purpose: 'invoice' },
+  { id: 'controlled-acceptance-document-10', filename: 'acceptance-10.pdf', purpose: 'acceptance' },
+  { id: 'controlled-tax-10', filename: 'tax-10.pdf', purpose: 'tax' },
+];
 
 type RpcCall = {
   actor: string;
@@ -212,11 +228,11 @@ function sessionFor(actor: Actor) {
   };
 }
 
-function response(route: Route, body: unknown, status = 200) {
+function response(route: Route, body: unknown, status = 200, headers: Record<string, string> = {}) {
   return route.fulfill({
     status,
     contentType: 'application/json',
-    headers: { 'access-control-allow-origin': '*' },
+    headers: { 'access-control-allow-origin': '*', ...headers },
     body: JSON.stringify(body),
   });
 }
@@ -268,11 +284,14 @@ export class ControlledProcurementRpcFixture {
   lifecycle: Record<string, unknown> | null = null;
   private task9: { certified: boolean; acknowledgement?: { actorId: string; revision: number; reference: string; documentHash: string } } | null = null;
   monitoring: Array<Record<string, unknown>> = [];
+  private readonly requestCollaborators = new Set<string>();
   task10: { acceptance: boolean; prepared: boolean; accepted: boolean; released: boolean; closureRequested: boolean; closed: boolean; vendorCurrent: boolean; legalRevision: number; clearanceOpened: boolean } | null = null;
   private readonly varianceAssignments = [
     { actorId: ACTORS.deptHead.id, stage: 'department_head' as const, assignmentId: 'controlled-department_head-assignment' },
     { actorId: ACTORS.finance.id, stage: 'finance' as const, assignmentId: 'controlled-finance-assignment' },
     { actorId: ACTORS.financeNoCapability.id, stage: 'finance' as const, assignmentId: 'controlled-finance-no-capability-assignment' },
+    { actorId: ACTORS.varianceDeptHead.id, stage: 'department_head' as const, assignmentId: 'controlled-variance-department-head-assignment' },
+    { actorId: ACTORS.varianceFinance.id, stage: 'finance' as const, assignmentId: 'controlled-variance-finance-assignment' },
   ];
 
   constructor() {
@@ -420,6 +439,8 @@ export class ControlledProcurementRpcFixture {
   }
 
   prepareExceptionWorkspace() {
+    this.requestCollaborators.add(ACTORS.exceptionReviewer.id);
+    this.requestCollaborators.add(ACTORS.exceptionDoa.id);
     Object.assign(this.request, {
       title: 'Controlled petty-cash exception',
       description: 'Stateful exception-workspace browser evidence.',
@@ -468,6 +489,8 @@ export class ControlledProcurementRpcFixture {
   }
 
   prepareTask10PurchaseOrder() {
+    // Task 10's independent closure approver is explicitly shared this request.
+    this.requestCollaborators.add(ACTORS.deptHead.id);
     this.sourcing = { id: 'controlled-sourcing-10', status: 'draft', submissionDeadline: '2026-09-30T04:00:00.000Z', intendedResponses: 3, packageVersion: 'RFQ-CONTROLLED-010-v1', packageHash: 'a'.repeat(64), responses: [] };
     this.purchaseOrder = { id: 'controlled-po-task-10', po_number: 'PO-CONTROLLED-010', request_id: this.requestId, core_vendor_id: 'vendor-1', vendor_name: 'Acme Medical Supplies, Inc.', status: 'approved', total: 1000, origin: 'procurement', actor_email: ACTORS.procurement.email, expected_date: '2026-09-01', notes: 'Controlled issued PO evidence.', source_award_status: 'approved', lines: [{ id: 'line-1', description: 'Governed clinical supply', quantity: 1, receivedQuantity: 1, uom: 'ea', unitPrice: 1000 }], created_at: '2026-08-22T00:00:00.000Z', updated_at: '2026-08-22T00:00:00.000Z' };
     this.request.requester_id = ACTORS.operations.id;
@@ -512,8 +535,14 @@ export class ControlledProcurementRpcFixture {
     return this.profiles.find((profile) => profile.status === 'active' && profile.relationship === 'mwell_operating')!;
   }
 
-  private workspace() {
+  private workspace(actor?: Actor) {
+    const varianceDecisionsVisible = Boolean(actor && (
+      this.hasCapability(actor, 'procurement', 'manage_rfp')
+      || this.hasCapability(actor, 'procurement', 'approve_award')
+      || this.hasCapability(actor, 'procurement', 'view_finance')
+    ));
     return {
+      requestId: this.requestId,
       event: this.sourcing
         ? {
             id: this.sourcing.id,
@@ -525,6 +554,14 @@ export class ControlledProcurementRpcFixture {
             selectedVendorId: this.sourcing.selectedVendorId,
             closureNote: this.sourcing.closureNote,
             responses: this.sourcing.responses,
+            communications: [],
+            commercialTabulations: this.commercialTabulations.map((item) => ({ ...item })),
+            technicalEvaluations: this.technicalEvaluations.map((item) => ({ ...item })),
+            awardRecommendation: this.awardRecommendation ? { ...this.awardRecommendation } : null,
+            varianceDecisionsVisible,
+            varianceEligibility: varianceDecisionsVisible && actor
+              ? this.varianceEligibility(actor) : { canReview: false },
+            ...(varianceDecisionsVisible ? { varianceDecisions: this.varianceDecisions.map((item) => ({ ...item })) } : {}),
           }
         : null,
     };
@@ -688,18 +725,33 @@ export class ControlledProcurementRpcFixture {
     }
     const table = relative.split('/')[0]!;
     this.log(actor, request.headers()['accept-profile'] ?? 'public', `read:${table}`, Object.fromEntries(url.searchParams));
-    const rows = this.rowsFor(table, url);
+    const rows = this.rowsFor(table, url, actor);
+    const offset = Number(url.searchParams.get('offset') ?? '0');
+    const limit = Number(url.searchParams.get('limit') ?? String(rows.length));
+    if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 0) {
+      return failure(route, 'Invalid controlled query range');
+    }
+    const page = rows.slice(offset, offset + limit);
+    const exactCount = request.headers().prefer?.split(',').some(preference => preference.trim() === 'count=exact');
+    const headers: Record<string, string> = exactCount ? {
+      'content-range': page.length ? `${offset}-${offset + page.length - 1}/${rows.length}` : `*/${rows.length}`,
+      'access-control-expose-headers': 'content-range',
+    } : {};
     const single = request.headers().accept?.includes('application/vnd.pgrst.object+json');
-    return response(route, single ? (rows[0] ?? null) : rows);
+    return response(route, single ? (page[0] ?? null) : page, 200, headers);
   }
 
-  private rowsFor(table: string, url: URL): Array<Record<string, unknown>> {
+  private rowsFor(table: string, url: URL, actor?: Actor): Array<Record<string, unknown>> {
     const filtered = <T extends Record<string, unknown>>(rows: T[]) => {
       const id = url.searchParams.get('id');
       if (!id?.startsWith('eq.')) return rows;
       return rows.filter((row) => String(row.id) === id.slice(3));
     };
-    if (table === 'requests') return filtered([{ ...this.request }]);
+    if (table === 'requests') {
+      const canRead = actor && (this.request.requester_id === actor.id || this.requestCollaborators.has(actor.id)
+        || ['author_po', 'manage_rfp', 'view_finance', 'admin'].some(cap => this.hasCapability(actor, 'procurement', cap)));
+      return canRead ? filtered([{ ...this.request }]) : [];
+    }
     if (table === 'purchase_orders') return this.purchaseOrder ? filtered([{ ...this.purchaseOrder }]) : [];
     if (table === 'approval_steps') return [];
     if (table === 'acceptance_packs') return this.task10?.acceptance ? [{ id: 'controlled-acceptance-10', purchase_order_id: 'controlled-po-task-10', request_id: this.requestId, acceptance_type: 'goods_receipt', accepted_scope: { summary: 'Warehouse receipt accepted against the governed PO.', lines: [{ po_line_id: 'line-1', quantity: 1 }] }, accepted_amount: 1000, exceptions: [], accepted_by_email: ACTORS.operations.email, accepted_at: '2026-08-23T00:00:00.000Z', status: 'accepted' }] : [];
@@ -802,8 +854,22 @@ export class ControlledProcurementRpcFixture {
       if (name === 'payment_readiness_staleness_work_items') return response(route, []);
       if (name === 'purchase_order_closure_work_items') return response(route, actor.id === ACTORS.deptHead.id && this.task10.closureRequested && !this.task10.closed ? [{ closure_request_id: 'controlled-closure-10', purchase_order_id: 'controlled-po-task-10', po_number: 'PO-CONTROLLED-010', closure_reason: 'Controlled obligations complete.', requested_by_name: ACTORS.procurement.name, requested_at: '2026-08-23T00:00:00.000Z' }] : []);
       if (name === 'evaluation_workspace') return response(route, { commercialTabulations: [], technicalEvaluations: [], awardRecommendation: null, varianceDecisions: [] });
+      if (name === 'payment_evidence_options') {
+        if (!['author_po', 'admin', 'view_finance'].some(cap => this.hasCapability(actor, 'procurement', cap))) return failure(route, 'Payment evidence access required', 403);
+        if (payload.purchase_order_id !== this.purchaseOrder?.id) return failure(route, 'Purchase order unavailable', 404);
+        const documents = this.task10.acceptance ? TASK10_PAYMENT_DOCUMENTS : [];
+        return response(route, {
+          foreignVendor: false,
+          documents,
+          packDocuments: this.task10.prepared && payload.pack_id === 'controlled-payment-10' ? documents : [],
+        });
+      }
       if (name === 'prepare_invoice_payment_readiness') {
         if (!isProcurement || !this.task10.acceptance || !this.task10.vendorCurrent) return failure(route, 'Current Legal eligibility and acceptance evidence are required', 403);
+        if (payload.purchase_order_id !== this.purchaseOrder?.id
+          || payload.invoice_or_si_storage_path !== TASK10_PAYMENT_DOCUMENTS[0]!.id
+          || payload.milestone_support_storage_path !== TASK10_PAYMENT_DOCUMENTS[1]!.id
+          || payload.tax_withholding_support_storage_path !== TASK10_PAYMENT_DOCUMENTS[2]!.id) return failure(route, 'Current PO-bound payment documents are required');
         this.task10.prepared = true;
         return response(route, { id: 'controlled-payment-10', status: 'ready_for_finance', invoice_amount: 1000 });
       }
@@ -909,7 +975,7 @@ export class ControlledProcurementRpcFixture {
       if (payload.request_id !== this.requestId || !this.canReadSourcing(actor)) {
         return failure(route, 'No procurement sourcing access is assigned to this account.', 403);
       }
-      return response(route, this.workspace());
+      return response(route, this.workspace(actor));
     }
     if (name === 'insufficient_bid_exception') return response(route, null);
     if (name === 'evaluation_workspace') {
@@ -923,7 +989,7 @@ export class ControlledProcurementRpcFixture {
       this.sourcing.intendedResponses = Number(payload.intended_responses ?? 3);
       this.sourcing.packageVersion = String(payload.package_version ?? '');
       this.sourcing.packageHash = String(payload.package_hash ?? '');
-      return response(route, this.workspace());
+      return response(route, this.workspace(actor));
     }
     if (name === 'invite_sourcing_vendors') {
       if (!this.sourcing) return failure(route, 'Sourcing event is required');
@@ -1053,7 +1119,7 @@ export class ControlledProcurementRpcFixture {
         this.sourcing.packageHash = String(payload.package_hash);
       }
       if (payload.action === 'cancel') this.sourcing.status = 'cancelled';
-      return response(route, this.workspace());
+      return response(route, this.workspace(actor));
     }
     if (name === 'get_effective_policy_profile') return response(route, this.effectiveProfile());
     if (name === 'save_policy_profile') {

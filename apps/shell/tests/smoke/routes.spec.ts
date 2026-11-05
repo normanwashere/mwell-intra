@@ -536,6 +536,23 @@ test('reachability keeps identically labelled controls separate', async ({ page 
   await assertControlsAreReachable(page, 'duplicate-label-uncovered', testInfo);
 });
 
+test('reachability retains obstructions beyond its diagnostic limit', async ({ page }, testInfo) => {
+  await page.setContent(`<meta name="viewport" content="width=device-width, initial-scale=1"><style>
+    body { margin: 0; min-height: 2000px; }
+    #actions { position: fixed; top: 0; left: 0; display: grid; grid-template-columns: repeat(3, 92px); gap: 4px; }
+    button { width: 92px; height: 48px; }
+    #last { position: absolute; top: 220px; left: 0; }
+    #cover { position: absolute; top: 210px; left: 0; width: 100px; height: 68px; z-index: 2; background: white; }
+    #temporary { position: fixed; inset: 0; z-index: 3; background: white; }
+  </style><div id="actions">${Array.from({ length: 12 }, (_, index) => `<button>Action ${index + 1}</button>`).join('')}</div>
+  <button id="last">Last action</button><div id="cover"></div><div id="temporary"></div>
+  <script>addEventListener('scroll', () => { const cover = document.querySelector('#temporary'); if (cover) cover.hidden = scrollY > 0; });</script>`);
+  await expect(assertControlsAreReachable(page, 'thirteenth-obstruction', testInfo)).rejects.toThrow(/intercepted/);
+  await page.locator('#cover').evaluate((element) => element.remove());
+  await page.locator('#temporary').evaluate((element) => element.remove());
+  await assertControlsAreReachable(page, 'all-thirteen-uncovered', testInfo);
+});
+
 async function assertControlsAreReachable(
   page: Page,
   path: string,
@@ -741,8 +758,7 @@ async function assertControlsAreReachable(
                 blocker: describeElement(blocker),
               };
             })
-            .filter((item): item is BlockedTargetIssue => item !== null)
-            .slice(0, 12);
+            .filter((item): item is BlockedTargetIssue => item !== null);
 
           return {
             reachableTargets,

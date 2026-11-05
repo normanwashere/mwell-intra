@@ -765,7 +765,13 @@
           event.preventDefault();
           const targetIndex = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (index + keyToOffset[event.key] + tabs.length) % tabs.length;
           const target = tabs[targetIndex];
-          activateRoute({ ...activeRoute, modeId: target.dataset.mode, guideId: target.dataset.mode === 'home' ? 'home' : null, headingId: null, historyMode: 'push', restoreScroll: false, focusTarget: true });
+          const keepContentsOpen = activeCompactSurface === 'contents';
+          const returnFocus = compactSurfaceReturnFocus;
+          activateRoute({ ...activeRoute, modeId: target.dataset.mode, guideId: target.dataset.mode === 'home' ? 'home' : null, headingId: null, historyMode: 'push', restoreScroll: false, focusTarget: false });
+          if (keepContentsOpen) {
+            openCompactSurface('contents', { focusSurface: false });
+            compactSurfaceReturnFocus = returnFocus;
+          }
           target.focus();
         }
       });

@@ -6,6 +6,9 @@ import {
   type ActorKey,
 } from '../helpers/controlled-procurement-rpc';
 
+// The runner records every actor context, including successful phases.
+test.use({ trace: 'on', actionTimeout: 10_000 });
+
 type ControlledSession = {
   actorKey: ActorKey;
   page: Page;
@@ -33,16 +36,14 @@ async function signIn(page: Page, actorKey: ActorKey, redirect: string) {
   await expect(page.getByRole('heading', { name: 'Sign in' })).toHaveCount(0);
 }
 
-async function controlledSession(browser: Browser, fixture: ControlledProcurementRpcFixture, actorKey: ActorKey, redirect: string, testInfo: TestInfo, traceName: string): Promise<ControlledSession> {
+async function controlledSession(browser: Browser, fixture: ControlledProcurementRpcFixture, actorKey: ActorKey, redirect: string, testInfo: TestInfo): Promise<ControlledSession> {
   const context: BrowserContext = await browser.newContext({ viewport: testInfo.project.use.viewport });
   const consoleErrors: string[] = [];
   const pageErrors: string[] = [];
   const failedControlledRequests: string[] = [];
   const controlledResponses: string[] = [];
-  const captureTrace = traceName === 'legal-decider' || traceName === 'closure-approver';
   let closed = false;
   await installControlledRpc(context, fixture, actorKey);
-  if (captureTrace) await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
   const page = await context.newPage();
   page.on('pageerror', (cause) => {
     const diagnostic = `${cause.message}\n${cause.stack ?? ''}`;
@@ -80,9 +81,6 @@ async function controlledSession(browser: Browser, fixture: ControlledProcuremen
     close: async () => {
       if (closed) return;
       closed = true;
-      if (captureTrace) {
-        await settleCleanup(context.tracing.stop({ path: testInfo.outputPath(`task-10-${traceName}-${testInfo.project.name}.zip`) }));
-      }
       await settleCleanup(context.close());
     },
   };
@@ -99,13 +97,14 @@ test('Task 10 controlled signed-in authority journey proves Legal recovery throu
   const progress: string[] = [];
   const mark = (stage: string) => { progress.push(stage); console.log(`Task 10 ${testInfo.project.name}: ${stage}`); };
   const openSession = async (actorKey: ActorKey, redirect: string, traceName: string) => {
-    const session = await controlledSession(browser, fixture, actorKey, redirect, testInfo, traceName);
+    const session = await test.step(traceName, () => controlledSession(browser, fixture, actorKey, redirect, testInfo));
     sessions.push(session);
     return session;
   };
 
   try {
   const legalMaker = await openSession('legalMaker', '/legal/cases', 'legal-maker');
+  await legalMaker.page.getByRole('button', { name: 'Vendor lifecycle', exact: true }).click();
   await expect(legalMaker.page.getByRole('region', { name: 'Legal VMO eligibility authority workspace' })).toBeVisible();
   await legalMaker.page.getByLabel('PO win rate').fill('0.2');
   await legalMaker.page.getByLabel('Delivery commitment rate').fill('1');
@@ -127,6 +126,7 @@ test('Task 10 controlled signed-in authority journey proves Legal recovery throu
   mark('legal maker recorded probation and clearance');
 
   const legalDecider = await openSession('legalDecider', '/legal/cases', 'legal-decider');
+  await legalDecider.page.getByRole('button', { name: 'Vendor lifecycle', exact: true }).click();
   await expect(legalDecider.page.getByRole('region', { name: 'Legal VMO eligibility authority workspace' })).toBeVisible();
   await legalDecider.page.getByLabel('Clearance ID').fill('controlled-clearance-10');
   await legalDecider.page.getByLabel('Expected revision').last().fill('1');
@@ -142,7 +142,7 @@ test('Task 10 controlled signed-in authority journey proves Legal recovery throu
   await procurement.page.getByLabel('Vendor to invite').selectOption('vendor-1');
   await procurement.page.getByRole('button', { name: 'Record invitation' }).click();
   await expect(procurement.page.getByText('Controlled vendor invitation recorded')).toBeVisible();
-  await expect(procurement.page.getByText('Approved', { exact: true })).toBeVisible();
+  await expect(procurement.page.getByRole('region', { name: 'Workflow status', exact: true }).getByText('Approved', { exact: true })).toBeVisible();
   await procurement.page.goto(poPath);
   expect(procurement.pageErrors, `PO route page errors\n${procurement.controlledResponses.join('\n')}`).toEqual([]);
   await expect(procurement.page.getByText('PO-CONTROLLED-010')).toBeVisible();
@@ -170,9 +170,9 @@ test('Task 10 controlled signed-in authority journey proves Legal recovery throu
   await paymentPreparer.page.getByLabel('Withholding amount').fill('20');
   await paymentPreparer.page.getByLabel('Invoice date').fill('2026-08-23');
   await paymentPreparer.page.getByLabel('Due date').fill('2026-09-23');
-  await paymentPreparer.page.getByLabel('Invoice, OR, or SI private reference').fill('private/invoice-10.pdf');
-  await paymentPreparer.page.getByLabel('Delivery or milestone private reference').fill('private/acceptance-10.pdf');
-  await paymentPreparer.page.getByLabel('Tax and withholding private reference').fill('private/tax-10.pdf');
+  await paymentPreparer.page.getByRole('combobox', { name: 'Invoice, OR, or SI document', exact: true }).selectOption('controlled-invoice-10');
+  await paymentPreparer.page.getByRole('combobox', { name: 'Delivery or milestone document', exact: true }).selectOption('controlled-acceptance-document-10');
+  await paymentPreparer.page.getByRole('combobox', { name: 'Tax and withholding document', exact: true }).selectOption('controlled-tax-10');
   await paymentPreparer.page.getByRole('button', { name: 'Validate match and send to Finance' }).click();
   await expect(paymentPreparer.page.getByText('Payment evidence sent to Finance')).toBeVisible();
   await expect(paymentPreparer.page.getByText('Ready for Finance')).toBeVisible();
@@ -194,7 +194,8 @@ test('Task 10 controlled signed-in authority journey proves Legal recovery throu
   await expect(closureRequester.page.getByLabel('Governed closure reason')).toBeVisible();
   await closureRequester.page.getByLabel('Governed closure reason').fill('Controlled obligations complete.');
   await closureRequester.page.getByRole('button', { name: 'Request governed closure' }).click();
-  await expect(closureRequester.page.getByText('Request governed closure')).toBeVisible();
+  await expect(closureRequester.page.getByRole('button', { name: 'Request governed closure', exact: true })).toBeVisible();
+  await expect.poll(() => fixture.task10?.closureRequested).toBe(true);
   await closureRequester.close();
   mark('Procurement requested closure');
 
@@ -203,9 +204,10 @@ test('Task 10 controlled signed-in authority journey proves Legal recovery throu
   await approver.page.getByRole('button', { name: 'Approve governed closure' }).click();
   await expect(approver.page.getByText('Independent governed closure approved')).toBeVisible();
   await expect(approver.page.getByRole('region', { name: 'Independent closure approval' })).toContainText('Governed closure approved by an independent final approver.');
-  await expect(approver.page.getByText('Closed', { exact: true })).toBeVisible();
-  await expect(approver.page.getByText('Closure', { exact: true }).locator('..')).toContainText('closed');
-  await expect(approver.page.getByText('Issue controls satisfied before closure')).toBeVisible();
+  await expect(approver.page.getByRole('region', { name: 'Workflow status', exact: true }).getByText('Closed', { exact: true })).toBeVisible();
+  await expect(approver.page.getByRole('region', { name: 'PO commitment readiness', exact: true }).getByText('Governed closure', { exact: true }).locator('..')).toContainText('closed');
+  await expect(approver.page.getByText('Closed PO: current controls satisfied', { exact: true })).toBeVisible();
+  await expect(approver.page.getByText('Issue controls satisfied before closure')).toHaveCount(0);
   await expect(approver.page.getByText('Package closed')).toBeVisible();
   await expect(approver.page.getByText('QC:').locator('..')).toContainText('accepted');
   await expect(approver.page.getByText('Ready to commit')).toHaveCount(0);
@@ -221,6 +223,12 @@ test('Task 10 controlled signed-in authority journey proves Legal recovery throu
   expect(fixture.callsNamed('invite_sourcing_vendors').map((call) => call.actor)).toEqual(['controlled-procurement']);
   expect(fixture.callsNamed('issue_purchase_order').map((call) => call.actor)).toEqual(['controlled-procurement']);
   expect(fixture.callsNamed('record_acceptance_pack').map((call) => call.actor)).toEqual(['controlled-operations']);
+  expect(fixture.callsNamed('prepare_invoice_payment_readiness')).toHaveLength(1);
+  expect(fixture.callsNamed('prepare_invoice_payment_readiness')[0]).toMatchObject({
+    actor: actor('procurement').id,
+    payload: { purchase_order_id: 'controlled-po-task-10', invoice_or_si_storage_path: 'controlled-invoice-10',
+      milestone_support_storage_path: 'controlled-acceptance-document-10', tax_withholding_support_storage_path: 'controlled-tax-10' },
+  });
   expect(fixture.callsNamed('review_payment_readiness').map((call) => call.actor)).toEqual(['controlled-finance']);
   expect(fixture.callsNamed('release_payment').map((call) => call.actor)).toEqual(['controlled-finance']);
   expect(fixture.callsNamed('approve_purchase_order_closure').map((call) => call.actor)).toEqual(['controlled-department-head']);

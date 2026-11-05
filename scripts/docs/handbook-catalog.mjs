@@ -14,6 +14,20 @@ export const HANDBOOK_TABS = Object.freeze([
 
 const CATALOG = [
   {
+    source: "docs/releases/2026-11-06-RELEASE-READINESS.md",
+    id: "nov06-release-readiness",
+    title: "November 6 Release Readiness",
+    primaryTab: "release",
+    relatedTabs: ["workflows", "security"],
+    contentType: "release-note",
+    audience: ["operator", "trainer", "developer", "release-reviewer"],
+    summary: "Candidate fixes, verification limits, stock-conversion follow-up and exact release gates; this is not a deployment notice or go-live approval.",
+    keywords: ["release", "readiness", "CI", "stock conversion", "verification", "UAT"],
+    sortOrder: -6,
+    collapse: "reference",
+    relatedSources: ["docs/manual/MWELL_INTRA_USER_MANUAL.md"],
+  },
+  {
     source: "docs/releases/2026-11-05-WMS-AUDIT-REMEDIATION.md",
     id: "nov05-wms-audit-remediation",
     title: "November 5 WMS Audit Fixes",

@@ -11608,5 +11608,299 @@
         "effect": "commit"
       }
     ]
+  },
+  {
+    "name": "20261105195433_stock_conversion_qc_putaway_bridge.sql",
+    "statements": [
+      {
+        "kind": "begin",
+        "sha256": "e6f07d43b5c21db0fbb9a31feac2dc599787763393dd5acbfad80e247eb02ad5",
+        "effect": "begin"
+      },
+      {
+        "kind": "dynamic-program",
+        "sha256": "166639ffc2adcf0d33f704e2247b73cc2307722d60145718304d2b0284b635be",
+        "effect": [
+          "private.external_po_inspect",
+          "private.warehouse_record_unit_history",
+          "private.warehouse_transfer_pre_lot_putaway"
+        ]
+      },
+      {
+        "kind": "create table",
+        "sha256": "7d4d14efd13f259c00d08cf2b7761532c5b1843dfeec996a84c575ba989c8a42",
+        "effect": "create table private.stock_conversion_qc_origins ( inspection_id uuid primary key, unit_id text not null unique, registration_id bigint not null, unit_state jso"
+      },
+      {
+        "kind": "create table",
+        "sha256": "9bbd75b6066c921ade4922cbb77c39fe7fd07f704759eef084194e9b5aa16e69",
+        "effect": "create table private.stock_conversion_qc_breaks ( inspection_id uuid primary key references private.stock_conversion_qc_origins(inspection_id), source_table tex"
+      },
+      {
+        "kind": "create table",
+        "sha256": "742a4b933916056e43bcc19cfa7c205692f1b40e98b9ad6500fdf44f7410ad0d",
+        "effect": "create table private.stock_conversion_putaway_bridges ( unit_id text primary key, inspection_id uuid not null unique references private.stock_conversion_qc_orig"
+      },
+      {
+        "kind": "create index",
+        "sha256": "b7d4a175237a1ef2f44c8a7b491e1f41d12568f8a9299fe37020219c3a24c695",
+        "effect": "create index stock_conversion_origin_serial_lookup on private.stock_conversion_qc_origins((unit_state->>'serial_number'))"
+      },
+      {
+        "kind": "create index",
+        "sha256": "76c797c81757eb0dd7e17c8941bcd30eb10b95f2b52b908052ff388959668cb7",
+        "effect": "create index stock_conversion_origin_scope_lookup on private.stock_conversion_qc_origins((unit_state->>'product_id'),(unit_state->>'location_id'))"
+      },
+      {
+        "kind": "create index",
+        "sha256": "d0a71e2a31f81d5e8519a8ff269d21a537da4f1de05c2fcd8bdf5f2a232a2e1f",
+        "effect": "create index stock_conversion_origin_receipt_lookup on private.stock_conversion_qc_origins((receipt_state->>'id'))"
+      },
+      {
+        "kind": "create index",
+        "sha256": "fb5cbbfb857f68ed088103a4c3c5b6359fdab856fbe3a0cc83d6296ec913c3f8",
+        "effect": "create index stock_conversion_origin_lot_lookup on private.stock_conversion_qc_origins((unit_state->>'lot_id'))"
+      },
+      {
+        "kind": "create index",
+        "sha256": "50909becb5732c4b7bf79d50a2a4fc51f19dfb4d222aba7d9740fc1b1c60e63a",
+        "effect": "create index stock_conversion_bridge_serial_lookup on private.stock_conversion_putaway_bridges((unit_state->>'serial_number'))"
+      },
+      {
+        "kind": "create index",
+        "sha256": "5f6e6b59f0941ad0231e7731b00063b793a26ba9709108731f6d15cb25cab226",
+        "effect": "create index stock_conversion_bridge_scope_lookup on private.stock_conversion_putaway_bridges((unit_state->>'product_id'),(unit_state->>'location_id'))"
+      },
+      {
+        "kind": "create index",
+        "sha256": "da298ea896e64de4b0238f9cc0b817a0f8f0ab8818e2a10868eabb9d99b44556",
+        "effect": "create index stock_conversion_bridge_intent_lookup on private.stock_conversion_putaway_bridges(actor_id,intent_key)"
+      },
+      {
+        "kind": "alter table",
+        "sha256": "48a66d2b7c4586f2be77799efc5bd2610c178186e59d22da593d4238f986d463",
+        "effect": "alter table private.stock_conversion_qc_origins enable row level security"
+      },
+      {
+        "kind": "alter table",
+        "sha256": "5e9037591df439d276705b9357e6925b2fd09ba6be6ce6b262c26637e07a176b",
+        "effect": "alter table private.stock_conversion_qc_breaks enable row level security"
+      },
+      {
+        "kind": "alter table",
+        "sha256": "53553a92d398895e9da9bcf922d8d6932bc8dbf49122a6341d51afb7cbbb4b30",
+        "effect": "alter table private.stock_conversion_putaway_bridges enable row level security"
+      },
+      {
+        "kind": "privilege",
+        "sha256": "1c4c475a82871d1c4800577fa1ce6b9fbcb6a12dd14fa4e6ece773fb266f962b",
+        "effect": "revoke all on private.stock_conversion_qc_origins,private.stock_conversion_qc_breaks,private.stock_conversion_putaway_bridges from public,anon,authenticated,service_role"
+      },
+      {
+        "kind": "create trigger",
+        "sha256": "034173aa057044e25722a58a4b446acf750608072aca361a1e7c72848b444582",
+        "effect": "create trigger stock_conversion_qc_origins_immutable before update or delete on private.stock_conversion_qc_origins for each row execute function private.stock_"
+      },
+      {
+        "kind": "create trigger",
+        "sha256": "9d5cf6fb5605aa75192e492210b5cf092cd6761a04530ffe4c54840c9c4ca843",
+        "effect": "create trigger stock_conversion_qc_origins_no_truncate before truncate on private.stock_conversion_qc_origins for each statement execute function private.stock_"
+      },
+      {
+        "kind": "create trigger",
+        "sha256": "ff3eb739940ae580f57a79277cb6ad877a81987d57ea001c8b5ed2a9972e0ea7",
+        "effect": "create trigger stock_conversion_qc_breaks_immutable before update or delete on private.stock_conversion_qc_breaks for each row execute function private.stock_co"
+      },
+      {
+        "kind": "create trigger",
+        "sha256": "50ac9d079aa8e7ae330c15a988176d65838f1301bcd848913990b501b24aac93",
+        "effect": "create trigger stock_conversion_qc_breaks_no_truncate before truncate on private.stock_conversion_qc_breaks for each statement execute function private.stock_co"
+      },
+      {
+        "kind": "create trigger",
+        "sha256": "81b44d12260966a3381fe4834457ba9905595c02eef0f368c8b8953b698ed8bd",
+        "effect": "create trigger stock_conversion_putaway_immutable before update or delete on private.stock_conversion_putaway_bridges for each row execute function private.stoc"
+      },
+      {
+        "kind": "create trigger",
+        "sha256": "4f3c8f31ebbebe82f3bce5cbf569af88d79eba37ba25ef88b49fd626f6b79cd1",
+        "effect": "create trigger stock_conversion_putaway_no_truncate before truncate on private.stock_conversion_putaway_bridges for each statement execute function private.stoc"
+      },
+      {
+        "kind": "function",
+        "sha256": "9938820662ef426b65083cde53d14f5759c9c755981929d9a3d37d9509cb3514",
+        "effect": {
+          "declaration": "create function private.stock_conversion_hold_scope(h jsonb,u jsonb) returns boolean language sql immutable set search_path=''",
+          "calls": [
+            "private.stock_conversion_hold_scope"
+          ],
+          "liveCapabilities": []
+        }
+      },
+      {
+        "kind": "function",
+        "sha256": "02f3ee2367b45c5ef426f8ee51a16e311098b6ace768ddbe653b34cbbb74dc6d",
+        "effect": {
+          "declaration": "create function private.stock_conversion_record_qc_origin() returns trigger language plpgsql security definer set search_path=''",
+          "calls": [
+            "auth.uid",
+            "core.has_live_cap",
+            "private.stock_conversion_hold_scope",
+            "private.stock_conversion_qc_origins",
+            "private.stock_conversion_record_qc_origin"
+          ],
+          "liveCapabilities": [
+            "warehouse.inspect_quality"
+          ]
+        }
+      },
+      {
+        "kind": "function",
+        "sha256": "8f50b8cba165821157926c0fde2b25bcb9b095a267e08cd7290b3f1d6e1fbad0",
+        "effect": {
+          "declaration": "create function private.stock_conversion_watch_qc_origin() returns trigger language plpgsql security definer set search_path=''",
+          "calls": [
+            "auth.uid",
+            "private.stock_conversion_hold_scope",
+            "private.stock_conversion_qc_breaks",
+            "private.stock_conversion_watch_qc_origin"
+          ],
+          "liveCapabilities": []
+        }
+      },
+      {
+        "kind": "create trigger",
+        "sha256": "de18217cc8a42f9c739707685e93556213debacca37f498bf725df495c622f0a",
+        "effect": "create trigger stock_conversion_00_qc_watch after insert or update or delete on warehouse.quality_inspections for each row execute function private.stock_conver"
+      },
+      {
+        "kind": "create trigger",
+        "sha256": "2d91f112f5f8e0f0835c4b756e354b6289be7b064b1db06204b78d6422221769",
+        "effect": "create trigger stock_conversion_10_qc_origin after update on warehouse.quality_inspections for each row execute function private.stock_conversion_record_qc_orig"
+      },
+      {
+        "kind": "create trigger",
+        "sha256": "c3ed4df3d606052cec880456553a9a01a29f52b5be4df30af8e6985b9af20538",
+        "effect": "create trigger stock_conversion_hold_watch after insert or update or delete on warehouse.inventory_holds for each row execute function private.stock_conversion_"
+      },
+      {
+        "kind": "create trigger",
+        "sha256": "cfb8b36316bea811487662a7255ee281831d4317072c2c301fe12c17212225f4",
+        "effect": "create trigger stock_conversion_return_watch after insert or update or delete on warehouse.returns for each row execute function private.stock_conversion_watch_"
+      },
+      {
+        "kind": "create trigger",
+        "sha256": "b0204edad0ffcb8d27bc5dd79b7fbc9bb81a09bd5fe4e0cce28f5ddbf0ef25f7",
+        "effect": "create trigger stock_conversion_receipt_watch after update or delete on warehouse.receipts for each row execute function private.stock_conversion_watch_qc_origi"
+      },
+      {
+        "kind": "create trigger",
+        "sha256": "9bc1991d1d9951d2e6f4503b45cb214cfc3ad112c965b58e924e9e2a65613a2b",
+        "effect": "create trigger stock_conversion_lot_watch after update or delete on warehouse.lots for each row execute function private.stock_conversion_watch_qc_origin()"
+      },
+      {
+        "kind": "create trigger",
+        "sha256": "4f5641d4b28867a0884f7f30d2f9cc909b6e8923d6881fb4601f066f03dcdf46",
+        "effect": "create trigger stock_conversion_movement_watch after insert or update or delete on warehouse.movements for each row execute function private.stock_conversion_wa"
+      },
+      {
+        "kind": "create trigger",
+        "sha256": "e191be1228b858e08e89bf35916459ab3b09f03097367e23cf4724cde02b7078",
+        "effect": "create trigger stock_conversion_history_watch after update or delete on private.warehouse_unit_history for each row execute function private.stock_conversion_wa"
+      },
+      {
+        "kind": "create trigger",
+        "sha256": "cd6a1c27e19e92ab7efafb2b895c3504b4b78d857bcaa69e5a26c540e5b89087",
+        "effect": "create trigger stock_conversion_receipt_proof_watch after update or delete on private.warehouse_offline_receipts for each row execute function private.stock_con"
+      },
+      {
+        "kind": "dynamic-program",
+        "sha256": "ad8d0e29cb3d69d331e696275e35a536dba536e44221b861895edd14ea35315b",
+        "effect": [
+          "private.stock_conversion_watch_qc_origin",
+          "private.warehouse_offline_receipts",
+          "private.warehouse_unit_history",
+          "warehouse.inventory_holds",
+          "warehouse.lots",
+          "warehouse.movements",
+          "warehouse.quality_inspections",
+          "warehouse.receipts",
+          "warehouse.returns"
+        ]
+      },
+      {
+        "kind": "function",
+        "sha256": "416786b5bff33855798745e5a3bb0163892a1db55aaf4e4860d4da8fdc47c4de",
+        "effect": {
+          "declaration": "create function private.stock_conversion_qc_origin_clean(o private.stock_conversion_qc_origins,u warehouse.inventory_units,p_batch_id uuid) returns boolean language sql volatile security definer set search_path=''",
+          "calls": [
+            "private.stock_conversion_hold_scope",
+            "private.stock_conversion_qc_origin_clean"
+          ],
+          "liveCapabilities": []
+        }
+      },
+      {
+        "kind": "function",
+        "sha256": "3119f93c96925c88492f36db43b4a06aae6022a78de3697771c1a50d470d27ef",
+        "effect": {
+          "declaration": "create function private.stock_conversion_capture_putaway() returns trigger language plpgsql security definer set search_path=''",
+          "calls": [
+            "auth.uid",
+            "core.has_cap",
+            "core.has_live_cap",
+            "private.stock_conversion_capture_putaway",
+            "private.stock_conversion_putaway_bridges",
+            "private.stock_conversion_qc_origin_clean"
+          ],
+          "liveCapabilities": [
+            "warehouse.transfer_stock"
+          ]
+        }
+      },
+      {
+        "kind": "create trigger",
+        "sha256": "9c8f6ba01bb1e59dbb375ecf8813196e81af117e481b6abedb4c599f44f40b00",
+        "effect": "create trigger stock_conversion_capture_putaway after insert on private.warehouse_offline_receipts for each row execute function private.stock_conversion_captur"
+      },
+      {
+        "kind": "function",
+        "sha256": "430a59377261c6d9489c2449c9e5c19bf08bbf386051408fbe88e325bcae4a92",
+        "effect": {
+          "declaration": "create function private.stock_conversion_qc_matches(u warehouse.inventory_units,q warehouse.quality_inspections,p_batch_id uuid,p_allow_bridge boolean) returns boolean language plpgsql volatile security definer set search_path=''",
+          "calls": [
+            "private.stock_conversion_qc_matches",
+            "private.stock_conversion_qc_origin_clean"
+          ],
+          "liveCapabilities": []
+        }
+      },
+      {
+        "kind": "dynamic-program",
+        "sha256": "f215f2119848eabec7ff4e64e2416b0dc12289e576e830102675951a2ebc5174",
+        "effect": [
+          "private.stock_conversion_batches",
+          "private.stock_conversion_qc_matches",
+          "private.stock_conversion_recipes",
+          "private.stock_conversion_validate_unit",
+          "warehouse.stock_conversion_workspace"
+        ]
+      },
+      {
+        "kind": "privilege",
+        "sha256": "adebc1d34faa320e988421a88a42b219f046ba4988e83b4c61039e053dead53c",
+        "effect": "revoke all on function private.stock_conversion_hold_scope(jsonb,jsonb),private.stock_conversion_record_qc_origin(),private.stock_conversion_watch_qc_origin(),private.stock_conversion_qc_origin_clean(private.stock_conversion_qc_origins,warehouse.inventory_units,uuid),private.stock_conversion_capture_putaway(),private.stock_conversion_qc_matches(warehouse.inventory_units,warehouse.quality_inspections,uuid,boolean) from public,anon,authenticated,service_role"
+      },
+      {
+        "kind": "notify",
+        "sha256": "03ec30466ad17e2387450a5d286284f2873b8769a5c7f5de7998fc616d36287c",
+        "effect": "notify pgrst,'reload schema'"
+      },
+      {
+        "kind": "commit",
+        "sha256": "9505cacb7c710ed17125fcc6cb3669e8ddca6c8cd8af6a31f6b3cd64604c3098",
+        "effect": "commit"
+      }
+    ]
   }
 ]

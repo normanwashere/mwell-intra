@@ -29,16 +29,23 @@ test('disposable replay executes canonical baseline plus all classified forward 
     const result = prepareLearningPostgres({ root, temporaryRoot, destination });
     const { files, manifest } = validateReplayInventory(root);
     assert.equal(result.baselineCount, 22);
-    assert.equal(result.migrationCount, 231);
+    assert.equal(result.migrationCount, 232);
     assert.equal(result.preservedCount, 35);
-    assert.equal(manifest.sources.length, 266);
+    assert.equal(manifest.sources.length, 267);
+    const bridgeMigration = '20261105195433_stock_conversion_qc_putaway_bridge.sql';
+    assert.deepEqual(manifest.sources.find(file => file.file === bridgeMigration), {
+      file: bridgeMigration,
+      sha256: 'cbe9d3eac2522c750bf8dc79e3ec35f3b142fc123d59481e114302cb935d1aaf',
+      action: 'execute-forward',
+    });
+    assert.equal(files.find(file => file.file === bridgeMigration)?.output, bridgeMigration);
     assert.deepEqual(readdirSync(path.join(destination, 'supabase')).sort(), ['config.toml', 'migrations']);
     assert.deepEqual(readdirSync(path.join(destination, 'supabase/migrations')).sort(), files.filter(file => file.output).map(file => file.output));
     for (const file of files.filter(file => file.output)) assert.deepEqual(
       readFileSync(path.join(destination, 'supabase/migrations', file.output)), file.bytes, file.file);
     const audit = JSON.parse(readFileSync(path.join(destination, 'replay-audit.json')));
     assert.match(audit.scope, /not exact applied-history replay/);
-    assert.equal(audit.files.length, 288);
+    assert.equal(audit.files.length, 289);
     assert.equal(audit.files.filter(file => !file.output && file.reason && file.sha256).length, 35);
     assert.throws(() => prepareLearningPostgres({ root, temporaryRoot, destination }), /already exists/);
     assert.throws(() => prepareLearningPostgres({ root, temporaryRoot, destination: root }), /outside.*temporary/i);

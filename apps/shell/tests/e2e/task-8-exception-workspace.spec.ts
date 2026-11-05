@@ -41,6 +41,9 @@ async function assertActionableInViewport(page: Page, buttonName: string) {
 }
 
 test('Task 8 governed exception workspace is usable across independent desktop and mobile lifecycle actors', async ({ browser }, testInfo) => {
+  test.setTimeout(90_000);
+  const startedAt = Date.now();
+  const mark = (phase: string) => console.log(`Task 8 ${testInfo.project.name}: ${phase} (${Date.now() - startedAt}ms)`);
   const fixture = new ControlledProcurementRpcFixture();
   fixture.prepareExceptionWorkspace();
   fixture.failNextExceptionSubmit();
@@ -67,6 +70,7 @@ test('Task 8 governed exception workspace is usable across independent desktop a
   await expect(submitter.page.getByText('under review', { exact: true })).toBeVisible();
   await submitter.page.screenshot({ path: testInfo.outputPath(`task-8-exception-submitter-${testInfo.project.name}.png`), fullPage: true });
   await submitter.context.close();
+  mark('submit validation and retry completed');
 
   const procurement = await actorPage('exceptionReviewer');
   await expect(procurement.page.getByText('Your independent decision')).toBeVisible();
@@ -74,6 +78,7 @@ test('Task 8 governed exception workspace is usable across independent desktop a
   await procurement.page.getByRole('button', { name: 'Approve as Procurement' }).click();
   await expect(procurement.page.getByText('Procurement: approved')).toBeVisible();
   await procurement.context.close();
+  mark('independent procurement approval completed');
 
   const finance = await actorPage('exceptionFinance');
   await expect(finance.page.getByText('Your independent decision')).toBeVisible();
@@ -81,6 +86,7 @@ test('Task 8 governed exception workspace is usable across independent desktop a
   await finance.page.getByRole('button', { name: 'Approve as Finance' }).click();
   await expect(finance.page.getByText('Finance: approved')).toBeVisible();
   await finance.context.close();
+  mark('independent finance approval completed');
 
   const doa = await actorPage('exceptionDoa');
   await expect(doa.page.getByText('Your independent decision')).toBeVisible();
@@ -94,6 +100,7 @@ test('Task 8 governed exception workspace is usable across independent desktop a
   await expect(doa.page.getByRole('heading', { name: 'Decision history' })).toBeVisible();
   await doa.page.screenshot({ path: testInfo.outputPath(`task-8-exception-history-${testInfo.project.name}.png`), fullPage: true });
   await doa.context.close();
+  mark('DOA approval and failed-refresh recovery completed');
 
   fixture.markExceptionStale();
   const recovery = await actorPage('procurement');
@@ -102,9 +109,13 @@ test('Task 8 governed exception workspace is usable across independent desktop a
   await expect(recovery.page.getByRole('heading', { name: 'Replace stale exception evidence' })).toBeVisible();
   await recovery.page.getByLabel('Business justification').fill('Replacement petty-cash evidence reflects the current effective policy profile and retained receipt plus liquidation proof.');
   await recovery.page.getByLabel('Receipt or invoice attached').uncheck();
+  await expect(recovery.page.getByLabel('Receipt or invoice attached')).not.toBeChecked();
   await recovery.page.getByLabel('Receipt or invoice attached').check();
+  await expect(recovery.page.getByLabel('Receipt or invoice attached')).toBeChecked();
   await recovery.page.getByLabel('Liquidation recorded').uncheck();
+  await expect(recovery.page.getByLabel('Liquidation recorded')).not.toBeChecked();
   await recovery.page.getByLabel('Liquidation recorded').check();
+  await expect(recovery.page.getByLabel('Liquidation recorded')).toBeChecked();
   const replacementSubmit = await assertActionableInViewport(recovery.page, 'Submit governed evidence');
   await recovery.page.screenshot({ path: testInfo.outputPath(`task-8-exception-recovery-${testInfo.project.name}.png`), fullPage: true });
   await replacementSubmit.click();
@@ -113,6 +124,7 @@ test('Task 8 governed exception workspace is usable across independent desktop a
   await expect(recovery.page.getByText('policy profile changed restart exception')).toHaveCount(0);
   await recovery.page.screenshot({ path: testInfo.outputPath(`task-8-exception-recovery-submitted-${testInfo.project.name}.png`), fullPage: true });
   await recovery.context.close();
+  mark('stale-evidence replacement completed');
 
   // These are the two deliberate 400 responses exercised above: submit
   // validation and an explicit refresh failure. Any additional console error
