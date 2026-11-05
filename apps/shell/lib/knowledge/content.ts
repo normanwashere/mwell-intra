@@ -717,9 +717,9 @@ const procedureArticles: KnowledgeArticle[] = [
       ],
       [
         "Record outcome",
-        "Enter sold, giveaway, returned, lost, damaged, re-kit, and gross-sales outcomes with Finance reference and evidence.",
+        "Enter sold, giveaway, returned, lost, damaged, re-kit, and gross-sales outcomes with Finance reference and evidence. Before an allocation return, check the remaining quantity: event custody accounts for recorded sales, giveaways and prior returns, not only the original issue. For example, 2 issued, 1 sold and 1 returned leaves 0 remaining. If the balance cannot load, it is not zero; check the connection and reopen the allocation before continuing. Do not guess a return quantity or repeat a saved return.",
       ],
-      ["Inspect returns", "Restock accepted units and route exceptions."],
+      ["Inspect returns", "Check exact serial identities, active holds and the existing Quality process before restocking accepted units; route exceptions. A remaining quantity is not Quality clearance or permission to return a sold unit."],
       [
         "Reconcile",
         "Submit the balanced outcome to Finance, obtain independent settlement approval, and close only after every fulfillment record is complete or cancelled.",

@@ -4,7 +4,7 @@ The [current release manifest](release-status.json) is the single deployment and
 
 ## Current Boundary
 
-The manifest retains the November 5 review's last verified UAT identity. The main release worker has not yet supplied the new immutable candidate, actual deployment or matching retest evidence to this handoff. All four-QA remediation deployment and acceptance claims remain pending. SMTP is excluded. The Reporting API remains disabled and belongs to a [separate implementation phase](../../integrations/reporting-api/SEPARATE-IMPLEMENTATION-PHASE.md); SCOPE-01 is not closed by this remediation.
+The manifest records actual UAT application `0b7964e`, scoped live results and failed CI run `42027790187`. Pushed source `3d7fd83` is not deployed; later repairs still await main's final candidate and outcome. Export and allocation-balance database versions are recorded separately from the serving app. This prepared documentation is not a published live handbook, full workflow acceptance or a new deployment. SMTP is unchanged. The Reporting API remains disabled and belongs to a [separate implementation phase](../../integrations/reporting-api/SEPARATE-IMPLEMENTATION-PHASE.md); SCOPE-01 is not closed by this remediation.
 
 The [September handoff pack](../2026-09-22/README.md) and its [September 23 manifest](../2026-09-22/release-status.json) are **historical**, including CI212 on `223144f`. Preserve those files and generated packages unchanged. Their date-local use of "current" describes that snapshot, not today's release authority. Do not redistribute the old pack alone as the current handoff. Supply this directory, its manifest and linked source documents together; an older offline HTML copy cannot discover later status automatically.
 

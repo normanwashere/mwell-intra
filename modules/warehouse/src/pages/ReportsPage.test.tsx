@@ -6,6 +6,7 @@ import { makeRepo, renderWithProviders } from '@/test/renderWithProviders';
 import type { InventoryPosition, PageResult } from '@intra/data-kit';
 
 let liveExportSession = false;
+let sessionLoading = false;
 const position = (overrides: Partial<InventoryPosition> = {}): InventoryPosition => ({
   productId: 'shirt-l', locationId: 'loc-wh', onHand: 1, committed: 0, held: 0, unavailable: 0, available: 1, ...overrides,
 });
@@ -13,12 +14,13 @@ vi.mock('@/auth/session', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/auth/session')>();
   return { ...actual, useSession: () => {
     const session = actual.useSession();
+    if (sessionLoading) return { ...session, loading: true };
     return liveExportSession ? { ...session, mode: 'supabase', userCapabilities: { warehouse: ['register_exports'] } } : session;
   } };
 });
 
 describe('ReportsPage', () => {
-  afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); liveExportSession = false; });
+  afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); liveExportSession = false; sessionLoading = false; });
 
   it('keeps the aggregate unknown while retaining verified rows and product-filtered totals', async () => {
     const repo = makeRepo();
@@ -100,6 +102,8 @@ describe('ReportsPage', () => {
     await user.selectOptions(screen.getByLabelText('Location filter'), 'loc-cebu');
     await user.selectOptions(screen.getByLabelText('Product filter'), 'shirt-l');
     expect(screen.getByText('Filters apply to this view; export includes all authorized positions.')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Export full inventory' })).not.toHaveAttribute('aria-describedby');
+    expect(screen.queryByText(/current access does not allow inventory exports/i)).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Export full inventory' }));
     expect(request).toHaveBeenCalledTimes(1);
     expect(request).toHaveBeenCalledWith('/api/warehouse/exports', expect.objectContaining({
@@ -142,8 +146,11 @@ describe('ReportsPage', () => {
     expect(screen.queryByLabelText('Inventory position totals')).not.toBeInTheDocument();
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Export report' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Export report' })).toHaveAccessibleDescription(/loading/i);
+    expect(screen.queryByText(/current access does not allow inventory exports/i)).not.toBeInTheDocument();
     await act(async () => finish({ rows: [position({ locationId: 'loc-cebu' })] }));
     expect(await screen.findByText('2 position row(s)')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Export report' })).not.toHaveAttribute('aria-describedby');
   });
 
   it('fails closed on a later-page error and retries from the start', async () => {
@@ -158,10 +165,12 @@ describe('ReportsPage', () => {
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
     expect(screen.queryByText('No positions match these filters')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Export report' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Export report' })).toHaveAccessibleDescription(/report loads successfully/i);
     await userEvent.click(screen.getByRole('button', { name: 'Retry loading report' }));
     expect(await screen.findByText('1 position row(s)')).toBeVisible();
     expect(load).toHaveBeenLastCalledWith({ limit: 100 });
     expect(screen.getByRole('button', { name: 'Export report' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Export report' })).not.toHaveAttribute('aria-describedby');
   });
 
   it('rejects a repeated cursor instead of showing incomplete or duplicate positions', async () => {
@@ -180,6 +189,17 @@ describe('ReportsPage', () => {
     await screen.findByRole('table', { name: 'Inventory position report' });
     await userEvent.click(screen.getByRole('button', { name: 'Export full inventory' }));
     expect(screen.getByRole('button', { name: 'Export full inventory' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Export full inventory' })).toHaveAccessibleDescription(/current access does not allow inventory exports.*authorized colleague/i);
+    expect(screen.getByText(/current access does not allow inventory exports/i)).toBeVisible();
     expect(request).not.toHaveBeenCalled();
+  });
+
+  it('does not describe pending session access as an export rights denial', async () => {
+    sessionLoading = true;
+    renderWithProviders(<ReportsPage />, { source: 'supabase', capabilities: ['view_inventory'] });
+    await screen.findByRole('table', { name: 'Inventory position report' });
+    expect(screen.getByRole('button', { name: 'Export full inventory' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Export full inventory' })).toHaveAccessibleDescription(/access is loading/i);
+    expect(screen.queryByText(/current access does not allow inventory exports/i)).not.toBeInTheDocument();
   });
 });

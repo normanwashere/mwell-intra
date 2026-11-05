@@ -1,6 +1,6 @@
 # WMS audit remediation - November 5, 2026
 
-**Current release authority:** See the [current release manifest](../handoffs/current/release-status.json). The original 19-finding WMS audit evidence below remains attributed to its recorded builds. The later 20-finding four-QA review is a separate scope; its candidate deployment and retest are pending. The appended follow-up does not retroactively certify or replace the original evidence. September handoff/CI212 results are historical, not authority for this release.
+**Current release authority:** See the [current release manifest](../handoffs/current/release-status.json). The original 19-finding WMS audit evidence below remains attributed to its recorded builds. The later 20-finding four-QA review is a separate scope: UAT now serves `0b7964e` with scoped retests, while the next application candidate remains undeployed. The appended follow-up does not retroactively certify or replace the original evidence. September handoff/CI212 results are historical, not authority for this release.
 
 ## Release status
 
@@ -59,9 +59,9 @@ Isolated synthetic fixtures remain identified in their owned manifests. Cleanup 
 
 The original audit and remediation evidence are retained separately; failed baseline results are not overwritten. Local evidence folder: `outputs/wms-uat-remediation-20261105` in the parent workspace.
 
-**Four-QA follow-up: pending deployment and retest**
+**Four-QA follow-up: initial acceptance plan and pending application follow-up**
 
-This addendum concerns `outputs/four-qa-review-20261105`, not the earlier 19-finding WMS checklist. The main release worker must supply the exact new SHA, actual UAT deployment and same-commit retest evidence before any following behavior is described as deployed or any evidence gap is closed. Original review reports remain immutable.
+This addendum concerns `outputs/four-qa-review-20261105`, not the earlier 19-finding WMS checklist. The table preserves the initial acceptance plan; the checkpoint below distinguishes later scoped results from pending work. Main must supply the final candidate SHA, actual UAT deployment and same-commit retest evidence before the follow-up is described as deployed. Original review reports remain immutable.
 
 | Finding | Candidate change / required acceptance |
 | --- | --- |
@@ -79,3 +79,16 @@ This addendum concerns `outputs/four-qa-review-20261105`, not the earlier 19-fin
 | SCOPE-01 | Reporting API/connector remains undelivered and disabled. It is explicitly a separate implementation phase, not a falsely closed app fix. |
 
 See the [candidate operator guidance](../manual/MWELL_INTRA_USER_MANUAL.md), [tester acceptance checklist](../handoffs/current/testers.md) and [separate API implementation phase](../integrations/reporting-api/SEPARATE-IMPLEMENTATION-PHASE.md). Existing workflows, tester data, policies, approvals, training and both receiving paths must be preserved. SMTP is excluded. No production, departmental or physical-device acceptance is granted by this addendum.
+
+**Follow-up source checkpoint: not deployed**
+
+The serving app remains `0b7964e5650e6908fdf861a081bc1fe27716c014`. Source `3d7fd83` is not deployed, and later repairs await a final candidate. Hosted run `42027790187` failed; local tests and successful UAT journeys are not a full CI pass. The current manifest records the application, applied database versions and prepared documentation separately.
+
+- Export repair is applied as `20261105134446`, reviewed locally as `20261105132130` with unchanged SQL. Current export capabilities, registered-object protection and independent review remain mandatory. The actual Warehouse export matched 258 observed authorized positions and its registered checksum; authenticated Lead download/storage denials and preservation readback passed. Whole-day reconciliation remains separate.
+- The P3 export explanation is prepared, **not deployed**: it distinguishes inventory/access loading, denied export permission and unsuccessful report loading. Viewing a report does not grant export authority; an authorized colleague prepares the file. The workflow and permissions are unchanged.
+- QA2-F03 balance repair is applied as `20261105135318`, reviewed locally as `20261105133207` with unchanged SQL. The sale-aware allocation display is prepared, **not deployed**. Existing event custody calculations account for sales, giveaways and prior returns; ordinary allocations retain their prior quantity rules. An unavailable balance is unknown, not zero. Exact serials, holds, return validation, Quality and independent settlement authority are unchanged. Independent review passed 27 SQL and 33 UI checks; main verified the applied quantity-only RPC and security metadata. These are not an updated-client live retest.
+- Main's full Warehouse follow-up suite passed **1,569/1,569, zero failed or skipped**, including the F03 and P3 tests, retained in `outputs/four-qa-remediation-20261105/warehouse-final-followup.json`. This is source verification, not deployment or hosted CI.
+- QA1-WMS-007 transfer repair is applied as `20261105141930`, reviewed as `20261105140056`, unchanged source hash `8704110436a8bce29b577c067dd584c24e993d96b32508d3ff430977ab4224ef`. QA2 reported 75 focused passes; QA3 independently cleared 78 local checks. These overlapping runs are not additive. Main verified unchanged outer wrappers and original ACL/DEFINER/empty-search-path settings. Quantity must match distinct validated serials before writes, without changing bulk/lot behavior, current authority, hold checks or uncertain-command recovery. QA1's owned rollback and fresh UI acceptance remain in progress; no live pass is claimed here.
+- On `0b7964e`, the fresh two-component customer-set journey passed nine scoped checks, including separate Lead release, full-set return and independent Quality acceptance. This is not recipe, kit assembly or stock conversion certification. Transfer quantity mismatch QA1-WMS-007, G01, recipe/conversion, remaining negative variants, human and physical-device gates stay open until their own evidence is recorded.
+
+Retained current evidence is in the parent workspace's `outputs/four-qa-remediation-20261105`, including `docs/REMEDIATION-UPDATE.md`, the bundle report, export evidence and independent reviews. No original report is overwritten. Reporting API implementation remains separate and disabled. SMTP is unchanged.

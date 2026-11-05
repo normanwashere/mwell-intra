@@ -2,6 +2,10 @@
 
 Use the [current release manifest](release-status.json) and confirm its deployed SHA/environment before running a case. The [September tester pack](../2026-09-22/testers.md) is historical guidance; do not copy its evidence into current results. All cases below are **Not run for the new candidate** until the main release worker records matching evidence.
 
+Scoped `0b7964e` evidence is retained separately, including the two-component bundle and 258-row export. For the follow-up client, check export loading, access-denied and failed-report explanations without widening permissions. Check allocation return remaining after a sale/giveaway and prior return, failed/zero balance, exact serials and holds; the workflow and Quality/settlement approvals are unchanged.
+
+Open or refresh the app while online so the updated worker can activate and purge old private CacheStorage. Do not clear all browser storage or uninstall the PWA: queued work must survive under its original account. An old offline-only client cannot receive the update, so no retroactive offline purge is claimed.
+
 | Area / finding | Required acceptance evidence |
 | --- | --- |
 | Public-only cache / QA4-001 | With synthetic private data, test logout, account/access change, online denial then offline, and upgrade from an old worker. No private response reappears; queued commands remain actor-scoped and intact. |

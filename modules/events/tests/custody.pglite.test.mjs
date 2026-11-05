@@ -88,7 +88,9 @@ async function fixture(){
   await db.exec(extractFunction(await migration('20260718202000_block_issue_from_held_stock_identity'),'warehouse.issue'));
   await db.exec('alter function warehouse.issue(jsonb) rename to issue_uncertified_impl');
   await db.exec(extractFunction(await migration('20260706092400_warehouse_rpcs'),'warehouse.cancel_allocation'));
-  await db.exec(sql);await actor(db);return db;
+  await db.exec(sql);
+  await db.exec(await migration('20261105135318_warehouse_allocation_return_balance'));
+  await actor(db);return db;
 }
 async function setup(db,acknowledge=true){
   await actor(db,B,['events.manage_events']);
@@ -282,4 +284,70 @@ test('settlement cannot precede handover and settled events cannot grow another 
   await assert.rejects(db.exec(`update warehouse.fulfillment_orders set status='completed',acknowledged_at=now(),acknowledged_by='${B}' where id='${O}'`),/settlement/);
   await actor(db,B,['events.request_fulfillment']);
   await assert.rejects(rpc(db,'request_event_fulfillment',{event_id:'e1',requesting_department:'marketing',purpose:'Late growth',cost_center:'MKT',required_date:'2026-10-01',expense_treatment:'expense',lines:[{productId:'watch',quantity:1}],idempotency_key:'post-settlement-demand'}),/settlement/);
+});
+
+async function bulkSetup(db) {
+  await actor(db,B,['events.manage_events']);
+  await rpc(db,'configure_event_custody',{event_id:'e1',action:'enable',idempotency_key:'bulk-enable-command'});
+  await rpc(db,'configure_event_custody',{event_id:'e1',action:'assign',user_id:A,idempotency_key:'bulk-assign-command'});
+  await db.exec(`insert into warehouse.fulfillment_orders(id,event_id,status,external_reference,lines,created_at,created_by)
+    values ('${O}','e1','released','BULK-1','[{"productId":"bag","quantity":2,"pickedSerialNumbers":[]}]',clock_timestamp(),'${B}');
+    insert into warehouse.movements(id,type,product_id,quantity,event_id,reference) values ('bulk-move','fulfillment_release','bag',2,'e1','${O}');`);
+  await db.query('select private.warehouse_advance_fulfillment_order_v2($1::jsonb)',[{order_id:O,action:'acknowledge_receipt',acknowledgement_reference:'BULK-ACK',acknowledgement_evidence_url:'https://example.test/synthetic',idempotency_key:'bulk-ack-command'}]);
+  await actor(db);
+  return (await db.query('select allocation_id from private.event_custody_sources')).rows[0].allocation_id;
+}
+const bulkReturn=(allocation_id,quantity,key)=>({allocation_id,idempotency_key:key,return:{source:'event',event_id:'e1',lines:[{productId:'bag',quantity,locationId:'quarantine',disposition:'quarantine',reason:'Synthetic unused'}]}});
+const balance=async(db,allocation_id)=>(await db.query('select private.event_allocation_remaining($1) result',[allocation_id])).rows[0].result;
+
+test('QA2-F03 predecessor view reproduces sold-custody overstatement',async t=>{
+  const db=await fixture();t.after(()=>db.close());const allocation_id=await bulkSetup(db);
+  await rpc(db,'record_event_outcome',sale({allocation_id,serial_numbers:[],amount:1}));
+  await db.exec(integrity.match(/create or replace view warehouse\.allocation_return_totals[\s\S]*?grant select on warehouse\.allocation_return_totals to authenticated;/)[0]);
+  assert.equal(Number((await db.query('select remaining_units from warehouse.allocation_return_totals where allocation_id=$1',[allocation_id])).rows[0].remaining_units),2);
+  assert.equal((await balance(db,allocation_id)).remaining_units,1);
+});
+
+test('QA2-F03 actual SQL return guard honors committed sale giveaway reversal and rollback',async t=>{
+  const db=await fixture();t.after(()=>db.close());const allocation_id=await bulkSetup(db);
+  const sold=await rpc(db,'record_event_outcome',sale({allocation_id,serial_numbers:[],amount:1}));
+  await actor(db,B,['warehouse.manage_returns']);
+  await assert.rejects(rpc(db,'record_return_v2',bulkReturn(allocation_id,2,'reject-sold-overreturn')),/remaining event custody/);
+  assert.equal((await db.query('select count(*)::int n from warehouse.returns')).rows[0].n,0);
+  await actor(db);
+  await db.exec('begin');
+  await rpc(db,'record_event_outcome',sale({allocation_id,serial_numbers:[],kind:'reversal',reverses_id:sold.id,reason:'Synthetic rollback',external_reference:'ROLLBACK',idempotency_key:'rollback-reversal-command'}));
+  assert.equal((await balance(db,allocation_id)).remaining_units,2);
+  await db.exec('rollback');assert.equal((await balance(db,allocation_id)).remaining_units,1);
+  await rpc(db,'record_event_outcome',sale({allocation_id,serial_numbers:[],kind:'giveaway',amount:0,external_reference:'GIFT',idempotency_key:'bulk-giveaway-command'}));
+  await actor(db,B,['warehouse.manage_returns']);
+  await assert.rejects(rpc(db,'record_return_v2',bulkReturn(allocation_id,1,'reject-giveaway-overreturn')),/remaining event custody/);
+  await actor(db);
+  await rpc(db,'record_event_outcome',sale({allocation_id,serial_numbers:[],kind:'reversal',reverses_id:sold.id,reason:'Synthetic cancellation',external_reference:'REV',idempotency_key:'bulk-reversal-command'}));
+  await actor(db,B,['warehouse.manage_returns']);
+  await rpc(db,'record_return_v2',bulkReturn(allocation_id,1,'legitimate-bulk-return'));
+  assert.equal((await balance(db,allocation_id)).remaining_units,0);
+  await db.exec("insert into warehouse.event_reconciliations(event_id,status,sold_units,giveaway_units,gross_sales_amount,returned_units) values('e1','approved',0,1,0,1)");
+  await assert.rejects(rpc(db,'record_return_v2',bulkReturn(allocation_id,1,'reject-settled-overreturn')),/remaining event custody/);
+  await actor(db);
+  await assert.rejects(rpc(db,'record_event_outcome',sale({allocation_id,serial_numbers:[],external_reference:'AFTER-SETTLEMENT',idempotency_key:'settled-sale-command'})),/settlement is locked/);
+  assert.equal((await db.query('select count(*)::int n from warehouse.returns')).rows[0].n,1);
+});
+
+test('QA2-F03 minimal return projection agrees with guard without seller ledger access',async t=>{
+  const db=await fixture();t.after(()=>db.close());const allocation_id=await bulkSetup(db);
+  await rpc(db,'record_event_outcome',sale({allocation_id,serial_numbers:[],amount:1}));
+  await actor(db,B,['warehouse.manage_returns']);await db.exec('set role authenticated');
+  const read=()=>db.query('select warehouse.allocation_return_balance($1) result',[allocation_id]);
+  assert.deepEqual((await read()).rows[0].result,{allocation_id,issued_units:2,returned_units:0,remaining_units:1});
+  await assert.rejects(rpc(db,'event_custody_ledger',{event_id:'e1'}),/Not authorized/);
+  await assert.rejects(db.exec('select * from private.event_custody_entries'),/permission denied/);
+  await rpc(db,'record_return_v2',bulkReturn(allocation_id,1,'projected-bulk-return'));
+  assert.equal((await read()).rows[0].result.remaining_units,0);
+  await actor(db,B,[]);await assert.rejects(read(),/Not authorized/);
+  await actor(db,'', ['warehouse.manage_returns']);await assert.rejects(read(),/Not authorized/);
+  await db.exec('reset role');await actor(db,B,['warehouse.manage_returns']);
+  await db.exec("insert into warehouse.allocations(id,event_id,product_id,quantity,status) values('legacy','e2','bag',5,'issued');insert into warehouse.returns(id,source,event_id,lines) values('legacy-return','event','e2','[{\"allocationId\":\"legacy\",\"productId\":\"bag\",\"quantity\":2}]')");
+  assert.deepEqual((await db.query("select warehouse.allocation_return_balance('legacy') result")).rows[0].result,{allocation_id:'legacy',issued_units:5,returned_units:2,remaining_units:3});
+  await assert.rejects(db.query("select warehouse.allocation_return_balance('missing')"),/not found/);
 });

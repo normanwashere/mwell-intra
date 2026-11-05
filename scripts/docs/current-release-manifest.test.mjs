@@ -43,6 +43,16 @@ test("current authority records observed deployment separately from an unverifie
   assert.equal(manifest.reportingApi.phase, "separate-implementation");
   assert.equal(manifest.reportingApi.acceptance, "not-delivered");
   assert.equal(manifest.smtp.status, "excluded");
+  assert.equal(manifest.documentation.basedOnDeployedAppCommit, manifest.deployed.commit);
+  assert.equal(manifest.documentation.commit, null);
+  assert.equal(manifest.documentation.status, "pending-publication");
+  assert.notEqual(manifest.candidate.latestPushedSourceCommit, manifest.deployed.commit);
+  for (const migration of manifest.databaseMigrations) {
+    assert.match(migration.appliedVersion, /^\d{14}$/);
+    assert.match(migration.reviewedLocalVersion, /^\d{14}$/);
+    assert.match(migration.sourceSha256, /^[a-f0-9]{64}$/);
+    assert.ok(migration.evidence);
+  }
   if (manifest.candidate.commit === null) {
     assert.equal(manifest.candidate.status, "pending-deploy-and-retest");
     assert.equal(manifest.candidate.deploymentId, null);
@@ -93,6 +103,9 @@ test("candidate operating guidance distinguishes unknown, scope and pending veri
   const manual = read("docs/manual/MWELL_INTRA_USER_MANUAL.md");
   for (const phrase of ["public-only", "valid source bin", "My Work", "Received Units Availability", "all time", "JSON 401", "Pending deployment and retest"]) {
     assert.ok(manual.includes(phrase), `missing guidance: ${phrase}`);
+  }
+  for (const phrase of ["authorized colleague", "2 issued, 1 sold and 1 returned leaves 0 remaining", "unknown, not zero", "independent settlement approval", "not yet deployed"]) {
+    assert.ok(manual.includes(phrase), `missing follow-up guidance: ${phrase}`);
   }
 });
 

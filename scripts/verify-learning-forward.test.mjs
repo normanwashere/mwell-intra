@@ -12,6 +12,9 @@ const vendor = '20260912131000_vendor_certification_scope_authority.sql';
 const plans = '20260911171901_learning_authority_plan_reuse.sql';
 const checkpoints = '20260912045335_align_assigned_training_checkpoints.sql';
 const seller = '20260920030900_event_seller_learning_readiness.sql';
+const exportsAuthority = '20261105134446_warehouse_export_command_authority.sql';
+const returnBalance = '20261105135318_warehouse_allocation_return_balance.sql';
+const transferAuthority = '20261105141930_serialized_transfer_quantity_identity.sql';
 const messages = input => verifyLearningSchema(input).join('\n');
 const childEnvironment = { ...process.env };
 delete childEnvironment.NODE_TEST_CONTEXT;
@@ -103,6 +106,96 @@ test('seller readiness remains read-only, private and publication-bound', () => 
   assert.match(messages(mutate(seller, sql => sql.replace('cv.owner_id <> cv.reviewer_id', 'true'))), /seller readiness.*independent/i);
   assert.match(messages(mutate('20260920025525_gated_event_seller_custody.sql', sql => sql.replace("learning.mutation_capability_rules(module,capability) values ('events','record_event_outcome')", "learning.mutation_capability_rules(module,capability) values ('events','approve_settlement')"))),
     /seller mutation capability/i);
+});
+
+test('export guard transformations retain certified, actor-bound authority independently of their digest', () => {
+  for (const [from, to, expected] of [
+    ["new_guard := $new$if auth.uid() is null or not (", "new_guard := $new$if not (", /export registration.*live capability/i],
+    ["coalesce(core.has_live_cap('warehouse', 'register_exports'), false)", "core.has_cap('warehouse', 'register_exports')", /export registration.*live capability/i],
+    ['source.created_by = auth.uid()', 'true', /export correction.*owner.*reviewer/i],
+    ["v_job.created_by = auth.uid() and (", 'true and (', /export download.*owner.*type/i],
+    ["v_job.export_type <> 'insights_snapshot'", "true", /export download.*owner.*type/i],
+    ['<> length(old_guard)', '< 0', /export transformation.*exact.*marker/i],
+    ['<> length(correction_guard)', '< 0', /export transformation.*exact.*marker/i],
+  ]) assert.match(messages(mutate(exportsAuthority, sql => sql.replace(from, to))), expected);
+});
+
+test('export orphan authority rejects RLS-relative absence, other paths and expanded grants', () => {
+  for (const [from, to, expected] of [
+    ['stable security definer', 'stable security invoker', /export orphan.*definer/i],
+    ["set search_path = ''", "set search_path = 'public'", /export orphan.*search_path/i],
+    ["p_path like 'exports/' || auth.uid()::text || '/%'", 'true', /export orphan.*own path/i],
+    ['where job.storage_path = p_path', 'where job.storage_path = p_path and job.created_by = auth.uid()', /export orphan.*global/i],
+    ['from public, anon, authenticated, service_role', 'from public, authenticated, service_role', /export orphan.*execute/i],
+    ['to authenticated;', 'to authenticated, anon;', /export orphan.*execute/i],
+    ["and owner_id = auth.uid()::text", 'and true', /export temporary read.*owner/i],
+    ['and private.warehouse_export_is_unregistered(name)', 'or private.warehouse_export_is_unregistered(name)', /export temporary read.*owner/i],
+  ]) assert.match(messages(mutate(exportsAuthority, sql => sql.replace(from, to))), expected);
+  assert.match(messages(mutate(exportsAuthority, sql => sql.replace(/(for delete to authenticated using \([\s\S]*?)  and \(coalesce\(core\.has_live_cap\('warehouse', 'register_exports'\), false\)\s+or coalesce\(core\.has_live_cap\('insights', 'prepare_exports'\), false\)\)\s+/, '$1'))),
+    /export temporary delete.*directly.*live capability/i);
+});
+
+test('allocation return projection retains fail-closed authorization before lookup and client ACLs', () => {
+  for (const [from, to, expected] of [
+    ['auth.uid() is null or ', '', /allocation return.*authenticate.*before lookup/i],
+    ["core.has_live_cap('warehouse','manage_returns')", "core.has_cap('warehouse','manage_returns')", /allocation return.*live capability/i],
+    ['is distinct from true', '= false', /allocation return.*fail.closed/i],
+    ['begin\n  if auth.uid()', 'begin\n  select * into allocation from warehouse.allocations where id=p_allocation_id;\n  if auth.uid()', /allocation return.*before lookup/i],
+    ['stable security definer', 'volatile security definer', /allocation return.*stable.*definer/i],
+    ["set search_path = ''", "set search_path = 'public'", /allocation return.*search_path/i],
+    ['from public,anon', 'from public', /allocation return.*execute/i],
+    ['to authenticated,service_role', 'to authenticated,service_role,anon', /allocation return.*execute/i],
+  ]) assert.match(messages(mutate(returnBalance, sql => sql.replace(/\r\n?/g, '\n').replace(from, to))), expected);
+});
+
+test('allocation return projection preserves custody delegation, ordinary lineage and quantity-only read behavior', () => {
+  for (const [from, to, expected] of [
+    ['where event_id=allocation.event_id)', 'where event_id=allocation.event_id and enabled)', /allocation return.*all custody sessions/i],
+    ['private.event_allocation_remaining(allocation.id)', 'private.event_allocation_remaining(p_allocation_id)', /allocation return.*exact resolved allocation/i],
+    ["'remaining_units',balance->'remaining_units'", "'remaining_units',balance->'issued_units'", /allocation return.*quantity.only.*custody/i],
+    ["'remaining_units',balance->'remaining_units'", "'remaining_units',balance->'remaining_units','seller_id',auth.uid()", /allocation return.*quantity.only.*custody/i],
+    ['r.event_id=allocation.event_id and ', '', /allocation return.*ordinary.*event.*lineage/i],
+    ["line->>'allocationId'=allocation.id", "line->>'productId'=allocation.product_id", /allocation return.*ordinary.*lineage/i],
+    ['returned<0 or returned>allocation.quantity', 'false', /allocation return.*invalid.*balance/i],
+    ["'remaining_units',allocation.quantity-returned", "'remaining_units',allocation.quantity", /allocation return.*ordinary.*remaining/i],
+    ['begin\n  if auth.uid()', 'begin\n  delete from warehouse.returns;\n  if auth.uid()', /allocation return.*read.only/i],
+  ]) {
+    assert.match(messages(mutate(returnBalance, sql => sql.replace(/\r\n?/g, '\n').replace(from, to))), expected);
+  }
+});
+
+test('transfer mutation retains predecessor, private implementation and authoritative identity boundaries', () => {
+  for (const [from, to, expected] of [
+    ["is distinct from '50973cd87f9aacaae2582b4480be732d'", "is distinct from '00000000000000000000000000000000'", /transfer.*reviewed predecessor/i],
+    ["to_regprocedure('private.warehouse_transfer_pre_lot_putaway(jsonb)')", "to_regprocedure('warehouse.transfer(jsonb)')", /transfer.*reviewed predecessor/i],
+    ['create or replace function private.warehouse_transfer_pre_lot_putaway', 'create or replace function warehouse.transfer', /transfer.*only.*private implementation/i],
+    ['security definer', 'security invoker', /transfer.*definer.*search_path/i],
+    ["set search_path = ''", "set search_path = 'public'", /transfer.*search_path/i],
+    ["if not core.has_cap('warehouse', 'transfer_stock') then", 'if false then', /transfer.*base capability/i],
+    ['v_actor := warehouse.authoritative_actor();', "v_actor := 'spoofed';", /transfer.*authoritative actor/i],
+    ['warehouse.force_actor_on_object(v_movement, v_actor)', 'v_movement', /transfer.*authoritative actor/i],
+    ['from public, anon, authenticated', 'from public, anon', /transfer.*execute/i],
+    ['to service_role;', 'to service_role, authenticated;', /transfer.*execute/i],
+  ]) assert.match(messages(mutate(transferAuthority, sql => sql.replace(from, to))), expected);
+});
+
+test('transfer quantity, unit identity, stock holds and lot guards cannot be removed', () => {
+  for (const [from, to, expected] of [
+    ["jsonb_typeof(v_movement->'quantity') is distinct from 'number'", 'false', /transfer.*positive integer/i],
+    ['v_quantity <> v_expected', 'false', /transfer.*distinct unit count/i],
+    ['v_expected <> (select count(distinct id) from unnest(v_unit_ids) id)', 'false', /transfer.*distinct unit count/i],
+    ["v_command->'quantity' is distinct from v_movement->'quantity'", 'false', /transfer.*command.*quantity/i],
+    ["v_unit.product_id is distinct from v_movement->>'product_id'", 'false', /transfer.*unit product/i],
+    ['v_unit.bin_id is distinct from v_from_bin_id', 'false', /transfer.*exact source/i],
+    ['active_hold.lot_id is not distinct from v_unit.lot_id', 'true', /transfer.*serialized hold/i],
+    ['v_updated <> v_expected', 'false', /transfer.*all selected units/i],
+    ['perform private.lock_warehouse_products(v_product_ids);', 'null;', /transfer.*product.*lock/i],
+    ['where unit.id = any(v_unit_ids) order by unit.id for update', 'where unit.id = any(v_unit_ids) order by unit.id', /transfer.*unit.*lock/i],
+    ['v_to_quantity <> v_from_quantity or v_quantity <> v_from_quantity', 'false', /transfer.*bulk.*quantity/i],
+    ['v_source_quantity - v_held_quantity < v_from_quantity', 'false', /transfer.*bulk.*hold/i],
+    ["v_to_delta ? 'lot_id' and nullif(v_to_delta->>'lot_id', '') is distinct from v_lot_id", 'false', /transfer.*lot identity/i],
+    ["elsif exists (select 1 from warehouse.products p where p.id = v_movement->>'product_id' and p.serialized) then", 'elsif false then', /transfer.*serialized.*unit ids/i],
+  ]) assert.match(messages(mutate(transferAuthority, sql => sql.replace(from, to))), expected);
 });
 
 test('reviewed dynamic Learning transformations retain their isolated PostgreSQL behavior', () => {

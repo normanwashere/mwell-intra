@@ -105,6 +105,50 @@ test('service-worker privacy acceptance is mandatory after Chromium installation
   assert.equal(steps[privacy]['continue-on-error'], undefined);
 });
 
+test('authenticated export SQL authority is mandatory in required CI', () => {
+  const steps = workflow('ci').jobs.lint.steps;
+  const step = steps.find(item => item.run === 'node --test scripts/verify-warehouse-export-authority.pglite.test.mjs');
+  assert.ok(step, 'execute the actual authenticated SQL and Storage RLS regressions');
+  assert.equal(step.if, undefined);
+  assert.equal(step['continue-on-error'], undefined);
+});
+
+test('serialized transfer and lot-aware putaway SQL regressions are mandatory in required CI', () => {
+  const job = workflow('ci').jobs.lint;
+  const step = job.steps.find(item => item.run === 'node --test --test-concurrency=1 scripts/verify-serialized-transfer-authority.pglite.test.mjs scripts/verify-lot-aware-putaway.pglite.test.mjs');
+  assert.ok(step, 'run both actual SQL suites, including production repository payloads');
+  assert.equal(step.if, undefined);
+  assert.equal(step['continue-on-error'], undefined);
+  assert.equal(step.env.QA_TRANSFER_BASELINE, '0');
+  assert.equal(job.if, undefined);
+  assert.equal(job['continue-on-error'], undefined);
+});
+
+test('applied PostgreSQL replays all migrations with isolated empty prerequisites and no bypass', () => {
+  const job = workflow('ci').jobs['learning-applied-postgres'];
+  const steps = job.steps;
+  const prepare = steps.findIndex(step => step.name === 'Verify and prepare isolated legacy prerequisites');
+  const start = steps.findIndex(step => step.name === 'Start disposable local PostgreSQL');
+  const reset = steps.findIndex(step => step.name === 'Replay complete history over empty legacy prerequisites');
+  const authority = steps.findIndex(step => step.name === 'Verify applied learning authority');
+  assert.ok(prepare >= 0 && prepare < start && start < reset && reset < authority);
+  assert.match(job.env.SUPABASE_WORKDIR, /runner.temp/);
+  assert.equal(job.env.MWELL_LOCAL_DATABASE_URL, 'postgresql://postgres:postgres@127.0.0.1:54322/postgres');
+  assert.match(steps[prepare].run, /node --test scripts\/qa\/prepare-learning-postgres.test.mjs/);
+  assert.match(steps[prepare].run, /node scripts\/qa\/prepare-learning-postgres.mjs --output "\$SUPABASE_WORKDIR"/);
+  assert.match(steps[reset].run, /db reset --local --no-seed --workdir "\$SUPABASE_WORKDIR"/);
+  for (const index of [prepare, start, reset, authority]) {
+    assert.equal(steps[index].if, undefined);
+    assert.equal(steps[index]['continue-on-error'], undefined);
+  }
+  for (const step of steps.filter(step => /pnpm exec supabase (?:start|stop|db reset)/.test(step.run ?? ''))) {
+    assert.match(step.run, /--workdir "\$SUPABASE_WORKDIR"/);
+    assert.doesNotMatch(step.run, /--linked|--db-url|--ignore-health-check|\|\|\s*true|--version/);
+  }
+  assert.equal(steps.find(step => step.name === 'Remove disposable local PostgreSQL').if, 'always()');
+  assert.ok(workflow('ci').jobs.e2e.needs.includes('learning-applied-postgres'));
+});
+
 test('coverage bounds workspace and Vitest concurrency without weakening tests or coverage', () => {
   const ci = workflow('ci');
   const step = ci.jobs.test.steps.find(item => item.name === 'Run tests with coverage');

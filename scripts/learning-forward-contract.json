@@ -11462,5 +11462,151 @@
         "effect": "select pg_notify('pgrst','reload schema')"
       }
     ]
+  },
+  {
+    "name": "20261105134446_warehouse_export_command_authority.sql",
+    "statements": [
+      {
+        "kind": "dynamic-program",
+        "sha256": "c1d5254116d5a66a1bbfb8b324a56ce67d9aa4ea3cb7f9ab2c3011ef8ab177f0",
+        "effect": [
+          "core.has_cap",
+          "core.has_live_cap",
+          "warehouse.prepare_export_download_pre_insights_certification",
+          "warehouse.register_export_job_uncertified_impl"
+        ]
+      },
+      {
+        "kind": "function",
+        "sha256": "0d9df79a5eddfa2365aef5635710bf0544fa3bd95732077e6768325999aa64e1",
+        "effect": {
+          "declaration": "create function private.warehouse_export_is_unregistered(p_path text) returns boolean language sql stable security definer set search_path = ''",
+          "calls": [
+            "auth.uid",
+            "private.warehouse_export_is_unregistered"
+          ],
+          "liveCapabilities": []
+        }
+      },
+      {
+        "kind": "privilege",
+        "sha256": "cd0facda3fbd2451cc5db3482c904e1d2cc612955f47fd441a51056e4d28961b",
+        "effect": "revoke all on function private.warehouse_export_is_unregistered(text) from public, anon, authenticated, service_role"
+      },
+      {
+        "kind": "privilege",
+        "sha256": "ef4ec966fbcce1cb10a7786433f61df7e5fb53db775e39e2cd57d6c91c932bd2",
+        "effect": "grant execute on function private.warehouse_export_is_unregistered(text) to authenticated"
+      },
+      {
+        "kind": "create policy",
+        "sha256": "aabfd64d47dac7134886006b668dcbbe582cac63650e2630543c4307cca7c614",
+        "effect": "create policy warehouse_exports_own_temporary_read on storage.objects for select to authenticated using ( bucket_id = 'warehouse-exports' and owner_id = auth.ui"
+      },
+      {
+        "kind": "drop policy",
+        "sha256": "62ca69c2724122ce3c58f1f6e5bf83a3b6bbdfc7bff3d3203ba176d76ecb62d1",
+        "effect": "drop policy warehouse_exports_orphan_cleanup on storage.objects"
+      },
+      {
+        "kind": "create policy",
+        "sha256": "f7e8d45d48a56d725550da00fa36cf67d79b52bd78741424ab418e316a0dbe4b",
+        "effect": "create policy warehouse_exports_orphan_cleanup on storage.objects for delete to authenticated using ( bucket_id = 'warehouse-exports' and owner_id = auth.uid():"
+      },
+      {
+        "kind": "notify",
+        "sha256": "5bb10b5d320bb06077517ed9fc42fd9d5ce1c4b9ecc69c2a08163e0be4b6c851",
+        "effect": "notify pgrst, 'reload schema'"
+      }
+    ]
+  },
+  {
+    "name": "20261105135318_warehouse_allocation_return_balance.sql",
+    "statements": [
+      {
+        "kind": "function",
+        "sha256": "69f049da81a89fe97598a4a74fdc580b4a6a5556e76a867b17de8d149aff404c",
+        "effect": {
+          "declaration": "create or replace function warehouse.allocation_return_balance(p_allocation_id text) returns jsonb language plpgsql stable security definer set search_path = ''",
+          "calls": [
+            "auth.uid",
+            "core.has_live_cap",
+            "private.event_allocation_remaining",
+            "warehouse.allocation_return_balance"
+          ],
+          "liveCapabilities": [
+            "warehouse.manage_returns"
+          ]
+        }
+      },
+      {
+        "kind": "privilege",
+        "sha256": "8cfa111b2d98619fd7086e67e12fdf8e39184758f51bf9d8f0f2073ac2fd76ef",
+        "effect": "revoke all on function warehouse.allocation_return_balance(text) from public,anon"
+      },
+      {
+        "kind": "privilege",
+        "sha256": "9221f794e456313a2666638aa96b87b047b4261b681a207836ffd0c24eb41752",
+        "effect": "grant execute on function warehouse.allocation_return_balance(text) to authenticated,service_role"
+      },
+      {
+        "kind": "notify",
+        "sha256": "5bb10b5d320bb06077517ed9fc42fd9d5ce1c4b9ecc69c2a08163e0be4b6c851",
+        "effect": "notify pgrst, 'reload schema'"
+      }
+    ]
+  },
+  {
+    "name": "20261105141930_serialized_transfer_quantity_identity.sql",
+    "statements": [
+      {
+        "kind": "begin",
+        "sha256": "e6f07d43b5c21db0fbb9a31feac2dc599787763393dd5acbfad80e247eb02ad5",
+        "effect": "begin"
+      },
+      {
+        "kind": "dynamic-program",
+        "sha256": "58b646e4570ca7921703192f52b45d011bc1e481728f7d98c8207bb5f7144695",
+        "effect": [
+          "private.warehouse_transfer_pre_lot_putaway"
+        ]
+      },
+      {
+        "kind": "function",
+        "sha256": "6a74656c9890129888793bd371272e7a3cb1c89dc381d02053a75e3725fcbbd0",
+        "effect": {
+          "declaration": "create or replace function private.warehouse_transfer_pre_lot_putaway(payload jsonb) returns jsonb language plpgsql security definer set search_path = ''",
+          "calls": [
+            "core.has_cap",
+            "private.lock_warehouse_products",
+            "private.warehouse_transfer_pre_lot_putaway",
+            "warehouse.authoritative_actor",
+            "warehouse.force_actor_on_object",
+            "warehouse.stock_levels"
+          ],
+          "liveCapabilities": []
+        }
+      },
+      {
+        "kind": "privilege",
+        "sha256": "e6f729bcf9f9da7425d3c1bdc80e7fedf48b95daae595c8db7098b902c5151d5",
+        "effect": "revoke all on function private.warehouse_transfer_pre_lot_putaway(jsonb) from public, anon, authenticated"
+      },
+      {
+        "kind": "privilege",
+        "sha256": "4562f32d549f5c4ec3092b29f5be8ac33b51184ea507f41392c1e6e9bc5043be",
+        "effect": "grant execute on function private.warehouse_transfer_pre_lot_putaway(jsonb) to service_role"
+      },
+      {
+        "kind": "select",
+        "sha256": "02c1d40e11a3c2bb3caf3d02d2a9891844c31282b8363e0b7d98e710ea4ed89a",
+        "effect": "select pg_notify('pgrst', 'reload schema')"
+      },
+      {
+        "kind": "commit",
+        "sha256": "9505cacb7c710ed17125fcc6cb3669e8ddca6c8cd8af6a31f6b3cd64604c3098",
+        "effect": "commit"
+      }
+    ]
   }
 ]

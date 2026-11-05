@@ -937,7 +937,7 @@ function digestMigrationBaseline(migrations) {
   return digest.digest("hex");
 }
 
-function scanSql(source, { splitStatements = true } = {}) {
+export function scanSql(source, { splitStatements = true } = {}) {
   const statements = [];
   let output = "";
   let state = "normal";

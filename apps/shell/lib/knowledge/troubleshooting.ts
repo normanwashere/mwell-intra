@@ -374,6 +374,7 @@ export const TROUBLESHOOTING_GUIDES: TroubleshootingGuide[] = [
       "In governed PO receiving, Exception reason explains damaged, short, excess or unidentified quantities; it is not an exemption. Example: expected 100 jackets, received 95 clean and 5 damaged; delivery photos attached",
       "For non-serialized merchandise, scan the barcode mapped to the exact product or size and enter quantity. A wrong barcode is not a reason to invent serials or bypass the product check",
       "A return serial is the existing serial on the physical unit or its original issue/order record, not a new return number. Already scanned means it is already listed in this intake",
+      "Serialized transfer quantity must match the distinct captured serials. Scan each physical unit once and check product, source location, bin and active holds if the move is rejected. For an uncertain save, check movement history and recover the original result before changing the draft. Do not duplicate scans or change quantity to force a transfer",
       "Use the applicable approval and adjustment or reconciliation flow",
     ],
     dataImpact:

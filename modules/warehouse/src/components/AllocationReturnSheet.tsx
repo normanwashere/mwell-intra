@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSession } from "@intra/auth";
 import { useWarehouse } from "@/app/store";
 import { allConflicts, allPending } from "@/data/outbox";
+import { allocationReturnRemaining } from "@/data/allocationReturnBalance";
 import type { Allocation } from "@/domain/types";
 import { Field, QuantityStepper, Sheet, useToast } from "@/components/ui";
 import { EvidenceCapture } from "@/components/camera/EvidenceCapture";
@@ -57,13 +58,9 @@ function AllocationReturnForm({
     if (mode !== 'supabase') return;
     let active = true;
     if (!supabaseClient) { setCustodyError('Event custody is unavailable. Reconnect and reopen this return.'); return; }
-    void supabaseClient.schema('warehouse').from('allocation_return_totals')
-      .select('remaining_units').eq('allocation_id', allocation.id).single().then(({ data: row, error: cause }) => {
+    void allocationReturnRemaining(supabaseClient, allocation.id).then(remaining => {
         if (!active) return;
-        const remaining = Number(row?.remaining_units);
-        if (cause || !row || !Number.isSafeInteger(remaining) || remaining < 0) {
-          setCustodyError('Event custody is unavailable. Refresh and reopen this return.');
-        } else { setLiveRemaining(remaining); setQuantity(remaining); }
+        setLiveRemaining(remaining); setQuantity(remaining);
       }, () => {
         if (active) setCustodyError('Event custody is unavailable. Refresh and reopen this return.');
       });
@@ -299,7 +296,7 @@ function AllocationReturnForm({
               aria-label="Quantity returned"
               value={quantity}
               onChange={setQuantity}
-              min={1}
+              min={remainingQuantity > 0 ? 1 : 0}
               max={remainingQuantity}
             />
           </Field>

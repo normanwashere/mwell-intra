@@ -3,19 +3,19 @@
   "authority": "current-release",
   "asOf": "2026-11-05",
   "timezone": "Asia/Singapore",
-  "summary": "Last verified UAT identity retained. Four-QA remediation is pending deployment and retest; documentation preparation is not certification.",
+  "summary": "UAT serves 0b7964e with scoped live evidence and a failed hosted CI run. Follow-up application changes are not deployed; final candidate, CI, retests and documentation publication remain pending.",
   "deployed": {
-    "commit": "13d91e4fd95d8b33fda5828b7ac310686adc4704",
+    "commit": "0b7964e5650e6908fdf861a081bc1fe27716c014",
     "environment": "uat",
     "url": "https://mwell-intra-uat.vercel.app/",
     "supabaseProjectRef": "kkoitlvydytdhlpxhuah",
-    "deploymentId": null,
-    "observedAt": "2026-11-05T11:20:01.264Z",
+    "deploymentId": "dpl_E52Xq9WLhzsBdXFqSDHHfTWfXbkB",
+    "observedAt": "2026-11-05T12:38:45.508Z",
     "evidence": {
       "workspace": "parent mwell-intra-warehouse checkout",
-      "path": "outputs/four-qa-review-20261105/release-check.json",
-      "sha256": "9e437637d944f5c137991fb69e1929520785a1ef5f55e33f99e7c0b0e9833637",
-      "scope": "Retained health and release review, not a fresh probe by the documentation worker. Deployment ID was not supplied. No same-commit hosted run was found at this observation."
+      "path": "outputs/four-qa-remediation-20261105/privacy-live-0b7964e5650e-attempt2/evidence.json",
+      "sha256": "6d7cc184f86414f48b5ba68ab8268a92708f3292285eb8971d0a0fe574b1d2b8",
+      "scope": "Retained start/end UAT health and scoped privacy/API checks, not a fresh probe by the documentation worker. Deployment ID supplied by main. This does not certify all workflows or hosted CI."
     }
   },
   "candidate": {
@@ -24,11 +24,44 @@
     "deploymentId": null,
     "deployedAt": null,
     "evidence": [],
-    "scope": "Four-QA remediation; immutable candidate identity and actual deployment evidence must be supplied by the main release worker."
+    "latestPushedSourceCommit": "3d7fd838a73db26398e43219e029394e9d119246",
+    "scope": "3d7fd83 is not deployed and later source repairs await a final candidate SHA. Main must supply actual deployment and same-candidate evidence; neither a source hash nor an applied DB migration identifies a new app deployment."
   },
+  "documentation": {
+    "commit": null,
+    "status": "pending-publication",
+    "basedOnDeployedAppCommit": "0b7964e5650e6908fdf861a081bc1fe27716c014",
+    "scope": "Prepared source/manual update, not proof of a published live handbook. Record the documentation commit externally after commit creation; do not invent a self-referential final SHA. Runtime health remains authoritative for the application."
+  },
+  "databaseMigrations": [
+    {
+      "name": "warehouse_export_command_authority",
+      "appliedVersion": "20261105134446",
+      "reviewedLocalVersion": "20261105132130",
+      "sourceSha256": "0877282df3ec5d530dc31f10ca8c02086970eb68e92df059a415bd3dcac14fed",
+      "evidence": "outputs/four-qa-remediation-20261105/export-database-release-evidence.json",
+      "scope": "Main verified applied policies and ACLs. Renamed source body is unchanged; its hash is not independent applied PostgreSQL authority."
+    },
+    {
+      "name": "warehouse_allocation_return_balance",
+      "appliedVersion": "20261105135318",
+      "reviewedLocalVersion": "20261105133207",
+      "sourceSha256": "feae8f091a8ebbce465d7eac9a198d1d0cd6bfcf318bc52e6c7bbc5d244e945d",
+      "evidence": "outputs/four-qa-remediation-20261105/docs/allocation-return-migration-version-mapping.md",
+      "scope": "Main reports UAT Warehouse SQL-claims read issued=2, returned=1, remaining=0 and expected STABLE/DEFINER/empty-search-path/ACL metadata. Updated-client live retest remains pending."
+    },
+    {
+      "name": "serialized_transfer_quantity_identity",
+      "appliedVersion": "20261105141930",
+      "reviewedLocalVersion": "20261105140056",
+      "sourceSha256": "8704110436a8bce29b577c067dd584c24e993d96b32508d3ff430977ab4224ef",
+      "evidence": "outputs/four-qa-remediation-20261105/qa3-experience/TRANSFER-INDEPENDENT-REVIEW.md",
+      "scope": "QA3 cleared 78 local tests on the unchanged body. Main reports actual application, inner body MD5 c11d45eeafb0a75c01d631af51cef34d, unchanged outer wrappers, original ACL and DEFINER/empty-search-path settings. QA1 live rollback and fresh UI acceptance are in progress, not passed here."
+    }
+  ],
   "acceptance": {
-    "sameCommitHostedCi": { "status": "pending", "commit": null, "evidence": [] },
-    "nonSmtpUatRetest": { "status": "pending", "commit": null, "evidence": [] },
+    "sameCommitHostedCi": { "status": "failed", "commit": "0b7964e5650e6908fdf861a081bc1fe27716c014", "runId": "42027790187", "evidence": ["outputs/four-qa-remediation-20261105/qa4-release/ci-capacity-followup.json"] },
+    "nonSmtpUatRetest": { "status": "partial", "commit": "0b7964e5650e6908fdf861a081bc1fe27716c014", "evidence": ["outputs/four-qa-remediation-20261105/docs/REMEDIATION-UPDATE.md"], "scope": "Scoped privacy, picking, My Work, CSV, Finance, Product, event, bundle and export evidence; transfer follow-up, G01, recipe/conversion and remaining variants are not closed." },
     "dataAndWorkflowPreservation": { "status": "pending", "commit": null, "evidence": [] },
     "rel04DeployedHandoff": { "status": "pending", "commit": null, "evidence": [] },
     "humanAndPhysicalDeviceAcceptance": { "status": "not-recorded", "commit": null, "evidence": [] },
@@ -44,6 +77,15 @@
   },
   "smtp": { "status": "excluded", "scope": "No configuration or delivery certification; excluded checks are not passes." },
   "history": [
+    {
+      "status": "superseded-observation",
+      "asOf": "2026-11-05",
+      "commit": "13d91e4fd95d8b33fda5828b7ac310686adc4704",
+      "observedAt": "2026-11-05T11:20:01.264Z",
+      "evidence": "outputs/four-qa-review-20261105/release-check.json",
+      "sha256": "9e437637d944f5c137991fb69e1929520785a1ef5f55e33f99e7c0b0e9833637",
+      "scope": "Original four-QA release observation preserved; no same-commit hosted run was found at that observation."
+    },
     {
       "manifest": "docs/handoffs/2026-09-22/release-status.json",
       "status": "historical-not-current-certification",

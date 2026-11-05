@@ -1,6 +1,6 @@
 # Technical Handoff
 
-Use the [current release manifest](release-status.json) for observed UAT identity, candidate identity and acceptance evidence. The [September technical pack](../2026-09-22/technical.md) is historical; CI212 and its source-transfer evidence do not certify this candidate. No new deployment or receiving-team acceptance is recorded here.
+Use the [current release manifest](release-status.json) for observed UAT identity, candidate identity and acceptance evidence. The [September technical pack](../2026-09-22/technical.md) is historical; CI212 and its source-transfer evidence do not certify this candidate. UAT remains `0b7964e`; follow-up source and applied database versions are separate. No receiving-team acceptance is recorded here.
 
 ## Candidate Boundaries
 
@@ -9,6 +9,7 @@ Use the [current release manifest](release-status.json) for observed UAT identit
 - My Work paging follows the database cursor order, including mixed-case legacy IDs; repeated or invalid cursors still fail safely. A source failure is not an empty source and must not erase unrelated authorized data.
 - Picking accepts another valid source bin when no explicit order-bin constraint exists, while preserving warehouse, exact serial, hold, reservation and server command checks. A recommendation is not authority or proof of sufficient current stock.
 - CSV unknowns, Finance period labels and Product workflow-region accessible names follow the appended [pending release addendum](../../releases/2026-11-05-WMS-AUDIT-REMEDIATION.md).
+- Export repair `20261105134446` retains current live capabilities for registration/download and orphan cleanup. The report's new disabled-action explanation does not grant permission. Allocation-balance repair `20261105135318` exposes only allocation identity and quantities through an authenticated, live-capability-gated read; governed event custody uses the existing sale-aware calculation. Quantity display does not replace serial, hold, return or independent-review guards. Both follow-up client changes await deployment and retest.
 
 ## Release Evidence Still Required
 

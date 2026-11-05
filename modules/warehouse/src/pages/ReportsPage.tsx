@@ -4,6 +4,7 @@ import type { InventoryPosition } from '@intra/data-kit';
 import { useWarehouse } from '@/app/store';
 import { prepareWarehouseExport } from '@/app/governedExports';
 import { useCanPrepareWarehouseExport } from '@/auth/useCanPrepareWarehouseExport';
+import { useSession } from '@/auth/session';
 import { downloadText, downloadUrl } from '@/app/download';
 import { toCsv } from '@/domain/export';
 import { loadCompleteControlQueue } from '@/domain/controlQueues';
@@ -15,6 +16,7 @@ const PAGE_SIZE = 50;
 export function ReportsPage() {
   const { data, source, identityId, capabilities, loadInventoryPositions } = useWarehouse();
   const canExport = useCanPrepareWarehouseExport(source);
+  const { loading: sessionLoading } = useSession();
   const loader = useRef(loadInventoryPositions);
   useEffect(() => { loader.current = loadInventoryPositions; });
   const sequence = useRef(0);
@@ -62,6 +64,11 @@ export function ReportsPage() {
     (productId === 'all' || position.productId === productId)), [locationId, positions, productId]);
   const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const visibleRows = rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const exportDisabledReason = loading || (source === 'supabase' && sessionLoading)
+    ? 'Export is unavailable while inventory or access is loading.'
+    : !canExport
+      ? 'You can view this report, but your current access does not allow inventory exports. Ask an authorized colleague to prepare the export.'
+      : !ready ? 'Export is unavailable until the report loads successfully.' : undefined;
   if (!data) return null;
   const productName = (id: string) => data.products.find((product) => product.id === id)?.name ?? id;
   const locationName = (id: string) => data.locations.find((location) => location.id === id)?.name ?? id;
@@ -127,8 +134,9 @@ export function ReportsPage() {
       <div className="grid min-w-0 gap-3 border-y border-line py-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] [&>div]:min-w-0">
         <Field label="Location filter" htmlFor="report-location"><select id="report-location" className="input" value={locationId} onChange={(event) => { setLocationId(event.target.value); setPage(0); }}><option value="all">All locations</option>{data.locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select></Field>
         <Field label="Product filter" htmlFor="report-product"><select id="report-product" className="input" value={productId} onChange={(event) => { setProductId(event.target.value); setPage(0); }}><option value="all">All products</option>{data.products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select></Field>
-        <button type="button" className="btn-primary self-end justify-center" disabled={!canExport || exporting || loading || !ready} onClick={() => void exportReport()}><Icon name="download" />{exporting ? 'Preparing...' : source === 'supabase' ? 'Export full inventory' : 'Export report'}</button>
+        <button type="button" className="btn-primary self-end justify-center" disabled={!canExport || exporting || loading || !ready} aria-describedby={exportDisabledReason ? 'report-export-reason' : undefined} onClick={() => void exportReport()}><Icon name="download" />{exporting ? 'Preparing...' : source === 'supabase' ? 'Export full inventory' : 'Export report'}</button>
       </div>
+      {exportDisabledReason && <p id="report-export-reason" className="text-sm text-muted">{exportDisabledReason}</p>}
       {source === 'supabase' && <p className="text-sm text-muted">Filters apply to this view; export includes all authorized positions.</p>}
       {exportReady && <p role="status" className="rounded-lg bg-emerald-500/10 p-3 text-sm font-medium text-emerald-700 dark:text-emerald-300">Export ready. The private download link expires shortly; request a new export for corrections.</p>}
       {ready && <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6" aria-label="Inventory position totals">

@@ -35,6 +35,7 @@ test('atomic lot-aware putaway retains hold authority and offline replay', async
     await db.exec(await migration('20260810155237_block_transfer_of_held_inventory.sql'));
     await db.exec(await migration('20260905094000_offline_replay_identity.sql'));
     await db.exec(await migration('20261019180843_lot_aware_atomic_putaway.sql'));
+    await db.exec(await migration('20261105141930_serialized_transfer_quantity_identity.sql'));
     const reset = () => db.exec(`truncate warehouse.stock_levels,warehouse.inventory_holds,warehouse.movements,private.warehouse_offline_receipts; set test.allowed='yes'; insert into warehouse.stock_levels(product_id,location_id,bin_id,lot_id,quantity) values ('bulk','wh',null,'lot-a',2),('bulk','wh',null,'lot-b',1);`);
     const input = (quantity=3, extra={}) => ({ bulk_relocation:true,idempotency_key:'putaway-test-intent-001',command_input:{ productId:'bulk',locationId:'wh',toBinId:'dest',quantity,...extra } });
     const move = async payload => (await db.query('select warehouse.transfer($1::jsonb) result',[JSON.stringify(payload)])).rows[0].result;

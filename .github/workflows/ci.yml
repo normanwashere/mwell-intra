@@ -53,6 +53,7 @@ jobs:
     needs: learning-source
     env:
       MWELL_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+      SUPABASE_WORKDIR: ${{ runner.temp }}/mwell-learning-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v6
@@ -63,12 +64,17 @@ jobs:
           node-version: "22"
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Verify and prepare isolated legacy prerequisites
+        run: |
+          node --test scripts/qa/prepare-learning-postgres.test.mjs
+          node scripts/qa/prepare-learning-postgres.mjs --output "$SUPABASE_WORKDIR"
       - name: Start disposable local PostgreSQL
         run: >-
           pnpm exec supabase start
+          --workdir "$SUPABASE_WORKDIR"
           --exclude gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
-      - name: Apply complete migration history from empty
-        run: pnpm exec supabase db reset --local --no-seed
+      - name: Replay complete history over empty legacy prerequisites
+        run: pnpm exec supabase db reset --local --no-seed --workdir "$SUPABASE_WORKDIR"
       - name: Publish and verify governed role orientations
         run: |
           pnpm publish:learning-orientations -- --ci-bootstrap
@@ -79,7 +85,7 @@ jobs:
           pnpm verify:learning-applied
       - name: Remove disposable local PostgreSQL
         if: always()
-        run: pnpm exec supabase stop --no-backup
+        run: pnpm exec supabase stop --no-backup --workdir "$SUPABASE_WORKDIR"
 
   knowledge-base:
     name: Knowledge Base contract
@@ -140,6 +146,12 @@ jobs:
         run: pnpm verify:launch-artifacts
       - name: Verify release and effective authority boundaries
         run: node --test scripts/qa/release-workflow-boundaries.test.mjs scripts/verify-procurement-legal-authority.test.mjs
+      - name: Verify authenticated export SQL and Storage authority
+        run: node --test scripts/verify-warehouse-export-authority.pglite.test.mjs
+      - name: Verify serialized transfer and lot-aware putaway SQL authority
+        env:
+          QA_TRANSFER_BASELINE: "0"
+        run: node --test --test-concurrency=1 scripts/verify-serialized-transfer-authority.pglite.test.mjs scripts/verify-lot-aware-putaway.pglite.test.mjs
       - name: Lint
         run: pnpm lint
 
