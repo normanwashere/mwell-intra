@@ -486,24 +486,9 @@ function expectedSchemaPrivileges() {
 }
 
 function expectedDefaultPrivileges() {
-  return [
-    "SELECT",
-    "DELETE",
-    "INSERT",
-    "MAINTAIN",
-    "REFERENCES",
-    "SELECT",
-    "TRIGGER",
-    "TRUNCATE",
-    "UPDATE",
-  ].map((privilege, index) => ({
-    owner: "postgres",
-    schema: "core",
-    objectType: "TABLE",
-    grantee: index === 0 ? "authenticated" : "service_role",
-    privilege,
-    grantable: false,
-  }));
+  // The excluded 20260706090000 MVP granted core defaults. The canonical
+  // bootstrap does not; forward SQL only revokes defaults in this query's scope.
+  return [];
 }
 
 export function expectedLearningCatalogSnapshot({
@@ -546,11 +531,14 @@ export function expectedLearningCatalogSnapshot({
       PRIVATE_ANSWER_KEY_TABLE,
     ].map((table) => ({ table, owner: "postgres" })),
     defaultPrivileges: expectedDefaultPrivileges(),
+    // Pinned supabase/postgres:17.6.1.158 explicitly enables API-role INHERIT:
+    // migrations/db/migrations/20230529180330_alter_api_roles_for_inherit.sql.
+    // https://github.com/supabase/postgres/blob/17.6.1.158/migrations/db/migrations/20230529180330_alter_api_roles_for_inherit.sql
     roles: [
       {
         name: "anon",
         superuser: false,
-        inherit: false,
+        inherit: true,
         createRole: false,
         createDb: false,
         canLogin: false,
@@ -561,7 +549,7 @@ export function expectedLearningCatalogSnapshot({
       {
         name: "authenticated",
         superuser: false,
-        inherit: false,
+        inherit: true,
         createRole: false,
         createDb: false,
         canLogin: false,
@@ -572,7 +560,7 @@ export function expectedLearningCatalogSnapshot({
       {
         name: "service_role",
         superuser: false,
-        inherit: false,
+        inherit: true,
         createRole: false,
         createDb: false,
         canLogin: false,

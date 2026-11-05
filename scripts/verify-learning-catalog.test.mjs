@@ -651,6 +651,10 @@ test("catalog queries expose ACL state and transitive service-role escalation", 
       create role anon nologin noinherit;
       create role authenticated nologin noinherit;
       create role service_role nologin noinherit bypassrls;
+      -- Supabase postgres 17.6.1.158 / 20230529180330_alter_api_roles_for_inherit.sql
+      alter role authenticated inherit;
+      alter role anon inherit;
+      alter role service_role inherit;
       create role learning_bridge nologin noinherit;
       create role learning_superuser nologin noinherit superuser;
       grant learning_superuser to learning_bridge;
@@ -663,6 +667,7 @@ test("catalog queries expose ACL state and transitive service-role escalation", 
       alter default privileges grant insert on tables to authenticated;
     `);
     const snapshot = await catalogModule.loadLearningCatalogSnapshot(database);
+    assert.deepEqual(snapshot.roles, expectedSnapshot().roles);
     assert.deepEqual(snapshot.schemas, [
       { schema: "core", owner: "postgres" },
       { schema: "learning", owner: "postgres" },
@@ -710,6 +715,103 @@ test("catalog queries expose ACL state and transitive service-role escalation", 
     );
   } finally {
     await database.close();
+  }
+});
+
+test("native Supabase role attributes remain exact with INHERIT", () => {
+  const expected = expectedSnapshot();
+  assert.deepEqual(
+    expected.roles,
+    ["anon", "authenticated", "service_role"].map((name) => ({
+      name,
+      superuser: false,
+      inherit: true,
+      createRole: false,
+      createDb: false,
+      canLogin: false,
+      bypassRls: name === "service_role",
+      replication: false,
+      connectionLimit: -1,
+    })),
+  );
+  for (const role of expected.roles) {
+    for (const field of [
+      "superuser",
+      "inherit",
+      "createRole",
+      "createDb",
+      "canLogin",
+      "bypassRls",
+      "replication",
+      "connectionLimit",
+    ]) {
+      expectDrift((snapshot) => {
+        snapshot.roles.find((row) => row.name === role.name)[field] =
+          field === "connectionLimit" ? 0 : !role[field];
+      }, /role attribute/i);
+    }
+  }
+});
+
+test("canonical default ACL scope excludes MVP grants and rejects every added grant", () => {
+  const manifest = JSON.parse(
+    readFileSync(
+      new URL("./qa/canonical-replay-manifest.json", import.meta.url),
+      "utf8",
+    ),
+  );
+  assert.equal(
+    manifest.sources.find(
+      (row) => row.file === "20260706090000_core_schema_identity.sql",
+    ).action,
+    "preserve-history",
+  );
+  const executed = new Set(
+    manifest.sources
+      .filter((row) => row.action === "execute-forward")
+      .map((row) => row.file),
+  );
+  const sql = [
+    ...manifest.baseline.map((row) =>
+      readFileSync(
+        new URL(
+          `./qa/fixtures/canonical-uat-baseline/${row.file}`,
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    ),
+    ...readRepositoryMigrations()
+      .filter((row) => executed.has(row.name))
+      .map((row) => row.sql),
+  ];
+  const scopedDefaults = sql
+    .flatMap((source) => scanSql(source))
+    .filter(
+      (statement) =>
+        /^alter default privileges\b/i.test(statement) &&
+        (!/\bin schema\b/i.test(statement) ||
+          /\bin schema (?:core|learning|private)\b/i.test(statement)),
+    );
+  assert.ok(scopedDefaults.length > 0);
+  for (const statement of scopedDefaults)
+    assert.match(statement, /\brevoke\b/i);
+  assert.deepEqual(expectedSnapshot().defaultPrivileges, []);
+  for (const schema of ["<global>", "core", "learning", "private"]) {
+    for (const grantee of ["PUBLIC", "anon", "authenticated", "service_role"]) {
+      expectDrift(
+        (snapshot) =>
+          snapshot.defaultPrivileges.push({
+            owner: "postgres",
+            schema,
+            objectType: "TABLE",
+            grantee,
+            privilege: "SELECT",
+            grantable: false,
+          }),
+        /default privilege/i,
+      );
+    }
   }
 });
 
@@ -862,7 +964,7 @@ test("schema ownership, schema ACLs, table owners, and default ACLs are exact", 
   );
   assert.ok(expected.schemaPrivileges.length > 0);
   assert.ok(expected.governedTableOwners.length > 0);
-  assert.ok(expected.defaultPrivileges.length > 0);
+  assert.deepEqual(expected.defaultPrivileges, []);
 
   expectDrift((snapshot) => {
     snapshot.schemas.find((schema) => schema.schema === "learning").owner =
