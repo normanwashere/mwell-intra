@@ -35,15 +35,15 @@ describe("OnboardingTrainingSession", () => {
       onClose: vi.fn(),
     };
     const view = render(<OnboardingTrainingSession {...props} resumeKey="launch-1" />);
-    fireEvent.click(await screen.findByRole("button", { name: "Continue", exact: true }));
-    expect(await screen.findByRole("heading", { name: "Role orientation", exact: true })).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: /^Continue$/ }));
+    expect(await screen.findByRole("heading", { name: /^Role orientation$/ })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Resume later" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     view.rerender(<OnboardingTrainingSession {...props} resumeKey="launch-1" />);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     view.rerender(<OnboardingTrainingSession {...props} resumeKey="launch-2" />);
-    expect(await screen.findByRole("heading", { name: "Role orientation", exact: true })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Back", exact: true }));
+    expect(await screen.findByRole("heading", { name: /^Role orientation$/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^Back$/ }));
     expect(await screen.findByRole("heading", { name: "Confirm why this step is assigned" })).toBeInTheDocument();
     expect(props.onCheckpoint).not.toHaveBeenCalled();
     expect(props.onEvaluateChoice).not.toHaveBeenCalled();
