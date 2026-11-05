@@ -47,7 +47,8 @@ export function ImportsPage() {
   const [file, setFile] = useState<File | null>(null);
   const [result, setResult] = useState<ValidationResponse | null>(null);
   const [correctedFrom, setCorrectedFrom] = useState<string>();
-  const [working, setWorking] = useState(false);
+  const [activity, setActivity] = useState<'validating' | 'applying' | null>(null);
+  const working = activity !== null;
   const [error, setError] = useState('');
   const [applied, setApplied] = useState(false);
   const [reviewerEmail, setReviewerEmail] = useState('');
@@ -70,7 +71,7 @@ export function ImportsPage() {
 
   const validate = async () => {
     if (!file || !online || !live) return;
-    setWorking(true);
+    setActivity('validating');
     setError('');
     try {
       const form = new FormData();
@@ -85,13 +86,13 @@ export function ImportsPage() {
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Import validation failed.');
     } finally {
-      setWorking(false);
+      setActivity(null);
     }
   };
 
   const apply = async () => {
     if (!result || result.preview.rejectedRows > 0 || result.preview.duplicateRows > 0 || !online) return;
-    setWorking(true);
+    setActivity('applying');
     setError('');
     try {
       const response = await fetch('/api/warehouse/imports', {
@@ -110,7 +111,7 @@ export function ImportsPage() {
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Import apply failed.');
     } finally {
-      setWorking(false);
+      setActivity(null);
     }
   };
 
@@ -169,12 +170,18 @@ export function ImportsPage() {
 
   const mayApply = Boolean(result && result.preview.rejectedRows === 0 && result.preview.duplicateRows === 0
     && result.evidence?.uploaderId !== identityId);
+  const currentStep = activity === 'validating' ? 1 : applied || activity === 'applying' ? 3 : result ? 2 : file ? 1 : 0;
+  const validateDisabled = !file || !online || !live || working;
 
   return (
     <div className="space-y-4">
       <PageHeader title="Warehouse imports" icon="download" subtitle="Validate, review, and reconcile controlled cutover data" />
       <ol className="grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="Import steps">
-        {STEPS.map((step, index) => <li key={step} className="rounded-lg bg-inset px-3 py-2 text-xs font-semibold text-muted"><span className="mr-2 text-brand-600">{index + 1}</span>{step}</li>)}
+        {STEPS.map((step, index) => <li key={step} aria-current={!applied && index === currentStep ? 'step' : undefined}
+          className={`rounded-lg border px-3 py-2 text-xs ${index === currentStep && !applied ? 'border-brand-600 bg-surface font-bold text-ink' : 'border-line bg-inset text-muted'}`}>
+          <span className="mr-2" aria-hidden="true">{index + 1}</span><span>{step}</span>
+          <span className="mt-1 block font-medium">{applied || index < currentStep ? 'Completed' : index === currentStep ? 'Current' : 'Pending'}</span>
+        </li>)}
       </ol>
 
       {!online && <p role="alert" className="rounded-lg bg-amber-500/10 p-3 text-sm font-medium text-amber-800 dark:text-amber-200">Connect to the network before validating or applying an import.</p>}
@@ -210,7 +217,7 @@ export function ImportsPage() {
             </label>
           </div>
         </div>
-        <button type="button" className="btn-primary mt-4 w-full justify-center" disabled={!file || !online || !live || working} onClick={() => void validate()}>{working ? 'Validating...' : 'Validate file'}</button>
+        <button type="button" className={`${validateDisabled ? 'btn-outline' : 'btn-primary'} mt-4 w-full justify-center`} disabled={validateDisabled} onClick={() => void validate()}>{activity === 'validating' ? 'Validating...' : 'Validate file'}</button>
       </Card>
 
       {result && (

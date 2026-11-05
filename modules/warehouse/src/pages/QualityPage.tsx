@@ -13,6 +13,7 @@ import { HoldReleaseSheet } from '@/components/quality/HoldReleaseSheet';
 import { InspectionEvidence } from '@/components/quality/InspectionEvidence';
 import { pendingQualityWork, type PendingInspection } from '@/domain/controlQueues';
 import { loadQualityControlPopulation } from '@/domain/qualityControlLoad';
+import { productIdentity, sourceIdentity } from './workSourcePresentation';
 
 type QualityTab = 'pending' | 'holds' | 'completed';
 
@@ -149,9 +150,10 @@ export function QualityPage() {
 
   if (!data) return null;
   const productName = (productId: string) => data.products.find((product) => product.id === productId)?.name ?? productId;
+  const productSku = (productId: string) => data.products.find(product => product.id === productId)?.sku;
   const matches = (...values: (string | undefined)[]) => values.join(' ').toLowerCase().includes(search.trim().toLowerCase());
   const sourceFocused = Boolean(selectedSource && search.trim() === selectedSource);
-  const shownPending = sourceFocused ? sourceMatches.pending : pending.filter(i => matches(i.id, i.sourceId, i.serialNumber, productName(i.productId)));
+  const shownPending = sourceFocused ? sourceMatches.pending : pending.filter(i => matches(i.id, i.sourceId, i.serialNumber, productName(i.productId), productSku(i.productId)));
   const selectedItems = pending.filter(item => selectedIds.includes(item.id));
   const selectedGroup = selectedItems[0] ? qualityBatchGroup(selectedItems[0]) : null;
   const toggleSelected = (item: PendingInspection) => setSelectedIds(ids => ids.includes(item.id)
@@ -165,10 +167,10 @@ export function QualityPage() {
   const allActiveHolds = holds.filter((hold) =>
     hold.status === 'active' && hold.reason !== 'Awaiting independent quality inspection');
   const activeHolds = sourceFocused ? sourceMatches.holds : allActiveHolds.filter((hold) =>
-    matches(hold.id, hold.inspectionId, hold.serialNumber, hold.reason, productName(hold.productId)));
+    matches(hold.id, hold.inspectionId, hold.serialNumber, hold.reason, productName(hold.productId), productSku(hold.productId)));
   const allCompleted = inspections.filter((inspection) => inspection.disposition !== 'pending');
   const completed = sourceFocused ? sourceMatches.completed : allCompleted.filter((inspection) =>
-    matches(inspection.id, inspection.sourceId, inspection.serialNumber, productName(inspection.productId)));
+    matches(inspection.id, inspection.sourceId, inspection.serialNumber, productName(inspection.productId), productSku(inspection.productId)));
   const shownVendorReturns = sourceFocused ? sourceMatches.vendorReturns : vendorReturns;
   const sourceTabs: { value: QualityTab; label: string; count: number }[] = [
     { value: 'pending', label: 'Pending', count: sourceMatches.pending.length },
@@ -295,7 +297,15 @@ export function QualityPage() {
         shownPending.length === 0 ? <EmptyState icon="clipboard" title={search ? 'No matching inspections' : 'No inspections waiting'} /> : (
           <ul className="space-y-3" aria-label="Pending inspections">
             {[...groups.entries()].map(([key, items]) => <li key={key}><details open={Boolean(search) || groups.size < 5} className="rounded-lg border border-line bg-surface">
-              <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">{productName(items[0]!.productId)} <span className="ml-2 font-normal text-muted">{items.length} inspection(s)</span></summary>
+              <summary className="cursor-pointer px-4 py-3 text-sm font-semibold [overflow-wrap:anywhere]">
+                {productIdentity(data, items[0]!.productId)} <span className="ml-2 font-normal text-muted">{items.length} inspection(s)</span>
+                <span className="mt-1 block text-xs font-normal text-muted">{sourceIdentity(data, items[0]!.sourceType, items[0]!.sourceId)}</span>
+                <span className="mt-1 block text-xs font-normal text-muted">{[
+                  items[0]!.procurementPoLineId && `PO line ${items[0]!.procurementPoLineId}`,
+                  items[0]!.binId && `Bin ${data.storageAreas?.find(b => b.id === items[0]!.binId)?.code ?? items[0]!.binId}`,
+                  items[0]!.lotId && `Lot ${data.lots.find(l => l.id === items[0]!.lotId)?.lotCode ?? items[0]!.lotId}`,
+                ].filter(Boolean).join(' / ')}</span>
+              </summary>
               <div className="flex flex-wrap items-center justify-between gap-2 border-y border-line bg-inset px-4 py-2 text-xs">
                 <details className="min-w-0 [overflow-wrap:anywhere]"><summary className="cursor-pointer">Source and lot references</summary>
                   <p>{items[0]!.sourceType}: {items[0]!.sourceId}</p>

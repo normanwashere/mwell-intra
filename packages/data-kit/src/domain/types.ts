@@ -285,6 +285,8 @@ export interface CycleCountLine {
   counted: number;
   /** Required for serialized products; duplicates and unknown serials are rejected. */
   serialNumbers?: string[];
+  /** Explicit bulk observations when this bin contains multiple receipt lots. */
+  lotCounts?: { lotId: Id | null; counted: number }[];
 }
 
 export interface CycleCount {

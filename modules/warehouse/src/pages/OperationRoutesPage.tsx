@@ -46,6 +46,8 @@ export function OperationRoutesPage() {
     openRoute(routes[0]!);
   }, [mayEdit, routes, searchParams]);
   if (!data) return null;
+  const operationName = (route: OperationRoute) =>
+    data.operationTypes?.find(type => type.id === route.operationTypeId)?.label || 'Warehouse operation';
   const isLastActive = (route: OperationRoute) =>
     selected?.id === route.id &&
     selected.active &&
@@ -86,9 +88,10 @@ export function OperationRoutesPage() {
           {routes.map((route) => (
             <li key={route.id} className="grid gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
               <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2"><p className="font-semibold text-ink">{label(route.operationTypeId.replace(/^operation-/, '').replace(/^route-/, '').replace(/-default$/, ''))}</p><Badge tone={route.active ? 'emerald' : 'slate'}>{route.active ? 'Active' : 'Inactive'}</Badge></div>
+                <div className="flex flex-wrap items-center gap-2"><p className="font-semibold text-ink [overflow-wrap:anywhere]">{operationName(route)}</p><Badge tone={route.active ? 'emerald' : 'slate'}>{route.active ? 'Active' : 'Inactive'}</Badge></div>
                 <p className="mt-1 break-words text-sm text-muted">{route.sourceLocationTypes.map(label).join(', ')} → {route.destinationLocationTypes.map(label).join(', ')}</p>
                 <div className="mt-2 flex flex-wrap gap-2 text-xs text-faint"><span>{route.requiresEvidence ? 'Evidence required' : 'Evidence optional'}</span><span>·</span><span>{route.requiresApproval ? 'Approval required' : 'No approval'}</span><span>·</span><span>{route.requiresOnline ? 'Online required' : 'Offline allowed'}</span></div>
+                <p className="mt-2 select-text text-xs text-muted [overflow-wrap:anywhere]">Route: {route.id}</p>
                 {!route.active && <p className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-300">Inactive routes cannot be selected for new warehouse work.</p>}
               </div>
               {mayEdit && <button type="button" className="btn-primary btn-sm justify-center" onClick={() => openRoute(route)}>Edit route</button>}
@@ -97,8 +100,9 @@ export function OperationRoutesPage() {
         </ul>
       )}
 
-      <Sheet open={Boolean(selected)} onOpenChange={(open) => { if (!open) openRoute(null); }} title="Edit operation route" description={selected ? label(selected.operationTypeId) : undefined} footer={<button type="button" className="btn-primary w-full justify-center" disabled={!draft || draft.sourceLocationTypes.length === 0 || draft.destinationLocationTypes.length === 0 || saving} onClick={() => void save()}>{saving ? 'Saving...' : 'Save route'}</button>}>
+      <Sheet open={Boolean(selected)} onOpenChange={(open) => { if (!open) openRoute(null); }} title="Edit operation route" description={selected ? operationName(selected) : undefined} footer={<button type="button" className="btn-primary w-full justify-center" disabled={!draft || draft.sourceLocationTypes.length === 0 || draft.destinationLocationTypes.length === 0 || saving} onClick={() => void save()}>{saving ? 'Saving...' : 'Save route'}</button>}>
         {draft && <div className="space-y-4">
+          <p className="select-text text-xs text-muted [overflow-wrap:anywhere]">Route: {draft.id}</p>
           {guideReturnTo && (
             <a
               href={guideReturnTo}

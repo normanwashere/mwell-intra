@@ -70,7 +70,9 @@ Returning to a browser tab should keep the open form while the app successfully 
 
 **Assigned training:** Follow the requirements shown in Onboarding. A new permission is not proof of completed training. If a task's required training is missing or unclear, ask your administrator to check the published assignment; repeating unrelated practice will not resolve it. The September 14 training-version correction does not reset progress or mark new exercises complete.
 
-For exports, distinguish **opening the page** from **preparing a file**. Warehouse dashboard access does not require analytics or Finance viewing permission. Data & Reports needs analytics access; Inventory Reports follows its analytics/Finance and Insights access checks. An export still needs the separate current export-preparation permission. The Operations Associate dashboard entry does not unlock those reporting pages.
+For exports, distinguish **opening the page** from **preparing a file**. Warehouse dashboard access does not require analytics or Finance viewing permission. Data & Reports needs analytics access; Inventory Reports shows authorized inventory quantities with Warehouse inventory, analytics, or Finance viewing permission, without requiring a separate Insights workspace role. Inventory viewing does not grant Finance access or export authority. An export still needs the separate current export-preparation permission. Dashboard access alone does not unlock either reporting page. Wait for report loading to finish; filters use the complete authorized result, not just the first page. Filters apply to this view; export includes all authorized positions. A loading error is not an empty report.
+
+Inventory Reports separates **scoped commitments** from **unassigned product commitments**. All-location available totals count each product once. When demand has no assigned location, a location-filtered available quantity is **Not confirmed**, not zero; the demand is shown separately without assigning it to a warehouse. In the CSV, `product_available` and `unscoped_committed` repeat for each position of the product: count each once per `product_id`, never sum them down position rows. An unverified position has `availability_verified=false`, a blank `available`, and an explanatory `availability_status`. `putaway_available` is local free stock for putaway, not confirmed availability to promise.
 
 Being able to view a report or recommendation does not mean you can act on it. Export preparation and replenishment actions depend on your current command permissions. Operations submits the recommendation; Procurement handles its decision and handoff. Read-only records remain available to the roles allowed to see them.
 
@@ -653,6 +655,22 @@ Use the serial already on the physical device or in the original release, not a 
 ### Counts and Adjustments
 
 Create a count draft, record physical quantity and evidence, review variance, and post only an approved stock-change request. Never edit stock levels directly.
+
+**November 5 candidate instructions, pending live verification:**
+
+1. Choose the warehouse, storage area and product category. Count only the items you physically checked. A blank field stays uncounted; enter **0** only when you checked and found none. For serialized products, use **No units found** to record an intentional zero.
+2. Scan or enter each serial once. Changing or clearing the draft also clears its scan list. For bulk items spread across receipt lots, enter a count for every displayed lot, including lots with an expected balance of zero. Do not move a discrepancy into a different lot to make the total match.
+3. Add the reason and evidence, then submit. If confirmation is interrupted, keep the saved submission and use its retry action. It reuses the same request rather than creating a second count. A pending retry keeps its original quantities even if stock on screen later changes. If the server confirms that nothing was saved, the form becomes editable and keeps your observations and evidence. Correct the stated issue and submit again; do not clear browser data to get around an uncertain result.
+4. The reviewer checks individual lot differences as well as the total. Offsetting lot differences still need review. Approval exposure uses the total absolute lot differences at the saved product cost, so gains cannot cancel shortages to avoid Finance review. Existing reviewer separation and Finance thresholds remain in force.
+5. If stock changed after counting, nothing is adjusted. Reject the stale request and make a fresh physical count. Older pending counts without a verified snapshot also need a new count; do not approve them through a different screen.
+
+A count can record what you observed while the product has an active Quality hold, fulfillment reservation or event allocation. It cannot post a stock correction until the responsible owner has resolved those controls. This check is product-wide because some commitments do not identify a lot or bin. It does not release holds, cancel orders or move reservations. Reject the request if the physical count is no longer current; resolving a control is not itself evidence of a fresh count. The normal requester/reviewer separation and current role/training requirements still apply.
+
+The item detail screen shows an active Quality hold and its reason. A failed hold lookup means **unavailable**, not cleared stock. Use the linked Quality record for review; do not release a hold simply to finish a move. Serial history distinguishes exact unit custody changes from product-level movements. Historical product totals are not attributed to every serial, and unit custody is recorded going forward rather than invented for old records.
+
+Renaming a warehouse remains available. Before changing its type or making it inactive, finish or move open receiving, Quality, count and fulfillment work, reconcile stock, and deactivate empty storage areas. Existing Procurement PO receiving and emailed-PO receiving remain separate entry paths into the same inspection and putaway process.
+
+If a move's result is uncertain, reopen its saved result and confirm the stock position before starting another move. Return resolution does not itself clear Quality: review the current inspection/hold state shown with the return.
 
 ## DOA Administration
 

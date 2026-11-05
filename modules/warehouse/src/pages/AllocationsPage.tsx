@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useWarehouse } from '@/app/store';
 import { toStockState } from '@/data/repository';
 import { primaryStockLocation, stockByLocation } from '@/domain/transfers';
@@ -32,7 +33,10 @@ const STATUS_TONE: Record<AllocationStatus, Tone> = {
 };
 
 export function AllocationsPage() {
-  const { data, issue, cancelAllocation, can } = useWarehouse();
+  const { data, issue, cancelAllocation, can, canOpenRoute } = useWarehouse();
+  const [params, setParams] = useSearchParams();
+  const allocationId = params.get('allocation');
+  const hasSelection = params.has('allocation');
   const toast = useToast();
   const canIssue = can('issue_items');
   const canReserve = can('reserve_allocate');
@@ -78,6 +82,15 @@ export function AllocationsPage() {
   }, [data, issuing, issueLoc, issueBin]);
 
   if (!data) return null;
+  if (hasSelection && !canOpenRoute('allocations')) {
+    return <EmptyState icon="lock" title="Allocation is unavailable or outside your access" />;
+  }
+  const allocationLink = (id?: string) => {
+    const next = new URLSearchParams(params);
+    if (id) next.set('allocation', id);
+    else next.delete('allocation');
+    return next.size ? `?${next.toString()}` : '/allocations';
+  };
   const eventName = (id: string) => data.events.find((e) => e.id === id)?.name ?? id;
   const eventDate = (id: string) => {
     const ev = data.events.find((e) => e.id === id);
@@ -95,7 +108,7 @@ export function AllocationsPage() {
   const reservedCount = data.allocations.filter(isReserved).length;
   const issuedCount = data.allocations.filter((a) => a.status === 'issued').length;
   const shown = data.allocations.filter((a) =>
-    statusFilter === 'all'
+    hasSelection ? a.id === allocationId : statusFilter === 'all'
       ? true
       : statusFilter === 'reserved'
         ? isReserved(a)
@@ -220,8 +233,13 @@ export function AllocationsPage() {
           <div className="w-full sm:w-72">
             <SegmentedControl<StatusFilter>
               ariaLabel="Status filter"
-              value={statusFilter}
-              onChange={setStatusFilter}
+              value={hasSelection ? 'all' : statusFilter}
+              onChange={(value) => {
+                setStatusFilter(value);
+                const next = new URLSearchParams(params);
+                next.delete('allocation');
+                setParams(next);
+              }}
               options={[
                 { value: 'all', label: 'All' },
                 { value: 'reserved', label: 'Reserved' },
@@ -240,7 +258,13 @@ export function AllocationsPage() {
             issued
           </p>
         </div>
-        {data.allocations.length === 0 ? (
+        {hasSelection && <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <p role="status" className="text-sm font-semibold text-ink">Selected allocation</p>
+          <Link className="btn-ghost btn-sm" to={allocationLink()}>Show all allocations</Link>
+        </div>}
+        {hasSelection && shown.length === 0 ? (
+          <EmptyState icon="tag" title="Allocation is unavailable or outside your access" message="No different allocation was selected." />
+        ) : data.allocations.length === 0 ? (
           <EmptyState
             icon="calendar"
             title="No allocations yet"
@@ -253,19 +277,24 @@ export function AllocationsPage() {
             {shown.map((a) => (
               <li
                 key={a.id}
-                className="flex items-center justify-between gap-3 rounded-xl bg-inset p-3"
+                aria-label={`Allocation ${a.id}`}
+                aria-current={allocationId === a.id ? 'true' : undefined}
+                className={`grid min-w-0 content-start gap-3 rounded-lg border bg-inset p-3 ${allocationId === a.id ? 'border-brand-600 ring-2 ring-brand-600' : 'border-transparent'}`}
               >
-                <div className="min-w-0">
-                  <p className="truncate font-medium text-ink">
+                <div className="min-w-0 [overflow-wrap:anywhere]">
+                  <p className="font-medium text-ink">
                     {productName(a.productId)}
                   </p>
-                  <p className="text-xs text-faint">
-                    {eventName(a.eventId)} • {eventDate(a.eventId)} • Qty {a.quantity}
+                  <p className="text-sm text-muted">SKU {data.products.find(p => p.id === a.productId)?.sku ?? 'unavailable'} · Qty {a.quantity}</p>
+                  <p className="mt-1 text-xs text-muted">
+                    {eventName(a.eventId)} • {eventDate(a.eventId)}
                     {a.promotional ? ' • Giveaway' : ' • Selling'}
                   </p>
+                  <details className="mt-1 text-xs text-muted"><summary className="cursor-pointer">Allocation reference</summary><code>{a.id}</code></details>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <Badge tone={STATUS_TONE[a.status]}>{a.status}</Badge>
+                  <Link to={allocationLink(a.id)} className="btn-ghost btn-sm" aria-label={`View allocation ${a.id}`}>View</Link>
                   {(a.status === 'reserved' || a.status === 'allocated') && (
                     <>
                       {canReserve && (

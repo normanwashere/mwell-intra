@@ -33,10 +33,10 @@ beforeEach(() => {
 });
 
 describe("Dashboard export authority", () => {
-  it("combined Ops Associate gets the existing sheet on the floor without report-route widening", async () => {
+  it("combined Ops Associate retains its export sheet and quantity Reports without Data/Insights access", async () => {
     sessionOverrides.userRoles = { warehouse: ["warehouse_operator", "operations"] };
     sessionOverrides.userCapabilities = { warehouse: combinedCaps };
-    expect(canOpenWarehouseRoute("reports", cap => combinedCaps.includes(cap))).toBe(false);
+    expect(canOpenWarehouseRoute("reports", cap => combinedCaps.includes(cap), () => false)).toBe(true);
     expect(canOpenWarehouseRoute("data", cap => combinedCaps.includes(cap))).toBe(false);
     renderWithProviders(<DashboardPage />, { role: "warehouse_operator", source: "supabase", capabilities: combinedCaps });
     await screen.findByRole("heading", { name: "Warehouse floor operations" });
@@ -55,7 +55,7 @@ describe("Dashboard export authority", () => {
     expect(screen.getByRole("link", { name: "Pick & Pack" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Export data" })).not.toBeInTheDocument();
   });
-  it.each(["view_analytics", "view_finance"] as const)("%s alone cannot prepare a live export", async capability => {
+  it.each(["view_inventory", "view_analytics", "view_finance"] as const)("%s alone cannot prepare a live export", async capability => {
     sessionOverrides.userCapabilities = { warehouse: [capability] };
     renderWithProviders(<DashboardPage />, { source: "supabase", capabilities: ["view_dashboard", capability] });
     await screen.findByTestId("warehouse-dashboard-hero");
@@ -129,9 +129,9 @@ describe("Dashboard export authority", () => {
 
 describe.each([
   ["data", DataPage, ["Inventory", "Movements", "Allocations", "Inventory position", "Quality", "Cycle counts"]],
-  ["reports", ReportsPage, ["Export report"]],
+  ["reports", ReportsPage, ["Export full inventory"]],
 ] as const)("%s reporting export authority", (_page, Page, labels) => {
-  it.each([{}, { warehouse: ["view_analytics", "view_finance", "review_exports"] }, { warehouse: ["prepare_exports"] }])(
+  it.each([{}, { warehouse: ["view_inventory"] }, { warehouse: ["view_analytics", "view_finance", "review_exports"] }, { warehouse: ["prepare_exports"] }])(
     "reporting read-only authority does not authorize export: %j", async userCapabilities => {
       sessionOverrides.userCapabilities = userCapabilities;
       sessionOverrides.roleCapabilities = { warehouse: ["register_exports"], insights: ["prepare_exports"] };
@@ -176,7 +176,7 @@ describe.each([
     sessionOverrides = {};
     vi.mocked(prepareWarehouseExport).mockResolvedValue({ filename: "demo.csv", demoContent: "demo bytes" });
     renderWithProviders(<Page />, { source: "memory", role: "bi_analyst" });
-    const button = await screen.findByRole("button", { name: labels[0] });
+    const button = await screen.findByRole("button", { name: Page === ReportsPage ? "Export report" : labels[0] });
     await waitFor(() => expect(button).toBeEnabled());
     fireEvent.click(button);
     await waitFor(() => expect(downloadText).toHaveBeenCalledWith("demo.csv", "demo bytes"));

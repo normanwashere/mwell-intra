@@ -383,6 +383,8 @@ function LiveExternalReceiving() {
           )
         }
       />
+      <details className="border-y border-line py-1 text-sm">
+        <summary className="min-h-11 cursor-pointer content-center font-semibold text-ink">Receiving guidance</summary>
       <ol
         className="grid gap-2 border-y border-line py-3 text-sm sm:grid-cols-2 xl:grid-cols-3"
         aria-label="External receiving workflow"
@@ -398,6 +400,7 @@ function LiveExternalReceiving() {
           <li key={step}>{step}</li>
         ))}
       </ol>
+      </details>
       {!sheetOpen && feedback}
       {readError && (
         <div role="alert" className="space-y-2 text-sm text-rose-700">

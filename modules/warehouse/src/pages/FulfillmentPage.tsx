@@ -49,6 +49,7 @@ import { fulfillmentOrdersToCsv } from "@/domain/orderIntakeOptions";
 import { useSession } from "@/auth/session";
 import { actorName } from "@/domain/format";
 import { orderWorkflowSummary, requestWorkflowSummary, returnWorkflowSummary } from "@/domain/workflowSummary";
+import { ReturnResolutionSummary } from '@/components/fulfillment/ReturnResolutionSummary';
 import './FulfillmentPage.css';
 
 // Warehouse mutations confirm success as a boolean, not a returned order record.
@@ -130,6 +131,8 @@ const STATUS_TONE = {
   packing: "amber",
   ready: "emerald",
   released: "emerald",
+  delivery_failed: "rose",
+  returned_to_sender: "rose",
   cancelled: "rose",
   pending_approval: "amber",
   approved: "brand",
@@ -466,6 +469,13 @@ export function FulfillmentPage() {
     nextParams.delete("request");
     setSearchParams(nextParams);
   };
+  const workloadOverview = <SummaryStrip
+    orders={data.fulfillmentOrders}
+    requests={data.departmentStockRequests.filter(row => row.status === 'pending_approval').length}
+    returns={data.customerReturnCases}
+    reKits={data.reKitWorkOrders}
+    floorMode={isFloorOperator}
+  />;
 
   return (
     <div className="hierarchy-preview hp-fulfillment space-y-3 [&>.page-header-band]:!py-2">
@@ -480,17 +490,12 @@ export function FulfillmentPage() {
       />
 
       {tab !== "orders" && tab !== "requests" && (
-        <SummaryStrip
-          orders={data.fulfillmentOrders}
-          requests={
-            data.departmentStockRequests.filter(
-              (row) => row.status === "pending_approval",
-            ).length
-          }
-          returns={data.customerReturnCases}
-          reKits={data.reKitWorkOrders}
-          floorMode={isFloorOperator}
-        />
+        tab === 'returns' ? (
+        <details className="border-y border-line py-1 text-sm">
+          <summary className="min-h-11 cursor-pointer content-center font-semibold text-ink">Workload overview</summary>
+          {workloadOverview}
+        </details>
+        ) : workloadOverview
       )}
 
       {visibleTabs.length > 1 && (
@@ -933,7 +938,7 @@ function OrdersWorkspace({
                 </div>
               </div>
               <div className="order-1 flex min-w-0 flex-wrap items-center gap-2 xl:order-none xl:flex-col xl:items-start">
-                <StatusBadge status={order.status} label={orderWorkflowSummary(order, { actorIds, units }).status} />
+                <StatusBadge status={order.status === 'released' && order.deliveryMethod === 'shipment' && ['delivery_failed', 'returned_to_sender'].includes(order.shipmentStatus ?? '') ? order.shipmentStatus! : order.status} label={orderWorkflowSummary(order, { actorIds, units }).status} />
                 <time className="text-xs text-muted" dateTime={order.createdAt} title={requestDate(order.createdAt)}>
                   {Number.isFinite(Date.parse(order.createdAt)) ? `${Math.max(0, Math.floor((Date.now() - Date.parse(order.createdAt)) / 86_400_000))}d old` : 'Age unavailable'}
                 </time>
@@ -3627,6 +3632,8 @@ function ReturnsWorkspace({
           </button>
         )}
       </div>
+      <details className="border-y border-line py-1 text-sm">
+        <summary className="min-h-11 cursor-pointer content-center font-semibold text-ink">Return handoff guidance</summary>
       <HandoffRail
         steps={[
           {
@@ -3643,6 +3650,7 @@ function ReturnsWorkspace({
           },
         ]}
       />
+      </details>
       {returns.length === 0 ? (
         <EmptyState
           icon="rotate"
@@ -4055,7 +4063,7 @@ function ResolveReturnSheet({
         className="space-y-4"
         onSubmit={(event) => void submit(event)}
       >
-        <WorkflowSummary {...returnWorkflowSummary(record, { returns: data?.returns })} />
+        <ReturnResolutionSummary record={record} />
         <section aria-label="Return case context" className="border-y border-line py-4 text-sm [overflow-wrap:anywhere]">
           <dl className="grid gap-3 sm:grid-cols-2">
             <div><dt className="text-xs text-muted">Original order</dt><dd className="font-semibold">{originalOrder?.externalReference ?? (record.sourceOrderId ? `${record.sourceOrderId} (reference unavailable)` : 'Not linked to an order')}</dd></div>

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { WarehouseData } from '@intra/data-kit';
 import { BarcodeScanner } from './BarcodeScanner';
 
@@ -90,12 +90,22 @@ interface WarehouseScanFlowProps extends Omit<ResolveWarehouseScanInput, 'code' 
   complete?: boolean;
 }
 
-export function WarehouseScanFlow({ scannedCodes = [], onResolved, onCancel, label, manualLabel, manualActionLabel, batch, complete = false, ...rules }: WarehouseScanFlowProps) {
+export function WarehouseScanFlow({ scannedCodes, onResolved, onCancel, label, manualLabel, manualActionLabel, batch, complete = false, ...rules }: WarehouseScanFlowProps) {
   const [accepted, setAccepted] = useState<string[]>([]);
   const acceptedRef = useRef<string[]>([]);
   const [result, setResult] = useState<ScanResolution | null>(null);
+  const controlledCountCodes = rules.context === 'count' && scannedCodes !== undefined
+    ? JSON.stringify(scannedCodes) : null;
+  useEffect(() => {
+    if (controlledCountCodes === null) return;
+    const codes: string[] = JSON.parse(controlledCountCodes);
+    acceptedRef.current = codes;
+    setAccepted(codes);
+    setResult(current => current && codes.some(code => code.toLowerCase() === current.code.toLowerCase()) ? current : null);
+  }, [controlledCountCodes]);
   const detect = (code: string) => {
-    const resolution = resolveWarehouseScan({ ...rules, code, scannedCodes: [...scannedCodes, ...acceptedRef.current] });
+    if (complete) return;
+    const resolution = resolveWarehouseScan({ ...rules, code, scannedCodes: [...(scannedCodes ?? []), ...acceptedRef.current] });
     setResult(resolution);
     if (!resolution.ok) return;
     acceptedRef.current = [...acceptedRef.current, resolution.code];

@@ -15,6 +15,7 @@ const number = new Intl.NumberFormat('en-PH', {
 });
 
 const money = (value: number) => `PHP ${number.format(value)}`;
+const reviewNumber = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 
 function statusLabel(status: StockChangeRequest['status']) {
   if (status === 'pending_supervisor') return 'Awaiting Warehouse Supervisor';
@@ -122,7 +123,7 @@ export function ApprovalsPage() {
                   </Badge>
                 </div>
                 <p className="mt-1 text-sm text-muted">
-                  {request.quantityDelta > 0 ? '+' : ''}{request.quantityDelta} units · {money(request.financialImpact)}
+                  {request.quantityDelta > 0 ? '+' : ''}{request.quantityDelta} {request.sourceType === 'cycle_count' ? 'net units' : 'units'} · {money(request.approvalExposure ?? request.financialImpact)} {request.sourceType === 'cycle_count' ? 'gross approval exposure' : 'approval exposure'}
                 </p>
                 <p className="mt-1 break-all text-xs text-faint">Requested by {request.requestedByDisplayName ?? `Name unavailable (${request.requestedBy})`} · {request.reason}</p>
               </div>
@@ -147,6 +148,13 @@ export function ApprovalsPage() {
           product: selectedProduct.name, sku: selectedProduct.sku, location: selectedLocation.name,
           bin: data.storageAreas.find(b => b.id === selected.binId)?.code,
           expected: countLine?.expected, counted: countLine?.counted,
+          lotCounts: countLine?.lotCounts?.map(lot => ({
+            lotId: lot.lotId,
+            label: lot.lotId === null ? 'Unlotted' : data.lots.find(candidate => candidate.id === lot.lotId && candidate.productId === selected.productId)?.lotCode || lot.lotId,
+            expected: reviewNumber('expected' in lot ? lot.expected : undefined),
+            counted: reviewNumber(lot.counted),
+            delta: reviewNumber('delta' in lot ? lot.delta : undefined),
+          })),
           requester: selected.requestedByDisplayName ?? `Name unavailable (${selected.requestedBy})`,
         } : undefined}
         onOpenChange={(open) => { if (!open) setSelected(null); }}

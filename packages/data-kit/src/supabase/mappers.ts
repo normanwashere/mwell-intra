@@ -666,6 +666,8 @@ export function rowToStockChangeRequest(r: Row): StockChangeRequest {
     quantityDelta: Number(r.quantity_delta),
     unitCost: Number(r.unit_cost),
     financialImpact: Number(r.financial_impact),
+    approvalExposure: r.approval_exposure == null ? undefined : Number(r.approval_exposure),
+    grossQuantity: r.gross_quantity == null ? undefined : Number(r.gross_quantity),
     reason: r.reason,
     evidenceUrls: r.evidence_urls ?? [],
     status: r.status,
@@ -701,5 +703,9 @@ export function rowToInventoryPosition(r: Row): InventoryPosition {
     held: Number(r.held),
     unavailable: Number(r.unavailable),
     available: Number(r.available),
+    unscopedCommitted: r.unscoped_committed == null ? undefined : Number(r.unscoped_committed),
+    productAvailable: r.product_available === null ? null : r.product_available === undefined ? undefined : Number(r.product_available),
+    availabilityVerified: typeof r.availability_verified === 'boolean' ? r.availability_verified : undefined,
+    putawayAvailable: r.putaway_available == null ? undefined : Number(r.putaway_available),
   };
 }

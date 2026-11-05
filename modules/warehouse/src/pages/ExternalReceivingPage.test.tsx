@@ -144,6 +144,16 @@ function savedShipment() {
 }
 
 describe("external receiving workflow", () => {
+  it('collapses secondary workflow guidance while keeping search and arrival work visible', async () => {
+    mount();
+    expect(await screen.findByLabelText('Search emailed POs')).toBeVisible();
+    expect(screen.getByRole('button', { name: /Open EMAIL-101/ })).toBeVisible();
+    const guidance = screen.getByText('1. Register emailed PO').closest('details');
+    expect(guidance).not.toBeNull();
+    expect(guidance).not.toHaveAttribute('open');
+    fireEvent.click(within(guidance!).getByText('Receiving guidance'));
+    expect(guidance).toHaveAttribute('open');
+  });
   it('links each posted shipment product to its exact warehouse and receipt, not generic Storage', async () => {
     savedShipment();
     const shipment = workspace.orders[0]!.shipments[0]!;

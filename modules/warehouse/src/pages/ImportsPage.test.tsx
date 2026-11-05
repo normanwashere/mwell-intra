@@ -9,6 +9,25 @@ const csv = new File(['template_version,location_external_id\n1,loc-1'], 'locati
 describe('ImportsPage', () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  it('keeps Validate current while revalidating an existing preview, not Apply', async () => {
+    const user = userEvent.setup();
+    const payload = { job: { id: 'job-ready', status: 'ready' }, issues: [],
+      preview: { sourceRows: 1, acceptedRows: 1, rejectedRows: 0, duplicateRows: 0, normalizedRows: [] } };
+    let finish!: (value: Response) => void;
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(payload), { status: 201 }))
+      .mockImplementationOnce(() => new Promise(resolve => { finish = resolve; })));
+    renderWithProviders(<ImportsPage />, { role: 'warehouse_admin', source: 'supabase' });
+    await user.upload(screen.getByLabelText('Choose import CSV'), csv);
+    await user.click(screen.getByRole('button', { name: 'Validate file' }));
+    await screen.findByText('Validation review');
+    await user.click(screen.getByRole('button', { name: 'Validate file' }));
+    try {
+      const steps = screen.getByRole('list', { name: 'Import steps' });
+      expect(within(steps).getByText('Validate').closest('li')).toHaveAttribute('aria-current', 'step');
+      expect(screen.getByRole('button', { name: 'Validating...' })).toBeDisabled();
+    } finally { await act(async () => finish(new Response(JSON.stringify(payload), { status: 201 }))); }
+  });
+
   it('accepts drop input, reconciles preview counts, and keeps Apply away from unresolved errors', async () => {
     const user = userEvent.setup();
     const request = vi.fn().mockResolvedValue(new Response(JSON.stringify({
@@ -20,7 +39,13 @@ describe('ImportsPage', () => {
     vi.stubGlobal('fetch', request);
     renderWithProviders(<ImportsPage />, { role: 'warehouse_admin', source: 'supabase' });
 
+    const steps = screen.getByRole('list', { name: 'Import steps' });
+    expect(within(steps).getByText('Select template').closest('li')).toHaveAttribute('aria-current', 'step');
+    expect(screen.getByRole('button', { name: 'Validate file' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Validate file' })).not.toHaveClass('btn-primary');
+
     fireEvent.drop(screen.getByLabelText('Import CSV drop zone'), { dataTransfer: { files: [csv] } });
+    expect(within(steps).getByText('Validate').closest('li')).toHaveAttribute('aria-current', 'step');
     await user.click(screen.getByRole('button', { name: 'Validate file' }));
     const preview = await screen.findByLabelText('Import reconciliation');
     expect(within(preview).getByText('5')).toBeInTheDocument();
@@ -29,9 +54,12 @@ describe('ImportsPage', () => {
     expect(screen.getByText(/5 = 3 \+ 1 \+ 1/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Download error CSV' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Apply import' })).not.toBeInTheDocument();
+    expect(within(steps).getByText('Review').closest('li')).toHaveAttribute('aria-current', 'step');
+    expect(within(steps).getByText('Review').closest('li')).toHaveTextContent('Current');
 
     await user.click(screen.getByRole('button', { name: 'Start correction' }));
     expect(screen.getByText(/correction of job-invalid/i)).toBeInTheDocument();
+    expect(within(steps).getByText('Select template').closest('li')).toHaveAttribute('aria-current', 'step');
   });
 
   it('shows evidence and requires a separate reviewer before applying a valid file', async () => {
@@ -55,6 +83,7 @@ describe('ImportsPage', () => {
     await user.click(screen.getByRole('button', { name: 'Apply import' }));
     expect(await screen.findByText(/import applied/i)).toBeInTheDocument();
     expect(screen.getByText(/reviewer@mwell.test/)).toBeInTheDocument();
+    expect(within(screen.getByRole('list', { name: 'Import steps' })).getAllByText('Completed')).toHaveLength(4);
     expect(request).toHaveBeenLastCalledWith('/api/warehouse/imports', expect.objectContaining({ method: 'POST' }));
   });
 

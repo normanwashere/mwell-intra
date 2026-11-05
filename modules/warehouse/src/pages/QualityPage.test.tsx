@@ -459,7 +459,7 @@ describe("QualityPage", () => {
 
     renderWithProviders(<QualityPage />, { repo, role: "warehouse_operator" });
     const queue = await screen.findByLabelText("Pending inspections");
-    expect(within(queue).getByText((content) => content.includes(receipt.id)))
+    expect(within(queue).getByText(`receipt: ${receipt.id}`))
       .toBeInTheDocument();
     await userEvent.click(screen.getByRole("tab", { name: "Holds" }));
     expect(await screen.findByText("No active holds")).toBeInTheDocument();
@@ -513,9 +513,7 @@ describe("QualityPage", () => {
     renderWithProviders(<QualityPage />, { repo, role: "warehouse_operator" });
 
     const queue = await screen.findByLabelText("Pending inspections");
-    const sourceText = within(queue).getByText((content) =>
-      content.includes(receipt.id),
-    );
+    const sourceText = within(queue).getByText(`receipt: ${receipt.id}`);
     const sourceRow = sourceText.closest("li");
     expect(sourceRow).not.toBeNull();
     const inspect = within(sourceRow!).getByRole("button", { name: "Inspect" });

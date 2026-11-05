@@ -26,7 +26,7 @@ const flows = KNOWLEDGE_CONTENT.flows.filter((flow) => feature.relatedFlowIds.in
 it.each([
   ["warehouse-dashboard", "/warehouse", "permission to view the Warehouse dashboard", "Analytics and finance viewing permissions are not additional requirements"],
   ["warehouse-data", "/warehouse/data", "permission to view Warehouse analytics", "Export permission alone does not open this page"],
-  ["warehouse-reports", "/warehouse/reports", "permission to view either Warehouse analytics or Warehouse finance", "together with access to Warehouse reporting in Insights"],
+  ["warehouse-reports", "/warehouse/reports", "permission to view Warehouse inventory, Warehouse analytics, or Warehouse finance", "Insights access is not required"],
 ])("separates page entry from export permission in %s without changing its destination", async (id, route, entry, boundary) => {
   const exportFeature = KNOWLEDGE_CONTENT.features.find(item => item.id === id)!;
   const original = JSON.stringify(exportFeature);

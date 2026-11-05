@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useWarehouse } from '@/app/store';
 import { WAREHOUSE_MUTATION_CAPABILITIES } from '@/app/authorization';
 import { toStockState } from '@/data/repository';
@@ -37,6 +37,8 @@ import { ProductEditorSheet } from '@/components/ProductEditorSheet';
 import { RelocationSheet } from '@/components/relocation/RelocationSheet';
 import { WarehouseScanFlow } from '@/components/camera/WarehouseScanFlow';
 import { InventoryRecommendationAction } from '@/components/InventoryRecommendationAction';
+import { UnitCustodyHistory } from '@/components/UnitCustodyHistory';
+import { matchingUnitHolds, useProductHolds } from '@/domain/useProductHolds';
 
 const UNIT_TONE: Record<UnitStatus, Tone> = {
   in_stock: 'emerald',
@@ -55,6 +57,7 @@ export function ProductDetailPage() {
   const { data, can, transfer, requestStockChange, source, loading, error } = useWarehouse();
   const { totals: availableByProduct, loading: availabilityLoading, error: availabilityError, refresh: refreshAvailability } = useInventoryAvailability();
   const toast = useToast();
+  const productHolds = useProductHolds(id);
 
   const [relocateOpen, setRelocateOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
@@ -234,6 +237,7 @@ export function ProductDetailPage() {
   const timeline = timelineSerial
     ? unitTimeline(data.movements, timelineSerial, product.id)
     : [];
+  const timelineUnit = allUnits.find(unit => unit.serialNumber === timelineSerial);
 
   return (
     <div className="space-y-4">
@@ -455,7 +459,9 @@ export function ProductDetailPage() {
             <EmptyState icon="tag" title={uq || unitBin !== 'all' ? 'No matching units' : 'No units yet'} />
           ) : (
             <ul className="space-y-2" aria-label="Serialized units">
-              {units.slice(0, unitLimit).map((u: InventoryUnit) => (
+              {units.slice(0, unitLimit).map((u: InventoryUnit) => {
+                const holds = matchingUnitHolds(productHolds.holds, u);
+                return (
                 <li key={u.id}>
                   <button
                     type="button"
@@ -471,10 +477,18 @@ export function ProductDetailPage() {
                         {u.assignedTo ? ` • ${u.assignedTo}` : ''}
                       </p>
                     </div>
-                    <Badge tone={UNIT_TONE[u.status]}>{statusLabel(u.status)}</Badge>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <Badge tone={holds.length ? 'rose' : UNIT_TONE[u.status]}>{holds.length ? 'On Quality hold' : statusLabel(u.status)}</Badge>
+                      {productHolds.loading && <span className="text-xs text-muted">Checking holds</span>}
+                      {productHolds.error && <span className="text-xs text-rose-700 dark:text-rose-300">Hold status unavailable</span>}
+                    </div>
                   </button>
+                  {holds.map(hold => <div key={hold.id} className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-rose-500 px-3 py-2 text-sm">
+                    <p className="min-w-0 flex-1 break-words text-rose-800 dark:text-rose-200">{hold.reason}</p>
+                    {(can('inspect_quality') || can('release_quality_hold') || can('manage_returns')) && <Link className="btn-ghost shrink-0" to={`/quality?source=${encodeURIComponent(hold.id)}`}>View Quality hold</Link>}
+                  </div>)}
                 </li>
-              ))}
+              ); })}
             </ul>
           )}
           {units.length > 0 && (
@@ -483,6 +497,7 @@ export function ProductDetailPage() {
               {unitLimit < units.length && <button type="button" className="btn-ghost" onClick={() => setUnitLimit(limit => limit + 30)}>Load more units</button>}
             </div>
           )}
+          {productHolds.error && <button type="button" className="btn-ghost mt-2" onClick={productHolds.refresh}>Check holds again</button>}
         </Card>
       )}
 
@@ -767,8 +782,10 @@ export function ProductDetailPage() {
         description={timelineSerial ?? undefined}
         side="right"
       >
+        {timelineUnit && <UnitCustodyHistory key={timelineUnit.id} unitId={timelineUnit.id} locationName={locationName} binName={binLabel} />}
+        <h3 className="mb-2 font-semibold text-ink">Serial-linked movements</h3>
         {timeline.length === 0 ? (
-          <EmptyState icon="history" title="No history for this unit" />
+          <EmptyState icon="history" title="No movements linked to this serial" message="General product movements are listed on the product page; they are not proof that this unit moved." />
         ) : (
           <ol className="relative space-y-3 border-l border-line pl-4">
             {timeline.map((m) => (

@@ -128,6 +128,16 @@ jobs:
             scripts/verify-warehouse-custody-truncate.pglite.test.mjs
       - name: Verify requester-name and return authorization regressions
         run: node --test --test-concurrency=1 scripts/verify-department-request-names.pglite.test.mjs scripts/verify-replacement-delivery.pglite.test.mjs scripts/verify-authority-plan-performance.pglite.test.mjs
+      - name: Verify WMS count integrity and custody regressions
+        run: |
+          node --test --test-concurrency=1 \
+            scripts/verify-warehouse-count-integrity.pglite.test.mjs \
+            scripts/verify-warehouse-lot-count-exposure.pglite.test.mjs \
+            scripts/verify-warehouse-count-encumbrance.pglite.test.mjs \
+            scripts/verify-warehouse-inventory-position.pglite.test.mjs \
+            scripts/verify-warehouse-location-dependencies.pglite.test.mjs \
+            scripts/verify-warehouse-unit-history.pglite.test.mjs \
+            scripts/verify-warehouse-reports-routing.test.mjs
       - name: Verify final DOA concurrency on disposable PostgreSQL
         env:
           SEP22_DOA_EPHEMERAL_CI: "1"

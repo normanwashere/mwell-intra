@@ -5,7 +5,6 @@ import { useSession } from "@intra/auth";
 import {
   Badge,
   Card,
-  EmptyState,
   Field,
   Sheet,
   useToast,
@@ -38,6 +37,8 @@ export function InventoryIntegrityPanel({
   const live = mode === "supabase" ? supabaseClient : null;
   const toast = useToast();
   const [cases, setCases] = useState<IntegrityCase[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [open, setOpen] = useState(false);
   const [workingId, setWorkingId] = useState<string>();
   const [draft, setDraft] = useState({
@@ -52,27 +53,35 @@ export function InventoryIntegrityPanel({
 
   const refresh = useCallback(async () => {
     if (!live) return;
-    const { data, error } = await live
-      .schema("warehouse")
-      .from("inventory_integrity_cases")
-      .select("id,case_type,product_id,status,severity,reason")
-      .order("opened_at", { ascending: false })
-      .limit(100);
-    if (error) {
-      toast.error(error.message);
-      return;
+    setLoading(true);
+    setLoadError(false);
+    try {
+      const { data, error } = await live
+        .schema("warehouse")
+        .from("inventory_integrity_cases")
+        .select("id,case_type,product_id,status,severity,reason")
+        .order("opened_at", { ascending: false })
+        .limit(100);
+      if (error) {
+        setLoadError(true);
+        return;
+      }
+      setCases(
+        (Array.isArray(data) ? data : []).map((row) => ({
+          id: readText(row.id),
+          caseType: readText(row.case_type),
+          productId: readText(row.product_id) || undefined,
+          status: readText(row.status),
+          severity: readText(row.severity),
+          reason: readText(row.reason),
+        })),
+      );
+    } catch {
+      setLoadError(true);
+    } finally {
+      setLoading(false);
     }
-    setCases(
-      (Array.isArray(data) ? data : []).map((row) => ({
-        id: readText(row.id),
-        caseType: readText(row.case_type),
-        productId: readText(row.product_id) || undefined,
-        status: readText(row.status),
-        severity: readText(row.severity),
-        reason: readText(row.reason),
-      })),
-    );
-  }, [live, toast]);
+  }, [live]);
 
   useEffect(() => {
     void refresh();
@@ -143,33 +152,27 @@ export function InventoryIntegrityPanel({
 
   return (
     <section className="space-y-3" aria-labelledby="integrity-title">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-xs font-semibold uppercase text-faint">
-            Inventory control
-          </p>
           <h2
             id="integrity-title"
-            className="font-display text-lg font-bold text-ink"
+            className="text-sm font-semibold text-ink"
           >
             Integrity cases
           </h2>
-          <p className="text-sm text-muted">
-            Counts, expiry, recalls, damage, and serial reconciliation with
-            approval evidence.
-          </p>
+          {loading ? <p role="status" className="text-xs text-muted">Checking integrity cases...</p>
+            : !loadError && cases.length === 0 && <p className="text-xs text-muted">No integrity exceptions</p>}
         </div>
         <button
           type="button"
-          className="btn-primary w-full sm:w-auto"
+          className="btn-outline btn-sm"
           onClick={() => setOpen(true)}
         >
           <Icon name="plus" className="h-4 w-4" /> Open case
         </button>
       </div>
-      {cases.length === 0 ? (
-        <EmptyState icon="check" title="No integrity exceptions" />
-      ) : (
+      {loadError && <p role="alert" className="text-sm text-rose-700 dark:text-rose-300">Integrity cases could not be loaded. <button type="button" className="btn-ghost btn-sm" onClick={() => void refresh()}>Retry integrity cases</button></p>}
+      {cases.length > 0 && (
         <div className="grid gap-3 lg:grid-cols-2">
           {cases.map((record) => (
             <Card key={record.id} className="space-y-3">

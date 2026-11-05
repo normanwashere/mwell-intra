@@ -40,7 +40,7 @@ type Filter =
 const INVENTORY_BATCH_SIZE = 12;
 
 export function InventoryPage() {
-  const { data, createProduct, can } = useWarehouse();
+  const { data, source, createProduct, can } = useWarehouse();
   const { totals: availableByProduct, loading: availabilityLoading, error: availabilityError, refresh: refreshAvailability } = useInventoryAvailability();
   const navigate = useNavigate();
   const toast = useToast();
@@ -138,14 +138,15 @@ export function InventoryPage() {
             )
           : fam.variants;
         if (lowOnly) {
-          shown = availableByProduct ? shown.filter((p) =>
-            isBelowReorder(p, availableByProduct.get(p.id) ?? 0),
-          ) : [];
+          shown = availableByProduct ? shown.filter((p) => {
+            const available = availableByProduct.get(p.id) ?? (source === 'memory' ? 0 : null);
+            return available !== null && isBelowReorder(p, available);
+          }) : [];
         }
         return { ...fam, isFamily: fam.variants.length > 1, shown };
       })
       .filter((fam) => fam.shown.length > 0);
-  }, [data, query, filter, lowOnly, availableByProduct]);
+  }, [data, source, query, filter, lowOnly, availableByProduct]);
 
   const visibleFamilies = useMemo(
     () => families.slice(0, visibleFamilyCount),
@@ -184,7 +185,8 @@ export function InventoryPage() {
 
   if (!data) return null;
 
-  const avail = (p: Product) => availableByProduct ? availableByProduct.get(p.id) ?? 0 : null;
+  const avail = (p: Product) => availableByProduct ? availableByProduct.get(p.id) ?? (source === 'memory' ? 0 : null) : null;
+  const unverifiedCount = availableByProduct ? data.products.filter(product => avail(product) === null).length : 0;
   const isLow = (p: Product) => {
     const available = avail(p);
     return available !== null && isBelowReorder(p, available);
@@ -236,13 +238,14 @@ export function InventoryPage() {
               className={clsx(
                 available === null ? "text-xs font-semibold" : "tnum text-lg font-extrabold",
                 isLow(product)
-                  ? "text-rose-600 dark:text-rose-300"
+                  ? "text-rose-700 dark:text-rose-300"
                   : "text-ink",
               )}
             >
               {available ?? unavailableLabel}
             </p>
             <p className="text-xs text-muted">available</p>
+            {isLow(product) && <p className="text-xs font-semibold text-rose-700 dark:text-rose-300">Low stock</p>}
           </div>
           <Icon name="chevron" className="h-4 w-4 text-faint" />
         </div>
@@ -347,11 +350,11 @@ export function InventoryPage() {
           </button>
         </div>
         <p className="text-xs text-faint">
-          {lowOnly && !availableByProduct ? "Low-stock count unverified" : `${skuCount} SKU${skuCount === 1 ? "" : "s"}`}
+          {lowOnly && (!availableByProduct || unverifiedCount > 0) ? "Low-stock count unverified" : `${skuCount} SKU${skuCount === 1 ? "" : "s"}`}
           {lowCount > 0 && (
             <>
               {" • "}
-              <span className="font-semibold text-rose-600 dark:text-rose-300">
+              <span className="font-semibold text-rose-700 dark:text-rose-300">
                 {lowCount} low
               </span>
             </>
@@ -362,6 +365,7 @@ export function InventoryPage() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         {availabilityLoading && <p role="status" className="text-sm text-muted">Checking inventory availability...</p>}
         {availabilityError && <p role="alert" className="text-sm text-rose-700 dark:text-rose-300">{availabilityError}</p>}
+        {unverifiedCount > 0 && <p role="status" className="text-sm text-muted">{unverifiedCount} product quantities not confirmed.</p>}
         <button type="button" className="btn-ghost btn-sm ml-auto" disabled={availabilityLoading} onClick={refreshAvailability}>
           <Icon name="rotate" className="h-4 w-4" /> Refresh availability
         </button>
@@ -370,7 +374,7 @@ export function InventoryPage() {
       {lowOnly && !availableByProduct ? null : families.length === 0 ? (
         <EmptyState
           icon="search"
-          title={lowOnly ? "No low-stock items" : "No matching items"}
+          title={lowOnly ? unverifiedCount > 0 ? "Low-stock status not confirmed" : "No low-stock items" : "No matching items"}
         />
       ) : (
         <StaggerGrid
@@ -378,7 +382,8 @@ export function InventoryPage() {
           aria-label="Inventory list"
         >
           {visibleFamilies.map((fam) => {
-            const total = availableByProduct ? fam.shown.reduce((s, v) => s + (avail(v) ?? 0), 0) : null;
+            const quantities = fam.shown.map(avail);
+            const total = quantities.every(value => value !== null) ? quantities.reduce<number>((sum, value) => sum + value!, 0) : null;
             const anyLow = fam.shown.some(isLow);
             const single = fam.shown[0];
             if (!single) return null;

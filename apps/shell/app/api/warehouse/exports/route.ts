@@ -37,11 +37,55 @@ async function buildExportRows(
   client: NonNullable<Awaited<ReturnType<typeof createSupabaseServerClient>>>,
   kind: WarehouseExportKind,
 ): Promise<CsvRow[]> {
+  if (kind === 'inventory_position') {
+    const rows: CsvRow[] = [];
+    const seen = new Set<string>();
+    const productTotals = new Map<string, { available: number | null; unscoped: number }>();
+    const quantity = (value: unknown) => (typeof value === 'number' || (typeof value === 'string' && value.trim() !== ''))
+      && Number.isFinite(Number(value)) && Number(value) >= 0;
+    let cursor: string | undefined;
+    // Keyset pages remain below the API row cap; continue until an empty page,
+    // rather than treating a server-truncated response as the complete export.
+    for (;;) {
+      let query = client.from('inventory_position_v1')
+        .select('id,product_id,location_id,bin_id,on_hand,committed,held,unavailable,available,unscoped_committed,product_available,availability_verified,putaway_available')
+        .order('id', { ascending: true });
+      if (cursor) query = query.gt('id', cursor);
+      const { data, error } = await query.limit(500);
+      if (error) throw new Error(error.message);
+      const page = asRows(data);
+      if (page.length === 0) return rows;
+      for (const row of page) {
+        if (typeof row.id !== 'string' || !row.id || seen.has(row.id)) throw new Error('Inventory export pagination could not be verified. Retry the export.');
+        seen.add(row.id);
+        const explicitUnknown = row.product_available === null && row.availability_verified === false
+          && quantity(row.available) && Number(row.available) === 0
+          && quantity(row.putaway_available) && Number(row.putaway_available) === 0;
+        if (typeof row.product_id !== 'string' || !row.product_id || typeof row.availability_verified !== 'boolean'
+          || (!quantity(row.product_available) && !explicitUnknown) || !quantity(row.unscoped_committed) || !quantity(row.putaway_available)) {
+          throw new Error('Inventory quantity summary could not be verified. Retry the export.');
+        }
+        const summary = { available: explicitUnknown ? null : Number(row.product_available), unscoped: Number(row.unscoped_committed) };
+        const previous = productTotals.get(row.product_id);
+        if (previous && (previous.available !== summary.available || previous.unscoped !== summary.unscoped)) {
+          throw new Error('Inventory quantities changed while preparing the export. Retry the export.');
+        }
+        productTotals.set(row.product_id, summary);
+        const verified = row.availability_verified === true && row.unscoped_committed != null
+          && Number(row.unscoped_committed) === 0 && row.available != null && Number.isFinite(Number(row.available)) && Number(row.available) >= 0;
+        const { id: _id, ...quantities } = row;
+        rows.push({
+          ...Object.fromEntries(Object.entries(quantities).map(([key, value]) => [key, csvValue(value)])),
+          available: verified ? csvValue(row.available) : '',
+          availability_verified: verified ? 'true' : 'false',
+          availability_status: verified ? 'Confirmed' : !explicitUnknown && Number(row.unscoped_committed) > 0 ? 'Unassigned demand' : 'Not confirmed',
+          product_totals_scope: 'Repeated per product_id; count once per product',
+        });
+      }
+      cursor = String(page.at(-1)!.id);
+    }
+  }
   const reportingViews: Partial<Record<WarehouseExportKind, { table: string; projection: string }>> = {
-    inventory_position: {
-      table: 'inventory_position_v1',
-      projection: 'product_id,location_id,bin_id,on_hand,committed,held,unavailable,available',
-    },
     quality: {
       table: 'bi_quality_v1',
       projection: 'id,created_at,source_type,source_id,product_id,sku,location_id,bin_id,lot_id,serial_number,quantity,disposition,reason,active_hold_quantity',

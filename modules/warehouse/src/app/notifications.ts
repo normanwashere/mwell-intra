@@ -59,10 +59,10 @@ export function buildNotifications(
     const product = data.products.find((p) => p.id === a.productId);
     const event = data.events.find((e) => e.id === a.eventId);
     const to =
-      event && canOpenEvents
-        ? `/events/${event.id}`
-        : canOpenAllocations
-          ? '/allocations'
+      canOpenAllocations
+        ? `/allocations?allocation=${encodeURIComponent(a.id)}`
+        : event && canOpenEvents
+          ? `/events/${encodeURIComponent(event.id)}`
           : undefined;
     notifications.push({
       id: `reserved-${a.id}`,

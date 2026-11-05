@@ -29,7 +29,7 @@ describe('unitTimeline', () => {
     expect(unitTimeline(movements, 'NOPE')).toEqual([]);
   });
 
-  it('folds in product-level receive/issue/transfer history when a productId is given', () => {
+  it('never attributes aggregate product movements to a particular serial', () => {
     const withAggregates: Movement[] = [
       ...movements,
       { id: 'r1', type: 'receipt', productId: 'ring', quantity: 10, actor: 'a', createdAt: '2026-05-30T00:00:00.000Z' },
@@ -37,8 +37,13 @@ describe('unitTimeline', () => {
       { id: 'agg-issue', type: 'issue', productId: 'shirt', quantity: 5, actor: 'a', createdAt: '2026-06-06T00:00:00.000Z' },
     ];
     const timeline = unitTimeline(withAggregates, 'SN1', 'ring');
-    // serial-specific (m1,m3,m2) + ring product-level aggregates (r1,t1), sorted asc; shirt aggregate excluded.
-    expect(timeline.map((m) => m.id)).toEqual(['r1', 'm1', 'm3', 'm2', 't1']);
+    expect(timeline.map((m) => m.id)).toEqual(['m1', 'm3', 'm2']);
+    expect(unitTimeline(withAggregates, 'UNKNOWN', 'ring')).toEqual([]);
+  });
+
+  it('does not mix identical serial labels across products', () => {
+    const other: Movement = { ...movements[0]!, id: 'other', productId: 'other' };
+    expect(unitTimeline([...movements, other], 'SN1', 'ring').map(m => m.id)).toEqual(['m1', 'm3', 'm2']);
   });
 
   it('does not fold aggregates without a productId (back-compat)', () => {

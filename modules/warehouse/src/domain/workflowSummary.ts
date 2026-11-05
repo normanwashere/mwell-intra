@@ -117,6 +117,8 @@ export function requestWorkflowSummary(request: DepartmentStockRequest, order?: 
 
 export function returnWorkflowSummary(record: CustomerReturnCase, context: {
   returns?: readonly ReturnRecord[];
+  qualitySummary?: string;
+  qualityAccepted?: boolean;
 } = {}): RecordWorkflowSummary {
   if (record.status === 'closed') return {
     status: 'Customer case closed', owner: 'No further customer-case handoff', tone: 'success',
@@ -142,9 +144,9 @@ export function returnWorkflowSummary(record: CustomerReturnCase, context: {
     status: { submitted: 'Customer case submitted / awaiting resolution', received: 'Customer case received / awaiting resolution', inspecting: 'Customer case under review / awaiting resolution', decision_required: 'Awaiting resolution decision' }[record.status],
     owner: record.status === 'decision_required' && record.resolution === 'refund' ? 'Finance' : 'Warehouse returns team',
     nextStep: 'Review the linked physical intake and Quality records; record the resolution with required evidence, then hand off to Customer Service. Refunds belong to Finance.',
-    blocker: intakeRecorded
-      ? 'Linked physical intake is recorded. Current Quality hold or release status is not available in this view.'
+    blocker: intakeRecorded && context.qualityAccepted ? undefined : intakeRecorded
+      ? `Linked physical intake is recorded. ${context.qualitySummary ?? 'Current Quality hold or release status is not available in this view.'}`
       : 'Linked physical intake and current Quality status are not verified in this view.',
-    tone: 'warning',
+    tone: intakeRecorded && context.qualityAccepted ? 'neutral' : 'warning',
   };
 }

@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { beforeAll, describe, it, expect } from 'vitest';
+import { beforeAll, describe, it, expect, vi } from 'vitest';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { App } from './App';
 import { renderWithProviders } from '@/test/renderWithProviders';
-import { useWarehouse } from './store';
+import { useWarehouse, WarehouseProvider } from './store';
 import { InMemoryRepository } from '@/data/inMemoryRepository';
 
 function ControlFailureProbe() {
@@ -247,6 +247,40 @@ describe('App routing & guards', () => {
     reports.unmount();
     renderWithProviders(<App />, { role: 'logistics_supervisor', route: '/operation-routes' });
     expect(await screen.findByRole('heading', { name: 'Operation routes' })).toBeInTheDocument();
+  });
+
+  it.each(['view_inventory', 'view_analytics', 'view_finance'] as const)('opens the exact Reports route with %s and no Insights access', async (capability) => {
+    const repo = new InMemoryRepository(undefined, { storage: null });
+    renderWithProviders(
+      <WarehouseProvider repo={repo} source="supabase" initialRole="operations" capabilities={[capability]} destinationAccess={{ insights: false }}>
+        <App />
+      </WarehouseProvider>,
+      { repo, role: 'operations', route: '/reports' },
+    );
+    expect(await screen.findByRole('heading', { name: 'Inventory position report' })).toBeVisible();
+    expect(await screen.findByRole('table', { name: 'Inventory position report' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Export full inventory' })).toBeDisabled();
+  });
+
+  it.each(['warehouse_operator', 'warehouse_supervisor', 'logistics_supervisor'] as const)('lets %s read Reports without export or Insights authority', async (role) => {
+    const repo = new InMemoryRepository(undefined, { storage: null });
+    renderWithProviders(
+      <WarehouseProvider repo={repo} source="supabase" initialRole={role} capabilities={['view_inventory']} destinationAccess={{ insights: false }}>
+        <App />
+      </WarehouseProvider>,
+      { repo, role, route: '/reports' },
+    );
+    expect(await screen.findByRole('table', { name: 'Inventory position report' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Export full inventory' })).toBeDisabled();
+    expect(screen.queryByRole('link', { name: 'Data & Reports' })).not.toBeInTheDocument();
+  });
+
+  it.each([[], ['register_exports'], ['view_dashboard']] as const)('denies Reports without a read capability (%j) before loading positions', async (...capabilities) => {
+    const repo = new InMemoryRepository(undefined, { storage: null });
+    const load = vi.spyOn(repo, 'listInventoryPositions');
+    renderWithProviders(<App />, { repo, role: 'warehouse_admin', source: 'supabase', capabilities, route: '/reports' });
+    expect(await screen.findByText(/don't have access to this page/i)).toBeVisible();
+    expect(load).not.toHaveBeenCalled();
   });
 
   it('returns false when a guarded control command is denied', async () => {

@@ -14,13 +14,28 @@ import { ROLE_LIST } from "@/auth/roles";
 import { canOpenWarehouseRoute } from './authorization';
 
 describe("warehouse navigation metadata", () => {
-  it("gates Data & Reports against Insights just like the reports redirect", () => {
+  it("keeps the Data redirect gated by Insights", () => {
     const visible = modulesForWarehouseAccess("supabase", "warehouse_admin", () => true, () => false);
     expect(visible.map(module => module.id)).not.toContain("data");
     expect(warehouseDestinationForRoute("data")).toBe("insights");
     expect(canOpenWarehouseRoute('data', () => true, () => false)).toBe(false);
     expect(modulesForWarehouseAccess("supabase", "warehouse_admin", () => true, () => true)
       .map(module => module.id)).toContain("data");
+  });
+
+  it.each(['view_inventory', 'view_analytics', 'view_finance'] as const)("opens local Reports with %s without granting Insights", (capability) => {
+    const can = (candidate: string) => candidate === capability;
+    expect(warehouseDestinationForRoute('reports')).toBeUndefined();
+    expect(canOpenWarehouseRoute('reports', can, () => false)).toBe(true);
+    expect(canOpenWarehouseRoute('data', can, () => false)).toBe(false);
+    expect(canOpenWarehouseRoute('reports', () => false, () => true)).toBe(false);
+  });
+
+  it.each(['warehouse_operator', 'warehouse_supervisor', 'logistics_supervisor'] as const)("shows quantity Reports to %s with inventory read permission only", (role) => {
+    const can = (capability: string) => capability === 'view_inventory';
+    expect(modulesForRole(role).map(module => module.id)).toContain('reports');
+    expect(modulesForWarehouseAccess('supabase', role, can, () => false).map(module => module.id)).toContain('reports');
+    expect(modulesForWarehouseAccess('supabase', role, capability => capability === 'register_exports', () => true).map(module => module.id)).not.toContain('reports');
   });
 
   it("names the module home unambiguously in every primary navigation", () => {
@@ -47,6 +62,7 @@ describe("warehouse navigation metadata", () => {
       "Cycle Counts",
       "Quality Control",
       "Exceptions",
+      "Inventory Reports",
       ]),
     );
   });
@@ -74,6 +90,7 @@ describe("warehouse navigation metadata", () => {
       "fulfillment",
       "returns",
       "events",
+      "reports",
     ]);
     expect(
       modulesForRole("warehouse_supervisor").map((module) => module.id),
@@ -117,21 +134,18 @@ describe("warehouse navigation metadata", () => {
   });
 
   it("keeps advanced cross-functional tools out of the Operator workflow", () => {
-    expect(
-      modulesForRole("warehouse_operator").map((module) => module.id),
-    ).not.toEqual(
-      expect.arrayContaining([
+    const visible = modulesForRole("warehouse_operator").map((module) => module.id);
+    expect(visible).toContain("reports");
+    for (const id of [
         "procurement",
         "pricing",
         "data",
-        "reports",
         "events",
         "suppliers",
         "imports",
         "operation-routes",
         "approvals",
-      ]),
-    );
+      ]) expect(visible).not.toContain(id);
   });
 
   it("intersects live Operator capabilities with the canonical floor projection", () => {
@@ -182,9 +196,9 @@ describe("warehouse navigation metadata", () => {
       (capability) => capabilities.has(capability),
       (destination) => destination !== "events" && destination !== "insights",
     );
-    expect(visible.map((module) => module.id)).not.toEqual(
-      expect.arrayContaining(["events", "reports"]),
-    );
+    expect(visible.map((module) => module.id)).not.toContain("events");
+    expect(visible.map((module) => module.id)).not.toContain("data");
+    expect(visible.map((module) => module.id)).toContain("reports");
   });
 
   it("assigns every route to exactly one desktop group", () => {

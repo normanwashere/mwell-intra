@@ -31,6 +31,15 @@ test("classifies the Warehouse transition record as scoped release evidence", ()
   assert.match(entry.summary, /verification limits/);
 });
 
+test("classifies the November WMS remediation separately from live certification", () => {
+  const entry = HANDBOOK_DOCUMENTS.find(document => document.source === "docs/releases/2026-11-05-WMS-AUDIT-REMEDIATION.md");
+  assert.ok(entry);
+  assert.equal(entry.primaryTab, "release");
+  assert.equal(entry.contentType, "release-note");
+  assert.ok(entry.relatedTabs.includes("workflows"));
+  assert.match(entry.summary, /verification limits/);
+});
+
 test("classifies every current maintained source exactly once", () => {
   const sources = documentationSources();
   const result = resolveHandbookCatalog(sources);

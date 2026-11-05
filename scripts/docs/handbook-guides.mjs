@@ -1066,6 +1066,7 @@ function roleGuide(definition) {
 }
 
 const SOURCE_ROOT_HEADINGS = {
+  "nov05-wms-audit-remediation": "WMS audit remediation - November 5, 2026",
   "oct20-warehouse-transition": "Warehouse Transition Release Record",
   "sept23-reporting-foundation": "Reporting Foundation Update",
   "sept22-event-seller-ci-date": "Event Seller CI Date Correction",
@@ -1414,6 +1415,7 @@ function markdownHeadings(source) {
 }
 
 const LEGACY_TARGET_BY_SOURCE_ID = {
+  "nov05-wms-audit-remediation": ["system", "source-references", "source-nov05-wms-audit-remediation"],
   "oct20-warehouse-transition": ["system", "source-references", "source-oct20-warehouse-transition"],
   "sept23-reporting-foundation": ["system", "source-references", "source-sept23-reporting-foundation"],
   "sept22-event-seller-ci-date": ["system", "source-references", "source-sept22-event-seller-ci-date"],

@@ -1,30 +1,29 @@
 import { userFacingError } from '@intra/ui';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { tasksReturnPath } from '@/domain/taskNavigation';
-import type { ResolveExceptionInput, WarehouseException } from '@intra/data-kit';
+import type { QualityInspectionSummary, ResolveExceptionInput, StockChangeRequest, WarehouseException } from '@intra/data-kit';
 import { useWarehouse } from '@/app/store';
 import { Badge, EmptyState, Field, PageHeader, Sheet } from '@/components/ui';
 import { loadCompleteControlQueue } from '@/domain/controlQueues';
+import { exceptionPresentation } from './workSourcePresentation';
 
 function commandKey(exceptionId: string, action: string) {
   return `exception-${exceptionId}-${action}-${Date.now()}`;
 }
 
-function sourceRoute(exception: WarehouseException) {
-  const sourceId = encodeURIComponent(exception.sourceId);
-  if (exception.type === 'po_receipt' && exception.sourceType === 'receipt') return { path: `/purchase-orders?receipt=${sourceId}`, routeId: 'purchase-orders' as const };
-  if (exception.sourceType === 'stock_change_request') return { path: `/approvals?request=${sourceId}`, routeId: 'approvals' as const };
-  if (exception.sourceType === 'receipt') return { path: `/receiving?receipt=${sourceId}`, routeId: 'receiving' as const };
-  if (exception.sourceType === 'import_job') return { path: `/imports?job=${sourceId}`, routeId: 'imports' as const };
-  if (exception.type === 'quality') return { path: `/quality?inspection=${sourceId}`, routeId: 'quality' as const };
-  return { path: `/cycle-counts?count=${sourceId}`, routeId: 'cycle-counts' as const };
-}
-
 export function ExceptionsPage() {
-  const { can, canOpenRoute, loadExceptions, resolveException } = useWarehouse();
+  const { data, identityId, capabilities, can, canOpenRoute, loadExceptions, loadStockChangeRequests, loadQualityInspectionSummaries, resolveException } = useWarehouse();
   const [params, setParams] = useSearchParams();
   const [exceptions, setExceptions] = useState<WarehouseException[]>([]);
+  const [requests, setRequests] = useState<StockChangeRequest[]>([]);
+  const [inspections, setInspections] = useState<QualityInspectionSummary[]>([]);
+  const sequence = useRef(0);
+  const loaders = useRef({ loadExceptions, loadStockChangeRequests, loadQualityInspectionSummaries });
+  useEffect(() => { loaders.current = { loadExceptions, loadStockChangeRequests, loadQualityInspectionSummaries }; });
+  const accessScope = [...capabilities].sort().join('|');
+  const mayReadChanges = canOpenRoute('approvals') || can('cycle_count') || can('manage_inventory');
+  const mayReadQuality = canOpenRoute('quality');
   const [selected, setSelected] = useState<WarehouseException | null>(null);
   const [resolution, setResolution] = useState('');
   const [loading, setLoading] = useState(true);
@@ -37,18 +36,34 @@ export function ExceptionsPage() {
   const hasNonDefaultFilters = severity !== 'all' || status !== 'open';
 
   const reload = useCallback(async () => {
+    if (!data) return;
+    const current = ++sequence.current;
     setLoading(true);
     setLoadError(null);
+    setExceptions([]);
+    setRequests([]);
+    setInspections([]);
     try {
-      setExceptions(await loadCompleteControlQueue(loadExceptions));
+      const rows = await loadCompleteControlQueue(loaders.current.loadExceptions);
+      // Enrichment is read-only and caller-scoped. A denied detail read must not hide the queue.
+      const [changes, quality] = await Promise.all([
+        mayReadChanges && rows.some(e => e.sourceType === 'stock_change_request')
+          ? loadCompleteControlQueue(loaders.current.loadStockChangeRequests).catch(() => []) : [],
+        mayReadQuality && rows.some(e => e.sourceType === 'quality_inspection')
+          ? loadCompleteControlQueue(loaders.current.loadQualityInspectionSummaries).catch(() => []) : [],
+      ]);
+      if (current !== sequence.current) return;
+      setExceptions(rows);
+      setRequests(changes);
+      setInspections(quality);
     } catch (e) {
-      setLoadError(e instanceof Error ? e.message : 'Exceptions could not be loaded.');
+      if (current === sequence.current) setLoadError(e instanceof Error ? e.message : 'Exceptions could not be loaded.');
     } finally {
-      setLoading(false);
+      if (current === sequence.current) setLoading(false);
     }
-  }, [loadExceptions]);
+  }, [data, identityId, accessScope, mayReadChanges, mayReadQuality]);
 
-  useEffect(() => { void reload(); }, [reload]);
+  useEffect(() => { setSelected(null); void reload(); return () => { sequence.current += 1; }; }, [reload]);
   useEffect(() => setResolution(''), [selected]);
 
   const rows = useMemo(() => exceptions.filter((exception) =>
@@ -121,7 +136,7 @@ export function ExceptionsPage() {
       ) : (
         <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface" aria-label="Warehouse exceptions">
           {rows.map((exception) => {
-            const source = sourceRoute(exception);
+            const { summary, context, source } = exceptionPresentation(data, exception, requests, inspections, canOpenRoute);
             return (
             <li key={exception.id} className="grid gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
               <div className="min-w-0">
@@ -130,9 +145,13 @@ export function ExceptionsPage() {
                   <p className="text-sm font-semibold capitalize text-ink">{exception.type.replace('_', ' ')}</p>
                   <Badge tone="slate">{exception.status.replace('_', ' ')}</Badge>
                 </div>
+                {summary && <p className="mt-1 text-sm font-medium text-ink [overflow-wrap:anywhere]">{summary}</p>}
+                {context && <p className="mt-1 text-sm text-muted [overflow-wrap:anywhere]">{context}</p>}
+                <details className="mt-1 text-xs text-muted [overflow-wrap:anywhere]"><summary className="cursor-pointer">Source reference</summary><code>{exception.sourceType}: {exception.sourceId}</code></details>
                 <p className="mt-1 text-xs text-faint">Opened {exception.createdAt.slice(0, 10)} · Owner {exception.ownerId ?? 'Unassigned'}</p>
                 {exception.type === 'po_receipt' && <p className="text-sm text-muted">An independent Lead must complete the controlled receipt decision before the next delivery. Beginning work alone does not release the PO line.</p>}
-                {canOpenRoute(source.routeId) && <Link className="mt-2 inline-block text-xs font-semibold text-brand-600 hover:underline dark:text-brand-300" to={source.path}>View source</Link>}
+                {source ? <Link className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-brand-600 hover:underline dark:text-brand-300" to={source.path}>View source</Link>
+                  : <p className="mt-2 text-sm text-muted">Source details unavailable or outside your access.</p>}
               </div>
               {mayResolve && exception.type !== 'po_receipt' && <button type="button" className="btn-primary btn-sm justify-center" onClick={() => setSelected(exception)}>Review exception</button>}
             </li>

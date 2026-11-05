@@ -38,6 +38,28 @@ describe('resolveWarehouseScan', () => {
 });
 
 describe('WarehouseScanFlow', () => {
+  it('uses current count field contents after removal and preserves duplicate protection within the draft', async () => {
+    const user = userEvent.setup();
+    const data = await makeRepo().getData();
+    const onResolved = vi.fn();
+    const serial = 'SMART-WATCH-SN0001';
+    const view = render(<WarehouseScanFlow data={data} context="count" scannedCodes={[]} onResolved={onResolved} />);
+    const scan = async () => {
+      await user.type(screen.getByLabelText('Enter barcode manually'), serial);
+      await user.click(screen.getByRole('button', { name: 'Add' }));
+    };
+    await scan();
+    view.rerender(<WarehouseScanFlow data={data} context="count" scannedCodes={[serial]} onResolved={onResolved} />);
+    await scan();
+    expect(screen.getByRole('alert')).toHaveTextContent(/already scanned/i);
+    expect(onResolved).toHaveBeenCalledTimes(1);
+    view.rerender(<WarehouseScanFlow data={data} context="count" scannedCodes={[]} onResolved={onResolved} />);
+    expect(screen.queryByLabelText('Accepted scans')).not.toBeInTheDocument();
+    await scan();
+    expect(onResolved).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole('status')).toHaveTextContent(/scan accepted/i);
+  });
+
   it('announces valid scans, retains them after an error, and supports cancellation', async () => {
     const user = userEvent.setup();
     const data = await makeRepo().getData();

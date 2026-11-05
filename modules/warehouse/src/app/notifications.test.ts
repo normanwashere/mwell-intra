@@ -150,7 +150,7 @@ describe("buildNotifications", () => {
     const notes = buildNotifications(data(), allow("allocations"));
     expect(notes.find((note) => note.id === "low-ring")?.to).toBeUndefined();
     expect(notes.find((note) => note.id === "reserved-a1")?.to).toBe(
-      "/allocations",
+      "/allocations?allocation=a1",
     );
   });
 });

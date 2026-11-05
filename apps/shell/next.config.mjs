@@ -92,7 +92,6 @@ const nextConfig = {
       { source: '/warehouse/events', destination: '/events', permanent: false },
       { source: '/warehouse/data', destination: '/insights/warehouse', permanent: false },
       { source: '/warehouse/quality-control', destination: '/warehouse/quality', permanent: false },
-      { source: '/warehouse/reports', destination: '/insights/warehouse', permanent: false },
     ];
   },
 };

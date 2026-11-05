@@ -1243,6 +1243,8 @@ export function PurchaseOrdersPage() {
         <Icon name="truck" className="h-4 w-4" /> Emailed POs and saved arrival drafts
       </Link>
 
+      <details className="border-y border-line py-1 text-sm">
+        <summary className="min-h-11 cursor-pointer content-center font-semibold text-ink">Receiving guidance</summary>
       {!canReadProcurement && (
         <p className="border-y border-line py-3 text-sm text-muted">Procurement owns requests and purchase orders. Approved orders appear in this receiving queue; contact Procurement with the PO reference for sourcing or request updates.</p>
       )}
@@ -1285,6 +1287,7 @@ export function PurchaseOrdersPage() {
           ))}
         </ol>
       </section>
+      </details>
 
       {mayResolveReceiptExceptions && (
         <>
@@ -1361,19 +1364,19 @@ export function PurchaseOrdersPage() {
             <EmptyState icon="cart" title={`No ${filter} purchase orders`} />
           ) : (
             <ul
-              className="grid gap-3 lg:grid-cols-2"
+              className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2"
               aria-label="Purchase orders"
             >
               {shownPOs.map((po) => (
-                <li key={po.id}>
+                <li key={po.id} className="min-w-0">
                   <button
                     type="button"
                     onClick={() => setDetailPOId(po.id)}
                     className="card block w-full space-y-3 p-4 text-left transition hover:-translate-y-0.5 hover:shadow-e3 sm:p-5"
                   >
-                    <div className="flex items-start justify-between gap-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="truncate font-semibold text-ink">
+                        <p className="font-semibold text-ink [overflow-wrap:anywhere]">
                           {poNo(po)} · {supplierName(po.supplierId)}
                         </p>
                         <p className="text-xs text-faint">

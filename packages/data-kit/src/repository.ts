@@ -199,6 +199,8 @@ export interface CycleCountInput {
 
 export interface CreateAndSubmitCycleCountInput extends CycleCountInput {
   idempotencyKey: string;
+  /** Stable count identity retained with the full command before its first send. */
+  cycleCountId?: string;
   reason: string;
   evidenceUrls: string[];
 }

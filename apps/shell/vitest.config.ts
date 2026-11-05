@@ -5,6 +5,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@shell": path.resolve(__dirname),
+      "@warehouse": path.resolve(__dirname, "../../modules/warehouse/src"),
       "@": path.resolve(__dirname, "../../modules/warehouse/src"),
     },
   },

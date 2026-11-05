@@ -14,6 +14,20 @@ export const HANDBOOK_TABS = Object.freeze([
 
 const CATALOG = [
   {
+    source: "docs/releases/2026-11-05-WMS-AUDIT-REMEDIATION.md",
+    id: "nov05-wms-audit-remediation",
+    title: "November 5 WMS Audit Fixes",
+    primaryTab: "release",
+    relatedTabs: ["workflows", "security"],
+    contentType: "release-note",
+    audience: ["operator", "trainer", "developer", "release-reviewer"],
+    summary: "Count integrity, exact serial history, inventory summaries and daily-work refinements, with scoped verification limits and live certification tracked separately.",
+    keywords: ["warehouse", "counts", "lots", "serials", "holds", "reports", "audit", "UAT"],
+    sortOrder: -5,
+    collapse: "reference",
+    relatedSources: ["docs/manual/MWELL_INTRA_USER_MANUAL.md"],
+  },
+  {
     source: "docs/releases/2026-10-20-WAREHOUSE-TRANSITION.md",
     id: "oct20-warehouse-transition",
     title: "October 20 Warehouse Transition",

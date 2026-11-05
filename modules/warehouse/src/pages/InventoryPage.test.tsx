@@ -34,6 +34,56 @@ afterEach(() => {
 });
 
 describe("InventoryPage", () => {
+  it("keeps unrelated known products readable when another product has an explicit null summary", async () => {
+    const seed = await availabilitySeed(false);
+    seed.products.push({ ...seed.products[0]!, id: 'known', name: 'Known Watch', sku: 'KNOWN-WATCH' });
+    const repo = makeRepo(seed);
+    vi.spyOn(repo, 'listInventoryPositions').mockResolvedValue({ rows: [
+      position({ productAvailable: null, availabilityVerified: false, available: 0, putawayAvailable: 0, unscopedCommitted: 0 }),
+      position({ productId: 'known', productAvailable: 7, availabilityVerified: true, available: 7, putawayAvailable: 7, unscopedCommitted: 0 }),
+    ] });
+    renderWithProviders(<InventoryPage />, { repo, source: 'supabase', capabilities: ['view_inventory'] });
+    const known = await screen.findByRole('button', { name: /Known Watch.*KNOWN-WATCH/ });
+    expect(await within(known).findByText('7')).toBeVisible();
+    const unknown = screen.getByRole('button', { name: /Power Gen 2.*WATCH-POW-G2/ });
+    expect(within(unknown).getByText('Unverified')).toBeVisible();
+    expect(within(unknown).queryByText('0')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Inventory availability could not be verified/)).not.toBeInTheDocument();
+  });
+
+  it("keeps a live product with no position summary unverified and out of zero-stock claims", async () => {
+    const repo = makeRepo(await availabilitySeed(false));
+    vi.spyOn(repo, 'listInventoryPositions').mockResolvedValue({ rows: [] });
+    renderWithProviders(<InventoryPage />, { repo, source: 'supabase', capabilities: ['view_inventory'] });
+    const row = await screen.findByRole('button', { name: /Power Gen 2.*WATCH-POW-G2/ });
+    expect(await within(row).findByText('Unverified')).toBeVisible();
+    expect(within(row).queryByText('0')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Low stock only' }));
+    expect(screen.queryByText('No low-stock items')).not.toBeInTheDocument();
+    expect(screen.getByText('Low-stock count unverified')).toBeVisible();
+  });
+
+  it("uses the repeated product-wide quantity once even when position availability is unresolved", async () => {
+    const repo = makeRepo(await availabilitySeed(false));
+    vi.spyOn(repo, 'listInventoryPositions').mockImplementation(async ({ cursor }) => cursor
+      ? { rows: [position({ locationId: 'loc-cebu', available: 0, productAvailable: 4, unscopedCommitted: 8, availabilityVerified: false })] }
+      : { rows: [position({ available: 0, productAvailable: 4, unscopedCommitted: 8, availabilityVerified: false })], nextCursor: 'next' });
+    renderWithProviders(<InventoryPage />, { repo, source: 'supabase', capabilities: ['view_inventory'] });
+    const row = await screen.findByRole('button', { name: /Power Gen 2.*WATCH-POW-G2/ });
+    expect(await within(row).findByText('4')).toBeVisible();
+    expect(within(row).queryByText('0')).not.toBeInTheDocument();
+    expect(within(row).queryByText('8')).not.toBeInTheDocument();
+  });
+
+  it("does not publish legacy live availability without the new product summary", async () => {
+    const repo = makeRepo(await availabilitySeed(false));
+    vi.spyOn(repo, 'listInventoryPositions').mockResolvedValue({ rows: [position({ available: 10 })] });
+    renderWithProviders(<InventoryPage />, { repo, source: 'supabase', capabilities: ['view_inventory'] });
+    expect(await screen.findByText(/Inventory availability could not be verified/)).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Low stock only' })).toBeDisabled();
+    expect(within(screen.getByRole('button', { name: /Power Gen 2.*WATCH-POW-G2/ })).getByText('Unverified')).toBeVisible();
+  });
+
   it("uses all governed availability pages for the held Power watch and its low-stock result", async () => {
     const user = userEvent.setup();
     const repo = makeRepo(await availabilitySeed());

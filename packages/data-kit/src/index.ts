@@ -26,6 +26,7 @@ export * from "./domain/deliveryDate";
 // --- Repository PORT + input DTOs + WarehouseData read model + toStockState ---
 export * from "./repository";
 export * from "./returnOutcome";
+export * from "./cycleCountOutcome";
 
 // --- Adapters + factory ---
 export * from "./inMemoryRepository";

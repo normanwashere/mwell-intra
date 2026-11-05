@@ -299,7 +299,8 @@ test("legacy top-level routes redirect without trapping the detail handoff", asy
   await page.goto("/warehouse/events");
   await expect(page).toHaveURL(/\/events$/);
   await page.goto("/warehouse/reports");
-  await expect(page).toHaveURL(/\/insights\/warehouse$/);
+  await expect(page).toHaveURL(/\/warehouse\/reports$/);
+  await expect(page.getByRole("heading", { name: "Inventory position report" })).toBeVisible();
   await page.goto("/warehouse/quality-control");
   await expect(page).toHaveURL(/\/warehouse\/quality$/);
   await page.goto("/warehouse/events/evt-demo-wellness-caravan");

@@ -75,14 +75,17 @@ function renderPages(roles: Partial<UserRoles>, effective = projection(roles)) {
 beforeEach(() => { window.localStorage.clear(); window.sessionStorage.clear(); });
 
 describe('Sep20 destination contracts for the 18 reviewed personas', () => {
-  it.each(personas)('%s renders only Procurement and Insights links its destination admits', async (_name, roles) => {
+  it.each(personas)('%s admits Procurement, local Reports and Insights through their own grants', async (_name, roles) => {
     const effective = projection(roles);
     const nav = modulesForWarehouseAccess('supabase', (roles.warehouse?.[0] ?? 'warehouse_admin') as WarehouseUiRole,
       capability => effective.warehouse?.includes(capability) === true,
       destination => destination === 'insights' ? can(roles, 'insights', 'view_warehouse') : can(roles, 'events', 'view_events'));
-    for (const item of nav.filter(item => item.id === 'data' || item.id === 'reports')) {
+    for (const item of nav.filter(item => item.id === 'data')) {
       expect(can(roles, 'insights', 'view_warehouse'), item.id).toBe(true);
     }
+    expect(nav.some(item => item.id === 'reports')).toBe(
+      ['view_inventory', 'view_analytics', 'view_finance'].some(capability => effective.warehouse?.includes(capability)),
+    );
     renderPages(roles, effective);
     await screen.findByLabelText('Current access');
     await screen.findByRole('heading', { name: 'Replenishment planning' });

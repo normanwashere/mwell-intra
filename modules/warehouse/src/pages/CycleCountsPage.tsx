@@ -1,4 +1,5 @@
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useMemo, useRef, useState } from 'react';
+import { userFacingError } from '@intra/ui';
 import { Link, useSearchParams } from 'react-router-dom';
 import { tasksReturnPath } from '@/domain/taskNavigation';
 import { clsx } from 'clsx';
@@ -12,22 +13,47 @@ import { Icon } from '@/components/Icon';
 import { WarehouseScanFlow } from '@/components/camera/WarehouseScanFlow';
 import { EvidenceCapture } from '@/components/camera/EvidenceCapture';
 import { useCycleCountRecord } from '@/domain/useCycleCountRecord';
+import { completeCycleCountIntent, cycleCountIntentKey, readCycleCountIntent, retainCycleCountIntent, type CycleCountCommand } from '@/domain/cycleCountIntent';
 
 export function CycleCountsPage() {
-  const { data, submitNewCycleCount } = useWarehouse();
+  const { source, identityId } = useWarehouse();
+  return <CycleCountSheet key={`${source}:${identityId}`} />;
+}
+
+function CycleCountSheet() {
+  const { data, submitNewCycleCount, getCycleCount, source, identityId, actor } = useWarehouse();
   const toast = useToast();
+  const storageKey = cycleCountIntentKey(source, identityId);
+  const [recovery] = useState(() => {
+    try { return { command: readCycleCountIntent(storageKey), error: '' }; }
+    catch (error) { return { command: null, error: error instanceof Error ? error.message : 'Saved count is unavailable.' }; }
+  });
+  const [pending, setPending] = useState<CycleCountCommand | null>(recovery.command);
+  const pendingRef = useRef(pending);
+  const sendingRef = useRef(false);
+  const [sending, setSending] = useState(false);
+  const [rejection, setRejection] = useState('');
+  const locked = Boolean(pending) || Boolean(recovery.error);
   const warehouses = useMemo(
     () => data?.locations.filter((l) => l.type === 'warehouse') ?? [],
     [data],
   );
-  const [locationId, setLocationId] = useState('');
-  const [binId, setBinId] = useState('');
-  const [category, setCategory] = useState<ItemCategory>('merchandise');
-  const [counts, setCounts] = useState<Record<string, number>>({});
-  const [serialInputs, setSerialInputs] = useState<Record<string, string>>({});
-  const [blind, setBlind] = useState(false);
-  const [confirmUncounted, setConfirmUncounted] = useState(false);
-  const [evidenceUrls, setEvidenceUrls] = useState<string[]>([]);
+  const [locationId, setLocationId] = useState(pending?.locationId ?? '');
+  const [binId, setBinId] = useState(pending?.binId ?? '');
+  const [category, setCategory] = useState<ItemCategory>(pending?.category ?? 'merchandise');
+  const [counts, setCounts] = useState<Record<string, number>>(() => Object.fromEntries(
+    pending?.lines.filter(line => !line.serialNumbers).map(line => [line.productId, line.counted]) ?? [],
+  ));
+  const [serialInputs, setSerialInputs] = useState<Record<string, string>>(() => Object.fromEntries(
+    pending?.lines.filter(line => line.serialNumbers).map(line => [line.productId, line.serialNumbers!.join(', ')]) ?? [],
+  ));
+  const [lotInputs, setLotInputs] = useState<Record<string, Record<string, number>>>(() => Object.fromEntries(
+    pending?.lines.filter(line => line.lotCounts).map(line => [line.productId,
+      Object.fromEntries(line.lotCounts!.map(lot => [JSON.stringify(lot.lotId), lot.counted])),
+    ]) ?? [],
+  ));
+  const [blind, setBlind] = useState(pending?.reason === 'Blind cycle count');
+  const [evidenceUrls, setEvidenceUrls] = useState<string[]>(pending?.evidenceUrls ?? []);
   const [evidenceBusy, setEvidenceBusy] = useState(false);
   const [evidenceVersion, setEvidenceVersion] = useState(0);
   const [search, setSearch] = useState('');
@@ -59,11 +85,21 @@ export function CycleCountsPage() {
   const bins = (data.storageAreas ?? []).filter(
     (b) => b.locationId === activeLocation,
   );
-  const activeBin = bins.some((b) => b.id === binId) ? binId : '';
+  const activeBin = pending ? pending.binId ?? '' : bins.some((b) => b.id === binId) ? binId : '';
   const scope = activeBin || undefined;
+  const lotsFor = (productId: string): (string | null)[] => {
+    const retained = pending?.lines.find(line => line.productId === productId)?.lotCounts;
+    if (retained) return retained.map(lot => lot.lotId);
+    return [...new Set(data.stockLevels.filter(row => row.productId === productId
+      && row.locationId === activeLocation && (row.binId ?? undefined) === scope)
+      .map(row => row.lotId ?? null))];
+  };
+  const needsLotCounts = (id: string) => lotsFor(id).length > 1;
 
   // Expected reflects the selected storage-area scope (bin, or the general area).
   const expectedForScope = (productId: string): number => {
+    const retainedLine = pending?.lines.find(line => line.productId === productId);
+    if (retainedLine) return retainedLine.expected;
     const product = data.products.find((row) => row.id === productId);
     if (product?.serialized) {
       return data.units.filter((unit) =>
@@ -101,10 +137,15 @@ export function CycleCountsPage() {
       return;
     }
     const n = Number(raw);
-    setCount(productId, Number.isNaN(n) ? 0 : Math.max(0, n));
+    setCount(productId, n);
   };
   const onSerialChange = (productId: string, raw: string) => {
-    setSerialInputs((previous) => ({ ...previous, [productId]: raw.toUpperCase() }));
+    setSerialInputs((previous) => {
+      const next = { ...previous };
+      if (raw.split(/[\s,]+/).some(Boolean)) next[productId] = raw.toUpperCase();
+      else delete next[productId];
+      return next;
+    });
   };
 
   const serialTokens = (id: string) => (serialInputs[id] ?? '')
@@ -114,15 +155,27 @@ export function CycleCountsPage() {
   const isSerialized = (id: string) => data.products.find((product) => product.id === id)?.serialized ?? false;
   const isCounted = (id: string) => isSerialized(id)
     ? Object.prototype.hasOwnProperty.call(serialInputs, id)
+    : needsLotCounts(id) ? lotsFor(id).every(lotId => lotInputs[id]?.[JSON.stringify(lotId)] !== undefined)
     : counts[id] !== undefined;
-  const countedFor = (id: string, expected: number) => isSerialized(id)
-    ? (isCounted(id) ? serialTokens(id).length : expected)
-    : (counts[id] ?? expected);
+  const countedFor = (id: string, _expected: number) => isSerialized(id)
+    ? serialTokens(id).length
+    : needsLotCounts(id) ? lotsFor(id).reduce((total, lotId) => total + (lotInputs[id]?.[JSON.stringify(lotId)] ?? 0), 0)
+    : (counts[id] ?? 0);
+  const incompleteLots = items.some(({ product }) => !product.serialized && needsLotCounts(product.id)
+    && lotsFor(product.id).some(lotId => lotInputs[product.id]?.[JSON.stringify(lotId)] !== undefined) && !isCounted(product.id));
+  const invalidQuantities = [...Object.values(counts), ...Object.values(lotInputs).flatMap(Object.values)]
+    .some(value => !Number.isSafeInteger(value) || value < 0);
+  const hasLotVariance = (id: string) => !isSerialized(id) && needsLotCounts(id) && isCounted(id)
+    && lotsFor(id).some(lotId => lotInputs[id]?.[JSON.stringify(lotId)] !== data.stockLevels
+      .filter(row => row.productId === id && row.locationId === activeLocation
+        && (row.binId ?? undefined) === scope && (row.lotId ?? null) === lotId)
+      .reduce((sum, row) => sum + row.quantity, 0));
+  const hasVariance = (id: string, expected: number) => countedFor(id, expected) !== expected || hasLotVariance(id);
   const expectedSerials = (id: string) => new Set(data.units
     .filter((unit) => unit.productId === id && unit.locationId === activeLocation
       && (unit.binId ?? undefined) === scope && ['in_stock', 'returned'].includes(unit.status))
     .map((unit) => unit.serialNumber));
-  const serialIssues = items.flatMap(({ product }) => {
+  const serialIssues = pending ? [] : items.flatMap(({ product }) => {
     if (!product.serialized || !isCounted(product.id)) return [];
     const tokens = serialTokens(product.id);
     const duplicates = tokens.filter((serial, index) => tokens.indexOf(serial) !== index);
@@ -132,18 +185,19 @@ export function CycleCountsPage() {
   });
   const firstMissing = items.find(({ product, expected }) =>
     product.serialized && isCounted(product.id) && countedFor(product.id, expected) < expected);
-  // Blind mode records only entered rows. In normal mode the whole sheet is
-  // recorded — untouched rows fall back to expected, which the submit flow
-  // makes the operator explicitly confirm below.
+  // Blank rows are not observations, in either normal or blind mode.
   const lines = items
-    .filter(({ product }) => (blind || product.serialized) ? isCounted(product.id) : true)
+    .filter(({ product }) => isCounted(product.id))
     .map(({ product, expected }) => ({
       productId: product.id,
       expected,
       counted: countedFor(product.id, expected),
       ...(product.serialized ? { serialNumbers: serialTokens(product.id) } : {}),
+      ...(!product.serialized && needsLotCounts(product.id) ? {
+        lotCounts: lotsFor(product.id).map(lotId => ({ lotId, counted: lotInputs[product.id]![JSON.stringify(lotId)]! })),
+      } : {}),
     }));
-  const variances = lines.filter((l) => l.counted !== l.expected);
+  const variances = lines.filter((line) => hasVariance(line.productId, line.expected));
   const enteredCount = items.filter((i) => isCounted(i.product.id)).length;
   const uncounted = items.length - enteredCount;
 
@@ -151,44 +205,97 @@ export function CycleCountsPage() {
   const isVisible = (id: string, name: string, sku: string, expected: number) => {
     if (q && !(name.toLowerCase().includes(q) || sku.toLowerCase().includes(q)))
       return false;
-    if (!blind && variancesOnly && (!isCounted(id) || countedFor(id, expected) === expected)) return false;
+    if (!blind && variancesOnly && (!isCounted(id) || !hasVariance(id, expected))) return false;
     return true;
   };
 
   const expectedById = new Map(items.map((i) => [i.product.id, i.expected]));
   const families = groupProductsByFamily(items.map((i) => i.product));
+  const lotCountControls = (id: string, name: string) => <div className="min-w-0 space-y-2">
+    {lotsFor(id).map(lotId => {
+      const key = JSON.stringify(lotId);
+      const label = lotId === null ? 'Unlotted' : data.lots.find(lot => lot.id === lotId)?.lotCode ?? lotId;
+      return <label key={key} className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-left text-xs">
+        <span className="min-w-0 flex-1 break-words [overflow-wrap:anywhere]">{label}</span>
+        <input type="number" inputMode="numeric" min={0} step={1}
+          className="input min-h-11 w-24 text-right" aria-label={`${name} lot ${label} counted`}
+          value={lotInputs[id]?.[key] ?? ''} placeholder="Count"
+          onChange={event => {
+            const raw = event.target.value;
+            setLotInputs(previous => {
+              const next = { ...previous[id] };
+              if (raw === '') delete next[key];
+              else next[key] = Number(raw);
+              return { ...previous, [id]: next };
+            });
+          }} />
+      </label>;
+    })}
+  </div>;
+  const zeroSerialControl = (id: string, name: string) => <label className="mt-1 flex min-h-11 items-center gap-2 text-xs text-muted">
+    <input type="checkbox" aria-label={`${name} no units found`} checked={isCounted(id) && serialTokens(id).length === 0}
+      onChange={(event) => {
+        if (event.target.checked) setSerialInputs(previous => ({ ...previous, [id]: '' }));
+        else onSerialChange(id, '');
+      }} />
+    No units found
+  </label>;
 
   const submit = async () => {
-    if (evidenceBusy) return;
-    const ok = await submitNewCycleCount({
-      locationId: activeLocation,
-      binId: scope,
-      category,
-      lines,
-      reason: blind ? 'Blind cycle count' : 'Scheduled cycle count',
-      evidenceUrls,
-    });
-    if (!ok) return;
-    toast.success(
-      variances.length > 0
-        ? `${variances.length} variance(s) · Awaiting Warehouse Supervisor`
-        : 'Count completed · balanced',
-    );
-    setCounts({});
-    setSerialInputs({});
-    setEvidenceUrls([]);
-    setEvidenceVersion((version) => version + 1);
-    setConfirmUncounted(false);
-  };
-
-  // Submitting with silently-uncounted rows needs an explicit confirmation
-  // ("8 rows not counted — submit anyway?", WH-18).
-  const onSubmitClick = () => {
-    if (!blind && category !== 'device' && uncounted > 0) {
-      setConfirmUncounted(true);
-      return;
+    if (sendingRef.current || evidenceBusy || recovery.error) return;
+    if (!pendingRef.current && (enteredCount === 0 || incompleteLots || invalidQuantities || serialIssues.length > 0 || evidenceUrls.length === 0)) return;
+    sendingRef.current = true;
+    setSending(true);
+    try {
+      const command = retainCycleCountIntent(storageKey, pendingRef.current ?? {
+        idempotencyKey: `atomic-count-${crypto.randomUUID()}`,
+        cycleCountId: `cc-${crypto.randomUUID()}`,
+        actor,
+        requesterId: identityId,
+        locationId: activeLocation,
+        binId: scope,
+        category,
+        lines,
+        reason: blind ? 'Blind cycle count' : 'Scheduled cycle count',
+        evidenceUrls,
+      });
+      pendingRef.current = command;
+      setPending(command);
+      setRejection('');
+      const outcome = await submitNewCycleCount(command);
+      if (outcome.status === 'rejected') {
+        completeCycleCountIntent(storageKey, command);
+        pendingRef.current = null;
+        setPending(null);
+        setRejection(userFacingError(outcome.message));
+        return;
+      }
+      if (outcome.status !== 'committed') return;
+      const saved = await getCycleCount(command.cycleCountId);
+      if (!saved && source === 'supabase') {
+        throw new Error('Count accepted, but its saved record could not be read. Retry this same count to confirm its status.');
+      }
+      completeCycleCountIntent(storageKey, command);
+      const varianceCount = command.lines.filter(line => line.counted !== line.expected).length;
+      toast.success(saved?.status === 'rejected' ? 'Saved count was rejected. No new count was submitted.'
+        : saved?.status === 'pending_approval' || saved?.status === 'submitted' ? 'Count saved · Awaiting Warehouse Supervisor'
+        : saved?.status === 'approved' && varianceCount > 0 ? 'Saved count was already approved. No new adjustment was requested.'
+        : varianceCount > 0
+        ? `${varianceCount} variance(s) · Awaiting Warehouse Supervisor`
+        : 'Count completed · balanced');
+      pendingRef.current = null;
+      setPending(null);
+      setCounts({});
+      setLotInputs({});
+      setSerialInputs({});
+      setEvidenceUrls([]);
+      setEvidenceVersion((version) => version + 1);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not retain the count. No new command was created.');
+    } finally {
+      sendingRef.current = false;
+      setSending(false);
     }
-    void submit();
   };
 
   return (
@@ -204,6 +311,13 @@ export function CycleCountsPage() {
         <p className="mt-0.5 text-xs">A material variance requires a different Warehouse Supervisor; the counter cannot approve it, including through delegation.</p>
       </div>
 
+      {recovery.error && <p role="alert">{recovery.error}</p>}
+      {rejection && <p role="alert" className="break-words text-sm text-danger">Count not submitted. {rejection}</p>}
+      {pending && <div role="status" className="break-words rounded-lg border border-amber-500/40 p-3 text-sm">
+        <p>{sending ? 'Confirming saved count...' : 'Count outcome unconfirmed. Retry the saved count before starting another.'}</p>
+        <p className="break-all font-mono text-xs">{pending.cycleCountId}</p>
+      </div>}
+      <fieldset disabled={locked} className="min-w-0 space-y-4">
       <Card className="grid gap-3 sm:grid-cols-2">
         <Field label="Location" htmlFor="cc-location">
           <select
@@ -214,10 +328,10 @@ export function CycleCountsPage() {
               setLocationId(e.target.value);
               setBinId('');
               setCounts({});
+              setLotInputs({});
               setSerialInputs({});
               setEvidenceUrls([]);
               setEvidenceVersion((version) => version + 1);
-              setConfirmUncounted(false);
             }}
           >
             {warehouses.map((l) => (
@@ -235,10 +349,10 @@ export function CycleCountsPage() {
             onChange={(e) => {
               setCategory(e.target.value as ItemCategory);
               setCounts({});
+              setLotInputs({});
               setSerialInputs({});
               setEvidenceUrls([]);
               setEvidenceVersion((version) => version + 1);
-              setConfirmUncounted(false);
             }}
           >
             <option value="merchandise">Merchandise</option>
@@ -258,10 +372,10 @@ export function CycleCountsPage() {
             </span>
           </div>
         )}
-        {category === 'device' && (
+        {category === 'device' && !locked && (
           <div className="sm:col-span-2">
             <WarehouseScanFlow
-              key={`${activeLocation}:${scope ?? 'general'}`}
+              key={`${activeLocation}:${scope ?? 'general'}:${evidenceVersion}`}
               data={data}
               context="count"
               expectedLocationId={activeLocation}
@@ -300,8 +414,8 @@ export function CycleCountsPage() {
                   setBinId(e.target.value);
                   setEvidenceUrls([]);
                   setEvidenceVersion((version) => version + 1);
-                  setConfirmUncounted(false);
                   setCounts({});
+                  setLotInputs({});
                   setSerialInputs({});
                 }}
               >
@@ -439,8 +553,9 @@ export function CycleCountsPage() {
                           <td className="py-2 text-right tabular-nums">
                             {blind ? '—' : expected}
                           </td>
-                          <td className="py-2 text-right">
+                          <td className="py-2 pl-3 text-right">
                             {product.serialized ? (
+                              <div>
                               <input
                                 type="text"
                                 className="input min-w-52 py-1.5"
@@ -449,13 +564,15 @@ export function CycleCountsPage() {
                                 value={serialInputs[product.id] ?? ''}
                                 onChange={(e) => onSerialChange(product.id, e.target.value)}
                               />
-                            ) : (
+                              {zeroSerialControl(product.id, product.name)}
+                              </div>
+                            ) : needsLotCounts(product.id) ? lotCountControls(product.id, product.name) : (
                               <input
                                 type="number"
                                 inputMode="numeric"
                                 className="input w-24 py-1.5 text-right"
                                 aria-label={`Counted ${product.name}`}
-                                placeholder={blind ? '—' : `Exp. ${expected}`}
+                                placeholder={blind ? '—' : 'Count'}
                                 value={counts[product.id] ?? ''}
                                 min={0}
                                 onChange={(e) => onCountChange(product.id, e.target.value)}
@@ -464,12 +581,12 @@ export function CycleCountsPage() {
                           </td>
                           {!blind && <td
                             className={
-                              !has || variance === 0
+                              !has || !hasVariance(product.id, expected)
                                 ? 'py-2 text-right tabular-nums text-faint'
                                 : 'py-2 text-right font-semibold tabular-nums text-rose-600 dark:text-rose-300'
                             }
                           >
-                            {!has ? '—' : variance === 0 ? '±0' : variance > 0 ? `+${variance}` : variance}
+                            {!has ? '—' : variance === 0 ? hasLotVariance(product.id) ? 'Lot differences' : '±0' : variance > 0 ? `+${variance}` : variance}
                           </td>}
                         </tr>
                       );
@@ -518,46 +635,49 @@ export function CycleCountsPage() {
                         {!blind && <span
                           className={clsx(
                             'shrink-0 rounded-md px-2 py-1 text-xs font-semibold tabular-nums',
-                            !has || variance === 0
+                            !has || !hasVariance(product.id, expected)
                               ? 'bg-inset text-faint'
                               : 'bg-rose-500/15 text-rose-600 dark:text-rose-300',
                           )}
                           aria-label="Variance"
                         >
-                          {!has ? 'Var —' : variance === 0 ? '±0' : variance > 0 ? `+${variance}` : variance}
+                          {!has ? 'Var —' : variance === 0 ? hasLotVariance(product.id) ? 'Lot differences' : '±0' : variance > 0 ? `+${variance}` : variance}
                         </span>}
                       </div>
-                      <div className="flex items-center justify-between gap-3">
+                      <div className={clsx('flex gap-3', !product.serialized && needsLotCounts(product.id) ? 'flex-col' : 'items-center justify-between')}>
                         <span className="text-xs text-faint">
                           Expected{' '}
                           <span className="font-semibold tabular-nums text-muted">
                             {blind ? '—' : expected}
                           </span>
                         </span>
-                        <label className="flex items-center gap-2">
+                        <div className={clsx('flex min-w-0 gap-2', !product.serialized && needsLotCounts(product.id) ? 'w-full flex-col' : 'items-center')}>
                           <span className="text-xs text-faint">Counted</span>
                           {product.serialized ? (
+                            <div className="min-w-0 flex-1">
                             <input
                               type="text"
-                              className="input min-h-11 min-w-0 flex-1"
+                              className="input min-h-11 w-full min-w-0"
                               aria-label={`${product.name} scanned serials`}
                               placeholder="Scan serials"
                               value={serialInputs[product.id] ?? ''}
                               onChange={(e) => onSerialChange(product.id, e.target.value)}
                             />
-                          ) : (
+                            {zeroSerialControl(product.id, product.name)}
+                            </div>
+                          ) : needsLotCounts(product.id) ? lotCountControls(product.id, product.name) : (
                             <input
                               type="number"
                               inputMode="numeric"
                               className="input min-h-11 w-24 text-right"
                               aria-label={`${product.name} counted quantity`}
-                              placeholder={blind ? '—' : `Exp. ${expected}`}
+                              placeholder={blind ? '—' : 'Count'}
                               value={counts[product.id] ?? ''}
                               min={0}
                               onChange={(e) => onCountChange(product.id, e.target.value)}
                             />
                           )}
-                        </label>
+                        </div>
                       </div>
                     </li>
                   );
@@ -581,7 +701,6 @@ export function CycleCountsPage() {
           label="Attach cycle-count evidence"
           onChange={(urls) => {
             setEvidenceUrls(urls);
-            if (urls.length === 0) setConfirmUncounted(false);
           }}
         />
         {evidenceUrls.length === 0 && (
@@ -590,46 +709,21 @@ export function CycleCountsPage() {
           </p>
         )}
       </Card>
+      </fieldset>
 
       <div className="space-y-2">
-        {confirmUncounted && (
-          <div
-            role="alertdialog"
-            aria-label="Confirm uncounted rows"
-            className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 shadow-pop backdrop-blur"
-          >
-            <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
-              {uncounted} row{uncounted === 1 ? '' : 's'} not counted — they
-              will be recorded at the expected quantity. Submit anyway?
-            </p>
-            <div className="mt-2 flex gap-2">
-              <button
-                type="button"
-                className="btn-ghost btn-sm flex-1 justify-center"
-                onClick={() => setConfirmUncounted(false)}
-              >
-                Keep counting
-              </button>
-              <button
-                type="button"
-                className="btn-primary btn-sm flex-1 justify-center"
-                disabled={evidenceBusy || evidenceUrls.length === 0}
-                onClick={() => void submit()}
-              >
-                Submit anyway
-              </button>
-            </div>
-          </div>
-        )}
+        {invalidQuantities && <p role="alert" className="text-sm text-rose-700 dark:text-rose-300">Enter whole-number quantities of zero or more.</p>}
+        {incompleteLots && <p role="alert" className="text-sm text-amber-800 dark:text-amber-200">Enter each receipt-lot count for the started item, including zero when none were found.</p>}
+        {uncounted > 0 && <p className="text-sm text-muted">{uncounted} row{uncounted === 1 ? '' : 's'} not counted. Only entered observations will be submitted.</p>}
         <button
           type="button"
           className="btn-primary w-full shadow-pop"
           // An explicit entry is always required — no more one-tap "perfect
           // count" (WH-18).
-          disabled={evidenceBusy || enteredCount === 0 || serialIssues.length > 0 || evidenceUrls.length === 0}
-          onClick={onSubmitClick}
+          disabled={sending || Boolean(recovery.error) || evidenceBusy || (!pending && (enteredCount === 0 || incompleteLots || invalidQuantities || serialIssues.length > 0 || evidenceUrls.length === 0))}
+          onClick={() => void submit()}
         >
-          Submit count ({enteredCount}/{items.length})
+          {sending ? 'Confirming count...' : pending ? 'Retry saved count' : `Submit count (${enteredCount}/${items.length})`}
         </button>
       </div>
     </div>

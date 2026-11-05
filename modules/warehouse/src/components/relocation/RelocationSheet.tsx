@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { userFacingError } from '@intra/ui';
 import type { InventoryHold, Product, WarehouseData } from '@intra/data-kit';
+import { findIntent, intentIdentity } from '@intra/data-kit';
 import { useWarehouse } from '@/app/store';
 import { WAREHOUSE_MUTATION_CAPABILITIES } from '@/app/authorization';
 import { useSession } from '@/auth/session';
@@ -39,7 +40,7 @@ export function RelocationSheet(props: Props) {
 }
 
 function ScopedRelocationSheet({ product, data, initialLocationId, open, onOpenChange, scope }: Props & { scope: string }) {
-  const { relocate, loadHolds, can, source } = useWarehouse();
+  const { relocate, loadHolds, can, source, actor } = useWarehouse();
   const toast = useToast();
   const [initial] = useState<RelocationDraft>(() => ({ locationId: initialLocationId, fromBinId: '', toBinId: '', quantity: 1, serials: [] }));
   const [saving, setSaving] = useState(false);
@@ -57,6 +58,11 @@ function ScopedRelocationSheet({ product, data, initialLocationId, open, onOpenC
   const { locationId, fromBinId, toBinId, quantity, serials } = draft.value;
   const warehouses = data.locations.filter(location => location.type === 'warehouse');
   const bins = data.storageAreas.filter(bin => bin.locationId === locationId);
+  const selectedIdentity = (id: string) => {
+    const warehouse = warehouses.find(location => location.id === locationId);
+    const bin = bins.find(item => item.id === id);
+    return `${warehouse?.name ?? locationId} / ${id ? (bin ? `${bin.code}${bin.label ? ` - ${bin.label}` : ''}` : `${id} (unavailable)`) : 'General area (unassigned)'}`;
+  };
   const locked = saving || confirmed || draft.needsResume || draft.conflict;
   const update = (patch: Partial<RelocationDraft>) => {
     if (inFlight.current || locked) return;
@@ -67,34 +73,58 @@ function ScopedRelocationSheet({ product, data, initialLocationId, open, onOpenC
   const submit = async () => {
     if (inFlight.current || locked || !can(WAREHOUSE_MUTATION_CAPABILITIES.relocate)) return;
     setError(null);
-    // Hold RLS uses these capabilities; an invisible population is not empty.
-    if (source === 'supabase' && !can('inspect_quality') && !can('view_exceptions') && !can('view_finance')) {
-      setError('Active holds cannot be verified with your current access. No move was submitted. Ask Quality or a warehouse supervisor to review the retained draft.');
-      return;
-    }
     const selected = draft.current.current;
     const count = product.serialized ? selected.serials.length : selected.quantity;
-    if (!warehouses.some(location => location.id === selected.locationId)) {
-      setError('Choose a current warehouse.');
-      return;
-    }
-    if ([selected.fromBinId, selected.toBinId].some(id => id && !bins.some(bin => bin.id === id))) {
-      setError('A selected storage area is no longer at this warehouse. Choose the current source and destination.');
-      return;
-    }
-    if (selected.fromBinId === selected.toBinId) {
-      setError('Source and destination bins must differ.');
-      return;
-    }
-    if (!Number.isInteger(count) || count < 1) {
-      setError(product.serialized ? 'Scan the exact units to move.' : 'Quantity must be a positive whole number.');
-      return;
-    }
+    const input = { productId: product.id, locationId: selected.locationId,
+      fromBinId: selected.fromBinId || undefined, toBinId: selected.toBinId || undefined,
+      quantity: count, serialNumbers: product.serialized ? selected.serials : undefined };
     if (!draft.replace(selected, true)) return;
     inFlight.current = true;
     setSaving(true);
     let submitted = false;
+    let intentChecked = source !== 'supabase';
+    const complete = (recovered: boolean) => {
+      setConfirmed(true);
+      toast.success(`${recovered ? 'Previously submitted move confirmed: ' : 'Moved '}${count}x ${product.name} to ${data.storageAreas.find(bin => bin.id === selected.toBinId)?.code ?? 'General area'}`);
+      if (draft.clear()) {
+        setConfirmed(false);
+        if (draft.mounted.current) onOpenChange(false);
+      }
+    };
     try {
+      // A replay receipt describes the original command, not today's source stock.
+      // Never send a new command while that actor's exact intent is unresolved.
+      const retained = source === 'supabase' ? await findIntent(intentIdentity('relocate', { ...input, actor })) : undefined;
+      intentChecked = true;
+      if (!draft.mounted.current || !latest.current.can(WAREHOUSE_MUTATION_CAPABILITIES.relocate) || !draft.replace(selected, true)) return;
+      if (retained) {
+        if (retained.status === 'committed') complete(true);
+        else setError(retained.status === 'pending'
+          ? 'This move is pending sync confirmation. Your draft and original command are retained. Reconnect and let Sync finish, then check this move again. No new move was submitted.'
+          : `This move needs review in Sync issues. ${retained.error ?? 'The original command could not be confirmed.'} Your draft is retained. No new move was submitted.`);
+        return;
+      }
+      // Hold RLS uses these capabilities; an invisible population is not empty.
+      if (source === 'supabase' && !can('inspect_quality') && !can('view_exceptions') && !can('view_finance')) {
+        setError('Active holds cannot be verified with your current access. No move was submitted. Ask Quality or a warehouse supervisor to review the retained draft.');
+        return;
+      }
+      if (!warehouses.some(location => location.id === selected.locationId)) {
+        setError('Choose a current warehouse.');
+        return;
+      }
+      if ([selected.fromBinId, selected.toBinId].some(id => id && !bins.some(bin => bin.id === id))) {
+        setError('A selected storage area is no longer at this warehouse. Choose the current source and destination.');
+        return;
+      }
+      if (selected.fromBinId === selected.toBinId) {
+        setError('Source and destination bins must differ.');
+        return;
+      }
+      if (!Number.isInteger(count) || count < 1) {
+        setError(product.serialized ? 'Scan the exact units to move.' : 'Quantity must be a positive whole number.');
+        return;
+      }
       let holds: InventoryHold[];
       try {
         holds = await loadCompleteControlQueue(query => loadHolds({ ...query, status: 'active' }));
@@ -136,18 +166,12 @@ function ScopedRelocationSheet({ product, data, initialLocationId, open, onOpenC
         }
       }
       submitted = true;
-      const ok = await relocate({ productId: product.id, locationId: selected.locationId,
-        fromBinId: selected.fromBinId || undefined, toBinId: selected.toBinId || undefined,
-        quantity: count, serialNumbers: product.serialized ? selected.serials : undefined });
+      const ok = await relocate(input);
       if (!ok) { setError(recoveryMessage); return; }
-      setConfirmed(true);
-      toast.success(`Moved ${count}x ${product.name} to ${data.storageAreas.find(bin => bin.id === selected.toBinId)?.code ?? 'General area'}`);
-      if (draft.clear()) {
-        setConfirmed(false);
-        if (draft.mounted.current) onOpenChange(false);
-      }
+      complete(false);
     } catch {
-      setError(submitted ? recoveryMessage : 'The stock check could not be completed. Nothing was moved. Your draft is saved. Reopen inventory and check the selected stock before trying again.');
+      setError(!intentChecked ? 'The previous move status could not be checked. No new move was submitted. Your draft is saved; check Sync and retry when the connection is restored.'
+        : submitted ? recoveryMessage : 'The stock check could not be completed. Nothing was moved. Your draft is saved. Reopen inventory and check the selected stock before trying again.');
     } finally {
       inFlight.current = false;
       setSaving(false);
@@ -178,16 +202,18 @@ function ScopedRelocationSheet({ product, data, initialLocationId, open, onOpenC
             </select>
           </Field>}
           <Field label="From bin" htmlFor="rel-from">
-            <select id="rel-from" className="input" value={fromBinId} onChange={event => update({ fromBinId: event.target.value, serials: [] })}>
+            <select id="rel-from" className="input" aria-describedby="rel-from-identity" value={fromBinId} onChange={event => update({ fromBinId: event.target.value, serials: [] })}>
               <option value="">General area (unassigned)</option>
               {bins.map(bin => <option key={bin.id} value={bin.id}>{bin.code}{bin.label ? ` - ${bin.label}` : ''}</option>)}
             </select>
+            <p id="rel-from-identity" className="mt-1 min-w-0 whitespace-normal text-sm text-muted [overflow-wrap:anywhere]">{selectedIdentity(fromBinId)}</p>
           </Field>
           <Field label="To bin" htmlFor="rel-to">
-            <select id="rel-to" className="input" value={toBinId} onChange={event => update({ toBinId: event.target.value })}>
+            <select id="rel-to" className="input" aria-describedby="rel-to-identity" value={toBinId} onChange={event => update({ toBinId: event.target.value })}>
               <option value="">General area (unassigned)</option>
               {bins.map(bin => <option key={bin.id} value={bin.id}>{bin.code}{bin.label ? ` - ${bin.label}` : ''}</option>)}
             </select>
+            <p id="rel-to-identity" className="mt-1 min-w-0 whitespace-normal text-sm text-muted [overflow-wrap:anywhere]">{selectedIdentity(toBinId)}</p>
           </Field>
           {product.serialized ? <Field label="Serialized units" hint={`${serials.length} selected`}>
             <BarcodeScanner key={`${open}:${locationId}:${fromBinId}:${draft.generation}`} label="Scan relocation serial" mode="batch" disabled={locked || !open}

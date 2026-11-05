@@ -113,6 +113,9 @@ export interface StockChangeRequest {
   quantityDelta: number;
   unitCost: number;
   financialImpact: number;
+  /** Server-governed gross exposure; absent on legacy requests. */
+  approvalExposure?: number;
+  grossQuantity?: number;
   reason: string;
   evidenceUrls: string[];
   status: 'pending_supervisor' | 'pending_finance' | 'approved' | 'rejected';
@@ -145,6 +148,12 @@ export interface InventoryPosition {
   held: number;
   unavailable: number;
   available: number;
+  /** Product-wide values repeat on every position; aggregate once per product. */
+  unscopedCommitted?: number;
+  productAvailable?: number | null;
+  availabilityVerified?: boolean;
+  /** Local free quantity for putaway, not a substitute for confirmed availability. */
+  putawayAvailable?: number;
 }
 
 export interface PageQuery {

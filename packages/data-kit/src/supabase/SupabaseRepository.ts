@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { StockConversionRejectedError, validateStockConversion, type StockConversionCommand, type StockConversionResult, type StockConversionWorkspace } from "../domain/stockConversion";
 import { ReturnRejectedError } from "../returnOutcome";
 import { InspectionRejectedError } from "../inspectionOutcome";
+import { CycleCountRejectedError } from "../cycleCountOutcome";
 import type {
   Allocation,
   CycleCount,
@@ -182,11 +183,11 @@ const TABLE_PROJECTIONS: Record<string, string> = {
   exceptions:
     "id,exception_type,severity,source_type,source_id,status,owner_id,due_at,resolution,created_at",
   stock_change_requests:
-    "id,source_type,source_id,product_id,location_id,bin_id,quantity_delta,unit_cost,financial_impact,reason,evidence_urls,status,requested_by,requested_at,created_at",
+    "id,source_type,source_id,product_id,location_id,bin_id,quantity_delta,unit_cost,financial_impact,approval_exposure,gross_quantity,reason,evidence_urls,status,requested_by,requested_at,created_at",
   warehouse_tasks:
     "id,task_type,source_id,title,status,assignee_id,due_at,completed_at,created_at",
   inventory_position_v1:
-    "id,product_id,location_id,bin_id,on_hand,committed,held,unavailable,available,created_at",
+    "id,product_id,location_id,bin_id,on_hand,committed,held,unavailable,available,created_at,unscoped_committed,product_available,availability_verified,putaway_available",
   procurement_po_handoff:
     "id,po_number,vendor_name,status,expected_date,total,lines,created_at",
   fulfillment_orders:
@@ -697,10 +698,10 @@ export class SupabaseRepository implements WarehouseControlRepository {
   async createAndSubmitCycleCount(
     input: CreateAndSubmitCycleCountInput,
   ): Promise<StockChangeRequest[]> {
-    const response = await this.callRpc("create_and_submit_cycle_count", {
+    const payload = {
       idempotency_key: input.idempotencyKey,
       cycle_count: {
-        id: uid("cc"),
+        id: input.cycleCountId ?? `cc-${input.idempotencyKey}`,
         location_id: input.locationId,
         bin_id: input.binId ?? null,
         category: input.category ?? null,
@@ -708,7 +709,14 @@ export class SupabaseRepository implements WarehouseControlRepository {
       },
       reason: input.reason,
       evidence_urls: input.evidenceUrls,
-    });
+    };
+    const { data, error, status } = await this.db.rpc("create_and_submit_cycle_count", { payload });
+    if (error) {
+      // Only the server's fresh-command rollback receipt releases an immutable intent.
+      if (error.code === 'PWC01' && status === 400) throw new CycleCountRejectedError(error.message);
+      throw Object.assign(new Error(error.message), { code: error.code, status });
+    }
+    const response = data as Row;
     return ((response.requests as Row[] | undefined) ?? []).map((row) =>
       rowToStockChangeRequest(row),
     );

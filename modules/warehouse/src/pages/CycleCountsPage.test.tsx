@@ -41,7 +41,7 @@ describe("CycleCountsPage", () => {
     await user.click(screen.getByRole('button', { name: /submit count/i }));
     await screen.findByText('Count submission interrupted');
     assertBlind();
-    await user.click(screen.getByRole('button', { name: /submit count/i }));
+    await user.click(screen.getByRole('button', { name: /retry saved count/i }));
     await screen.findByText(counted === 120 ? 'Count completed · balanced' : /awaiting warehouse supervisor/i);
     expect(submit).toHaveBeenLastCalledWith(expect.objectContaining({
       reason: 'Blind cycle count',
@@ -135,13 +135,16 @@ describe("CycleCountsPage", () => {
     renderWithProviders(<CycleCountsPage />, { role: "finance" });
     await screen.findByRole("heading", { name: /count sheet/i });
 
-    // Inputs start EMPTY; expected shows as a placeholder reference only.
+    // Inputs start empty; expected quantities belong in the adjacent column.
     const shirtInput = screen.getByLabelText(/Counted Event Shirt \(L\)/i);
     expect(shirtInput).toHaveValue(null);
     expect(shirtInput).toHaveAttribute(
       "placeholder",
-      expect.stringMatching(/^Exp\./),
+      'Count',
     );
+    const mobileShirtInput = screen.getByLabelText(/Event Shirt \(L\) counted quantity/i);
+    expect(mobileShirtInput).toHaveValue(null);
+    expect(mobileShirtInput).toHaveAttribute('placeholder', 'Count');
 
     // No fake "balanced" state and no submit before a real entry.
     expect(screen.queryByText("balanced")).not.toBeInTheDocument();
@@ -193,7 +196,7 @@ describe("CycleCountsPage", () => {
     expect(screen.getByRole("button", { name: /submit count/i })).toBeEnabled();
   });
 
-  it("asks for confirmation when rows are left uncounted, then routes variances for approval", async () => {
+  it("leaves untouched rows uncounted and routes only entered variances for approval", async () => {
     const user = userEvent.setup();
     renderWithProviders(<CycleCountsPage />, { role: "finance" });
     await screen.findByRole("heading", { name: /count sheet/i });
@@ -202,13 +205,7 @@ describe("CycleCountsPage", () => {
     await attachCountEvidence(user);
     await user.click(screen.getByRole("button", { name: /submit count/i }));
 
-    // 8 of 9 rows untouched → explicit confirmation before recording.
-    const confirm = await screen.findByRole("alertdialog", {
-      name: /confirm uncounted rows/i,
-    });
-    expect(confirm).toHaveTextContent(/\d+ rows not counted/i);
-
-    await user.click(screen.getByRole("button", { name: /submit anyway/i }));
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     await waitFor(() =>
       expect(
         screen.getByText(/awaiting warehouse supervisor/i),

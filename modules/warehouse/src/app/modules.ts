@@ -348,11 +348,10 @@ export const MODULES: ModuleDef[] = [
     label: "Inventory Reports",
     shortLabel: "Reports",
     path: "/reports",
-    capabilities: ["view_analytics", "view_finance"],
+    capabilities: ["view_inventory", "view_analytics", "view_finance"],
     description: "Committed inventory positions and governed exports.",
     icon: "history",
     group: "analyze",
-    destination: "insights",
   },
   {
     id: "suppliers",
@@ -543,6 +542,7 @@ const OPERATOR_MODULES: ModuleDef[] = [
     "cycle-counts",
     "quality",
     "exceptions",
+    "reports",
   ].map((id) => MODULES.find((module) => module.id === id)!),
 ];
 
@@ -619,6 +619,6 @@ export function warehouseDestinationForRoute(
   routeId: WarehouseRouteId,
 ): WarehouseDestination | undefined {
   if (routeId === "events" || routeId === "event-detail") return "events";
-  if (routeId === "data" || routeId === "reports") return "insights";
+  if (routeId === "data") return "insights";
   return undefined;
 }

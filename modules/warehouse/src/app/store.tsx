@@ -1,4 +1,5 @@
 "use client";
+import { cycleCountIntentKey, retainCycleCountIntent, type CycleCountCommand } from '@/domain/cycleCountIntent';
 import { StockConversionRejectedError, stockConversionCapability, type StockConversionCommand, type StockConversionWorkspace } from "@intra/data-kit";
 
 // WarehouseProvider — the React binding over the framework-agnostic data-kit
@@ -40,6 +41,7 @@ import {
   DATA_STORAGE_KEY,
   ReturnRejectedError,
   InspectionRejectedError,
+  CycleCountRejectedError,
 } from "@intra/data-kit";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
@@ -61,6 +63,7 @@ import type {
   CreateSupplierInput,
   CycleCountInput,
   CycleCount,
+  CycleCountOutcome,
   DataSource,
   DecideDepartmentStockRequestInput,
   DecideStockChangeInput,
@@ -162,9 +165,8 @@ interface WarehouseContextValue {
     input: Omit<CycleCountInput, "actor" | "requesterId">,
   ) => Promise<boolean>;
   submitNewCycleCount: (
-    input: Omit<CycleCountInput, "actor" | "requesterId"> &
-      Pick<SubmitCycleCountInput, "reason" | "evidenceUrls">,
-  ) => Promise<boolean>;
+    input: CycleCountCommand,
+  ) => Promise<CycleCountOutcome>;
   transfer: (input: Omit<TransferInput, "actor">) => Promise<boolean>;
   createPurchaseOrder: (
     input: Omit<CreatePurchaseOrderInput, "actor">,
@@ -706,20 +708,25 @@ export function WarehouseProvider({
       runAuthorizedAction("cycle_count", "other", () =>
         repo.recordCycleCount({ ...input, actor, requesterId: identityId }),
       ),
-    submitNewCycleCount: (input) =>
-      runAuthorizedAction("cycle_count", "other", async () => {
-        await repo.createAndSubmitCycleCount({
-          idempotencyKey: `atomic-count-${crypto.randomUUID()}`,
-          locationId: input.locationId,
-          binId: input.binId,
-          category: input.category,
-          lines: input.lines,
-          actor,
-          requesterId: identityId,
-          reason: input.reason,
-          evidenceUrls: input.evidenceUrls ?? [],
-        });
-      }),
+    submitNewCycleCount: async (input) => {
+      let commandError: unknown;
+      const committed = await runAuthorizedAction("cycle_count", "other", async () => {
+        if (input.requesterId !== identityId || input.actor !== actor) {
+          throw new Error('This saved count belongs to a different signed-in identity.');
+        }
+        if (!input.idempotencyKey || !input.cycleCountId) {
+          throw new Error('A retained count command and count ID are required.');
+        }
+        const command = retainCycleCountIntent(cycleCountIntentKey(source, identityId), input);
+        try { await repo.createAndSubmitCycleCount(command); }
+        catch (error) { commandError = error; throw error; }
+      });
+      if (committed) return { status: 'committed' };
+      const message = commandError instanceof Error ? commandError.message : 'The count result could not be confirmed.';
+      return commandError instanceof CycleCountRejectedError
+        ? { status: 'rejected', code: commandError.code, message }
+        : { status: 'unknown', message };
+    },
     transfer: (input) =>
       runAuthorizedAction(
         "transfer_stock",

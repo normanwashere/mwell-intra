@@ -1596,6 +1596,25 @@ describe("SupabaseRepository concurrency-safe payloads (warehouse.* v8 RPCs)", (
     expect(call.payload.cycle_count).not.toHaveProperty("requested_by");
   });
 
+  it("preserves the caller's count identity and exact wire payload on replay and repository reload", async () => {
+    const { client, calls } = makeMockClient(seed);
+    const command = {
+      idempotencyKey: 'atomic-count-retry-001',
+      cycleCountId: 'cc-retained-count-001',
+      locationId: 'loc-wh',
+      lines: [{ productId: token.id, expected: 80, counted: 75 }],
+      reason: 'Scheduled control count',
+      evidenceUrls: ['evidence/count.jpg'],
+      actor: 'counter',
+    };
+    await new SupabaseRepository(client).createAndSubmitCycleCount(command);
+    await new SupabaseRepository(client).createAndSubmitCycleCount(structuredClone(command));
+    const submissions = calls.filter(call => call.fn === 'create_and_submit_cycle_count');
+    expect(submissions).toHaveLength(2);
+    expect(submissions[0]!.payload.cycle_count).toHaveProperty('id', command.cycleCountId);
+    expect(submissions[1]!.payload).toEqual(submissions[0]!.payload);
+  });
+
   it("recordReturn sends quarantine intent and leaves physical deltas to the RPC", async () => {
     const { client, calls } = makeMockClient(seed);
     const repo = new SupabaseRepository(client);

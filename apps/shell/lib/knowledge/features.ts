@@ -1181,9 +1181,9 @@ const definitions: FeatureDefinition[] = [
     statuses:
       "Draft, counting, submitted, no variance, approval required, approved, posted, or rejected.",
     exception:
-      "Freeze the scope and recount when stock moved during counting or a serial identity is missing.",
+      "Leave unchecked items blank; enter zero only after checking. Count each receipt lot, including zero-balance lots, and scan each serial once. If confirmation is interrupted, retry the saved submission rather than starting another. A confirmed rejection that saved nothing lets you correct the count and submit again. Changed stock or an older request without a verified snapshot requires rejection and a fresh physical count. Active holds or reservations block posting: ask the responsible Quality or fulfillment owner to review them; do not release them just to force an adjustment.",
     completionEvidence:
-      "Physical count, expected count, variance, evidence, decision, and any ledger adjustment are linked.",
+      "Physical counts, exact serials, each lot's expected/count/difference, evidence, independent decisions and resulting movements are linked. Offsetting lot differences still require review; their gross value determines the existing Finance threshold.",
   },
   {
     id: "warehouse-quality",
@@ -1307,17 +1307,17 @@ const definitions: FeatureDefinition[] = [
     module: "warehouse",
     route: "/warehouse/reports",
     purpose:
-      "Produces committed inventory-position reports with explicit scope, definitions, and governed export controls.",
+      "Shows inventory-position quantities by product, location, and bin, with separately governed exports.",
     reads:
-      "Committed stock positions, reservations, valuation, receipts, movements, and report definitions.",
+      "Authorized product, location, and bin identities with on-hand, committed, held, unavailable, and available quantities. Scoped commitments belong to a position; unassigned commitments belong to a product. Global available and unassigned commitment totals count each product once. Location availability with unassigned demand is Not confirmed, not verified zero.",
     writes:
       "Preparing a live export creates a governed report artifact and export audit event; source stock remains unchanged.",
     statuses:
       "Preparing, ready, empty, exported, expired, or generation failed.",
     exception:
-      "Page access remains separate from export permission. Export preparation is unavailable while permissions are loading or after permission is revoked. Demo-mode exports are demo downloads, not live permission or audit evidence. Regenerate rather than editing exported totals and escalate source discrepancies to the owning workflow.",
+      "Opening this quantity report requires permission to view Warehouse inventory, Warehouse analytics, or Warehouse finance, without an additional Insights workspace role. Inventory viewing does not grant finance access or export authority. Page access remains separate from export permission. Wait for all positions to load before using filters or totals; a loading error is not an empty report. Filters apply to this view; export includes all authorized positions. Export preparation is unavailable while permissions are loading or after permission is revoked. Demo-mode exports are demo downloads, not live permission or audit evidence. Regenerate rather than editing exported totals and escalate discrepancies to the owning workflow.",
     completionEvidence:
-      "Report title, filters, as-of time, row count, actor, and export reference accompany the artifact.",
+      "Retain the report scope, row count, actor, and export reference. In the CSV, product_available and unscoped_committed repeat per product_id and are non-additive: count once per product. availability_verified=false leaves available blank; availability_status identifies unassigned demand or an unconfirmed quantity. putaway_available is local free stock, not confirmed stock available to promise.",
   },
   {
     id: "warehouse-suppliers",

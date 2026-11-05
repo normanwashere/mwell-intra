@@ -80,6 +80,16 @@ describe("Knowledge Base content", () => {
     expect(feature.writes.join(" ")).toMatch(/stock.*unchanged|unchanged.*stock/);
   });
 
+  it("limits Inventory Reports guidance to quantity reads and separate export authority", () => {
+    const report = KNOWLEDGE_CONTENT.features.find(item => item.id === "warehouse-reports")!;
+    expect(report.reads.join(" ")).toContain("on-hand, committed, held, unavailable, and available quantities");
+    expect(report.reads.join(" ")).not.toMatch(/valuation|receipts|movements/);
+    expect(report.exceptions.join(" ")).toContain("Warehouse inventory, Warehouse analytics, or Warehouse finance");
+    expect(report.exceptions.join(" ")).toContain("Filters apply to this view; export includes all authorized positions");
+    expect(report.reads.join(" ")).toContain("count each product once");
+    expect(report.reads.join(" ")).toContain("Not confirmed, not verified zero");
+  });
+
   it("keeps the floor export entry distinct from reporting routes and describes memory exports as demo only", () => {
     const dashboard = EXPLICIT_FEATURE_DETAILS["warehouse-dashboard"]!;
     expect(dashboard.controls.find(item => item.name === "Open export menu")!.behavior).toContain("same export sheet");

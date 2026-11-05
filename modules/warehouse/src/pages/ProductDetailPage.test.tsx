@@ -31,6 +31,31 @@ function renderDetail(id: string, role: Role = "logistics_supervisor") {
 }
 
 describe("ProductDetailPage", () => {
+  it("shows an active unit hold, its reason and exact Quality link without treating a released hold as active", async () => {
+    const repo = makeRepo();
+    vi.spyOn(repo, "listHolds").mockResolvedValue({ rows: [
+      relocationHold({ reason: "Damaged screen awaiting Quality review" }),
+      relocationHold({ id: "released", serialNumber: "SMART-WATCH-SN0002", status: "released" }),
+    ] });
+    renderWithProviders(<Routes><Route path="/inventory/:id" element={<ProductDetailPage />} /></Routes>, { repo, route: "/inventory/smart-watch" });
+    const list = await screen.findByRole("list", { name: "Serialized units" });
+    const first = within(list).getByRole("button", { name: /SMART-WATCH-SN0001/ }).closest("li")!;
+    expect(await within(first).findByText("On Quality hold")).toBeVisible();
+    expect(within(first).getByText("Damaged screen awaiting Quality review")).toBeVisible();
+    expect(within(first).getByRole("link", { name: "View Quality hold" })).toHaveAttribute("href", "/quality?source=hold-relocation");
+    const second = within(list).getByRole("button", { name: /SMART-WATCH-SN0002/ });
+    expect(second).not.toHaveTextContent("On Quality hold");
+  });
+
+  it("reports unavailable hold status and allows a fresh read without claiming the unit is clear", async () => {
+    const user = userEvent.setup(); const repo = makeRepo();
+    const holds = vi.spyOn(repo, "listHolds").mockRejectedValueOnce(new Error("offline"));
+    renderWithProviders(<Routes><Route path="/inventory/:id" element={<ProductDetailPage />} /></Routes>, { repo, route: "/inventory/smart-watch" });
+    await user.click(await screen.findByRole("button", { name: "Check holds again" }));
+    await waitFor(() => expect(screen.queryByText("Hold status unavailable")).not.toBeInTheDocument());
+    expect(holds).toHaveBeenCalledTimes(2);
+  });
+
   it.each(["smart-watch", "shirt-l"])("shows governed availability for %s without changing on-hand breakdowns", async (productId) => {
     const repo = makeRepo();
     const load = vi.spyOn(repo, "listInventoryPositions").mockResolvedValue({ rows: [
@@ -157,7 +182,7 @@ describe("ProductDetailPage", () => {
   it("fails closed when holds cannot be checked and retains the draft for a fresh preflight", async () => {
     const user = userEvent.setup();
     const repo = makeRepo();
-    vi.spyOn(repo, "listHolds").mockRejectedValueOnce(new Error("offline"));
+    vi.spyOn(repo, "listHolds").mockResolvedValueOnce({ rows: [] }).mockRejectedValueOnce(new Error("offline"));
     const move = vi.spyOn(repo, "relocate");
     renderWithProviders(<Routes><Route path="/inventory/:id" element={<ProductDetailPage />} /></Routes>, { repo, route: "/inventory/smart-watch" });
     await user.click(await screen.findByRole("button", { name: /relocate/i }));
@@ -214,7 +239,8 @@ describe("ProductDetailPage", () => {
     const user = userEvent.setup();
     const repo = makeRepo();
     let resolveHolds!: (value: { rows: InventoryHold[] }) => void;
-    const holds = vi.spyOn(repo, "listHolds").mockImplementation(() => new Promise(resolve => { resolveHolds = resolve; }));
+    const holds = vi.spyOn(repo, "listHolds").mockResolvedValueOnce({ rows: [] })
+      .mockImplementation(() => new Promise(resolve => { resolveHolds = resolve; }));
     const move = vi.spyOn(repo, "relocate");
     const mounted = renderWithProviders(<Routes><Route path="/inventory/:id" element={<ProductDetailPage />} /></Routes>, { repo, route: "/inventory/smart-watch" });
     await user.click(await screen.findByRole("button", { name: /relocate/i }));
@@ -223,7 +249,8 @@ describe("ProductDetailPage", () => {
     await user.selectOptions(within(dialog).getByLabelText("To bin"), "bin-pasig-a1");
     fireEvent.click(within(dialog).getByRole("button", { name: "Move stock" }));
     fireEvent.click(within(dialog).getByRole("button", { name: "Move stock" }));
-    expect(holds).toHaveBeenCalledTimes(1);
+    // One background read for the unit list and one action preflight; the double click does not add another.
+    expect(holds).toHaveBeenCalledTimes(2);
     expect(within(dialog).getByRole("button", { name: "Remove SMART-WATCH-SN0001" })).toBeDisabled();
     expect(within(dialog).getByRole("button", { name: "Discard draft" })).toBeDisabled();
     await user.click(within(dialog).getByRole("button", { name: "Close" }));
