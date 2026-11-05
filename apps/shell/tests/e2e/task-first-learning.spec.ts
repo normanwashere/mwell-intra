@@ -59,11 +59,21 @@ test("local task endpoint, dark theme, invalid task and KB recovery", async ({ p
     sessionStorage.setItem("intra.memory-session.v1", JSON.stringify(value));
     localStorage.setItem("intra-theme", "dark");
   }, { profileId: profile.id, roles: profile.roles });
+  const tasksResponse = page.waitForResponse(response => {
+    const url = new URL(response.url());
+    return response.request().method() === "GET" && url.pathname === "/api/knowledge/tasks" && url.searchParams.get("demoProfile") === profile.id;
+  });
   await page.goto("/onboarding?task=not-a-real-task");
+  const response = await tasksResponse;
+  expect(response.ok()).toBe(true);
+  const catalog = await response.json();
+  expect(catalog.demo).toBe(true);
+  expect(catalog.tasks).toEqual(expect.arrayContaining([expect.objectContaining({ id: "receive-inspect-stock" })]));
   await page.getByText("Choose a task", { exact: true }).click();
   await expect(page.getByRole("heading", { name: "Your operational tasks" })).toBeVisible();
-  await page.getByRole("region", { name: "Eligible tasks by module" }).getByRole("button", { name: /^Select / }).first().click();
-  await expect(page.getByRole("region", { name: "Task learning", exact: true })).toBeVisible();
+  await page.getByRole("region", { name: "Eligible tasks by module" })
+    .getByRole("button", { name: "Select Receive and inspect stock", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Task learning", exact: true })).toHaveAttribute("data-task-id", "receive-inspect-stock");
   await expect(page).not.toHaveURL(/not-a-real-task/);
   const start = page.getByRole("region", { name: "Task learning", exact: true })
     .getByRole("button", { name: "Start Role orientation", exact: true });

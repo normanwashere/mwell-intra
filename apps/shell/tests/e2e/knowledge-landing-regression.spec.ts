@@ -60,7 +60,7 @@ test("task search opens all five cross-department governed decision trees", asyn
 
 test("legacy job persona deep links retain the exact task-first guide", async ({
   page,
-}) => {
+}, testInfo) => {
   await page.goto("/knowledge?mode=role&article=persona-operations_associate");
   await expect(page).toHaveURL(
     /mode=role&article=persona-operations_associate/,
@@ -85,6 +85,7 @@ test("legacy job persona deep links retain the exact task-first guide", async ({
     page.getByText("Perform a cycle count", { exact: true }),
   ).toBeVisible();
 
+  await page.screenshot({ path: testInfo.outputPath("legacy-persona-first-viewport.png") });
   const firstViewport = await page.evaluate(() => ({
     hasHorizontalOverflow:
       document.documentElement.scrollWidth >

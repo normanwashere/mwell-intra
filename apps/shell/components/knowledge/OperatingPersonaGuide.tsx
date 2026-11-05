@@ -83,7 +83,7 @@ export function OperatingPersonaGuide({
               {persona.responsibility}
             </p>
           </div>
-          <div className="border-l-4 border-brand-500 bg-inset px-4 py-3">
+          <div className="hidden border-l-4 border-brand-500 bg-inset px-4 py-3 sm:block">
             <p className="text-xs font-semibold uppercase text-brand-700">
               Start here
             </p>
