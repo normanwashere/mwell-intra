@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSession, useCan } from "@intra/auth";
 import {
   Badge,
@@ -99,6 +99,34 @@ export function ProductApp() {
     {},
   );
   const inFlightActions = useRef(new Set<string>());
+  const restoredRecord = useRef<string | null>(null);
+  const actorId = profile?.id;
+
+  useEffect(() => {
+    // Native fragment navigation can run before the workspace's record anchors exist.
+    const restoreRecord = () => {
+      if (!actorId || sessionLoading || workspace.loading || workspace.error || !viewReadiness) return;
+      const navigation = `${actorId}:${window.location.hash}`;
+      if (restoredRecord.current === navigation) return;
+      let id: string;
+      try { id = decodeURIComponent(window.location.hash.slice(1)); } catch { return; }
+      const visibleRecord = workspace.data.readiness.some(item => `readiness-${item.id}` === id)
+        || (viewPricing && workspace.data.pricing.some(item => `pricing-${item.id}` === id));
+      if (!visibleRecord) return;
+      const target = document.getElementById(id);
+      if (!target) return;
+      restoredRecord.current = navigation;
+      target.focus({ preventScroll: true });
+      target.scrollIntoView({ block: 'start', behavior: 'instant' });
+    };
+    const onHashChange = () => {
+      restoredRecord.current = null;
+      restoreRecord();
+    };
+    restoreRecord();
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, [actorId, sessionLoading, viewReadiness, viewPricing, workspace.loading, workspace.error, workspace.data.readiness, workspace.data.pricing]);
 
   if (sessionLoading || (profile && workspace.loading)) {
     return (
@@ -498,7 +526,7 @@ function ReadinessCard({
   const handoffReady = canAcknowledge && canAcknowledgeOperationsHandoff(item);
   const kit = kitReadiness(item);
   return (
-    <article id={`readiness-${item.id}`} aria-label={`${item.title} readiness package`}>
+    <article id={`readiness-${item.id}`} tabIndex={-1} className="scroll-mt-28" aria-label={`${item.title} readiness package`}>
       <Card className="space-y-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -602,7 +630,7 @@ function PriceCard({
   onDecide: (decision: Decision) => void;
 }) {
   return (
-    <article id={`pricing-${item.id}`} aria-label={`${item.reason} price proposal`}>
+    <article id={`pricing-${item.id}`} tabIndex={-1} className="scroll-mt-28" aria-label={`${item.reason} price proposal`}>
       <Card className="space-y-4">
         <div className="flex items-start justify-between gap-3">
           <div>

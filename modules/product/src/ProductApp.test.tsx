@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionValue } from "@intra/auth";
 import type { ProductWorkspaceData } from "./data";
 
@@ -123,6 +123,137 @@ describe("ProductApp", () => {
       createReadiness: vi.fn(async () => undefined),
       proposePrice: vi.fn(async () => undefined),
     };
+  });
+
+  describe('record hash navigation', () => {
+    const originalScroll = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollIntoView');
+    let scroll: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      window.history.replaceState(null, '', '/product');
+      scroll = vi.fn();
+      Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: scroll });
+    });
+
+    afterEach(() => {
+      window.history.replaceState(null, '', '/');
+      if (originalScroll) Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', originalScroll);
+      else Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
+    });
+
+    function navigateHash(hash: string) {
+      act(() => {
+        window.history.replaceState(null, '', `/product${hash}`);
+        window.dispatchEvent(new HashChangeEvent('hashchange'));
+      });
+    }
+
+    it.each([
+      ['#readiness-ready-1', 'Remote care launch readiness package'],
+      ['#pricing-price-1', 'Reflect the approved supplier cost revision. price proposal'],
+    ])('restores %s after session/data loading, including a same-hash reload', (hash, name) => {
+      window.history.replaceState(null, '', `/product${hash}`);
+      state.session.loading = true;
+      state.workspace.loading = true;
+      const view = render(<ProductApp />);
+      expect(scroll).not.toHaveBeenCalled();
+      state.session.loading = false;
+      view.rerender(<ProductApp />);
+      expect(scroll).not.toHaveBeenCalled();
+      state.workspace.loading = false;
+      view.rerender(<ProductApp />);
+      const article = screen.getByRole('article', { name });
+      expect(article).toHaveFocus();
+      expect(article).toHaveAttribute('tabindex', '-1');
+      expect(article).toHaveClass('scroll-mt-28');
+      expect(scroll).toHaveBeenCalledExactlyOnceWith({ block: 'start', behavior: 'instant' });
+      expect(scroll.mock.instances[0]).toBe(article);
+
+      view.unmount();
+      state.workspace.loading = true;
+      const reloaded = render(<ProductApp />);
+      expect(window.location.hash).toBe(hash);
+      expect(scroll).toHaveBeenCalledTimes(1);
+      state.workspace.loading = false;
+      reloaded.rerender(<ProductApp />);
+      expect(screen.getByRole('article', { name })).toHaveFocus();
+      expect(scroll).toHaveBeenCalledTimes(2);
+      expect(state.workspace.decideReadiness).not.toHaveBeenCalled();
+      expect(state.workspace.acknowledgeHandoff).not.toHaveBeenCalled();
+      expect(state.workspace.decidePrice).not.toHaveBeenCalled();
+    });
+
+    it('handles hash changes and back-to-record navigation without stealing focus on refresh', () => {
+      window.history.replaceState(null, '', '/product#readiness-ready-1');
+      const view = render(<ProductApp />);
+      const readiness = screen.getByRole('article', { name: 'Remote care launch readiness package' });
+      expect(readiness).toHaveFocus();
+      const link = within(readiness).getByRole('link', { name: 'Link to this record' });
+      link.focus();
+      state.workspace.data = { ...DATA, readiness: [...DATA.readiness] };
+      view.rerender(<ProductApp />);
+      expect(link).toHaveFocus();
+      expect(scroll).toHaveBeenCalledTimes(1);
+      navigateHash('#pricing-price-1');
+      expect(screen.getByRole('article', { name: /price proposal$/ })).toHaveFocus();
+      navigateHash('#readiness-ready-1');
+      expect(readiness).toHaveFocus();
+      expect(scroll).toHaveBeenCalledTimes(3);
+      navigateHash('#readiness-queue-title');
+      expect(scroll).toHaveBeenCalledTimes(3);
+      navigateHash('#readiness-ready-1');
+      expect(scroll).toHaveBeenCalledTimes(4);
+    });
+
+    it('restores only the latest hash when navigation changes during loading', () => {
+      window.history.replaceState(null, '', '/product#readiness-ready-1');
+      state.workspace.loading = true;
+      const view = render(<ProductApp />);
+      navigateHash('#pricing-price-1');
+      expect(scroll).not.toHaveBeenCalled();
+      state.workspace.loading = false;
+      view.rerender(<ProductApp />);
+      expect(screen.getByRole('article', { name: /price proposal$/ })).toHaveFocus();
+      expect(scroll).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(['#readiness-missing', '#readiness-%E0%A4%A', '#unrelated', '#readiness-queue-title'])('ignores missing, malformed or unrelated target %s', hash => {
+      window.history.replaceState(null, '', `/product${hash}`);
+      render(<ProductApp />);
+      expect(scroll).not.toHaveBeenCalled();
+      expect(screen.getByRole('heading', { name: 'Product readiness' })).toBeInTheDocument();
+    });
+
+    it('does not navigate hidden pricing or denied Product records', () => {
+      state.session = session(['operations_partner']);
+      window.history.replaceState(null, '', '/product#pricing-price-1');
+      const view = render(<ProductApp />);
+      expect(screen.queryByRole('article', { name: /price proposal$/ })).not.toBeInTheDocument();
+      expect(scroll).not.toHaveBeenCalled();
+      state.session = session([]);
+      view.rerender(<ProductApp />);
+      navigateHash('#readiness-ready-1');
+      expect(screen.getByRole('heading', { name: 'No Product access' })).toBeInTheDocument();
+      expect(scroll).not.toHaveBeenCalled();
+    });
+
+    it('waits for a failed workspace read to recover before restoring the record', () => {
+      window.history.replaceState(null, '', '/product#readiness-ready-1');
+      state.workspace.error = 'Read failed';
+      const view = render(<ProductApp />);
+      expect(scroll).not.toHaveBeenCalled();
+      state.workspace.error = null;
+      view.rerender(<ProductApp />);
+      expect(screen.getByRole('article', { name: 'Remote care launch readiness package' })).toHaveFocus();
+      expect(scroll).toHaveBeenCalledTimes(1);
+    });
+
+    it('removes the hash listener on unmount', () => {
+      const view = render(<ProductApp />);
+      view.unmount();
+      navigateHash('#readiness-ready-1');
+      expect(scroll).not.toHaveBeenCalled();
+    });
   });
 
   it("gives the Product Owner final decisions without preparation controls", () => {

@@ -3,6 +3,8 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
+import "./verify-learning-forward.test.mjs";
+
 import {
   REQUIRED_TABLES,
   verifyLearningSchema,
@@ -427,7 +429,7 @@ ${serviceContractAlignmentSql}`;
   );
 });
 
-test("keeps every SQL role persona in parity with the canonical catalog", () => {
+test("keeps SQL role personas in parity with the catalog and the exact seller adapter", () => {
   const catalogBlock = task1Catalog.match(
     /export const ROLE_PERSONAS:[\s\S]*?= \{([\s\S]*?)\r?\n\};/,
   )?.[1];
@@ -449,6 +451,11 @@ test("keeps every SQL role persona in parity with the canonical catalog", () => 
       match[2],
     ]),
   );
+  // Seller v1 is introduced after this immutable SQL CASE. Its exact null
+  // persona is handled by the repository adapter, exercised in the forward suite.
+  assert.equal(catalogMap.get("events:seller"), "general_employee");
+  assert.equal(sqlMap.has("events:seller"), false);
+  catalogMap.delete("events:seller");
   assert.deepEqual(sqlMap, catalogMap);
 });
 

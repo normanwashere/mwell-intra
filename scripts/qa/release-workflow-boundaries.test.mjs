@@ -105,6 +105,36 @@ test('service-worker privacy acceptance is mandatory after Chromium installation
   assert.equal(steps[privacy]['continue-on-error'], undefined);
 });
 
+test('coverage bounds workspace and Vitest concurrency without weakening tests or coverage', () => {
+  const ci = workflow('ci');
+  const step = ci.jobs.test.steps.find(item => item.name === 'Run tests with coverage');
+  const args = step.run.replace(/\\\r?\n/g, ' ').trim().split(/\s+/);
+  const separator = args.indexOf('--');
+  assert.ok(separator > 0);
+  assert.ok(args.slice(0, separator).includes('--concurrency=2'), 'Turbo must bound concurrent workspace tasks');
+  assert.ok(args.slice(separator + 1).includes('--maxWorkers=1'), 'Vitest must bound workers inside each workspace');
+  assert.ok(args.includes('--coverage'));
+  assert.ok(args.includes('--coverage.provider=v8'));
+  assert.doesNotMatch(step.run, /testTimeout|--retry|--exclude|--testNamePattern|--passWithNoTests/);
+  assert.equal(step.if, undefined);
+  assert.equal(step['continue-on-error'], undefined);
+  assert.equal(ci.env.COVERAGE_MIN, '50');
+  assert.ok(ci.jobs.test.steps.some(item => item.run === 'node .github/workflows/scripts/verify_coverage.mjs'));
+});
+
+test('coverage installs the shell-pinned Chromium before mandatory browser contracts', () => {
+  const steps = workflow('ci').jobs.test.steps;
+  const dependencies = steps.findIndex(item => item.run === 'pnpm install --frozen-lockfile');
+  const install = steps.findIndex(item => item.run === 'pnpm --filter @intra/shell exec playwright install --with-deps chromium');
+  const coverage = steps.findIndex(item => item.name === 'Run tests with coverage');
+  assert.ok(install > dependencies && install < coverage, 'the isolated coverage runner needs its own matching Chromium');
+  assert.equal(steps[install].if, undefined);
+  assert.equal(steps[install]['continue-on-error'], undefined);
+  const source = readFileSync(new URL('../../modules/legal/src/localStore.upload.test.ts', import.meta.url), 'utf8');
+  assert.match(source, /createRequire\(new URL\('\.\.\/\.\.\/\.\.\/apps\/shell\/package\.json'/);
+  assert.match(source, /require\('@playwright\/test'\)/);
+});
+
 test('deploy waits for CI and checks out the verified source SHA, never workflow_run default-branch SHA', () => {
   const deploy = workflow('deploy-vercel');
   assert.equal(deploy.on.push, undefined);

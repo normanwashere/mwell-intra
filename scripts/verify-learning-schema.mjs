@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { basename, resolve } from "node:path";
+import { FORWARD_BOUNDARY, verifyLearningForwardProgram } from "./verify-learning-forward.mjs";
 
 export const FOUNDATION_MIGRATION_NAME =
   "20260812130000_learning_foundation.sql";
@@ -116,8 +117,10 @@ const PINNED_LEARNING_MIGRATION_SHA256 = Object.freeze({
     "ce4e0c8521c83d4ff22f51b8c5f32d2ab42496f51009e942c731f68abeba8ac2",
   [EQUIVALENT_ROLE_PRACTICE_KEY_FIX_MIGRATION_NAME]:
     "9960e9207fc0be7adc906adb55bfde161637b3c92ee3f4d336ad033507849694",
+  [ASSIGNED_ROLE_CERTIFICATION_PATHWAY_MIGRATION_NAME]:
+    "5a74f5c8e04cc9a2b62071d62a6eb40387707854054e15e4908e997664a1badf",
 });
-const INDEPENDENTLY_VERIFIED_CROSS_MODULE_MIGRATIONS = new Set([
+export const INDEPENDENTLY_VERIFIED_CROSS_MODULE_MIGRATIONS = new Set([
   TASK1_AUTHORITY_REMEDIATION_MIGRATION_NAME,
   RECEIPT_EXCEPTION_CONTRACT_MIGRATION_NAME,
   LEGAL_VENDOR_LAUNCH_BLOCKER_MIGRATION_NAME,
@@ -1409,6 +1412,11 @@ function validateMigrationInventory(state, migrations) {
   const migrationByName = new Map(
     migrations.map((migration) => [migration.name, migration]),
   );
+  for (const name of INDEPENDENTLY_VERIFIED_CROSS_MODULE_MIGRATIONS) {
+    if (!Object.hasOwn(PINNED_LEARNING_MIGRATION_SHA256, name)) {
+      state.errors.push(`Cross-module parser exception has no required immutable pin: ${name}.`);
+    }
+  }
   for (const [name, expectedDigest] of Object.entries(
     PINNED_LEARNING_MIGRATION_SHA256,
   )) {
@@ -4047,7 +4055,7 @@ export function verifyLearningSchema(input) {
   }
 
   for (const migration of migrations.filter(
-    (entry) => entry.name >= FOUNDATION_MIGRATION_NAME,
+    (entry) => entry.name >= FOUNDATION_MIGRATION_NAME && entry.name < FORWARD_BOUNDARY,
   )) {
     // These cross-module migrations have dedicated static or applied-database
     // verification. Exact checksums above keep each parser exception fail-closed.
@@ -4075,6 +4083,10 @@ export function verifyLearningSchema(input) {
   validateAuthorityIsolation(state);
   validateLearningServices(state);
 
+  state.errors.push(...verifyLearningForwardProgram(migrations, {
+    scanSql, parseFunctionDeclaration, functionBody,
+  }));
+
   return [...new Set(state.errors)];
 }
 
@@ -4083,7 +4095,7 @@ function run() {
   const errors = verifyLearningSchema(migrations);
   if (errors.length > 0) throw new Error(errors.join("\n"));
   console.log(
-    `Learning schema contract passed (${REQUIRED_TABLES.length} governed tables across ${migrations.length} effective migration${migrations.length === 1 ? "" : "s"}).`,
+    `Learning source contracts passed (${REQUIRED_TABLES.length} historical governed tables; complete ${migrations.length}-migration source program). Applied PostgreSQL authority remains a separate required gate.`,
   );
 }
 

@@ -162,6 +162,9 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      - name: Install Chromium for coverage browser contracts
+        run: pnpm --filter @intra/shell exec playwright install --with-deps chromium
+
       # The exact coverage provider is committed at the workspace root and
       # resolved by the same frozen install as the matching Vitest workspaces.
       - name: Run tests with coverage
@@ -169,7 +172,8 @@ jobs:
         # turbo forwards everything after ITS `--` to each task script (i.e.
         # `vitest run`). The double `--` is required.
         run: |
-          pnpm exec turbo run test -- \
+          pnpm exec turbo run test --concurrency=2 -- \
+            --maxWorkers=1 \
             --coverage \
             --coverage.provider=v8 \
             --coverage.reporter=json-summary \

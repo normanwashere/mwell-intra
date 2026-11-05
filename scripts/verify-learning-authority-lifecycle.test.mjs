@@ -200,12 +200,13 @@ async function createAuthorityDatabase() {
     grant usage on schema auth, core, learning to authenticated, service_role;
   `);
   await db.exec(migrationSql);
-  for (const name of ["20260813203240_task_1_database_authority_remediation.sql", "20260815154702_procurement_finance_requester_privacy.sql"]) {
+  for (const name of ["20260813203240_task_1_database_authority_remediation.sql", "20260815154702_procurement_finance_requester_privacy.sql",
+    "20260920025525_gated_event_seller_custody.sql"]) {
     const sql = readFileSync(new URL(`../supabase/migrations/${name}`, import.meta.url), "utf8");
-    const capabilities = sql.match(/insert into core\.capabilities\(module, cap\)[\s\S]*?;/i);
+    const capabilities = sql.match(/insert into core\.capabilities\(module,\s*cap\)[\s\S]*?;/i);
     assert.ok(capabilities, `Actual forward capabilities: ${name}`);
     await db.exec(capabilities[0]);
-    const rules = sql.match(/insert into learning\.mutation_capability_rules\(module, capability\)[\s\S]*?;/i);
+    const rules = sql.match(/insert into learning\.mutation_capability_rules\(module,\s*capability\)[\s\S]*?;/i);
     assert.ok(rules, `Actual forward mutation rules: ${name}`);
     await db.exec(rules[0]);
   }
