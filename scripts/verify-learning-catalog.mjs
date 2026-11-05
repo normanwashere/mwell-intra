@@ -1,11 +1,10 @@
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { isDeepStrictEqual } from "node:util";
 
 import {
   ALLOWED_FUNCTION_EXECUTE,
-  ALLOWED_SECURITY_DEFINERS,
   extractExpectedLearningPolicies,
-  MODELED_FUNCTIONS,
   PRIVATE_ANSWER_KEY_TABLE,
   readRepositoryMigrations,
   REQUIRED_TABLES,
@@ -209,6 +208,62 @@ const FUNCTION_SPECS = Object.freeze([
   fn("learning.evaluate_certifications", "", "jsonb", "plpgsql", "v", true),
   fn("learning.request_support", "jsonb", "jsonb", "plpgsql", "v", true),
   fn("learning.sync_shared_completions", "", "jsonb", "plpgsql", "v", true),
+  // 20260812200000 authority; 20260911171901 plan reuse; 20260912131000 vendor scope.
+  fn(
+    "learning.is_certification_required",
+    "text, text",
+    "boolean",
+    "plpgsql",
+    "s",
+    true,
+  ),
+  fn(
+    "learning.has_active_certification",
+    "uuid, text, text",
+    "boolean",
+    "plpgsql",
+    "s",
+    true,
+  ),
+  fn(
+    "learning.has_active_emergency_exception",
+    "uuid, text, text",
+    "boolean",
+    "plpgsql",
+    "s",
+    true,
+  ),
+  fn("core.has_live_cap", "text, text", "boolean", "sql", "s", true),
+  fn("core.my_role_capabilities", "", "jsonb", "sql", "s", true),
+  fn("core.my_capabilities", "", "jsonb", "sql", "s", true),
+  fn("core.my_capability_snapshot", "", "jsonb", "sql", "s", true),
+  // 20260816103000, 20260816183000 and 20260816184500 retain owner-only bases.
+  fn(
+    "private.cancel_ineffective_learning_role_assignments",
+    "",
+    "integer",
+    "plpgsql",
+    "v",
+    true,
+  ),
+  fn(
+    "private.resolve_vendor_learning_assignments",
+    "",
+    "jsonb",
+    "plpgsql",
+    "v",
+    true,
+  ),
+  fn("learning.my_learning_snapshot_base", "", "jsonb", "plpgsql", "s", true),
+  fn(
+    "learning.sync_equivalent_role_practices",
+    "",
+    "jsonb",
+    "plpgsql",
+    "v",
+    true,
+  ),
+  fn("learning.sync_exact_completions", "", "jsonb", "plpgsql", "v", true),
 ]);
 
 const CERTIFICATION_INDEXES = Object.freeze([
@@ -342,26 +397,37 @@ function expectedFunctionPrivileges() {
       spec.function,
     ]),
   );
-  return Object.entries(ALLOWED_FUNCTION_EXECUTE).flatMap(
-    ([functionName, grantees]) =>
-      grantees.map((grantee) => ({
-        function: signatureByName.get(functionName),
-        grantee,
-        privilege: "EXECUTE",
-        grantable: false,
-      })),
-  );
+  return Object.entries({
+    ...ALLOWED_FUNCTION_EXECUTE,
+    // 20260816090000 revokes authenticated raw-cap helpers, including manage_rbac.
+    "private.learning_is_active_employee_platform_admin": ["service_role"],
+  }).flatMap(([functionName, grantees]) => {
+    const signature = signatureByName.get(functionName);
+    if (!signature)
+      throw new Error(
+        `Missing applied function specification: ${functionName}`,
+      );
+    return grantees.map((grantee) => ({
+      function: signature,
+      grantee,
+      privilege: "EXECUTE",
+      grantable: false,
+    }));
+  });
 }
 
 function expectedTablePrivileges() {
   const rows = [];
   for (const table of REQUIRED_TABLES) {
-    rows.push({
-      table: `learning.${table}`,
-      grantee: "authenticated",
-      privilege: "SELECT",
-      grantable: false,
-    });
+    // 20260812200000 deliberately makes mutation_capability_rules service-only.
+    if (table !== "mutation_capability_rules") {
+      rows.push({
+        table: `learning.${table}`,
+        grantee: "authenticated",
+        privilege: "SELECT",
+        grantable: false,
+      });
+    }
     for (const privilege of SERVICE_PRIVILEGES[table]) {
       rows.push({
         table: `learning.${table}`,
@@ -372,6 +438,14 @@ function expectedTablePrivileges() {
     }
   }
   for (const table of ["roles", "role_capabilities", "user_roles"]) {
+    // Canonical 20260717175559 cutover grants SELECT on core tables; later
+    // hardening removes anon and TRUNCATE, not authenticated catalog reads.
+    rows.push({
+      table: `core.${table}`,
+      grantee: "authenticated",
+      privilege: "SELECT",
+      grantable: false,
+    });
     for (const privilege of [
       "DELETE",
       "INSERT",
@@ -389,12 +463,6 @@ function expectedTablePrivileges() {
       });
     }
   }
-  rows.push({
-    table: "core.user_roles",
-    grantee: "authenticated",
-    privilege: "SELECT",
-    grantable: false,
-  });
   for (const privilege of ["DELETE", "INSERT", "SELECT", "UPDATE"]) {
     rows.push({
       table: PRIVATE_ANSWER_KEY_TABLE,
@@ -443,10 +511,8 @@ export function expectedLearningCatalogSnapshot({
 } = {}) {
   return normalizeSnapshot({
     functions: FUNCTION_SPECS,
-    privilegedFunctions: FUNCTION_SPECS.filter((spec) =>
-      ALLOWED_SECURITY_DEFINERS.has(
-        spec.function.slice(0, spec.function.indexOf("(")),
-      ),
+    privilegedFunctions: FUNCTION_SPECS.filter(
+      (spec) => spec.securityDefiner,
     ).map((spec) => spec.function),
     privilegedViews: [],
     schemas: ["core", "learning", "private"].map((schema) => ({
@@ -608,7 +674,7 @@ function normalizeSnapshot(snapshot) {
 }
 
 function compareSection(errors, label, expected, actual) {
-  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+  if (!isDeepStrictEqual(actual, expected)) {
     errors.push(
       `${label} drift: expected ${JSON.stringify(expected)}, received ${JSON.stringify(actual)}.`,
     );
@@ -792,17 +858,21 @@ export async function loadLearningCatalogSnapshot(client) {
       `,
       [FUNCTION_NAMES],
     ),
-    client.query(`
+    client.query(
+      `
       select n.nspname || '.' || p.proname || '(' || pg_catalog.oidvectortypes(p.proargtypes) || ')' as "function"
       from pg_catalog.pg_proc p
       join pg_catalog.pg_namespace n on n.oid = p.pronamespace
       where p.prosecdef
         and (
-          n.nspname = 'learning'
+          n.nspname || '.' || p.proname = any($1::text[])
+          or n.nspname = 'learning'
           or (n.nspname = 'private' and (p.proname like '%learning%' or p.prosrc ~* 'learning\\.'))
         )
       order by 1
-    `),
+    `,
+      [FUNCTION_NAMES],
+    ),
     client.query(`
       select n.nspname || '.' || c.relname as view
       from pg_catalog.pg_class c
@@ -884,7 +954,7 @@ export async function loadLearningCatalogSnapshot(client) {
           case when (t.tgtype & 32) <> 0 then 'TRUNCATE' end
         ], null) as events,
         coalesce((
-          select array_agg(attribute.attname order by attribute.attname)
+          select array_agg(attribute.attname::text order by attribute.attname)
           from unnest(t.tgattr::smallint[]) as trigger_attribute(attnum)
           join pg_catalog.pg_attribute attribute
             on attribute.attrelid = t.tgrelid

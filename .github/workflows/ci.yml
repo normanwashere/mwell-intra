@@ -85,6 +85,7 @@ jobs:
           pnpm verify:learning-orientations-applied
       - name: Verify applied learning authority
         run: |
+          node --test scripts/verify-learning-concurrency-fixture.test.mjs
           pnpm verify:learning-applied
           pnpm verify:learning-applied
       - name: Remove disposable local PostgreSQL

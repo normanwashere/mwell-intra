@@ -25,6 +25,7 @@ const SCENARIOS = Object.freeze({
   capabilityIssuanceFirst: scenario(5),
   capabilityLossFirst: scenario(6),
   privilege: scenario(7),
+  missingEvidence: scenario(8),
 });
 
 function scenario(number) {
@@ -35,10 +36,11 @@ function scenario(number) {
     assignmentRequirement: `71000000-0000-4000-8000-${suffix}`,
     roleAssignment: `80000000-0000-4000-8000-${suffix}`,
     certification: `90000000-0000-4000-8000-${suffix}`,
+    attempt: `91000000-0000-4000-8000-${suffix}`,
   };
 }
 
-async function seedFixture(client) {
+export async function seedFixture(client) {
   const evidenceScenarios = Object.entries(SCENARIOS)
     .filter(([name]) => name !== "privilege")
     .map(([, entry]) => entry);
@@ -220,13 +222,30 @@ async function seedFixture(client) {
           IDS.requirementVersion,
         ],
       );
+      if (entry !== SCENARIOS.missingEvidence) {
+        await client.query(
+          `insert into learning.attempts(
+            id, assignment_requirement_id, user_id, department_id, audience,
+            requirement_version_id, attempt_number, mode, status, integrity_result,
+            started_at, submitted_at, completed_at, created_at
+          ) values ($1, $2, $3, $4, 'internal', $5, 1, 'attestation', 'passed', 'valid',
+            '2020-01-05', '2020-01-06', '2020-01-06', '2020-01-05')`,
+          [
+            entry.attempt,
+            entry.assignmentRequirement,
+            entry.user,
+            IDS.department,
+            IDS.requirementVersion,
+          ],
+        );
+      }
     }
   } finally {
     await client.query("set session_replication_role = origin");
   }
 }
 
-async function cleanupFixture(client) {
+export async function cleanupFixture(client) {
   await client.query("rollback").catch(() => undefined);
   await client.query("set session_replication_role = replica");
   try {
@@ -251,6 +270,10 @@ async function cleanupFixture(client) {
     await client.query(
       "delete from learning.certifications where id = any($1::uuid[]) or module = 'learning_ci'",
       [certificationIds],
+    );
+    await client.query(
+      "delete from learning.attempts where id = any($1::uuid[])",
+      [Object.values(SCENARIOS).map((entry) => entry.attempt)],
     );
     await client.query(
       "delete from learning.assignment_requirements where id = any($1::uuid[])",
@@ -308,7 +331,7 @@ async function cleanupFixture(client) {
 }
 
 async function issueCertification(client, entry) {
-  await client.query(
+  const result = await client.query(
     `
       insert into learning.certifications(
         id, user_id, department_id, audience, assignment_id,
@@ -320,6 +343,7 @@ async function issueCertification(client, entry) {
         $6, array[$7]::uuid[], 'active', transaction_timestamp(),
         transaction_timestamp(), 'ci:applied-postgres', '[{"source":"ci"}]'::jsonb
       )
+      returning evidence_references
     `,
     [
       entry.certification,
@@ -331,6 +355,32 @@ async function issueCertification(client, entry) {
       IDS.requirementVersion,
     ],
   );
+  assert.deepEqual(
+    result.rows[0]?.evidence_references,
+    [
+      {
+        assignment_requirement_id: entry.assignmentRequirement,
+        source_assignment_requirement_id: entry.assignmentRequirement,
+        requirement_version_id: IDS.requirementVersion,
+        status: "passed",
+        attempt_ids: [entry.attempt],
+        acknowledgment_ids: [],
+      },
+    ],
+    "Issuance must derive exact evidence from its own valid attempt.",
+  );
+}
+
+export async function verifyMissingCompletionEvidence(client) {
+  await client.query("begin isolation level read committed");
+  try {
+    await assert.rejects(
+      issueCertification(client, SCENARIOS.missingEvidence),
+      /Certification completion lacks authoritative evidence/,
+    );
+  } finally {
+    await client.query("rollback");
+  }
 }
 
 async function assertStillBlocked(promise, label) {
@@ -493,6 +543,7 @@ async function run() {
     await cleanupFixture(checkClient);
     await seedFixture(checkClient);
     await verifyRoleAssignmentUpdatePrivileges(checkClient);
+    await verifyMissingCompletionEvidence(checkClient);
 
     await verifyIssuanceFirstRace({
       issueClient,
@@ -561,7 +612,7 @@ async function run() {
       label: "capability removal loss-first",
     });
     console.log(
-      "Applied PostgreSQL learning concurrency passed (service_role updates and 6 READ COMMITTED races).",
+      "Applied PostgreSQL learning concurrency passed (missing-evidence rejection, service_role updates and 6 READ COMMITTED races).",
     );
   } finally {
     await Promise.allSettled([
