@@ -381,7 +381,15 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Install Playwright browsers
         timeout-minutes: 10
-        run: pnpm --filter @intra/shell exec playwright install --with-deps
+        run: pnpm --filter @intra/shell exec playwright install --with-deps chromium
+      - name: Verify Chromium can launch
+        id: browser-ready
+        timeout-minutes: 2
+        run: >-
+          pnpm --filter @intra/shell exec node -e "const { chromium } = require('@playwright/test');
+          (async () => { const browser = await chromium.launch({ headless: true, timeout: 30000 });
+          try { console.log('Chromium ready: ' + browser.version()); } finally { await browser.close(); }
+          })().catch(error => { console.error(error); process.exitCode = 1; });"
       - name: E2E memory
         timeout-minutes: 43
         env:
@@ -393,7 +401,7 @@ jobs:
       # Sequential builds share .next only after Playwright stops its owned
       # server. reuseExistingServer:false fails before building if it remains.
       - name: E2E controlled RPC
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.browser-ready.outcome == 'success' }}
         timeout-minutes: 18
         env:
           PLAYWRIGHT_CI_RUNTIME: controlled

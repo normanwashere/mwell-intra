@@ -105,7 +105,7 @@ test('all three E2E shards retain coverage and reserve report upload time before
   assert.equal(run['timeout-minutes'], 43);
   assert.equal(run.env.PLAYWRIGHT_CI_RUNTIME, 'memory');
   assert.equal(controlled.env.PLAYWRIGHT_CI_RUNTIME, 'controlled');
-  assert.equal(controlled.if, '${{ !cancelled() }}');
+  assert.equal(controlled.if, "${{ !cancelled() && steps.browser-ready.outcome == 'success' }}");
   assert.equal(controlled['continue-on-error'], undefined);
   assert.match(controlled.run, /--config=playwright.ci.config.ts --shard=\$\{\{ matrix\.shard \}\}\/3 --global-timeout=900000/);
   assert.doesNotMatch(controlled.run, /--grep|--max-failures|--retries=0|\|\| true/);
@@ -121,6 +121,26 @@ test('all three E2E shards retain coverage and reserve report upload time before
   assert.match(config, /\["html", \{ outputFolder: "playwright-report\/html", open: "never" \}\]/);
   assert.match(config, /retries: IS_CI \? 1 : 0/);
   assert.match(config, /workers: IS_CI \? 2 : undefined/);
+});
+
+test('E2E installs only its configured Chromium engine and proves launch before either runtime', () => {
+  const steps = workflow('ci').jobs.e2e.steps;
+  const install = steps.findIndex(step => step.name === 'Install Playwright browsers');
+  const ready = steps.findIndex(step => step.id === 'browser-ready');
+  const memory = steps.findIndex(step => step.name === 'E2E memory');
+  assert.equal(steps[install].run, 'pnpm --filter @intra/shell exec playwright install --with-deps chromium');
+  assert.ok(ready > install && memory > ready);
+  assert.equal(steps[ready]['timeout-minutes'], 2);
+  assert.equal(steps[ready]['continue-on-error'], undefined);
+  assert.equal(steps[ready].if, undefined, 'failed installation must not proceed to launch');
+  assert.match(steps[ready].run, /chromium\.launch\(\{ headless: true, timeout: 30000 \}\)/);
+  assert.match(steps[ready].run, /finally \{ await browser\.close\(\); \}/);
+  assert.match(steps[ready].run, /process\.exitCode = 1/);
+  assert.doesNotMatch(steps[ready].run, /\|\| true/);
+  const config = readFileSync(new URL('../../apps/shell/playwright.config.ts', import.meta.url), 'utf8');
+  assert.equal((config.match(/devices\["Desktop Chrome"\]/g) ?? []).length, 3);
+  assert.equal((config.match(/devices\["Pixel 7"\]/g) ?? []).length, 3);
+  assert.doesNotMatch(config, /Desktop Firefox|Desktop Safari|browserName: ["'](?:firefox|webkit)/);
 });
 
 test('installed Playwright fails a suite budget and still emits its final JSON report', () => {
