@@ -80,6 +80,7 @@ jobs:
         run: pnpm exec supabase db reset --local --no-seed --workdir "$SUPABASE_WORKDIR"
       - name: Publish and verify governed role orientations
         run: |
+          node --test scripts/verify-learning-orientations-applied.test.mjs
           pnpm publish:learning-orientations -- --ci-bootstrap
           pnpm verify:learning-orientations-applied
       - name: Verify applied learning authority

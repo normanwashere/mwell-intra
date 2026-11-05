@@ -1,17 +1,59 @@
 import assert from "node:assert/strict";
 import pg from "pg";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   CI_ORIENTATION_OWNER,
   ORIENTATION_CATALOG,
 } from "./learning-orientation-catalog.mjs";
 
-const databaseUrl = process.env.MWELL_LOCAL_DATABASE_URL ?? process.env.SUPABASE_DB_URL;
-if (!databaseUrl) throw new Error("MWELL_LOCAL_DATABASE_URL or SUPABASE_DB_URL is required.");
-const client = new pg.Client({ connectionString: databaseUrl });
+export function assertOrientationSnapshot(snapshot) {
+  assert.ok(
+    Array.isArray(snapshot?.curricula),
+    "Learning snapshot must expose its current curricula array.",
+  );
+  for (const item of snapshot.curricula) {
+    assert.ok(
+      item?.curriculum && Array.isArray(item.requirements),
+      "Malformed learning curriculum composition.",
+    );
+  }
+  const expected = ORIENTATION_CATALOG.find(
+    (item) =>
+      item.simulationId === "internal.platform_administrator.orientation.v1",
+  );
+  assert.ok(
+    expected,
+    "Platform administrator orientation is missing from the catalog.",
+  );
+  assert.ok(
+    snapshot.curricula.some(
+      (item) =>
+        item.curriculum.id === expected.curriculumKey &&
+        item.curriculum.version === expected.version &&
+        item.source === "role" &&
+        item.requirements.some(
+          (requirement) =>
+            requirement?.id === expected.requirementKey &&
+            requirement.version === expected.version &&
+            requirement.mandatory === true &&
+            requirement.simulationId === expected.simulationId,
+        ),
+    ),
+    "Representative platform administrator did not resolve its current mandatory orientation assignment.",
+  );
+}
 
-try {
-  await client.connect();
-  const { rows } = await client.query(`
+export async function verifyAppliedOrientations() {
+  const databaseUrl =
+    process.env.MWELL_LOCAL_DATABASE_URL ?? process.env.SUPABASE_DB_URL;
+  if (!databaseUrl)
+    throw new Error("MWELL_LOCAL_DATABASE_URL or SUPABASE_DB_URL is required.");
+  const client = new pg.Client({ connectionString: databaseUrl });
+
+  try {
+    await client.connect();
+    const { rows } = await client.query(`
     select
       r.requirement_key,
       rv.version as requirement_version,
@@ -37,27 +79,35 @@ try {
     where r.requirement_kind = 'orientation'
       and rv.version = 1 and cv.version = 1
   `);
-  assert.equal(rows.length, ORIENTATION_CATALOG.length, "Expected one composition per orientation.");
-  const byKey = new Map(rows.map((row) => [row.requirement_key, row]));
-  for (const expected of ORIENTATION_CATALOG) {
-    const actual = byKey.get(expected.requirementKey);
-    assert.ok(actual, `Missing ${expected.requirementKey}.`);
-    assert.equal(actual.requirement_version, expected.version);
-    assert.equal(actual.requirement_status, "published");
-    assert.equal(actual.title, expected.title);
-    assert.equal(actual.simulation_id, expected.simulationId);
-    assert.deepEqual(actual.pass_rules.required_checkpoints, expected.checkpointIds);
-    assert.ok(actual.effective_at);
-    assert.equal(actual.requirement_effective, true);
-    assert.equal(actual.catalog_key, expected.curriculumKey);
-    assert.equal(actual.curriculum_version, expected.version);
-    assert.equal(actual.curriculum_status, "published");
-    assert.ok(actual.curriculum_effective_at);
-    assert.equal(actual.curriculum_effective, true);
-    assert.equal(actual.mandatory, true);
-  }
+    assert.equal(
+      rows.length,
+      ORIENTATION_CATALOG.length,
+      "Expected one composition per orientation.",
+    );
+    const byKey = new Map(rows.map((row) => [row.requirement_key, row]));
+    for (const expected of ORIENTATION_CATALOG) {
+      const actual = byKey.get(expected.requirementKey);
+      assert.ok(actual, `Missing ${expected.requirementKey}.`);
+      assert.equal(actual.requirement_version, expected.version);
+      assert.equal(actual.requirement_status, "published");
+      assert.equal(actual.title, expected.title);
+      assert.equal(actual.simulation_id, expected.simulationId);
+      assert.deepEqual(
+        actual.pass_rules.required_checkpoints,
+        expected.checkpointIds,
+      );
+      assert.ok(actual.effective_at);
+      assert.equal(actual.requirement_effective, true);
+      assert.equal(actual.catalog_key, expected.curriculumKey);
+      assert.equal(actual.curriculum_version, expected.version);
+      assert.equal(actual.curriculum_status, "published");
+      assert.ok(actual.curriculum_effective_at);
+      assert.equal(actual.curriculum_effective, true);
+      assert.equal(actual.mandatory, true);
+    }
 
-  const roleRows = await client.query(`
+    const roleRows = await client.query(
+      `
     select rc.module, rc.role, c.catalog_key,
       (rc.effective_at <= statement_timestamp() and
        (rc.expires_at is null or rc.expires_at > statement_timestamp())) as effective
@@ -65,35 +115,47 @@ try {
     join learning.curriculum_versions cv on cv.id = rc.curriculum_version_id
     join learning.curricula c on c.id = cv.curriculum_id
     where c.catalog_key = any($1::text[]) and rc.department_id is null
-  `, [ORIENTATION_CATALOG.map((item) => item.curriculumKey)]);
-  const expectedRoles = ORIENTATION_CATALOG.flatMap((item) =>
-    item.roles.map((role) => `${role.module}:${role.role}:${item.curriculumKey}`),
-  ).sort();
-  const actualRoles = roleRows.rows
-    .map((row) => {
-      assert.equal(row.effective, true);
-      return `${row.module}:${row.role}:${row.catalog_key}`;
-    })
-    .sort();
-  assert.deepEqual(actualRoles, expectedRoles, "Applied role-to-orientation mappings drifted.");
-
-  await client.query("begin");
-  await client.query("set local role authenticated");
-  await client.query("select set_config('request.jwt.claims', $1, true)", [
-    JSON.stringify({ sub: CI_ORIENTATION_OWNER.id, role: "authenticated" }),
-  ]);
-  const resolved = await client.query("select learning.resolve_assignments() as snapshot");
-  const assignments = resolved.rows[0].snapshot.assignments;
-  assert.ok(
-    assignments.some((assignment) =>
-      assignment.requirements.some(
-        (requirement) => requirement.simulation_id === "internal.platform_administrator.orientation.v1",
+  `,
+      [ORIENTATION_CATALOG.map((item) => item.curriculumKey)],
+    );
+    const expectedRoles = ORIENTATION_CATALOG.flatMap((item) =>
+      item.roles.map(
+        (role) => `${role.module}:${role.role}:${item.curriculumKey}`,
       ),
-    ),
-    "Representative platform administrator did not resolve its orientation assignment.",
-  );
-  await client.query("rollback");
-  console.log(`Verified ${ORIENTATION_CATALOG.length} applied orientation curricula.`);
-} finally {
-  await client.end();
+    ).sort();
+    const actualRoles = roleRows.rows
+      .map((row) => {
+        assert.equal(row.effective, true);
+        return `${row.module}:${row.role}:${row.catalog_key}`;
+      })
+      .sort();
+    assert.deepEqual(
+      actualRoles,
+      expectedRoles,
+      "Applied role-to-orientation mappings drifted.",
+    );
+
+    await client.query("begin");
+    await client.query("set local role authenticated");
+    await client.query("select set_config('request.jwt.claims', $1, true)", [
+      JSON.stringify({ sub: CI_ORIENTATION_OWNER.id, role: "authenticated" }),
+    ]);
+    const resolved = await client.query(
+      "select learning.resolve_assignments() as snapshot",
+    );
+    assertOrientationSnapshot(resolved.rows[0]?.snapshot);
+    await client.query("rollback");
+    console.log(
+      `Verified ${ORIENTATION_CATALOG.length} applied orientation curricula.`,
+    );
+  } finally {
+    await client.end();
+  }
+}
+
+if (
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  await verifyAppliedOrientations();
 }
