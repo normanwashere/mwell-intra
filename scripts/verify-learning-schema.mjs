@@ -325,7 +325,7 @@ const PINNED_BASELINE_MIGRATION_NAMES = Object.freeze(
     .split(/\s+/),
 );
 const PINNED_BASELINE_SHA256 =
-  "e705fe63579325ae5167dc1c75fdef410e2102f17d237d65e31136bf880b5e85";
+  "9e5b1c35f1842d8641b3dee03c77c822aa1390815943a6a9ca71880334bf4caa";
 
 export const REQUIRED_TABLES = Object.freeze([
   "curricula",

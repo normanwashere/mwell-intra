@@ -16,7 +16,7 @@ create table if not exists core.departments (
   updated_at timestamptz not null default now(),
   updated_by uuid references core.profiles(id) on delete set null,
   constraint departments_code_check
-    check (code = lower(code) and code ~ '^[a-z][a-z0-9]*(\.[a-z][a-z0-9_]*)*$'),
+    check (code = lower(code) and code ~ '^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$'),
   constraint departments_name_check check (btrim(name) <> ''),
   constraint departments_parent_check check (parent_id is null or parent_id <> id)
 );

@@ -1,0 +1,1486 @@
+{
+  "schemaVersion": 1,
+  "scope": "CI-only canonical empty bootstrap plus complete forward-source execution; not exact applied-history replay or a production bootstrap approval.",
+  "projectRef": "kkoitlvydytdhlpxhuah",
+  "baselineBoundary": "20260717175559",
+  "sourceCommitBeforePackaging": "0f38e8f2fdb02dde408ec1ef2242d2fa7ae2d554",
+  "baseline": [
+    {
+      "file": "20260717174922_prod_20260612033415_mwell_intra_initial_schema.sql",
+      "recordedVersion": "20260717174922",
+      "sha256": "b4ce601d173cac335f7c5a33a9b3d12cbcc63707406755201f005f8311b785de"
+    },
+    {
+      "file": "20260717174924_prod_20260612033426_malaya_lld_role_enum_expansion.sql",
+      "recordedVersion": "20260717174924",
+      "sha256": "d71bb7adfdaa928258af4fa79a0d2daaac2ae96156e766fdb543780d9ee05c25"
+    },
+    {
+      "file": "20260717174927_prod_20260612033547_malaya_lld_schema_and_rls.sql",
+      "recordedVersion": "20260717174927",
+      "sha256": "22f001bd56c2cc1a9af8cebec76a788ac93f0f6aa4846a3e6e283f09a66960a9"
+    },
+    {
+      "file": "20260717175007_baseline_warehouse_schema.sql",
+      "recordedVersion": "20260717175007",
+      "sha256": "79dc34862355ec834544c98ec0d46face2553895fce76dc6d119b7c511788f1d"
+    },
+    {
+      "file": "20260717175032_prod_20260613152118_warehouse_role_capabilities_and_helpers.sql",
+      "recordedVersion": "20260717175032",
+      "sha256": "828ddfe4e55640ace543b93903444d9407746ff211249dd600b0a828a152e67e"
+    },
+    {
+      "file": "20260717175033_prod_20260613152217_warehouse_role_aware_rls.sql",
+      "recordedVersion": "20260717175033",
+      "sha256": "f5862477c24c3961cdd23a8fae4e7f6002ed77100a459c27838c821d4a793371"
+    },
+    {
+      "file": "20260717175035_prod_20260613171136_transactional_rpcs.sql",
+      "recordedVersion": "20260717175035",
+      "sha256": "d7bb61e0a860d124cbe357dc05d62c2d101ee6acafdcee1521f1f71e187fee87"
+    },
+    {
+      "file": "20260717175037_prod_20260703163418_transactional_rpcs_v2.sql",
+      "recordedVersion": "20260717175037",
+      "sha256": "60da6435e50b95bf18aaf15b53272e8caab6a9a8093be5544d5af0fa538b5f46"
+    },
+    {
+      "file": "20260717175039_prod_20260703163853_transactional_rpcs_v2_fix_deltas.sql",
+      "recordedVersion": "20260717175039",
+      "sha256": "3429f42429cd63eae778da86c5ada8faf5b0970852666d27319cae144b128e63"
+    },
+    {
+      "file": "20260717175042_prod_20260703165041_evidence_storage.sql",
+      "recordedVersion": "20260717175042",
+      "sha256": "cf0c6efbd1e6ad856c119288843d4ee3b374b4203e2e3fb621c3e7c39ea76d38"
+    },
+    {
+      "file": "20260717175044_prod_20260703171256_locations_crud.sql",
+      "recordedVersion": "20260717175044",
+      "sha256": "a224591bb5de74ca8d5cff6fbe444dd269bcfd6febd6a58547201d327899c653"
+    },
+    {
+      "file": "20260717175046_prod_20260703180910_record_return_closes_allocation.sql",
+      "recordedVersion": "20260717175046",
+      "sha256": "3e124e56c35a71a8a2387a16f5917c3c5ef718d524266c1b81b4f4b3583a61ef"
+    },
+    {
+      "file": "20260717175048_prod_20260703192156_storage_areas.sql",
+      "recordedVersion": "20260717175048",
+      "sha256": "b227f5113e764c99db204a64e9cfc0e46e25e9590ec87bf0b17a73d01b93faa7"
+    },
+    {
+      "file": "20260717175050_prod_20260703192444_transactional_rpcs_v3_bins.sql",
+      "recordedVersion": "20260717175050",
+      "sha256": "5e9416b840f9a5a0826ebb523d734efaf346efa254634dfc9e4162ea8534b543"
+    },
+    {
+      "file": "20260717175052_prod_20260704111219_security_hardening_v4.sql",
+      "recordedVersion": "20260717175052",
+      "sha256": "2980e54077a84f7888aa1b243011907282ddc897414a63d79efb95c726ec12b8"
+    },
+    {
+      "file": "20260717175054_prod_20260704111311_bin_reconcile_v5.sql",
+      "recordedVersion": "20260717175054",
+      "sha256": "278ef595b778d706d35f2f03011b92b7d0cb64d0944f73b7082e13d485a76612"
+    },
+    {
+      "file": "20260717175056_prod_20260704112217_po_lots_lockdown_v6.sql",
+      "recordedVersion": "20260717175056",
+      "sha256": "cb249f0b4804048e04ec97b7df51746515fb606465e41f0ed9f1349c6eaee8a2"
+    },
+    {
+      "file": "20260717175059_prod_20260704113404_rpc_integrity_v7.sql",
+      "recordedVersion": "20260717175059",
+      "sha256": "7055643f0c9eed0ea700f5abbdd1ca41ed2ef120fca8481e32425813b3c0f80c"
+    },
+    {
+      "file": "20260717175101_prod_20260704123405_receive_po_location_guard_v8.sql",
+      "recordedVersion": "20260717175101",
+      "sha256": "350a7e83c9d5b0f01bd39064149bf5a3d52459213e139955a8aea306e39203fe"
+    },
+    {
+      "file": "20260717175124_prod_20260708142912_lockdown_legacy_public_procurement_requests.sql",
+      "recordedVersion": "20260717175124",
+      "sha256": "505f27f9dab123b9426f9ffc121af741603abdc1013dcb6ac546b1dc565eefb5"
+    },
+    {
+      "file": "20260717175126_prod_20260708143054_grant_current_app_role_for_legacy_policies.sql",
+      "recordedVersion": "20260717175126",
+      "sha256": "d08aaeea638314a62b646da9ffa0efc7f81f8ce44a015c5a9bdfd785632fbbd9"
+    },
+    {
+      "file": "20260717175559_baseline_live_intra_cutover_without_operational_fixtures.sql",
+      "recordedVersion": "20260717175559",
+      "sha256": "1301a16aa2058fd229e48ef83442c0a8d5f20e21de6e1c22c7a3f389b5608e9d"
+    }
+  ],
+  "sources": [
+    {
+      "file": "20260706090000_core_schema_identity.sql",
+      "sha256": "c93cc11d10442f2e542d8ecf3a7686c4ecbaa42edcab55fa86df44fdfb1c329c",
+      "action": "preserve-history",
+      "reason": "Incompatible alternate MVP baseline; canonical UAT bootstrap replaces this foundation, not a supported MVP database upgrade."
+    },
+    {
+      "file": "20260706090100_core_rbac.sql",
+      "sha256": "3bbd34e7a06218b4dccfb71a1b4777badb029fef994d0288e7153edf296bc8f6",
+      "action": "preserve-history",
+      "reason": "Incompatible alternate MVP baseline; canonical UAT bootstrap replaces this foundation, not a supported MVP database upgrade."
+    },
+    {
+      "file": "20260706090200_core_vendors.sql",
+      "sha256": "3c28a0f955c6a166e9414553b0c4f34fc71f6f1f555aeeb6ebe3bac2b07d7670",
+      "action": "preserve-history",
+      "reason": "Incompatible alternate MVP baseline; canonical UAT bootstrap replaces this foundation, not a supported MVP database upgrade."
+    },
+    {
+      "file": "20260706090300_core_documents.sql",
+      "sha256": "6deb4a3d45d9321b32f3b93b47342528429df69cb9eeb05622c769284352844f",
+      "action": "preserve-history",
+      "reason": "Incompatible alternate MVP baseline; canonical UAT bootstrap replaces this foundation, not a supported MVP database upgrade."
+    },
+    {
+      "file": "20260706090400_core_approvals.sql",
+      "sha256": "890e5ba185cdfa36e771c0fd09ca0097626914e14068bd3cc2af48652a2d74ef",
+      "action": "preserve-history",
+      "reason": "Incompatible alternate MVP baseline; canonical UAT bootstrap replaces this foundation, not a supported MVP database upgrade."
+    },
+    {
+      "file": "20260706090500_core_activity_log.sql",
+      "sha256": "4841679e158819d866cf0cc5840f0d11e0e21bdeeef0b4f9aac2d9c5798d47ea",
+      "action": "preserve-history",
+      "reason": "Incompatible alternate MVP baseline; canonical UAT bootstrap replaces this foundation, not a supported MVP database upgrade."
+    },
+    {
+      "file": "20260706090600_core_notifications.sql",
+      "sha256": "afa82d1666faf3c6a305b6bb2d66a042b949266f0ad64f25d80bde67719fc8fe",
+      "action": "preserve-history",
+      "reason": "Incompatible alternate MVP baseline; canonical UAT bootstrap replaces this foundation, not a supported MVP database upgrade."
+    },
+    {
+      "file": "20260706090700_core_rls_policies.sql",
+      "sha256": "bd3d414dfe5751b81d1c64e3e8f66a9bb6da67355e98211b467099d62edf2bc7",
+      "action": "preserve-history",
+      "reason": "Incompatible alternate MVP baseline; canonical UAT bootstrap replaces this foundation, not a supported MVP database upgrade."
+    },
+    {
+      "file": "20260706090800_core_rpcs.sql",
+      "sha256": "1628de8ae2c1f73552e363fb4bac8d3c681f8cbcc517ec58849cd31dff1f9de0",
+      "action": "preserve-history",
+      "reason": "Incompatible alternate MVP baseline; canonical UAT bootstrap replaces this foundation, not a supported MVP database upgrade."
+    },
+    {
+      "file": "20260706090900_core_expose_postgrest.sql",
+      "sha256": "372b9c248c9a2cf667786a1069cc6279a1c56cd6a509fdb80f4e8d0ac56b5ee5",
+      "action": "preserve-history",
+      "reason": "Incompatible alternate MVP baseline; canonical UAT bootstrap replaces this foundation, not a supported MVP database upgrade."
+    },
+    {
+      "file": "20260706091000_core_seed_rbac.sql",
+      "sha256": "d0611ad026ad766e6c76e8bc82aac271f4b2c508aff84b9a5cf3678992f92c25",
+      "action": "preserve-history",
+      "reason": "Incompatible alternate MVP baseline; canonical UAT bootstrap replaces this foundation, not a supported MVP database upgrade."
+    },
+    {
+      "file": "20260706092000_warehouse_schema.sql",
+      "sha256": "259f3b0ab8e1c25e950976d9da95a2783b5aafc661bca865147b2787fc16a8fd",
+      "action": "preserve-history",
+      "reason": "Incompatible alternate MVP baseline; canonical UAT bootstrap replaces this foundation, not a supported MVP database upgrade."
+    },
+    {
+      "file": "20260706092100_warehouse_step2_deltas.sql",
+      "sha256": "74f0e4e108d6ca219fffd9a3f76bcac6de6066bf06412402afbbfc8a4f1099cd",
+      "action": "preserve-history",
+      "reason": "Incompatible alternate MVP baseline; canonical UAT bootstrap replaces this foundation, not a supported MVP database upgrade."
+    },
+    {
+      "file": "20260706092200_warehouse_rls.sql",
+      "sha256": "0cf27b7bfeb35660d84bb2ae50c5aceb0250bf83afaa5d09b7a4930f7d993b02",
+      "action": "preserve-history",
+      "reason": "Incompatible alternate MVP baseline; canonical UAT bootstrap replaces this foundation, not a supported MVP database upgrade."
+    },
+    {
+      "file": "20260706092300_warehouse_evidence_storage.sql",
+      "sha256": "b775a3aa1f116dbdc22a189c3e2b88113b5041179860514c0a1ed79d104ffc47",
+      "action": "preserve-history",
+      "reason": "Incompatible alternate MVP baseline; canonical UAT bootstrap replaces this foundation, not a supported MVP database upgrade."
+    },
+    {
+      "file": "20260706092400_warehouse_rpcs.sql",
+      "sha256": "4f218e09854b7422a20b82d85ad1c4156610f74a99130ea01384bb50402d1742",
+      "action": "preserve-history",
+      "reason": "Incompatible alternate MVP baseline; canonical UAT bootstrap replaces this foundation, not a supported MVP database upgrade."
+    },
+    {
+      "file": "20260706092500_warehouse_demo_auth_users.sql",
+      "sha256": "1381897d6d29af4657c5b11f6bf6dfe54a073fdde7e49557f433a31d0bc20828",
+      "action": "preserve-history",
+      "reason": "Incompatible alternate MVP baseline; canonical UAT bootstrap replaces this foundation, not a supported MVP database upgrade."
+    },
+    {
+      "file": "20260706100000_reconcile_provisional_rbac.sql",
+      "sha256": "6c368b814dcb03a03d3fcb4888ccbe505e9ccb6d1a2ca2df461bf30480104035",
+      "action": "preserve-history",
+      "reason": "Incompatible alternate MVP baseline; canonical UAT bootstrap replaces this foundation, not a supported MVP database upgrade."
+    },
+    {
+      "file": "20260706110000_procurement_schema.sql",
+      "sha256": "2d35df20eab807295105b9adf943607c14df77ceddd36ec487af039931c90cc3",
+      "action": "preserve-history",
+      "reason": "Incompatible alternate MVP baseline; canonical UAT bootstrap replaces this foundation, not a supported MVP database upgrade."
+    },
+    {
+      "file": "20260706120000_legal_schema.sql",
+      "sha256": "3d5eb7e9c1f4d0b0faa2198dfb3ef6d40b68175b4a7c77c16078605fb61e27ba",
+      "action": "preserve-history",
+      "reason": "Incompatible alternate MVP baseline; canonical UAT bootstrap replaces this foundation, not a supported MVP database upgrade."
+    },
+    {
+      "file": "20260706130000_cross_module_wiring.sql",
+      "sha256": "93d79f0fdaeb27c2e9f75d2eede6df77f83ad7d4f18a30f907fc88211994e613",
+      "action": "preserve-history",
+      "reason": "Incompatible alternate MVP baseline; canonical UAT bootstrap replaces this foundation, not a supported MVP database upgrade."
+    },
+    {
+      "file": "20260706140000_scheduled_jobs.sql",
+      "sha256": "582c62c0d18a214c99e28107bbfaf44876d049c0b8ee6caecf763b50a603a083",
+      "action": "preserve-history",
+      "reason": "Incompatible alternate MVP baseline; canonical UAT bootstrap replaces this foundation, not a supported MVP database upgrade."
+    },
+    {
+      "file": "20260706150000_vendor_tier_reconcile.sql",
+      "sha256": "4b6b55c09e649b0f1b2d91f89cbe4a9a102991f26fc8d5b01f22aed007fc2fbb",
+      "action": "preserve-history",
+      "reason": "Incompatible alternate MVP baseline; canonical UAT bootstrap replaces this foundation, not a supported MVP database upgrade."
+    },
+    {
+      "file": "20260706160000_rate_limits_and_uploads.sql",
+      "sha256": "4de4ab0e4feb7afc6b6c0fec0ce70e17ff495d390bf21c9e6b914f8ee0db1005",
+      "action": "preserve-history",
+      "reason": "Incompatible alternate MVP baseline; canonical UAT bootstrap replaces this foundation, not a supported MVP database upgrade."
+    },
+    {
+      "file": "20260706170000_warehouse_rls_tighten.sql",
+      "sha256": "3cca163a9625ce79d8c32f3151055c9d4dc92f26d11c3109448a1ba30c2a77f0",
+      "action": "preserve-history",
+      "reason": "Incompatible alternate MVP baseline; canonical UAT bootstrap replaces this foundation, not a supported MVP database upgrade."
+    },
+    {
+      "file": "20260706180000_finance_keys.sql",
+      "sha256": "bce570eda839806fb401d7ea2012b473409af603d864f35799dd2c5930517d02",
+      "action": "preserve-history",
+      "reason": "Incompatible alternate MVP baseline; canonical UAT bootstrap replaces this foundation, not a supported MVP database upgrade."
+    },
+    {
+      "file": "20260706190000_procurement_policy_alignment.sql",
+      "sha256": "6e610a3409d94475a03f32cff4a79dd3de7e92e2a1ea47b5a2023c31fd509c31",
+      "action": "preserve-history",
+      "reason": "Incompatible alternate MVP baseline; canonical UAT bootstrap replaces this foundation, not a supported MVP database upgrade."
+    },
+    {
+      "file": "20260707090000_document_storage_buckets.sql",
+      "sha256": "cc07474e56cf3adca218dd58093e5ddcce867bf195525fdb54f86eca3f381ebf",
+      "action": "preserve-history",
+      "reason": "Incompatible alternate MVP baseline; canonical UAT bootstrap replaces this foundation, not a supported MVP database upgrade."
+    },
+    {
+      "file": "20260707100000_procurement_approval_rpcs.sql",
+      "sha256": "127657fab3975e0f162106c159458e014dc3084c1c3aecfbb4e1d6b5d1e3269a",
+      "action": "preserve-history",
+      "reason": "Incompatible alternate MVP baseline; canonical UAT bootstrap replaces this foundation, not a supported MVP database upgrade."
+    },
+    {
+      "file": "20260707110000_warehouse_actor_identity.sql",
+      "sha256": "7a50c0b78b996cb755affc82b87a1ee7b1d9fe4f2d5811fc2edb44ee80773497",
+      "action": "preserve-history",
+      "reason": "Incompatible alternate MVP baseline; canonical UAT bootstrap replaces this foundation, not a supported MVP database upgrade."
+    },
+    {
+      "file": "20260707120000_retention_enforcement.sql",
+      "sha256": "74805c8f9e0e980644a684b6dd570c1a8b1973e362c6578ec99c1115a0e8743e",
+      "action": "preserve-history",
+      "reason": "Incompatible alternate MVP baseline; canonical UAT bootstrap replaces this foundation, not a supported MVP database upgrade."
+    },
+    {
+      "file": "20260707130000_rbac_ladder_grants.sql",
+      "sha256": "54126fce8f57ccbd6f4f4097fb613949610693a21e0e8f96e34ad1b9f0609ea6",
+      "action": "preserve-history",
+      "reason": "Incompatible alternate MVP baseline; canonical UAT bootstrap replaces this foundation, not a supported MVP database upgrade."
+    },
+    {
+      "file": "20260708140000_lockdown_legacy_public_procurement_requests.sql",
+      "sha256": "505f27f9dab123b9426f9ffc121af741603abdc1013dcb6ac546b1dc565eefb5",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260708141000_grant_current_app_role_for_legacy_policies.sql",
+      "sha256": "d08aaeea638314a62b646da9ffa0efc7f81f8ce44a015c5a9bdfd785632fbbd9",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260709152000_live_intra_cutover_contract.sql",
+      "sha256": "b5afaae4dc590ab68cf68c2c0e9d8022256cab8ef300eeb2aec9112232de499b",
+      "action": "preserve-history",
+      "reason": "Replaced by the recorded fixture-free text-ID cutover in the canonical baseline; original source retained."
+    },
+    {
+      "file": "20260709161000_live_intra_followup_action_rpcs.sql",
+      "sha256": "7c4ccbbd50ec628c58a8ca2d130ffafa7adde6cf71f8e4e351082a964f751caf",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260709162500_lockdown_legacy_public_procurement_request_grants.sql",
+      "sha256": "ef16b7f05608fb28bcf9ea46d1d3ca2bdcaf700db8ff0f040a362ebc83ee9f4f",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260709173500_production_readiness_indexes_and_legacy_rbac_policy.sql",
+      "sha256": "e4690cf32918467b8d52f8aec51382b25c3e18d7b5d67b85bd54561d997148fb",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260710040105_repair_procurement_submission_contract.sql",
+      "sha256": "1e3b6e467de1d4076625a3107a340bb4f01efc136ce1841b603ca673aa83352a",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260710041319_govern_procurement_attachments.sql",
+      "sha256": "5565e7b066bc31d1773c5e7f370e8204ea7eb72dc5bdf27b6fb5181f60d7c8ed",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260710041816_govern_vendor_invitation_delivery.sql",
+      "sha256": "7c14512346af52da8e2ed94cb4bf4d33ed59643477b6aa634a88d2f76c8a3b28",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260710043410_govern_warehouse_csv_exports.sql",
+      "sha256": "72e3b8b61f269c3d64c4f81afa6a276718da9bfd9ec877493c2e2a153f3851d8",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260710044627_harden_finance_read_model.sql",
+      "sha256": "27d2949e43c1c99865295625c02ebdc3e14635e3c409f4b21ab4081346d1381c",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260710093000_p0_p1_production_readiness_fixes.sql",
+      "sha256": "5e6cba271157a65f92c9966e8a77d108ac3c0cce9c791a104234b79cbe3386b3",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260710120000_harden_operational_anon_grants.sql",
+      "sha256": "334e122d0d4a75702144d62bbd031c6247bdabb3170bb304adcf381f170749a8",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260710150000_warehouse_w1_control_schema.sql",
+      "sha256": "e353ee80297b2469357e6834c56a6045a49231a6c0eca576d357c36342386142",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260710160000_warehouse_w1_quality_and_approval_rpcs.sql",
+      "sha256": "57a90be1df60a7e49fa7464348ca7f088c12dfc8543706a51cd3a0d4348aadc8",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260710170000_warehouse_w1_imports_po_and_reporting.sql",
+      "sha256": "9e16d22a9b824f2082f4e1364d271099ab36bbe05d68f98ffbdadc9df35b78db",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260710180000_govern_cycle_count_draft_creation.sql",
+      "sha256": "8231a18be0fe58b5fc4790d1fc15e98afa8bf732e4dbdb867841fac762b37ede",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260710210000_policy_aligned_legal_procurement.sql",
+      "sha256": "45f8946596dabd9cf26a1c1a909d119c3022ddf406aa7f86f1bac63406984a63",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260711090000_department_doa_administration.sql",
+      "sha256": "c5b7cda3b33c49087e2c848c9755f54e93bec940d17b13acd25f68c0778372df",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260711100000_rls_advisor_hardening.sql",
+      "sha256": "d86efb85b95781fc7a2807a56f26bf7698e26fb27e662fa158a83f0a76eabf21",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260711110000_policy_rpc_search_paths.sql",
+      "sha256": "bb4d8e49413f6209bf5bd1ab79ee06653c90bd1104b0021f869b9a2487f4de70",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260711123000_temporary_department_doa_seed.sql",
+      "sha256": "720b44a85ebcf702c0132cd1ca18d9fb5da45a607166a31ab3dcf77e58419bc4",
+      "action": "preserve-history",
+      "reason": "Operational test-account-only DOA setup, not schema; requires five existing named UAT profiles."
+    },
+    {
+      "file": "20260711150000_allow_admin_legal_doa_read.sql",
+      "sha256": "e7892567933dd7fe1999e760115aaee39353267ed4471092eb08de017c28b581",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260713170000_current_function_advisor_hardening.sql",
+      "sha256": "fa55c4684cebbcca7d2631a880362fef93ad4f7f5164ee527c3246e748035f80",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260713190000_governed_rpc_wrapper_execution.sql",
+      "sha256": "67155a9e661a529c3a1f635a482fcbc7805fb42c92e5ed071ff013ef2ca21d77",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260713191000_warehouse_policy_core_capabilities.sql",
+      "sha256": "dc11eebe5d494519e8e4349baa107d0d673243d2fab2baa5112288b2fa07c1f4",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260713192000_storage_evidence_core_capabilities.sql",
+      "sha256": "d735c3f1249016008c064021f4873bf0d16c884256540510ec524e48a30c4d11",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260714133000_intra_role_workspaces.sql",
+      "sha256": "ace3aa241ada1c41d010304b0919027aea0d461fd1844895de551a8783b75064",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260714134500_user_role_claim_sync.sql",
+      "sha256": "a8f2e14796fde540c6a03ea8c7a8a843a1091a528ad5f0457f7fcab2f01ae012",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260714160000_command_log_explicit_client_deny.sql",
+      "sha256": "d28a44362d6383ca13a4015ec43408f478705162ca9c29671b6cd50bfbd382c3",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260714175057_core_organization_extensibility.sql",
+      "sha256": "1112a5fa0818ce12588f8b564e9c853a50cfab945bd8757417417083449c9e3b",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260714175318_single_po_receipt_authority.sql",
+      "sha256": "7a76035db60d2999286c989052d3cd815fc87ba698804c7a92ceb7e08795366f",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260717143000_task3_receipt_authority_forward_convergence.sql",
+      "sha256": "cc266a6cf1811db47474fb6aa12b33e9fbcf5f76908fba9d7d3b2bb538a9e822",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260718003000_receipt_reconciliation_rls.sql",
+      "sha256": "a7278e855ae073aed70f2ee640b54b694a4d75b9db9da73ed5c545a2af5fd9ab",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260718004000_current_rls_and_fk_indexes.sql",
+      "sha256": "bfd903d9c2875a535271155dc7a0e519d175a45ed115cf8bf911af5b60b44a61",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260718005000_expose_intra_postgrest_schemas.sql",
+      "sha256": "46ad11c7c7828969745a5e70a43b0d0faa3d5f06ade85ca39e232094ab31ca1f",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260718006000_historical_migration_forward_convergence.sql",
+      "sha256": "abe490521ea054b48f2cc9ccd4382a69e1346dc6dc886607fbf2a028c32a0192",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260718150000_fix_stock_approval_projection_uuid_join.sql",
+      "sha256": "5d537a1f63dc0dfb44e017f46d6bcbdf22981222ecc3dafc1c78db8a5bcfb82c",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260718160000_grant_approval_groups_to_service_role.sql",
+      "sha256": "30299a4a3c73969b86b579a0a4a87ee0f11bf73bb99033bb75398bda513bc985",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260718170000_harden_service_verification_and_digest_resolution.sql",
+      "sha256": "c5e4f772d4f39c4ba046ed9a05f742f7596a5e89b531de34ee9fea815bf7242b",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260718180000_fix_receipt_quantity_and_service_finance_readback.sql",
+      "sha256": "896072f70a775180bded6c914164bdd49d95a5b1046a21cf5b5fa47a2cf7f940",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260718190000_restore_governed_receive_stock.sql",
+      "sha256": "0cfbb94ab07bf839b3f91e8ced235c0b33243861ab575984550558f8ae6cad39",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260718191000_restore_warehouse_actor_helpers.sql",
+      "sha256": "de669c32e3a3eed6882c330f87924c2373b33141e414f143367947144d1141cb",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260718192000_restore_exception_pack_audit_timestamp.sql",
+      "sha256": "067460190b0e3bd70aaac7c4bad7c1f167a54d1caae1ac5707b4ab5496936b30",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260718193000_harden_receive_stock_server_defaults.sql",
+      "sha256": "104e17713a4d09972d766c89c401f241958a5ee9ffb13ca071d4035b24bd00fd",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260718194000_restore_warehouse_evidence_registration.sql",
+      "sha256": "3653e0c1eae2bfac30f6e7d918b4d2960a6a02f9beff3eb73d29f3b6cb2109e5",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260718195000_align_evidence_document_entity_identity.sql",
+      "sha256": "109592d492876790dbcf362fe29d87e3f1c1157e7e3b763b6c3fb7624cc2f352",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260718196000_harden_cycle_count_server_defaults.sql",
+      "sha256": "3730886c4006785e047dbd22e772c5289e33478e7e062a481f02caf6d4121547",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260718197000_converge_warehouse_rbac_gates.sql",
+      "sha256": "cb895fc172612f567668f38808bfe1b6f8fa0f8a90f3eaebb279d84f5e0cce57",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260718198000_converge_stock_change_governance.sql",
+      "sha256": "33f60e8b1e966600ab19f993f3f6f9fa00bf5456de71bbed4f11541b60df259d",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260718199000_align_stock_approval_entity_identity.sql",
+      "sha256": "dd34ea7a51bba167430cbb1bc11eaf20d60124e11e2468425d8f484322897b47",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260718200000_serialize_quality_holds_with_reservations.sql",
+      "sha256": "0bf4a017e5edeaec7d7a5476234079db119cb43584882be2ae2f0b40b88c6416",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260718201000_refresh_atp_inside_product_lock.sql",
+      "sha256": "3373f54391eccecbc9d334fba778c6f8380c6e9681a70a1b0e21168f3bf8c0c9",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260718202000_block_issue_from_held_stock_identity.sql",
+      "sha256": "d9e6137a6c2cd7a0ae9774e8e42b4300de99d4a3b2998deff306faff8e15a602",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260721200000_cross_department_wms_persistence.sql",
+      "sha256": "82fcd8ea528e7f72fd3df9bc098efcf63064d8f5e3612d269639ed3ad1843a69",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260721210000_cross_department_wms_advisor_remediation.sql",
+      "sha256": "c456d23022726754bd6d2ffd1d9551d7bd15a8022ec8bf5046fd46d07f8476ed",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260722114000_govern_admin_role_changes_and_seed_doa.sql",
+      "sha256": "806480c7f6216d0c966bfa1f4fe9c4d36dce1ab801d280a5e4179b24440b2dc3",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260722120000_legal_vendor_lifecycle_hardening.sql",
+      "sha256": "7f3d78ed8a4133af8b397bb170694cfa25c9a325047267ba19b40e6dca48ae11",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260722120500_procurement_event_workflow_remediation.sql",
+      "sha256": "e5929be3f60ce5c92c352f8006d2f442fe3fc42c6b8802916b4e8a09e02c66b3",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260722121000_warehouse_procurement_lineage_and_read_scope.sql",
+      "sha256": "849b8a199b745fd3ae1a57527607ed6e354667910eedce6a13d4a5e9c6721ec9",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260722121500_product_readiness_and_pricing_governance.sql",
+      "sha256": "31ddd2a8fc47349d15ff343e2e7cdbd26e07f3cd9bc3bc3f1669951a43065726",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260722124731_insights_correctness_and_provenance.sql",
+      "sha256": "ba139cf3a30f34fcd85ae4ec84835082901988084a55cf72921252fbe5362aa8",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260722150000_advisor_intent_and_private_function_hardening.sql",
+      "sha256": "376b5c7e1efa015df270da404f2f522c59f0f5f6a6bcec59517ca378c2a6fb84",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260722151000_index_new_governance_foreign_keys.sql",
+      "sha256": "c2c79cfe218a8204467a8aa70891f97550bd381b131f7767135d4d34a2762219",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260722170000_restore_receipt_status_projection_access.sql",
+      "sha256": "35cb5334792f92fe265edbc08bec79770b1e3d4bf4646eeba2c54ac764e81ae5",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260722173000_finish_governance_performance_hardening.sql",
+      "sha256": "5cf0d1728758f0dc5efeed7ff7f13fb85defc5be0c7020e8b8637f9e596b5a09",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260722174500_restore_governed_warehouse_wrapper_execution.sql",
+      "sha256": "f753463856c29163ed25d15eef849c71844fc75c04bf70596d031e68f36e9321",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260722180000_vendor_lifecycle_authority_remediation.sql",
+      "sha256": "e0d7875db9b9ea601879d5095b007a35208b95552ae1dbb1ff62a8cbdcd8095f",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260722183000_vendor_lifecycle_advisor_hardening.sql",
+      "sha256": "dd9fcfa4ee1b8ca16b894a8be3ceec52f9973b9a35bebc8dcb00f17df35ab7e4",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260722200000_warehouse_procurement_handoff_presentation.sql",
+      "sha256": "d0a7fca49294b1f4df30495ae61e25b279dcbe783aeb1ff03e44a4bb20f0d5b3",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260723010000_insights_projection_read_only.sql",
+      "sha256": "dc4559df3ccad4d2d56da80ac3d71ad92b499b208dcd020436f4a995d6ce029f",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260723020000_product_certification_cleanup.sql",
+      "sha256": "9c9b1f82d5b3d5511e65a4512ebb354326d91692861a4ccc13ec4c07b693935a",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260723031500_insights_warehouse_source_route.sql",
+      "sha256": "a5df3694f7f7baa38f5fb742e307355e9be9e12ef2c360d180fc6e6cc14cefd6",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260723040000_my_work_quality_route.sql",
+      "sha256": "36d5e6642d396488e73d51e2f32f92160b55e6f4728061197a3936c76c488c55",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260804150000_inventory_release_lifecycle_remediation.sql",
+      "sha256": "d9c8302890ee82bf94cd9729de96507d23f04873d766be83851a33feae3e53b9",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260804153000_inventory_release_lifecycle_index_hardening.sql",
+      "sha256": "b3971462b35254c0ea39b87cad872907222a9ad30bc21e7a017b5247f520badc",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260804154500_inventory_release_rls_performance.sql",
+      "sha256": "272e5bf4fae8f2866eb681c1ca0c650a9a85020d6d198811e81f1ed06519949c",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260804170000_procurement_to_payment_completion.sql",
+      "sha256": "0e7ed694d575152aa46d92af710cef259b585565161a7717f073595f99246763",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260804171000_acceptance_value_derivation.sql",
+      "sha256": "696d6c18f8ce759966e0905255f29b507578ffe7fb9945d972099d2f7a9b2ff2",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260804172000_procurement_payment_fk_indexes.sql",
+      "sha256": "96a00941b11a447d879391fc4d70d7aff856791edc7450f94375bf5e402b0786",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260804173000_insufficient_bid_exception_workflow.sql",
+      "sha256": "c904abbb272f1934abc11ed5192319b47fff78377ab5c33b56d06dcf1918e3ef",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260804174000_procurement_cost_center_validation.sql",
+      "sha256": "a6119eeb9e998753231cfd4ebafd487dc1b4c7be8a1b1cc70fbae8ef68279a3d",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260804175000_procurement_requester_po_visibility.sql",
+      "sha256": "74b4b45877a5cf6ece8fd48fb73b8770e5fd6b645b7a0c54c03cd29af57be1dc",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260804180000_procurement_goods_receiving_boundary.sql",
+      "sha256": "acfb4d72f4e360f482145e26eb4ef79bf6fa56613058a20a09c30adaf98cae62",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260804200000_operational_flow_completion.sql",
+      "sha256": "25a10144e6b2ebc8410ba42e45b8f7c1d77f603a1aa258b55fe61dbf6ac6c843",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260804201000_fix_replenishment_procurement_handoff.sql",
+      "sha256": "2e9e5461d0825a90ca626d687244b06bdbc65a069909dad6e3995e7c84fbdc89",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260804202000_index_operational_flow_foreign_keys.sql",
+      "sha256": "488496bc786437694abd81cfd57dd73a931a73901e43c637c4c388c13fae64e6",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260804203000_knowledge_feedback.sql",
+      "sha256": "742b9d9c99957834624af7b5833c7ff58fb94a459244af469ffb9a75f0de5243",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260806090000_receiving_boundary_replay_order.sql",
+      "sha256": "45dccca3cdf5a44f5a8c628c0a10a6dae3c3a43ae761d02f32ea8b91749a662a",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260806093000_user_scoped_warehouse_import_staging.sql",
+      "sha256": "c8a8d818a8dd40fb392fb1bc9aa425dd89deb306cf78e3f5ac69326f3313b641",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260806094500_knowledge_feedback_rls_initplan.sql",
+      "sha256": "44699c6c35139989274a96b6a0363c4421a73a0b37a15b7dbf961a40cff4424b",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260806100000_vendor_readiness_array_append.sql",
+      "sha256": "1f6c537a02ae6e4d2a28c74e55e6afbb0a37642b1208901d52f8c562748e5447",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260806101500_repair_commitment_readiness_ownership.sql",
+      "sha256": "b509339a1173b2f9aa9a4b96d04ee58fd878784428ea8ebfc69f3e27cf6d6bb3",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260806103000_drop_reconciliation_recovery_snapshot.sql",
+      "sha256": "e4ce38365ba219432211e45b80dc28c687af4827d8c6f9104b4054af0051f989",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260810142147_restore_doa_assignment_audit_timestamp.sql",
+      "sha256": "643972b4f777b61ae9e82d2dd4ae3542ed3bd3492050e6f41ab2001870113005",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260810155237_block_transfer_of_held_inventory.sql",
+      "sha256": "b45aa9c86f3fd726aca0433864380add2fd0d930d7fb2b3627120f977c500872",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260810155350_procurement_legal_database_authority_remediation.sql",
+      "sha256": "2b63095347e6035049aa42edeb31485ccac94b4423182388b4ab34b6099de817",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260810160000_finance_event_authority_remediation.sql",
+      "sha256": "c305bb64edfa7e55da9de353c00a698c0116353042ab3be9dedfa67c7be1d419",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260812120000_vendor_accreditation_draft_rbac.sql",
+      "sha256": "627d74bd618fc28a0fe52ebe31488e1da64f4c234e053d5890608edb4743c391",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260812130000_learning_foundation.sql",
+      "sha256": "b5b954f0fdb9ff52748047ca4a17916896227934ecd43c22951ea4489fc129ad",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260812140000_learning_role_authority_lifecycle.sql",
+      "sha256": "8668f05d2dc557da3d086ec3bdf78d82e4016d3bdbb212898d0d811f5225e736",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260812150000_learning_assignment_lineage_remediation.sql",
+      "sha256": "c5047ff95b5a545624c8dad090e1ff9c13ed2a977034ffc146a162740d8175ef",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260812160000_learning_services.sql",
+      "sha256": "037c98deded4de50131c0de3889e919e8baedbd62810c3ecd36f3decdfb9f667",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260812170000_learning_service_contract_alignment.sql",
+      "sha256": "a4001fd52c284eda4cbb04a813b6346d724d8416da6671a8ecd143037e2c1fbc",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260812180000_learning_completion_alignment.sql",
+      "sha256": "1e7daab3d83417e8d49325712eacbdff3114e29cbe0f8c5790985002ea465cc5",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260812190000_learning_completion_evidence_hardening.sql",
+      "sha256": "9914f21c7fa21e452973ca75d08348b307edb0c0f72580fa46263112e8e0f0d5",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260812200000_learning_authority.sql",
+      "sha256": "a8ad714d8ae7a5f637ecb62af1cb9b4688a256041f42673e86d598ea36085f39",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260812210000_learning_orientation_runtime.sql",
+      "sha256": "4b1fb8f1989e8412658de7e986208b3fdc1299a24885b2112b807485dcbf0f41",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260812220000_task8_database_authority_remediation.sql",
+      "sha256": "9a5eda277ea76db395469a95ac45f7f788a0d589db97a42ed0141ce59ccd6113",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260813065507_learning_pgcrypto_digest_compatibility.sql",
+      "sha256": "e88be4ed5ba89b2694fd1868cdb1982f3509b6e3062bca7e8ac12cce00f10172",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260813070234_learning_policy_acknowledgment_chronology.sql",
+      "sha256": "f193a65d7b08206482cd42ab65b1c866bec128c7da40bbf0186cce4d26eb1cb6",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260813071129_learning_assessment_answer_count_compatibility.sql",
+      "sha256": "c3d6f645700deedde9c31f45044c669a9828f77fa9d5c9699854eaebad32c0fc",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260813074855_fix_certification_requirement_scalar_aliases.sql",
+      "sha256": "0908f69a3c6aab05589008f0cef5333c3f9abcf11ceeb074c5f2f62c81a15dc3",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260813075513_qualify_certification_requirement_evidence.sql",
+      "sha256": "9285b19fc405076a0960e86f7fd66931b45148b454817b0f8d78874dd5104a9d",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260813075809_align_certification_issuance_chronology.sql",
+      "sha256": "f3ab2b156f34f370cad9d2aca12d456b16cbca9a651693fe1f2568a9b4af0390",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260813080141_make_role_assignment_resolution_idempotent.sql",
+      "sha256": "6953937423e534d666632e7290eca576c9a993f31d9158edbe9d4a85b54356fe",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260813203240_task_1_database_authority_remediation.sql",
+      "sha256": "78dd1dffa203af1dee43b7386f23ffed1d2b086196ab3de4d30c9abf73a9d927",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260814083514_add_receipt_exception_contract.sql",
+      "sha256": "9395622c616677faeb09567ecb4f4f92a1ecc7d763d41e2e5f02a8f94a8b680d",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260814084615_require_published_certification_pathway.sql",
+      "sha256": "c4a57624d28b9a4a877d7122dd908b8d24bbf6904b84c6303c3c31da35154907",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260815154324_legal_vendor_launch_blockers.sql",
+      "sha256": "07242ea085091eae92749fccbe5134082db4a7ee14ac3e7d6da6b147064cfe9d",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260815154702_procurement_finance_requester_privacy.sql",
+      "sha256": "7d2eeef8f97f618ad27a29b4f1253d9c145da12e8675384ef69c0c0efe22a031",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260815154910_operations_launch_blocker_slice.sql",
+      "sha256": "4af6fa3a809fb94df70f61ac05503bd6bce621ba53a40e694556321456f20657",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260815163010_require_attributable_cycle_count_actor.sql",
+      "sha256": "59272581efb7dc0792605914f93f882055737967b76db7592b63ca6b58482c91",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260815183000_leadership_insights_launch_blockers.sql",
+      "sha256": "740dcac03abe862f4a74b3557c4e677014b9e3cf9338946df13158ba908e37b5",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260816090000_security_database_launch_blocker_convergence.sql",
+      "sha256": "ac434feb1fd32800dee0855e44bd90dce2445a9315594edd758fbcab01617f53",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260816103000_restore_vendor_learning_assignments.sql",
+      "sha256": "30637614d190712923dc6b4ebf426cd674d69d4addd828a7634e0b418551ac64",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260816110000_sync_shared_role_orientations.sql",
+      "sha256": "9cc5d12c7fc9a02992886a9fe287d1b25832a0f8d72b64598d6037fc2ab70891",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260816183000_reconcile_launch_authority_and_learning.sql",
+      "sha256": "08d7fbaea5e3205c4656de65ed2fc1f6398da5e817173fede27a6a64dc6acf1d",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260816184500_retire_context_only_learning_assignments.sql",
+      "sha256": "ce4e0c8521c83d4ff22f51b8c5f32d2ab42496f51009e942c731f68abeba8ac2",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260816190000_fix_equivalent_role_practice_simulation_key.sql",
+      "sha256": "9960e9207fc0be7adc906adb55bfde161637b3c92ee3f4d336ad033507849694",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260816200000_allow_equivalent_simulation_certification_lineage.sql",
+      "sha256": "12d9b1db7815245610684d162b26d55c3bfd965a0326e5350ab44751e4d26dd7",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260816203000_scope_certification_pathways_to_assigned_roles.sql",
+      "sha256": "5a74f5c8e04cc9a2b62071d62a6eb40387707854054e15e4908e997664a1badf",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260816210000_add_service_role_launch_verifier.sql",
+      "sha256": "c3703ac0e5526c83bf505e0fed7a9e7a2eb7808524c21919d2d7a084e3f54bca",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260816213000_converge_read_rpc_live_capabilities.sql",
+      "sha256": "ae9e183f46b942184b7260a165fd8ebfe385e1f772227a1f0beb278a869c9516",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260816220000_restore_launch_read_contracts.sql",
+      "sha256": "5dd5d029be706e96d56f0df99006f3ea2cac79439aef06d9948f088412136533",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260816221000_certify_commitment_readiness_boundary.sql",
+      "sha256": "5ea6092ed837a34d015c05cb77f000454d8c27c281f495d32a538ad194e3579e",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260816222000_restore_exact_receipt_quality_boundary.sql",
+      "sha256": "5c2b858381d030ef9fb6fc784f329489e16780cf67f6a961c30d1aaf02367b6e",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260816223000_deduplicate_procurement_intake_collaborators.sql",
+      "sha256": "eea80eb68b8629704c419229b2535675ec149dcf25bd81d3362ee9ffeb089b6e",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260816230000_repair_quality_acceptance_and_doa_activation.sql",
+      "sha256": "97d3596490b8fee106c3506dad08e537d5f557ac9152c9d51c4ad89765a6b490",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260816231000_enforce_quality_receipt_line_identity_precedence.sql",
+      "sha256": "6f90be29f9fb7092fccb97871cbbbd0ef28923cb9edad7462efbd7c3323e92ae",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260817121220_ecommerce_fulfillment_intake_and_directed_pick.sql",
+      "sha256": "388435d1b188a60172970d5c969204535e21abac72770e583c04f56915d013aa",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260818063911_wms_comments_workflow_remediation.sql",
+      "sha256": "242d591c1fe3b44eb8885658c31b2c65e5b8fae31650e225ded44dafae3ba448",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260820094500_converge_shipment_tracking_live_capability.sql",
+      "sha256": "1d35b3e93c5990fa56882966f962c5bb3c4fc9e4177925f9973990e54d4cd9eb",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260822110000_mpic_procurement_policy_alignment.sql",
+      "sha256": "b67969dfb7dc3b91e2337b46b7f37a0614ddf0046f1d616c8cc770dc8e806372",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260823190000_canonicalize_doa_department_codes.sql",
+      "sha256": "3db3aa5583d1aa08b800f0b1183b2ea9170757fec57f07c87aa9b33daab0d6d4",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260823203000_complete_temporary_uat_doa_ladders.sql",
+      "sha256": "27229cda70372db8b625878f2f6e90d43aca7bcc200908a0978e95003e2acc62",
+      "action": "preserve-history",
+      "reason": "Operational test-account-only DOA completion, not schema; requires existing named UAT profiles."
+    },
+    {
+      "file": "20260823210000_repair_doa_save_runtime.sql",
+      "sha256": "f11b887169fb112cc2d418f39f24b405e7a7c71b75184cf2a0f87966171f309a",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260824234441_repair_warehouse_goods_po_handoff_visibility.sql",
+      "sha256": "698ad48a74afd4f854c3687ee230711f188836f1de8490706010c9ec7beab8ce",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260826015244_governed_po_receipt_breakdown.sql",
+      "sha256": "9c39559c423bb5cec177e535c846a84d205ed5fac807d3ce11f24e5ee6c022eb",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260826030637_third_party_custody_location_validation.sql",
+      "sha256": "799c021f0c6b120cfff33dbda384801272ec396541e53ad6c89c2b7912a0589d",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260826032845_converge_receipt_quality_custody.sql",
+      "sha256": "0f5689f1fdb04339131c981aab5cde1f5872d2c759d594e2dc94e7e45587ec01",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260826033026_third_party_custody_lifecycle_guard.sql",
+      "sha256": "b15212330ed73185a68d0f3a2eb5f5ec69e3616856b1f01757386db09258738c",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260826103000_event_reconciliation_finance_handoff.sql",
+      "sha256": "154fb95d485fa37191c07390807bbccf06c6a6c15062e81fad4f7feb84766aff",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260826123000_event_settlement_close_controls.sql",
+      "sha256": "263ac3bd4da8f544bf92e55285f145f6b3a8c56c592a5aa10ba3236d9f1bc9cd",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260826133000_enforce_event_settlement_actor_separation.sql",
+      "sha256": "5a1aa675c8315077cc3cf981ace48962fc207dfe4a8903e22c6343cfdd4abe86",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260826143000_preflight_event_settlement_actor_lineage.sql",
+      "sha256": "850e4f428136fac81c968cf69ba9ccc8d1657a4a9365602cb4072ad607d29f90",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260826150000_converge_third_party_custody_locking.sql",
+      "sha256": "fd2a906f946f469e1bda3fbc867e2a4951b8996ec0772243d956d21fb7051e56",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260826160000_harden_serial_custody_concurrency.sql",
+      "sha256": "6f673c49b6a8af155639124b83da7feb89b75d7e4bf309254f573f9fa90c0756",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260826170000_procurement_request_operational_visibility.sql",
+      "sha256": "676efca5505224d9b52cec17b008ff06ec80904a6e17546b5ea1cc3fea064b81",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260826171000_repair_uat_operations_evidence_links.sql",
+      "sha256": "53c01c3b0668453c2ed3985a45e10e506e184bee8da9eb5bb6026c3789d7c326",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260826180000_remove_insecure_operations_evidence_values.sql",
+      "sha256": "a63317a3be9673b10ee304bc8adc0b74cc7feee6b1e87d8731579a7a9928718f",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260828010344_receiving_saved_progress.sql",
+      "sha256": "28349e9ebd4e0776fa689c30023909add1137b1966bc8287167116ffece09a37",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260828011200_fulfillment_zero_line_backorder.sql",
+      "sha256": "6625201df3334287d57fb1f9febbbb49a730112ae8f63c1b88b1365fb2527ca0",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260828015022_marketing_event_reservation_access.sql",
+      "sha256": "5fb7e71dd0056a3b436e0f0446e5a2a7154e93c53c443c848d816a1d6f12a537",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260828033036_return_intake_atomic_quarantine.sql",
+      "sha256": "08e1f46714ab8e9c0fa89ad31a4522dadeec33a23bfa952b639789085ef33e64",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260828041500_return_intake_stock_state.sql",
+      "sha256": "33b656e4fdb00c914972716f69b4468c2af369e5716b40e67968aa8fd271ab17",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260828060000_atomic_event_reservations.sql",
+      "sha256": "aa13354189c8c574d8bedc5deaf062e4bbb321ba52a669d5a2ee9a900590da5f",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260828150000_scoped_action_evidence.sql",
+      "sha256": "0bc3bbdfad62e31bb0d4c4639dff96c6fb74bdf169538740a781d4905ce69129",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260828160000_atomic_finance_reconciliation.sql",
+      "sha256": "2b50a6eb113b86976aa31d530beb6a37c2146d0006fd69e8189da4c019de166b",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260828170000_action_evidence_rate_limit.sql",
+      "sha256": "064c0ac85d3c2993de6a84641fec7ec238c5df91e272fa47d09fd5e6adfc84e6",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260905042714_warehouse_custody_truncate_least_privilege.sql",
+      "sha256": "4f7ff70e50522a100995e28d5720accb9230dc103f168c3922ef99ce265f9d6b",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260905043614_warehouse_putaway_tasks.sql",
+      "sha256": "c2ba5e869198205e2822641d0fe57015feb584be1486956d981f263e085e5a92",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260905050820_receiving_draft_explicit_live_authority.sql",
+      "sha256": "7ebdd9f242e54640c2ffe5bc6b95f1063361f513d025559cc782e9973db895f6",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260905050907_quality_inspection_verifier_chain.sql",
+      "sha256": "189ae0c80e2d21ad83fdfc7f95575138a4bf0924e53d0f74e136d800a2aa7a6a",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260905090000_procurement_remediation.sql",
+      "sha256": "be376127b1c47686751778237415089aff13e4e1efabb5071382ca5aa0e9394e",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260905091000_platform_finance.sql",
+      "sha256": "4203e86381ee817816622bb032db92037d3a051ff40de3faf1230773b929e647",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260905091001_platform_work_union.sql",
+      "sha256": "635835c315f9d7fa5a210ee1dac6a4ce46114755310239837e1731d95e2b17a6",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260905092000_warehouse_integrity.sql",
+      "sha256": "f3a3879209fbcb1f31d8aa8233f526549b87aa6ef0c60eaa05fd09d42c821155",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260905094000_offline_replay_identity.sql",
+      "sha256": "acd09e11ce6c6f709bd4ec437dcc1c06f623e9e4d1785577b47cbb4024321fba",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260905095000_return_intake_certified_boundary.sql",
+      "sha256": "f2ff9bb9b104abc126a30c9aa5abc60764e7881e52c173a1af6e95eaddad554d",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260905175131_uat_request_cleanup_retained_history.sql",
+      "sha256": "520d856a4ca7db8aa487ba7b4d2bffd8f8839a337ffaf0e831fe1e37c601dc35",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260905180530_authorize_accepted_provisional_quality_hold_release.sql",
+      "sha256": "124ff322b4278009317c1d0a978e5521a5d8f1f6f58958c3e6e1c33d497a2840",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260905181632_certification_payment_evidence_cleanup.sql",
+      "sha256": "752cdca244674e5cb94341e490426f8ddc77fd6f1b7aeeea8c55e60ee7d6a5b6",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260905203219_canonical_raw_receipt_inspection_serial_identity.sql",
+      "sha256": "a268052a3c10037a8a3e4809fe6bb9023e209e0dfcda1798db39ddd0a169f6de",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260905203452_allow_fully_received_po_payment_evidence.sql",
+      "sha256": "56c1abfb28b3160317d4e934f57923f922285df2228819f51e2e16b2a6162635",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260905225538_authorize_service_invoice_identity_cleanup.sql",
+      "sha256": "9ae03385d9c719036012cae32c60a0232b42575f5fd1089490764b1d569dba37",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260906043800_gate_legacy_po_cancel_and_vendor_acknowledgement.sql",
+      "sha256": "d163cd53e2be63efc04bab9e45872cd863abf792c8bf9a2752a2b4b98492413f",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260908033401_fulfillment_release_exact_picked_bin.sql",
+      "sha256": "dca6d99dcd0795e1e71ac0181b0a465416955a3c731c1e3969ac64e301759863",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260908042032_department_request_actor_names.sql",
+      "sha256": "81763b01e49f38a8ebd02da794dcadbd018f2daea49ca3023eafe5765df428b5",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260908042408_warehouse_registered_evidence_access.sql",
+      "sha256": "82ffb33aaf5ce755fa643692dfb463c2330474280bd08d9086321b9d2dd4221b",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260908042504_governed_receipt_actual_delivery_date.sql",
+      "sha256": "56a888f47863e722689ee653a28498e0e218004257a39db8c44d4224fcb6c768",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260910133142_replacement_delivery_confirmation.sql",
+      "sha256": "f998ca529be5be157bae27ec3e8f341bc8c46ce8ef5a365a37b6dc1f72e182d1",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260910140118_fulfillment_handover_acknowledgment_guard.sql",
+      "sha256": "f8bcb6c99ce02d5245b0daf4c93a3093bd87c54135ebe3db41eaafc9f3fa8ec8",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260911035750_loading_query_performance.sql",
+      "sha256": "c641dbaa5273c76644c73cefab7baf07c80b396eebb32ca3606b0db55a695422",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260911080134_restore_ownerless_commitment_readiness.sql",
+      "sha256": "16c2857c7eb1433b7df8a00479416bb62a40a7bc2d8b25d60ac79dcabaabdc01",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260911170103_requester_names_return_live_authority.sql",
+      "sha256": "6eb61b27ccdb1059cba14c1635e4c29f38a72cfbb2c0811a0ce4d40ef57fe9d5",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260911171901_learning_authority_plan_reuse.sql",
+      "sha256": "008b05e73da45f469112d37c6bfd0f7ae92828db77ca64b6c217659e8d42c142",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260911225104_quality_queue_lazy_evidence.sql",
+      "sha256": "d21c159a2516879e06c6e4f37896302016b54233b73f77eb40620b96bd951419",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260912045335_align_assigned_training_checkpoints.sql",
+      "sha256": "d52d674ed9e8d98c84cf237d66c2007490d5d1aec8afa1ec6e8608ebafc8ed04",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260912045338_persist_exception_receipt_delivery_date.sql",
+      "sha256": "4ea797455c7fa0b977c0d2e9f6b6cd96a408841ff6b29b353264ed106bc3caca",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260912131000_vendor_certification_scope_authority.sql",
+      "sha256": "23cd60147aa93e8e8253513b901c99ac49cc097f8a51dd14e5247c6389fccfc3",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260913022735_warehouse_recipient_ack_evidence_upload.sql",
+      "sha256": "bac139009f5aa29f0dc10bffccd34e184b911887e40188773f6900f10cfa1f64",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260913071110_customer_return_intake_lineage.sql",
+      "sha256": "3f70f49b57ac24956eb474e08d396d0932c9178df2900e30d5ef08765330787d",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260913175711_align_replenishment_action_authority_and_snapshot.sql",
+      "sha256": "69b4c302a92e5548e72f21256e902185c265ca2f3c5a514f98adb8afca5976b4",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260913214911_govern_replenishment_request_completion.sql",
+      "sha256": "379833866b51634ee452966e50f0405873bd999c75b6ff3e5bc27bacc06b67e8",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260914025434_restore_sourcing_evaluation_read_contract.sql",
+      "sha256": "b998f2b7c052dd78725bf64b15f508e18276ab350d4676faaae2d0fa17d07f2f",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260914053733_uat_vendor_fixture_atomic_cleanup.sql",
+      "sha256": "54f27028912f93102716b9545af0e9b92d04990b455fc21028af4c8636a876bd",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260920025455_atomic_quality_batch.sql",
+      "sha256": "788be97c10a6a5873cd6bf6ece625e0fa1078ea04e73f31061712986a3fbb955",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260920025525_gated_event_seller_custody.sql",
+      "sha256": "76a0dd7eb3fca99fa97c0833f171dc0d6ef9cc78b3d4a0bae13086e844c6bc9d",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260920025920_approved_stock_origin_conversion.sql",
+      "sha256": "09b0f32abeb94fb4f53cf3c72913a31a468d9aec2f26597741799d3065a33283",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260920030900_event_seller_learning_readiness.sql",
+      "sha256": "686b0e0b30450559828def055bfd27c207ec64668172643e5b258bee9d569dee",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260920080131_gate_warehouse_raw_reads_by_current_capability.sql",
+      "sha256": "2322b5163d912f701578fd1804c4480f63de2708998e3333574b987f73f33fdf",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260920084037_enforce_event_ledger_effective_finance_read.sql",
+      "sha256": "57fe338f1e73c69b90aa6503c53ae6b13b8822fbc59dbe2f6cf9fd079922b47e",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260920164950_vendor_document_upload_authorization.sql",
+      "sha256": "deb3ec7d1e647bab92b300d964ae9badb539d6a856ea6ccee434c029e1612617",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260922111953_procurement_doa_tier_guard.sql",
+      "sha256": "3cce2faa592c86713e533954212d74efce0f89a021aaf8181d97ccef16effd22",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260922123940_procurement_final_approval_doa_authority.sql",
+      "sha256": "0e4463cd122704b23a8cb1db3f23dde945a946cf16c9d08fa6c006e2d2111e77",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20260923025605_reporting_private_authority_foundation.sql",
+      "sha256": "8bbc47627fbfb4dcd2f97ce0f3efdfbd73ab066d6835bf12f4ffc158378b6d98",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20261019142956_warehouse_external_po_receiving.sql",
+      "sha256": "27ec43900e9bd85bea0f87d7858dc57e67dc82d5609f96d7716ab18d44e03d7d",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20261019143020_external_po_quality_verifier_chain.sql",
+      "sha256": "1d7c9266f464a06075b977720dd58a0c847e1fec1929ae4c8fbf747a4db1c8eb",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20261019145212_external_po_shipment_evidence_access.sql",
+      "sha256": "464b5115d6769b1bb3e362b1dd6c5de92416602bac1c9e6ffc35834e68c2d6de",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20261019151646_uat_private_maintenance_archive.sql",
+      "sha256": "723736123f9f19046f83a17eb3fabd20c0cf79be657539fd8cfb031bc3366542",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20261019153041_external_po_procurement_duplicate_guard.sql",
+      "sha256": "0078ba43a374eab5cda7fe1832899bdbb2f871d6eb4ad7937b2535a22bba30d3",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20261019180843_lot_aware_atomic_putaway.sql",
+      "sha256": "a8dffe5ad697bdcc4315685376863bea1909a608e6f38407e1423ceeebed6d17",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20261019182006_warehouse_closed_po_history.sql",
+      "sha256": "16cdbc7d68c101265a9488db7727d74f6ece2ccb3977e5d71cf8bf5c3aa20613",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20261105071150_warehouse_count_integrity.sql",
+      "sha256": "3f8b043148d62ce752d17598a7478a6eaf7c09e7e40e990b2086a96b69e87fef",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20261105071201_warehouse_unit_custody_history.sql",
+      "sha256": "cfc6bc71a0aa8bdfcf5d080720a4c26359eea3fe83f4dd2075335354eab02eca",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20261105071210_warehouse_lot_count_exposure.sql",
+      "sha256": "623b7450239c50813eec572c5c9e7ddffad26dd5b7d1f95e8ad449baf0caec1f",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20261105071219_warehouse_location_dependencies.sql",
+      "sha256": "d332d415773324577f13cc5d1bb28493baf6bc76966d518e414d79c2778e45fb",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20261105071229_warehouse_count_rejection_receipt.sql",
+      "sha256": "453a0e96263f99881f7a2d8fd789273c5421bdb2460f02e3058355facec9c507",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20261105071241_warehouse_count_encumbrance_guard.sql",
+      "sha256": "47034af424ef2e1938bba5abae9d5903bb6bffff264ebdf8088d61236a05300b",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20261105074245_warehouse_inventory_position_summary.sql",
+      "sha256": "f91de0383f1deb462fc750b82be630bd021c4d4e63fd9beda9b72d789cdfebb5",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20261105134446_warehouse_export_command_authority.sql",
+      "sha256": "0877282df3ec5d530dc31f10ca8c02086970eb68e92df059a415bd3dcac14fed",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20261105135318_warehouse_allocation_return_balance.sql",
+      "sha256": "feae8f091a8ebbce465d7eac9a198d1d0cd6bfcf318bc52e6c7bbc5d244e945d",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20261105141930_serialized_transfer_quantity_identity.sql",
+      "sha256": "8704110436a8bce29b577c067dd584c24e993d96b32508d3ff430977ab4224ef",
+      "action": "execute-forward"
+    }
+  ]
+}

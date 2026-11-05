@@ -156,13 +156,13 @@ test('serialized transfer and lot-aware putaway SQL regressions are mandatory in
   assert.equal(job['continue-on-error'], undefined);
 });
 
-test('applied PostgreSQL replays all migrations with isolated empty prerequisites and no bypass', () => {
+test('applied PostgreSQL executes verified canonical baseline and complete forward source without bypass', () => {
   const job = workflow('ci').jobs['learning-applied-postgres'];
   const steps = job.steps;
   const initialize = steps.findIndex(step => step.name === 'Initialize isolated PostgreSQL workdir');
-  const prepare = steps.findIndex(step => step.name === 'Verify and prepare isolated legacy prerequisites');
+  const prepare = steps.findIndex(step => step.name === 'Verify and prepare canonical empty baseline');
   const start = steps.findIndex(step => step.name === 'Start disposable local PostgreSQL');
-  const reset = steps.findIndex(step => step.name === 'Replay complete history over empty legacy prerequisites');
+  const reset = steps.findIndex(step => step.name === 'Execute canonical baseline and complete forward source');
   const authority = steps.findIndex(step => step.name === 'Verify applied learning authority');
   assert.ok(initialize >= 0 && initialize < prepare && prepare < start && start < reset && reset < authority);
   assert.equal(job.env.SUPABASE_WORKDIR, undefined);

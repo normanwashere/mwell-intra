@@ -67,16 +67,16 @@ jobs:
         run: |
           : "${RUNNER_TEMP:?}" "${GITHUB_RUN_ID:?}" "${GITHUB_RUN_ATTEMPT:?}" "${GITHUB_ENV:?}"
           printf 'SUPABASE_WORKDIR=%s\n' "$RUNNER_TEMP/mwell-learning-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
-      - name: Verify and prepare isolated legacy prerequisites
+      - name: Verify and prepare canonical empty baseline
         run: |
-          node --test scripts/qa/prepare-learning-postgres.test.mjs
+          node --test scripts/qa/prepare-learning-postgres.test.mjs scripts/qa/receipt-signature-sql-syntax.test.mjs
           node scripts/qa/prepare-learning-postgres.mjs --output "$SUPABASE_WORKDIR"
       - name: Start disposable local PostgreSQL
         run: >-
           pnpm exec supabase start
           --workdir "$SUPABASE_WORKDIR"
           --exclude gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
-      - name: Replay complete history over empty legacy prerequisites
+      - name: Execute canonical baseline and complete forward source
         run: pnpm exec supabase db reset --local --no-seed --workdir "$SUPABASE_WORKDIR"
       - name: Publish and verify governed role orientations
         run: |

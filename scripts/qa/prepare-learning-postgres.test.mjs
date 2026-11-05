@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
-import { prepareLearningPostgres, validateLegacyPrerequisites } from './prepare-learning-postgres.mjs';
+import { prepareLearningPostgres, validateLegacyPrerequisites, validateCanonicalManifest, validateReplayInventory } from './prepare-learning-postgres.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 
@@ -22,20 +22,140 @@ test('unknown bootstrap authority, grants and data fail closed while CRLF remain
   ]) assert.throws(() => validateLegacyPrerequisites(mutation), /unreviewed legacy/i);
 });
 
-test('disposable replay retains every repository migration byte-for-byte and excludes linked credentials', () => {
+test('disposable replay executes canonical baseline plus all classified forward sources byte-for-byte', () => {
   const temporaryRoot = mkdtempSync(path.join(tmpdir(), 'qa4-learning-postgres-'));
   try {
     const destination = path.join(temporaryRoot, 'database');
     const result = prepareLearningPostgres({ root, temporaryRoot, destination });
-    const names = readdirSync(path.join(root, 'supabase/migrations')).filter(name => name.endsWith('.sql')).sort();
-    assert.equal(result.migrationCount, names.length);
+    const { files, manifest } = validateReplayInventory(root);
+    assert.equal(result.baselineCount, 22);
+    assert.equal(result.migrationCount, 231);
+    assert.equal(result.preservedCount, 35);
+    assert.equal(manifest.sources.length, 266);
     assert.deepEqual(readdirSync(path.join(destination, 'supabase')).sort(), ['config.toml', 'migrations']);
-    assert.deepEqual(readdirSync(path.join(destination, 'supabase/migrations')).sort(), [result.fixtureName, ...names]);
-    for (const name of names) assert.deepEqual(readFileSync(path.join(destination, 'supabase/migrations', name)),
-      readFileSync(path.join(root, 'supabase/migrations', name)), name);
+    assert.deepEqual(readdirSync(path.join(destination, 'supabase/migrations')).sort(), files.filter(file => file.output).map(file => file.output));
+    for (const file of files.filter(file => file.output)) assert.deepEqual(
+      readFileSync(path.join(destination, 'supabase/migrations', file.output)), file.bytes, file.file);
+    const audit = JSON.parse(readFileSync(path.join(destination, 'replay-audit.json')));
+    assert.match(audit.scope, /not exact applied-history replay/);
+    assert.equal(audit.files.length, 288);
+    assert.equal(audit.files.filter(file => !file.output && file.reason && file.sha256).length, 35);
     assert.throws(() => prepareLearningPostgres({ root, temporaryRoot, destination }), /already exists/);
     assert.throws(() => prepareLearningPostgres({ root, temporaryRoot, destination: root }), /outside.*temporary/i);
     assert.throws(() => prepareLearningPostgres({ root, temporaryRoot, destination: temporaryRoot }), /outside.*temporary/i);
+  } finally { rmSync(temporaryRoot, { recursive: true, force: true }); }
+});
+
+test('manifest edits cannot silently omit, substitute, reorder or weaken migration authority', () => {
+  const raw = readFileSync(path.join(root, 'scripts/qa/canonical-replay-manifest.json'), 'utf8');
+  validateCanonicalManifest(raw.replace(/\r?\n/g, '\r\n'));
+  for (const mutate of [
+    m => m.sources.pop(),
+    m => { m.sources.find(file => file.action === 'execute-forward').action = 'preserve-history'; },
+    m => { m.baseline[0].sha256 = '0'.repeat(64); },
+    m => m.baseline.reverse(),
+    m => { m.baseline[0].file = '../outside.sql'; },
+  ]) {
+    const manifest = JSON.parse(raw);
+    mutate(manifest);
+    assert.throws(() => validateCanonicalManifest(JSON.stringify(manifest)), /unreviewed canonical/i);
+  }
+});
+
+test('missing, changed and unknown SQL fails before any output workspace is created', () => {
+  const temporaryRoot = mkdtempSync(path.join(tmpdir(), 'qa4-canonical-input-'));
+  try {
+    const copy = path.join(temporaryRoot, 'source');
+    mkdirSync(copy);
+    for (const filename of ['supabase/migrations', 'supabase/config.toml', 'scripts/qa/canonical-replay-manifest.json', 'scripts/qa/fixtures/canonical-uat-baseline']) {
+      cpSync(path.join(root, filename), path.join(copy, filename), { recursive: true });
+    }
+    const destination = path.join(temporaryRoot, 'database');
+    const { files } = validateReplayInventory(copy);
+    const baseline = files.find(file => file.kind === 'baseline');
+    const source = files.find(file => file.kind === 'sources' && file.output);
+    const excluded = files.find(file => !file.output);
+    for (const file of [baseline, source, excluded]) {
+      const filename = path.join(copy, file.kind === 'baseline' ? 'scripts/qa/fixtures/canonical-uat-baseline' : 'supabase/migrations', file.file);
+      writeFileSync(filename, Buffer.concat([file.bytes, Buffer.from('\n-- changed\n')]));
+      assert.throws(() => prepareLearningPostgres({ root: copy, temporaryRoot, destination }), /changed.*migration/i);
+      assert.equal(existsSync(destination), false);
+      writeFileSync(filename, file.bytes);
+      rmSync(filename);
+      assert.throws(() => prepareLearningPostgres({ root: copy, temporaryRoot, destination }), /missing or unclassified/i);
+      assert.equal(existsSync(destination), false);
+      writeFileSync(filename, file.bytes);
+    }
+    writeFileSync(path.join(copy, 'supabase/migrations/20990101000000_unclassified.sql'), 'select 1;');
+    assert.throws(() => prepareLearningPostgres({ root: copy, temporaryRoot, destination }), /missing or unclassified/i);
+    assert.equal(existsSync(destination), false);
+  } finally { rmSync(temporaryRoot, { recursive: true, force: true }); }
+});
+
+test('linked input directories and non-file SQL entries fail before output creation', () => {
+  const temporaryRoot = mkdtempSync(path.join(tmpdir(), 'qa3-canonical-links-'));
+  try {
+    const copy = path.join(temporaryRoot, 'source');
+    mkdirSync(copy);
+    for (const filename of ['supabase/migrations', 'supabase/config.toml', 'scripts/qa/canonical-replay-manifest.json', 'scripts/qa/fixtures/canonical-uat-baseline']) {
+      cpSync(path.join(root, filename), path.join(copy, filename), { recursive: true });
+    }
+    const destination = path.join(temporaryRoot, 'database');
+    for (const directory of ['supabase/migrations', 'scripts/qa/fixtures', 'scripts/qa']) {
+      const original = path.join(copy, directory);
+      const moved = path.join(temporaryRoot, 'linked-input');
+      renameSync(original, moved);
+      symlinkSync(moved, original, process.platform === 'win32' ? 'junction' : 'dir');
+      assert.throws(() => prepareLearningPostgres({ root: copy, temporaryRoot, destination }), /symlink input/i);
+      assert.equal(existsSync(destination), false);
+      unlinkSync(original);
+      renameSync(moved, original);
+    }
+    const source = validateReplayInventory(copy).files.find(file => file.kind === 'sources' && file.output);
+    const filename = path.join(copy, 'supabase/migrations', source.file);
+    unlinkSync(filename);
+    mkdirSync(filename);
+    assert.throws(() => prepareLearningPostgres({ root: copy, temporaryRoot, destination }), /regular file/i);
+    assert.equal(existsSync(destination), false);
+  } finally { rmSync(temporaryRoot, { recursive: true, force: true }); }
+});
+
+test('unsafe local configuration and existing destinations cannot write or overwrite a workspace', () => {
+  const temporaryRoot = mkdtempSync(path.join(tmpdir(), 'qa3-canonical-destination-'));
+  try {
+    const copy = path.join(temporaryRoot, 'source');
+    mkdirSync(copy);
+    for (const filename of ['supabase/migrations', 'supabase/config.toml', 'scripts/qa/canonical-replay-manifest.json', 'scripts/qa/fixtures/canonical-uat-baseline']) {
+      cpSync(path.join(root, filename), path.join(copy, filename), { recursive: true });
+    }
+    const configPath = path.join(copy, 'supabase/config.toml');
+    const config = readFileSync(configPath, 'utf8');
+    const destination = path.join(temporaryRoot, 'database');
+    for (const mutation of [
+      config.replace('mwell-intra-learning-ci', 'unowned-project'),
+      config + '\nsecret = "env(TEST_ONLY_KEY)"\n',
+      config + '\nproject_ref = "test-only-remote"\n',
+      config + '\npassword = "synthetic-only"\n',
+    ]) {
+      writeFileSync(configPath, mutation);
+      assert.throws(() => prepareLearningPostgres({ root: copy, temporaryRoot, destination }), /credential-free local CI configuration/i);
+      assert.equal(existsSync(destination), false);
+    }
+    writeFileSync(configPath, config);
+    assert.throws(() => prepareLearningPostgres({ root: copy, temporaryRoot, destination: path.join(temporaryRoot, 'nested/database') }), /outside.*temporary/i);
+    assert.equal(existsSync(path.join(temporaryRoot, 'nested')), false);
+    const protectedPath = path.join(temporaryRoot, 'protected');
+    mkdirSync(protectedPath);
+    const sentinel = path.join(protectedPath, 'sentinel.txt');
+    writeFileSync(sentinel, 'preserve-owned-test-sentinel');
+    symlinkSync(protectedPath, destination, process.platform === 'win32' ? 'junction' : 'dir');
+    assert.throws(() => prepareLearningPostgres({ root: copy, temporaryRoot, destination }), /already exists/i);
+    assert.equal(readFileSync(sentinel, 'utf8'), 'preserve-owned-test-sentinel');
+    assert.deepEqual(readdirSync(protectedPath), ['sentinel.txt']);
+    unlinkSync(destination);
+    writeFileSync(destination, 'preserve-existing-file');
+    assert.throws(() => prepareLearningPostgres({ root: copy, temporaryRoot, destination }), /already exists/i);
+    assert.equal(readFileSync(destination, 'utf8'), 'preserve-existing-file');
   } finally { rmSync(temporaryRoot, { recursive: true, force: true }); }
 });
 

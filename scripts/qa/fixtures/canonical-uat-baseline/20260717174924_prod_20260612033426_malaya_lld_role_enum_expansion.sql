@@ -1,0 +1,10 @@
+alter type public.app_role add value if not exists 'logistics-supervisor';
+alter type public.app_role add value if not exists 'warehouse-supervisor';
+alter type public.app_role add value if not exists 'operations-user';
+alter type public.app_role add value if not exists 'operations-manager';
+alter type public.app_role add value if not exists 'finance-manager';
+alter type public.app_role add value if not exists 'bi-analyst';
+alter type public.app_role add value if not exists 'business-unit-manager';
+alter type public.app_role add value if not exists 'marketing-manager';
+alter type public.app_role add value if not exists 'procurement-consultant';
+alter type public.app_role add value if not exists 'pricing-consultant';

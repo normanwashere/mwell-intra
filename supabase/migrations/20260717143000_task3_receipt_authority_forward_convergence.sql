@@ -456,12 +456,12 @@ begin
       raise exception 'PO amendment approval requires a PNG signature bound to the active employee profile';
     end if;
     begin
-      v_signature_bytes:=decode(pg_catalog.substring(v_signature_data from 23),'base64');
+      v_signature_bytes:=decode(pg_catalog.substring(v_signature_data,23),'base64');
     exception when others then
       raise exception 'PO amendment signature PNG payload is not valid base64';
     end;
     if pg_catalog.octet_length(v_signature_bytes)>2097152
-       or pg_catalog.substring(v_signature_bytes from 1 for 8)
+       or pg_catalog.substring(v_signature_bytes,1,8)
          is distinct from decode('89504e470d0a1a0a','hex') then
       raise exception 'PO amendment signature must be a valid PNG no larger than 2 MiB';
     end if;
