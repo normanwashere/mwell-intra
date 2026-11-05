@@ -42,7 +42,7 @@ test('the formerly unpinned assigned-role exception rejects role escalation', ()
 });
 
 test('G02 closed contract rejects removal, widening or leakage of migration timeouts', () => {
-  const name='20261105195433_stock_conversion_qc_putaway_bridge.sql';
+  const name='20261105233321_stock_conversion_qc_putaway_bridge.sql';
   for (const change of [
     sql=>sql.replace(/select pg_catalog\.set_config\('lock_timeout'[\s\S]*?name='lock_timeout';/,''),
     sql=>sql.replace("'ms',true)","'ms',false)"),

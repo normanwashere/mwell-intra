@@ -408,16 +408,11 @@ export function AppShell({ children }: { children: ReactNode }) {
         {/* Top bar */}
         <header
           className={clsx(
-            "safe-top z-20 shrink-0 border-b border-line bg-surface/85 backdrop-blur transition-[padding,box-shadow] md:sticky md:top-0",
+            "safe-top z-20 shrink-0 border-b border-line bg-surface/85 backdrop-blur transition-shadow md:sticky md:top-0",
             scrolled && "shadow-e1",
           )}
         >
-          <div
-            className={clsx(
-              "flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 transition-[padding] md:flex-nowrap",
-              scrolled ? "py-2" : "py-3",
-            )}
-          >
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 md:flex-nowrap">
             <div
               className="flex w-36 shrink-0 items-center gap-1.5 md:hidden"
               aria-label="Mwell Intra Warehouse"

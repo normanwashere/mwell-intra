@@ -24,7 +24,7 @@ registerHooks({
 const { SupabaseRepository } = await import('../packages/data-kit/src/supabase/SupabaseRepository.ts');
 
 const migration = name => readFile(new URL(`../supabase/migrations/${name}`, import.meta.url), 'utf8');
-const fixName = '20261105195433_stock_conversion_qc_putaway_bridge.sql';
+const fixName = '20261105233321_stock_conversion_qc_putaway_bridge.sql';
 
 test('native putaway timeout probe is source-bound and refuses external or override connections', async t => {
   const source = await migration(fixName);

@@ -5,7 +5,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { assertDisposableLocalDatabaseUrl } from './verify-learning-catalog.mjs';
 import { scanSql } from './verify-learning-schema.mjs';
 
-const migrationUrl = new URL('../supabase/migrations/20261105195433_stock_conversion_qc_putaway_bridge.sql', import.meta.url);
+const migrationUrl = new URL('../supabase/migrations/20261105233321_stock_conversion_qc_putaway_bridge.sql', import.meta.url);
 
 export function putawayTimeoutProbeSql(source, schema) {
   assert.match(schema, /^qa_g02_timeout_[a-f0-9]{32}$/);

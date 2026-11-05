@@ -91,6 +91,7 @@ main:has(> .hierarchy-preview) { background: #eff2f4; }
 }
 .hierarchy-preview [aria-label="Fulfillment workspace"] > button {
   flex: 1 1 0;
+  min-width: min-content;
   border-radius: 0;
   border-bottom: 3px solid transparent;
   box-shadow: none;
@@ -150,6 +151,7 @@ main:has(> .hierarchy-preview) { background: #eff2f4; }
 @media (max-width: 639px) {
   .workspace-hierarchy .page-header-band h1, .hierarchy-preview h1 { font-size: 24px; }
   .workspace-hierarchy .page-header-band, .hierarchy-preview .page-header-band, .hierarchy-preview .hp-record-title { padding: 16px; }
+  .hierarchy-preview [aria-label="Fulfillment workspace"] > button { flex: 1 0 auto; }
   .hierarchy-preview .hp-view-tabs > button { padding: 12px 6px; }
   .hierarchy-preview .hp-toolbar { padding: 12px; }
   .hp-record > [aria-label="Workflow status"] { padding: 14px; }
