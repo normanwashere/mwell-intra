@@ -33,6 +33,7 @@ interface ConsoleIssue {
 }
 
 interface TargetIssue {
+  readonly identity: number;
   readonly label: string;
   readonly selector: string;
   readonly width: number;
@@ -507,6 +508,12 @@ test('reachability samples overlap between fixed chrome and retain real obstruct
   await page.setContent(`<meta name="viewport" content="width=device-width, initial-scale=1"><button style="width:140px;height:48px">Covered guide</button>
     <div style="position:fixed;inset:0;z-index:2;background:white"></div>`);
   await expect(assertControlsAreReachable(page, 'persistent-overlay', testInfo)).rejects.toThrow(/intercepted/);
+  await page.setContent(`<meta name="viewport" content="width=device-width, initial-scale=1"><style>
+    body { margin: 0; min-height: 1700px; }
+    button { position: absolute; top: calc(50vh - 30px); width: 140px; height: 48px; }
+  </style><button>Covered scrollable guide</button>
+    <div style="position:fixed;inset:0;z-index:2;background:white"></div>`);
+  await expect(assertControlsAreReachable(page, 'scrollable-persistent-overlay', testInfo)).rejects.toThrow(/intercepted/);
 });
 
 test('reachability allows subpixel arithmetic only, not undersized controls', async ({ page }, testInfo) => {
@@ -515,6 +522,18 @@ test('reachability allows subpixel arithmetic only, not undersized controls', as
   await assertControlsAreReachable(page, 'subpixel-target', testInfo);
   await page.locator('button').evaluate((element, height) => { element.style.height = `${height}px`; }, minimum - 1);
   await expect(assertControlsAreReachable(page, 'undersized-target', testInfo)).rejects.toThrow(/controls below/);
+});
+
+test('reachability keeps identically labelled controls separate', async ({ page }, testInfo) => {
+  await page.setContent(`<meta name="viewport" content="width=device-width, initial-scale=1"><style>
+    body { margin: 0; min-height: 1700px; }
+    button { position: absolute; left: 0; width: 140px; height: 48px; }
+    button:first-of-type { top: 200px; } button:last-of-type { top: 900px; }
+    #cover { position: absolute; top: 190px; left: 0; width: 150px; height: 68px; z-index: 2; background: white; }
+  </style><button>Open guide</button><button>Open guide</button><div id="cover"></div>`);
+  await expect(assertControlsAreReachable(page, 'duplicate-label-overlay', testInfo)).rejects.toThrow(/intercepted/);
+  await page.locator('#cover').evaluate((element) => element.remove());
+  await assertControlsAreReachable(page, 'duplicate-label-uncovered', testInfo);
 });
 
 async function assertControlsAreReachable(
@@ -560,6 +579,8 @@ async function assertControlsAreReachable(
   const hiddenTargets: TargetIssue[] = [];
   const blockedTargets: BlockedTargetIssue[] = [];
   const reachableTargetKeys = new Set<string>();
+  // Repeated row actions must not clear each other's obstruction failures.
+  const identities = await page.evaluateHandle(() => ({ ids: new WeakMap<Element, number>(), nextId: 1 }));
 
   try {
     for (const scrollY of samples) {
@@ -579,7 +600,7 @@ async function assertControlsAreReachable(
       );
       await page.waitForTimeout(50);
       const result = await page.evaluate(
-        ({ selector, minSize }) => {
+        ({ selector, minSize, identities }) => {
           const hasHiddenAncestor = (element: Element): boolean => {
             for (
               let current: Element | null = element;
@@ -633,7 +654,13 @@ async function assertControlsAreReachable(
 
           const describe = (element: Element): TargetIssue => {
             const rect = element.getBoundingClientRect();
+            let identity = identities.ids.get(element);
+            if (identity === undefined) {
+              identity = identities.nextId++;
+              identities.ids.set(element, identity);
+            }
             return {
+              identity,
               label:
                 element.getAttribute("aria-label") ??
                 element.textContent?.trim().replace(/\s+/g, " ").slice(0, 64) ??
@@ -674,7 +701,7 @@ async function assertControlsAreReachable(
             isVisible(element, element.getBoundingClientRect()),
           );
 
-          const visibleTargets = visibleElements.map(describe);
+          const reachableTargets: TargetIssue[] = [];
 
           const smallTargets = visibleElements
             .filter((element) => {
@@ -698,8 +725,11 @@ async function assertControlsAreReachable(
                 return null;
               }
               const blocker = document.elementFromPoint(x, y);
-              if (!blocker || element === blocker || element.contains(blocker))
+              if (blocker && (element === blocker || element.contains(blocker))) {
+                reachableTargets.push(describe(element));
                 return null;
+              }
+              if (!blocker) return null;
               if (
                 blocker.tagName.toLowerCase() === "nextjs-portal" ||
                 blocker.closest("nextjs-portal")
@@ -715,7 +745,7 @@ async function assertControlsAreReachable(
             .slice(0, 12);
 
           return {
-            visibleTargets,
+            reachableTargets,
             hiddenTargets,
             smallTargets,
             blockedTargets,
@@ -735,7 +765,7 @@ async function assertControlsAreReachable(
             return `${element.tagName.toLowerCase()}${id}${classes}`;
           }
         },
-        { selector: CONTROL_SELECTOR, minSize },
+        { selector: CONTROL_SELECTOR, minSize, identities },
       );
       smallTargets.push(
         ...result.smallTargets.map((item) => ({ ...item, scrollY })),
@@ -743,10 +773,8 @@ async function assertControlsAreReachable(
       hiddenTargets.push(
         ...result.hiddenTargets.map((item) => ({ ...item, scrollY })),
       );
-      const blockedKeys = new Set(result.blockedTargets.map(targetKey));
-      for (const item of result.visibleTargets) {
-        if (!blockedKeys.has(targetKey(item)))
-          reachableTargetKeys.add(targetKey(item));
+      for (const item of result.reachableTargets) {
+        reachableTargetKeys.add(targetKey(item));
       }
       blockedTargets.push(
         ...result.blockedTargets.map((item) => ({ ...item, scrollY })),
@@ -766,7 +794,7 @@ async function assertControlsAreReachable(
         useRegion: useScrollRegion,
         y: originalY,
       },
-    );
+    ).finally(() => identities.dispose());
   }
 
   expect(
@@ -791,7 +819,7 @@ function dedupeTargets<T extends TargetIssue>(items: readonly T[]): T[] {
   const seen = new Set<string>();
   const out: T[] = [];
   for (const item of items) {
-    const key = `${item.selector}:${item.label}:${item.width}:${item.height}:${item.scrollY}`;
+    const key = `${item.identity}:${item.width}:${item.height}:${item.scrollY}`;
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(item);
@@ -799,8 +827,8 @@ function dedupeTargets<T extends TargetIssue>(items: readonly T[]): T[] {
   return out;
 }
 
-function targetKey(item: Pick<TargetIssue, "selector" | "label">): string {
-  return `${item.selector}:${item.label}`;
+function targetKey(item: Pick<TargetIssue, "identity">): string {
+  return String(item.identity);
 }
 
 function escapeRegex(value: string): string {
