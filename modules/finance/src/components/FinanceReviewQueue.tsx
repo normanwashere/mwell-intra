@@ -96,7 +96,7 @@ export function FinanceReviewQueue({ items }: { items: FinancePaymentItem[] }) {
   const visible = paymentUrgency(items);
 
   return (
-    <section id="finance-payments" tabIndex={-1} aria-label="Payment readiness" className="min-w-0 max-w-full overflow-hidden">
+    <section id="finance-payments" tabIndex={-1} aria-label="Payment readiness" className="min-w-0 max-w-full overflow-hidden [&_table]:min-w-0">
       <SectionTitle
         title="Payment readiness"
         subtitle="Prioritized evidence packs handed off by Procurement"

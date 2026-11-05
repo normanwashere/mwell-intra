@@ -10,6 +10,7 @@ Status: fixes and verification in progress. This is not a deployment notice or a
 - CI browser setup installs its configured Chromium engine and proves that it can launch before running journeys. Installation failure is still a failure, not a skipped pass.
 - Mobile reachability checks use overlapping scroll samples and allow only 0.001px measurement tolerance. Tests still reject real overlays and undersized controls.
 - Controlled Procurement fixtures are being aligned with real paging, registered payment evidence and independent actor permissions. Fixture corrections do not certify live Legal or payment processing.
+- Tablet layouts keep Fulfillment filters within the page, allow Insights tabs to wrap, and retain visible Finance status controls. Existing actions, permissions and handoffs are unchanged. Regression checks include reserved scrollbar space so clipping is not hidden by the test device.
 
 ## Stock Conversion Follow-Up
 
@@ -18,6 +19,8 @@ An external-PO inspection can accept a serialized unit before its first putaway 
 The proposed forward migration records the exact future receipt, independent Quality decision and first single-serial putaway. It keeps the original inspection unchanged and rechecks eligibility when creating, approving and completing a conversion. Later custody, holds, inspection or return changes invalidate this carried evidence. Existing exact-bin inspection and return recovery rules stay intact.
 
 This is deliberately limited to newly recorded eligible stock. It does not repair historical stock, authorize new recipes, certify packaging conversion or remove independent approval. Migration `20261105195433_stock_conversion_qc_putaway_bridge.sql` is under review and is **not recorded as applied**. Local SQL checks are not live or concurrent acceptance.
+
+The migration caps each lock wait at five seconds and each statement at sixty seconds, retains stricter caller limits, and restores those settings at transaction end. This is not a total transaction deadline. A blocked application must fail and be inspected before any retry; active testers are never terminated to make it succeed. The native PostgreSQL gate includes real lock contention and rollback/commit setting checks on an owned scratch table.
 
 ## Release Gates
 

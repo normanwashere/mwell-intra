@@ -825,7 +825,7 @@ function OrdersWorkspace({
           </div>
         )}
       </div>
-      <div className="hp-toolbar grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2 border-y border-line py-2 md:grid-cols-[minmax(14rem,1fr)_minmax(24rem,1fr)]">
+      <div className="hp-toolbar grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2 border-y border-line py-2 md:grid-cols-1 lg:grid-cols-[minmax(14rem,1fr)_minmax(24rem,1fr)]">
         <Field label="Search orders" htmlFor="fulfillment-search">
           <input
             id="fulfillment-search"

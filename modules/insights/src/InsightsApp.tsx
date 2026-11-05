@@ -314,7 +314,7 @@ export function InsightsApp({ initialArea }: { initialArea?: InsightArea }) {
           ))}
         </select>
       </div>
-      <div className="hidden overflow-x-auto pb-1 sm:block">
+      <div className="hidden overflow-x-auto pb-1 sm:block [&_[role=tablist]]:flex-wrap [&_[role=tab]]:flex-[1_0_auto]">
         <SegmentedControl
           ariaLabel="Choose insight view"
           options={options}

@@ -5,6 +5,8 @@ import { PGlite } from '@electric-sql/pglite';
 import { existsSync, readFileSync } from 'node:fs';
 import { registerHooks } from 'node:module';
 import ts from 'typescript';
+import { scanSql } from './verify-learning-schema.mjs';
+import { putawayTimeoutProbeSql, verifyPutawayMigrationTimeouts } from './verify-stock-conversion-putaway.postgres.mjs';
 
 registerHooks({
   resolve(specifier, context, next) {
@@ -23,6 +25,63 @@ const { SupabaseRepository } = await import('../packages/data-kit/src/supabase/S
 
 const migration = name => readFile(new URL(`../supabase/migrations/${name}`, import.meta.url), 'utf8');
 const fixName = '20261105195433_stock_conversion_qc_putaway_bridge.sql';
+
+test('native putaway timeout probe is source-bound and refuses external or override connections', async t => {
+  const source = await migration(fixName);
+  const schema = `qa_g02_timeout_${'a'.repeat(32)}`;
+  const probe = putawayTimeoutProbeSql(source,schema);
+  assert.equal(scanSql(probe.prefix).length,3);
+  assert.equal(probe.trigger.replace(` on ${schema}.quality_inspections `,' on warehouse.quality_inspections '), scanSql(source).find(sql => sql.startsWith('create trigger stock_conversion_00_qc_watch ')));
+  for (const entry of [
+    ['external database','postgresql://postgres:unused@example.invalid:54322/postgres'],
+    ['different local database','postgresql://postgres:unused@127.0.0.1:54322/existing'],
+    ['different local port','postgresql://postgres:unused@127.0.0.1:5432/postgres'],
+    ['connection override','postgresql://postgres:unused@127.0.0.1:54322/postgres?host=example.invalid'],
+  ]) await t.test(entry[0], () => assert.rejects(verifyPutawayMigrationTimeouts(entry[1])));
+  for (const [name, mutate] of [
+    ['missing local limits',sql => sql.replace(/select pg_catalog\.set_config\('lock_timeout'[\s\S]*?name='lock_timeout';/,'')],
+    ['session-setting leak',sql => sql.replace("'ms',true)","'ms',false)")],
+    ['changed trigger target',sql => sql.replace('on warehouse.quality_inspections for each row','on warehouse.receipts for each row')],
+  ]) await t.test(name, () => assert.throws(() => putawayTimeoutProbeSql(mutate(source),schema)));
+  await t.test('scratch name is closed', () => assert.throws(() => putawayTimeoutProbeSql(source,'warehouse')));
+  const nativeGate = await readFile(new URL('./verify-learning-concurrency.mjs',import.meta.url),'utf8');
+  assert.match(nativeGate,/await verifyPutawayMigrationTimeouts\(connectionString\);/);
+});
+
+test('putaway migration timeout caps precede DDL and preserve stricter session limits', async t => {
+  const statements = scanSql(await migration(fixName));
+  assert.equal(statements[0].toLowerCase(), 'begin');
+  for (const [index, setting] of ['lock_timeout', 'statement_timeout'].entries()) {
+    assert.match(statements[index + 1], new RegExp(`^select pg_catalog\\.set_config\\(\\s*'${setting}'`, 'i'));
+    assert.match(statements[index + 1], /true\s*\)\s*from pg_catalog\.pg_settings/i);
+  }
+  assert.match(statements[3], /^do\b/i);
+  const db = new PGlite();
+  const settings = async () => (await db.query("select name,setting::int value from pg_settings where name in ('lock_timeout','statement_timeout') order by name")).rows.map(row => row.value);
+  try {
+    for (const entry of [
+      { name:'zero is unbounded', session:['0','0'], expected:[5000,60000] },
+      { name:'stricter limits retained', session:['120ms','250ms'], expected:[120,250] },
+      { name:'larger limits capped', session:['2min','3min'], expected:[5000,60000] },
+      { name:'independent lock limit', session:['90ms','0'], expected:[90,60000] },
+      { name:'independent statement limit', session:['0','400ms'], expected:[5000,400] },
+      { name:'equal limits retained', session:['5s','60s'], expected:[5000,60000] },
+    ]) {
+      await t.test(entry.name, async () => {
+        for (const [index, name] of ['lock_timeout','statement_timeout'].entries()) {
+          await db.query('select set_config($1,$2,false)', [name,entry.session[index]]);
+        }
+        const before = await settings();
+        for (const end of ['rollback','commit']) {
+          await db.exec(`${statements.slice(0,3).join(';')};`);
+          assert.deepEqual(await settings(), entry.expected);
+          await db.exec(end);
+          assert.deepEqual(await settings(), before, `${end} restores caller settings`);
+        }
+      });
+    }
+  } finally { await db.close(); }
+});
 const operator = '11111111-1111-4111-8111-111111111111';
 const quality = '22222222-2222-4222-8222-222222222222';
 const owner = '33333333-3333-4333-8333-333333333333';

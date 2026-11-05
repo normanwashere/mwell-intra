@@ -35,7 +35,7 @@ test('disposable replay executes canonical baseline plus all classified forward 
     const bridgeMigration = '20261105195433_stock_conversion_qc_putaway_bridge.sql';
     assert.deepEqual(manifest.sources.find(file => file.file === bridgeMigration), {
       file: bridgeMigration,
-      sha256: 'cbe9d3eac2522c750bf8dc79e3ec35f3b142fc123d59481e114302cb935d1aaf',
+      sha256: '83d84623c9b11e0ab1659ab42f75de4cd9fe18a943af405d7517b76ff2c746df',
       action: 'execute-forward',
     });
     assert.equal(files.find(file => file.file === bridgeMigration)?.output, bridgeMigration);

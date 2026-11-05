@@ -2,6 +2,15 @@
 -- No backfill, Quality decision rewrite, transfer wrapper replacement or grants.
 begin;
 
+-- Bound each lock wait and statement, not the total transaction. Zero is
+-- unbounded; retain stricter caller limits and restore them at transaction end.
+select pg_catalog.set_config('lock_timeout',
+  (case when setting::bigint=0 then 5000 else least(setting::bigint,5000) end)::text || 'ms',true)
+from pg_catalog.pg_settings where name='lock_timeout';
+select pg_catalog.set_config('statement_timeout',
+  (case when setting::bigint=0 then 60000 else least(setting::bigint,60000) end)::text || 'ms',true)
+from pg_catalog.pg_settings where name='statement_timeout';
+
 do $$
 declare spec record;
 begin

@@ -41,6 +41,18 @@ test('the formerly unpinned assigned-role exception rejects role escalation', ()
     /pinned learning migration checksum drifted.*20260816203000/i);
 });
 
+test('G02 closed contract rejects removal, widening or leakage of migration timeouts', () => {
+  const name='20261105195433_stock_conversion_qc_putaway_bridge.sql';
+  for (const change of [
+    sql=>sql.replace(/select pg_catalog\.set_config\('lock_timeout'[\s\S]*?name='lock_timeout';/,''),
+    sql=>sql.replace("'ms',true)","'ms',false)"),
+    sql=>sql.replace('least(setting::bigint,5000)','greatest(setting::bigint,5000)'),
+    sql=>sql.replace('then 5000','then 0'),
+    sql=>sql.replace('then 60000','then 0'),
+    sql=>sql.replace('least(setting::bigint,60000)','60000'),
+  ]) assert.match(messages(mutate(name,change)), /reviewed forward.*(?:authority|digest|count|order)/i);
+});
+
 test('every historical parser exception rejects appended privilege escalation', () => {
   for (const name of INDEPENDENTLY_VERIFIED_CROSS_MODULE_MIGRATIONS) {
     const errors = verifyLearningSchema(mutate(name, sql => `${sql}\ngrant service_role to authenticated;`));

@@ -202,6 +202,10 @@ test("Insights respects unified leadership, manager, and executive scopes", asyn
 }, testInfo) => {
   await installSession(page, sessions.analyst);
   await page.goto("/insights");
+  // Preserve space for non-overlay scrollbars at the tablet layout boundary.
+  if (page.viewportSize()?.width === 768) {
+    await page.addStyleTag({ content: 'html { scrollbar-gutter: stable; }' });
+  }
   const mobile = testInfo.project.name.startsWith("mobile");
   if (mobile) {
     await expect(page.getByRole("combobox", { name: "Insight view" })).toBeVisible();

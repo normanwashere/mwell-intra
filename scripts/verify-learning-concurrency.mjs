@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { verifyPutawayMigrationTimeouts } from './verify-stock-conversion-putaway.postgres.mjs';
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -627,6 +628,7 @@ async function run() {
       await Promise.allSettled(clients.map((client) => client.end()));
     }
   }
+  await verifyPutawayMigrationTimeouts(connectionString);
 }
 
 if (

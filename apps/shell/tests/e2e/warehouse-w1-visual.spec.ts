@@ -25,6 +25,10 @@ async function auditRoute(
 ) {
   await installWarehouseSession(page, role, theme);
   await page.goto(route, { waitUntil: 'networkidle' });
+  // The payment table must also fit tablets with non-overlay scrollbars.
+  if (route === '/finance' && page.viewportSize()?.width === 768) {
+    await page.addStyleTag({ content: 'html { scrollbar-gutter: stable; }' });
+  }
   await expect(page).toHaveURL(url => url.pathname.replace(/\/$/, '') === route.replace(/\/$/, ''));
   if (route === '/warehouse/fulfillment') {
     await expect(page).toHaveURL(url => url.searchParams.get('tab') === 'orders');
