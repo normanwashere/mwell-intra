@@ -166,6 +166,7 @@ jobs:
   test:
     name: Test + coverage (node ${{ matrix.node }})
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -183,6 +184,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install Chromium for coverage browser contracts
+        timeout-minutes: 10
         run: pnpm --filter @intra/shell exec playwright install --with-deps chromium
 
       # The exact coverage provider is committed at the workspace root and

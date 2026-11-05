@@ -131,11 +131,12 @@ export async function seedFixture(client) {
           id, requirement_id, audience, requirement_kind, governance_owner,
           version, status, title, estimated_minutes, effective_at,
           change_reason, materiality, owner_id, reviewer_id, approved_at,
-          published_at, created_at
+          published_at, created_at, simulation_id, pass_rules
         ) values (
           $1, $2, 'internal', 'orientation', 'platform', 1, 'published',
           'Learning CI orientation', 1, '2020-01-04', 'CI verification',
-          'material', $3, $4, '2020-01-02', '2020-01-03', '2020-01-01'
+          'material', $3, $4, '2020-01-02', '2020-01-03', '2020-01-01',
+          'learning-ci-orientation-v1', '{"required_checkpoints":["complete"]}'::jsonb
         )
       `,
       [IDS.requirementVersion, IDS.requirement, IDS.owner, IDS.reviewer],

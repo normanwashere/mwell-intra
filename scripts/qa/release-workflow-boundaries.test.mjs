@@ -79,6 +79,17 @@ test('CI covers current checkout branch without invoking live business certifica
   assert.doesNotMatch(JSON.stringify(ci), /secrets\.|SUPABASE_SERVICE_ROLE_KEY|UAT_AUDIT|SMTP/);
 });
 
+test('coverage browser installation is bounded without skipping tests or weakening release gates', () => {
+  const ci = workflow('ci');
+  assert.equal(ci.jobs.test['timeout-minutes'], 30);
+  const install = ci.jobs.test.steps.find(step => step.name === 'Install Chromium for coverage browser contracts');
+  assert.equal(install['timeout-minutes'], 10);
+  assert.equal(install['continue-on-error'], undefined);
+  assert.equal(install.run, 'pnpm --filter @intra/shell exec playwright install --with-deps chromium');
+  assert.ok(ci.jobs.test.steps.some(step => step.name === 'Run tests with coverage'));
+  assert.ok(ci.jobs.e2e.needs.includes('test'));
+});
+
 test('job env contexts reject valid-YAML runner expressions before runner allocation', () => {
   for (const name of ['ci', 'deploy-vercel', 'uat-live-certification']) assertJobEnvContexts(workflow(name));
   for (const expression of ['runner.temp', "runner['temp']", 'toJSON(runner)', 'steps.init.outputs.path', 'env.PATH', 'job.status']) {
