@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -10,6 +11,26 @@ import { marked } from 'marked';
 const require = createRequire(new URL('../../apps/shell/package.json', import.meta.url));
 const yaml = createRequire(require.resolve('eslint'))('js-yaml');
 const workflow = name => yaml.load(readFileSync(new URL(`../../.github/workflows/${name}.yml`, import.meta.url), 'utf8'));
+
+// GitHub's context-availability table excludes runner/steps/env/job here,
+// even though these expressions are syntactically valid YAML.
+function assertJobEnvContexts(document) {
+  const allowed = new Set(['github', 'needs', 'strategy', 'matrix', 'vars', 'secrets', 'inputs']);
+  for (const [id, job] of Object.entries(document.jobs)) {
+    for (const [key, value] of Object.entries(job.env ?? {})) {
+      for (const [, expression] of String(value).matchAll(/\$\{\{([\s\S]*?)\}\}/g)) {
+        const tokens = expression.replace(/'(?:''|[^'])*'/g, "''")
+          .match(/[A-Za-z_][A-Za-z0-9_-]*|[^\s]/g) ?? [];
+        for (let index = 0; index < tokens.length; index++) {
+          const token = tokens[index];
+          if (!/^[A-Za-z_]/.test(token) || tokens[index - 1] === '.' || tokens[index + 1] === '(' ||
+              ['true', 'false', 'null'].includes(token)) continue;
+          assert.ok(allowed.has(token), `jobs.${id}.env.${key}: unavailable context ${token}`);
+        }
+      }
+    }
+  }
+}
 const sha = 'a'.repeat(40);
 const repository = 'example/intra';
 const requiredJobs = [
@@ -56,6 +77,17 @@ test('CI covers current checkout branch without invoking live business certifica
   assert.ok(Object.hasOwn(ci.on, 'workflow_dispatch'));
   assert.doesNotMatch(JSON.stringify(ci), /provision:test:uat|certify:onboarding-live|cleanup-uat-live-run|test:intra-live/);
   assert.doesNotMatch(JSON.stringify(ci), /secrets\.|SUPABASE_SERVICE_ROLE_KEY|UAT_AUDIT|SMTP/);
+});
+
+test('job env contexts reject valid-YAML runner expressions before runner allocation', () => {
+  for (const name of ['ci', 'deploy-vercel', 'uat-live-certification']) assertJobEnvContexts(workflow(name));
+  for (const expression of ['runner.temp', "runner['temp']", 'toJSON(runner)', 'steps.init.outputs.path', 'env.PATH', 'job.status']) {
+    const mutated = workflow('ci');
+    mutated.jobs['learning-applied-postgres'].env.SUPABASE_WORKDIR = '${{ ' + expression + ' }}';
+    assert.throws(() => assertJobEnvContexts(mutated), /unavailable context/);
+  }
+  assertJobEnvContexts({ jobs: { example: { env: { VALUE:
+    "${{ format('{0}/{1}', github.run_id, needs.prepare.outputs.path) }}-${{ matrix.node }}-${{ vars.PATH }}-${{ inputs.path }}-${{ secrets.KEY }}-${{ strategy.job-index }}" } } } });
 });
 
 test('deploy required names cover every actual CI job and matrix expansion', () => {
@@ -127,17 +159,20 @@ test('serialized transfer and lot-aware putaway SQL regressions are mandatory in
 test('applied PostgreSQL replays all migrations with isolated empty prerequisites and no bypass', () => {
   const job = workflow('ci').jobs['learning-applied-postgres'];
   const steps = job.steps;
+  const initialize = steps.findIndex(step => step.name === 'Initialize isolated PostgreSQL workdir');
   const prepare = steps.findIndex(step => step.name === 'Verify and prepare isolated legacy prerequisites');
   const start = steps.findIndex(step => step.name === 'Start disposable local PostgreSQL');
   const reset = steps.findIndex(step => step.name === 'Replay complete history over empty legacy prerequisites');
   const authority = steps.findIndex(step => step.name === 'Verify applied learning authority');
-  assert.ok(prepare >= 0 && prepare < start && start < reset && reset < authority);
-  assert.match(job.env.SUPABASE_WORKDIR, /runner.temp/);
+  assert.ok(initialize >= 0 && initialize < prepare && prepare < start && start < reset && reset < authority);
+  assert.equal(job.env.SUPABASE_WORKDIR, undefined);
+  assert.match(steps[initialize].run, /\$RUNNER_TEMP\/mwell-learning-\$GITHUB_RUN_ID-\$GITHUB_RUN_ATTEMPT/);
+  assert.match(steps[initialize].run, />> "\$GITHUB_ENV"/);
   assert.equal(job.env.MWELL_LOCAL_DATABASE_URL, 'postgresql://postgres:postgres@127.0.0.1:54322/postgres');
   assert.match(steps[prepare].run, /node --test scripts\/qa\/prepare-learning-postgres.test.mjs/);
   assert.match(steps[prepare].run, /node scripts\/qa\/prepare-learning-postgres.mjs --output "\$SUPABASE_WORKDIR"/);
   assert.match(steps[reset].run, /db reset --local --no-seed --workdir "\$SUPABASE_WORKDIR"/);
-  for (const index of [prepare, start, reset, authority]) {
+  for (const index of [initialize, prepare, start, reset, authority]) {
     assert.equal(steps[index].if, undefined);
     assert.equal(steps[index]['continue-on-error'], undefined);
   }
@@ -147,6 +182,23 @@ test('applied PostgreSQL replays all migrations with isolated empty prerequisite
   }
   assert.equal(steps.find(step => step.name === 'Remove disposable local PostgreSQL').if, 'always()');
   assert.ok(workflow('ci').jobs.e2e.needs.includes('learning-applied-postgres'));
+});
+
+test('PostgreSQL cleanup is inert before initialization or config creation and stops only its owned project', () => {
+  const job = workflow('ci').jobs['learning-applied-postgres'];
+  const cleanup = job.steps.find(step => step.name === 'Remove disposable local PostgreSQL');
+  const bash = process.platform === 'win32' ? 'C:/Program Files/Git/bin/bash.exe' : 'bash';
+  const run = prefix => {
+    const result = spawnSync(bash, ['--noprofile', '--norc', '-e', '-u', '-c',
+      `pnpm() { printf 'CALLED'; printf '<%s>' "$@"; }\n${prefix}\n${cleanup.run}`], { encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr || result.error?.message);
+    return result.stdout;
+  };
+  assert.equal(run('unset SUPABASE_WORKDIR'), '');
+  assert.equal(run('SUPABASE_WORKDIR=""'), '');
+  assert.equal(run('SUPABASE_WORKDIR="/nonexistent-qa4-workdir"'), '');
+  const output = run('owned=$(mktemp -d)\ntrap \'rm -- "$owned/supabase/config.toml"; rmdir -- "$owned/supabase" "$owned"\' EXIT\nmkdir "$owned/supabase"\ntouch "$owned/supabase/config.toml"\nSUPABASE_WORKDIR="$owned"');
+  assert.match(output, /^CALLED<exec><supabase><stop><--no-backup><--workdir><\/.*>$/);
 });
 
 test('coverage bounds workspace and Vitest concurrency without weakening tests or coverage', () => {
