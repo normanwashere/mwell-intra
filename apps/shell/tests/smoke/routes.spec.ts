@@ -495,6 +495,28 @@ test('styled native choices retain visible labels and reachable touch targets', 
   await expect(assertControlsAreReachable(page, 'hidden-choice-label', testInfo)).rejects.toThrow(/hidden\/transparent ancestor/);
 });
 
+test('reachability samples overlap between fixed chrome and retain real obstruction failures', async ({ page }, testInfo) => {
+  await page.setContent(`<meta name="viewport" content="width=device-width, initial-scale=1"><style>
+    body { margin: 0; min-height: 1700px; }
+    header, footer { position: fixed; inset-inline: 0; height: 150px; background: white; z-index: 2; }
+    header { top: 0; } footer { bottom: 0; }
+    button { position: absolute; top: calc(100vh - 130px); width: 140px; height: 48px; }
+  </style><header></header><button>Reachable guide</button><footer></footer>`);
+  await assertControlsAreReachable(page, 'between-scroll-samples', testInfo);
+  await page.getByRole('button', { name: 'Reachable guide' }).click();
+  await page.setContent(`<meta name="viewport" content="width=device-width, initial-scale=1"><button style="width:140px;height:48px">Covered guide</button>
+    <div style="position:fixed;inset:0;z-index:2;background:white"></div>`);
+  await expect(assertControlsAreReachable(page, 'persistent-overlay', testInfo)).rejects.toThrow(/intercepted/);
+});
+
+test('reachability allows subpixel arithmetic only, not undersized controls', async ({ page }, testInfo) => {
+  const minimum = testInfo.project.name.includes('mobile') ? 44 : 32;
+  await page.setContent(`<meta name="viewport" content="width=device-width, initial-scale=1"><button style="width:150px;height:${minimum}px;border:0;padding:0;transform:scaleY(0.99999)">Exact target</button>`);
+  await assertControlsAreReachable(page, 'subpixel-target', testInfo);
+  await page.locator('button').evaluate((element, height) => { element.style.height = `${height}px`; }, minimum - 1);
+  await expect(assertControlsAreReachable(page, 'undersized-target', testInfo)).rejects.toThrow(/controls below/);
+});
+
 async function assertControlsAreReachable(
   page: Page,
   path: string,
@@ -522,7 +544,8 @@ async function assertControlsAreReachable(
     },
     { selector: scrollRegionSelector, useRegion: useScrollRegion },
   );
-  const step = Math.max(1, Math.floor(viewportHeight * 0.75));
+  // Overlap enough to inspect controls between the fixed header and bottom nav.
+  const step = Math.max(1, Math.floor(viewportHeight * 0.5));
   const maxY = Math.max(0, scrollHeight - viewportHeight);
   const samples = Array.from(
     new Set([
@@ -577,7 +600,7 @@ async function assertControlsAreReachable(
                     const inputBounds = element.getBoundingClientRect();
                     return Boolean(label.textContent?.trim()) && labelStyle.display !== 'none' &&
                       labelStyle.visibility !== 'hidden' && Number(labelStyle.opacity) > 0 &&
-                      bounds.width >= minSize && bounds.height >= minSize &&
+                      bounds.width + 0.001 >= minSize && bounds.height + 0.001 >= minSize &&
                       inputBounds.left >= bounds.left - 1 && inputBounds.right <= bounds.right + 1 &&
                       inputBounds.top >= bounds.top - 1 && inputBounds.bottom <= bounds.bottom + 1;
                   });
@@ -656,7 +679,7 @@ async function assertControlsAreReachable(
           const smallTargets = visibleElements
             .filter((element) => {
               const rect = element.getBoundingClientRect();
-              return rect.width < minSize || rect.height < minSize;
+              return rect.width + 0.001 < minSize || rect.height + 0.001 < minSize;
             })
             .map(describe)
             .slice(0, 12);

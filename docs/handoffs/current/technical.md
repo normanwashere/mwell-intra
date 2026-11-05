@@ -13,6 +13,8 @@ Use the [current release manifest](release-status.json) for observed UAT identit
 
 ## Release Evidence Still Required
 
+See the [November 6 readiness update](../../releases/2026-11-06-RELEASE-READINESS.md) for the proposed Quality-to-putaway conversion bridge. It is not recorded as applied. Required CI now includes its SQL/repository regression suite as well as native full migration replay; neither substitutes for the isolated live conversion journey.
+
 Retain a clean frozen install, actual aligned coverage execution, same-SHA hosted checks, failed-check/wrong-SHA promotion-denial tests, actual UAT identity and scoped non-SMTP browser/transaction results. Source-level assertions do not replace effective authorization or live behavior. Keep local, hosted, deployment, human and physical-device results separate.
 
 Preserve existing business workflows, approvals, learning, stock, tester records and active policies. Use isolated owned fixtures for authorized writes, record before/after readbacks and any retained residuals, and never reset shared UAT to manufacture success. Do not purge queued commands while testing response-cache privacy.

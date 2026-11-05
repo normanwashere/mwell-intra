@@ -36,7 +36,7 @@ async function expectAccessibleGuide(page: Page) {
         document.documentElement.clientWidth,
       undersizedTargets: targets.flatMap((element) => {
         const rect = element.getBoundingClientRect();
-        return rect.width < 44 || rect.height < 44
+        return rect.width + 0.001 < 44 || rect.height + 0.001 < 44
           ? [
               {
                 label: element.textContent?.trim() ?? "",

@@ -4,6 +4,8 @@ Use the [current release manifest](release-status.json) and confirm its deployed
 
 Scoped `0b7964e` evidence is retained separately, including the two-component bundle and 258-row export. For the follow-up client, check export loading, access-denied and failed-report explanations without widening permissions. Check allocation return remaining after a sale/giveaway and prior return, failed/zero balance, exact serials and holds; the workflow and Quality/settlement approvals are unchanged.
 
+The [November 6 readiness update](../../releases/2026-11-06-RELEASE-READINESS.md) is preparation guidance, not a test-window announcement. The coordinator must identify the deployed candidate and approved fresh fixtures first. Record each variant independently; missing access, data or evidence is Blocked, not Pass.
+
 Open or refresh the app while online so the updated worker can activate and purge old private CacheStorage. Do not clear all browser storage or uninstall the PWA: queued work must survive under its original account. An old offline-only client cannot receive the update, so no retroactive offline purge is claimed.
 
 | Area / finding | Required acceptance evidence |

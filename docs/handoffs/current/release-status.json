@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "authority": "current-release",
-  "asOf": "2026-11-05",
+  "asOf": "2026-11-06",
   "timezone": "Asia/Singapore",
-  "summary": "UAT serves 0b7964e with scoped live evidence and a failed hosted CI run. Follow-up application changes are not deployed; final candidate, CI, retests and documentation publication remain pending.",
+  "summary": "UAT still serves 0b7964e. Source b2886fb passed eight required CI checks but all three browser groups failed; follow-up source fixes remain local. Final candidate, successful CI, deployment and same-version live retests are pending.",
   "deployed": {
     "commit": "0b7964e5650e6908fdf861a081bc1fe27716c014",
     "environment": "uat",
@@ -24,8 +24,9 @@
     "deploymentId": null,
     "deployedAt": null,
     "evidence": [],
-    "latestPushedSourceCommit": "3d7fd838a73db26398e43219e029394e9d119246",
-    "scope": "3d7fd83 is not deployed and later source repairs await a final candidate SHA. Main must supply actual deployment and same-candidate evidence; neither a source hash nor an applied DB migration identifies a new app deployment."
+    "latestPushedSourceCommit": "b2886fb152761df47f5ef7c43c873a0a9381d51a",
+    "hostedCi": { "runId": "42094667424", "status": "failed", "passedChecks": 8, "requiredChecks": 11, "scope": "All three browser groups completed unsuccessfully. One failed browser installation; the others exposed journey/fixture and handbook/mobile test failures. Later local repairs are not a hosted pass." },
+    "scope": "b2886fb is not deployed. Later onboarding, CI and test repairs plus the proposed QC-to-putaway conversion bridge await a final candidate SHA and independent review. Neither local tests nor a source hash identifies a new app deployment."
   },
   "documentation": {
     "commit": null,
