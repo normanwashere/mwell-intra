@@ -1364,7 +1364,7 @@ html[data-theme="dark"] .diagram-shell figcaption {
 
   .article-body thead th {
     position: sticky;
-    top: var(--handbook-header-height);
+    top: 0;
     z-index: 2;
   }
 }

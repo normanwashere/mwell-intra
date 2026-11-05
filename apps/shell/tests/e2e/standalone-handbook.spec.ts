@@ -514,6 +514,72 @@ test('search includes governance System intent without displacing operational an
   }
 });
 
+test('compact search preserves visible mode keyboard focus and query results', async ({ page }) => {
+  const viewport = page.viewportSize();
+  await page.setViewportSize({ width: Math.min(viewport?.width ?? 360, 360), height: viewport?.height ?? 800 });
+  await page.goto('/#mode=tasks&guide=stock-receiving-putaway');
+  await expect(page.locator('article[data-guide-id="stock-receiving-putaway"] h1')).toBeFocused();
+  const searchbox = page.getByRole('searchbox');
+  const contents = page.locator('#contents-rail');
+  await searchbox.fill('stock');
+  await expect(contents).toBeVisible();
+  const resultCount = await page.locator('#search-results [data-search-result]').count();
+  expect(resultCount).toBeGreaterThan(0);
+  await page.locator('#mode-tasks').focus();
+
+  for (const [key, targetId] of [['ArrowRight', 'mode-roles'], ['Home', 'mode-home'], ['End', 'mode-system']]) {
+    await page.keyboard.press(key);
+    const state = await page.evaluate(async (id) => {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      const surface = document.querySelector('#contents-rail')!;
+      const target = document.getElementById(id)!;
+      return {
+        focused: document.activeElement === target,
+        visible: target.getClientRects().length > 0 && getComputedStyle(target).visibility === 'visible',
+        searchSurface: surface.hasAttribute('data-search-surface'),
+        modal: surface.getAttribute('aria-modal'),
+        dialog: surface.getAttribute('role') === 'dialog',
+        drawerOpen: document.body.classList.contains('drawer-open'),
+        inert: document.querySelector('.reading-canvas')!.hasAttribute('inert'),
+        query: (document.querySelector('input[type="search"]') as HTMLInputElement).value,
+        results: document.querySelectorAll('#search-results [data-search-result]').length,
+      };
+    }, targetId);
+    expect(state, `${key} must retain the nonmodal search surface`).toEqual({
+      focused: true, visible: true, searchSurface: true, modal: null, dialog: false,
+      drawerOpen: false, inert: false, query: 'stock', results: resultCount,
+    });
+  }
+
+  await page.keyboard.press('Escape');
+  await expect(contents).toBeHidden();
+  await expect(searchbox).toBeFocused();
+  await expect(searchbox).toHaveValue('stock');
+  await expect(contents).not.toHaveAttribute('aria-modal');
+  await expect(contents).not.toHaveAttribute('role', 'dialog');
+});
+
+test('scrollable handbook table keeps its header above the first body row', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/#mode=roles&guide=operations_associate');
+  const article = page.locator('article[data-guide-id="operations_associate"]');
+  await expect(article.locator('h1')).toBeFocused();
+  const table = article.locator('table').first();
+  await table.scrollIntoViewIfNeeded();
+  const geometry = await table.evaluate((element) => {
+    const header = element.querySelector('thead th')!.getBoundingClientRect();
+    const firstRow = element.querySelector('tbody tr')!.getBoundingClientRect();
+    const bounds = element.getBoundingClientRect();
+    return { headerTop: header.top, headerBottom: header.bottom, firstRowTop: firstRow.top, tableTop: bounds.top, left: bounds.left, right: bounds.right, overflowX: getComputedStyle(element).overflowX };
+  });
+  await page.screenshot({ path: testInfo.outputPath('handbook-table-1440.png') });
+  expect(geometry.headerBottom).toBeLessThanOrEqual(geometry.firstRowTop + 1);
+  expect(geometry.headerTop).toBeLessThanOrEqual(geometry.tableTop + 1);
+  expect(geometry.left).toBeGreaterThanOrEqual(-1);
+  expect(geometry.right).toBeLessThanOrEqual(1441);
+  expect(geometry.overflowX).toMatch(/auto|scroll/);
+});
+
 test('compact search keeps focus coherent across typing restore activation and Escape', async ({ page }, testInfo) => {
   if (!['mobile-430', 'mobile-390', 'mobile-320'].includes(testInfo.project.name)) test.skip();
   await page.goto('/#mode=tasks&guide=stock-receiving-putaway');

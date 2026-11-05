@@ -765,11 +765,11 @@
           event.preventDefault();
           const targetIndex = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (index + keyToOffset[event.key] + tabs.length) % tabs.length;
           const target = tabs[targetIndex];
-          const keepContentsOpen = activeCompactSurface === 'contents';
+          const navigationSurface = ['contents', 'search'].includes(activeCompactSurface) ? activeCompactSurface : null;
           const returnFocus = compactSurfaceReturnFocus;
           activateRoute({ ...activeRoute, modeId: target.dataset.mode, guideId: target.dataset.mode === 'home' ? 'home' : null, headingId: null, historyMode: 'push', restoreScroll: false, focusTarget: false });
-          if (keepContentsOpen) {
-            openCompactSurface('contents', { focusSurface: false });
+          if (navigationSurface) {
+            openCompactSurface(navigationSurface, { focusSurface: false });
             compactSurfaceReturnFocus = returnFocus;
           }
           target.focus();
