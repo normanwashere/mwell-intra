@@ -8,8 +8,9 @@ import { eventCapabilityAllowed } from './capabilities';
 type Allocation = { allocation_id: string; product_id: string; serialized: boolean; issued_units: number; returned_units: number;
   sold_units: number; giveaway_units: number; remaining_units: number; eligible_serials: string[] };
 type Entry = { id: string; kind: string; allocation_id: string; seller_id: string; quantity: number; amount: number;
-  external_reference: string; serial_numbers: string[]; reverses_id?: string; created_at: string };
+  external_reference: string; serial_numbers: string[]; reverses_id?: string; created_at: string; archived_source?: boolean };
 type Ledger = { enabled: boolean; may_configure: boolean; event_status: string; event_name?: string; allocations: Allocation[]; entries: Entry[];
+  archived_allocation_count?: number;
   readiness?: { schema: boolean; capabilities: boolean; learning: boolean; ready: boolean };
   totals: { sold_units: number; giveaway_units: number; gross_sales_amount: number }; next_offset: number | null;
   sellers: Array<{ user_id: string; full_name: string; email: string; valid_until: string; revoked_at: string | null }> };
@@ -43,7 +44,11 @@ export function EventCustodyWorkspace({ eventId, embedded = false }: { eventId?:
     void Promise.resolve(request).then(({ data, error: failure }) => {
       if (cancelled) return;
       if (failure) { setError(userFacingError(failure)); setLedger(null); return; }
-      if (eventId) setLedger(data as unknown as Ledger); else setEvents((data ?? []) as unknown as ScopedEvent[]);
+      if (eventId) {
+        const nextLedger = data as unknown as Ledger;
+        setLedger(nextLedger);
+        setReversal(current => current && (!nextLedger || nextLedger.entries.some(entry => entry.id === current.id && entry.archived_source)) ? null : current);
+      } else setEvents((data ?? []) as unknown as ScopedEvent[]);
     }).catch(cause => { if (!cancelled) setError(userFacingError(cause)); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -109,8 +114,13 @@ export function EventCustodyWorkspace({ eventId, embedded = false }: { eventId?:
           <p>Issued {row.issued_units}; sold {row.sold_units}; giveaways {row.giveaway_units}; returned {row.returned_units}; remaining {row.remaining_units}</p>
         </li>)}</ul>
         {ledger.enabled && !isClosed && ledger.allocations.length === 0 && <div role="status" className="space-y-1 border-l-4 border-brand-500 bg-inset px-4 py-3 text-sm">
-          <p className="font-semibold">No stock is ready to record yet.</p>
-          <p>Warehouse must release the stock and the recipient must acknowledge receipt before it appears here. Ask your event coordinator to check the linked fulfillment order.</p>
+          {(ledger.archived_allocation_count ?? 0) > 0 ? <>
+            <p className="font-semibold">No active allocations.</p>
+            <p>Archived test custody remains in history and cannot record new outcomes.</p>
+          </> : <>
+            <p className="font-semibold">No stock is ready to record yet.</p>
+            <p>Warehouse must release the stock and the recipient must acknowledge receipt before it appears here. Ask your event coordinator to check the linked fulfillment order.</p>
+          </>}
         </div>}
         {!mayRecord && userRoles.events?.includes('seller') && <p role="status" className="text-sm">Seller posting is locked. <a className="underline" href={`/onboarding?requirement=internal.role.events.seller.custody-practice.v1&next=${encodeURIComponent(`/events/${eventId}`)}`}>Open required learning</a></p>}
         {mayRecord && ledger.enabled && !isClosed && <form className="min-w-0 space-y-3" onSubmit={event => {
@@ -137,8 +147,10 @@ export function EventCustodyWorkspace({ eventId, embedded = false }: { eventId?:
           </fieldset>
         </form>}
         <ul className="divide-y divide-line text-sm" aria-label="Event outcome history">{ledger.entries.map(entry => <li key={entry.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
-          <div className="min-w-0"><p className="break-words font-semibold">{entry.external_reference}</p><p>{entry.kind}: {entry.quantity}; PHP {Number(entry.amount).toFixed(2)}</p><p className="break-words text-muted">{entry.serial_numbers.join(', ')}</p></div>
-          {entry.kind !== 'reversal' && entry.seller_id === profile?.id && mayRecord && !isClosed && ledger.enabled && <button type="button" className="btn-ghost" disabled={saving} onClick={() => { setReversal(entry); setDraft(current => ({ ...current, external_reference: '', reason: '' })); }}><Icon name="rotate" className="h-4 w-4" /> Reverse</button>}
+          <div className="min-w-0"><p className="break-words font-semibold">{entry.external_reference}</p><p>{entry.kind}: {entry.quantity}; PHP {Number(entry.amount).toFixed(2)}</p><p className="break-words text-muted">{entry.serial_numbers.join(', ')}</p>
+            {entry.archived_source && <p className="text-muted">Archived test custody</p>}
+          </div>
+          {!entry.archived_source && entry.kind !== 'reversal' && entry.seller_id === profile?.id && mayRecord && !isClosed && ledger.enabled && <button type="button" className="btn-ghost" disabled={saving} onClick={() => { setReversal(entry); setDraft(current => ({ ...current, external_reference: '', reason: '' })); }}><Icon name="rotate" className="h-4 w-4" /> Reverse</button>}
         </li>)}</ul>
         <nav className="flex gap-2" aria-label="Ledger pages">
           {offset > 0 && <button className="btn-outline" disabled={loading || saving} onClick={() => setOffset(Math.max(0, offset - 100))}>Previous</button>}
