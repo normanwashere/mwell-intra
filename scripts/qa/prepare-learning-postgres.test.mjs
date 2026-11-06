@@ -29,9 +29,9 @@ test('disposable replay executes canonical baseline plus all classified forward 
     const result = prepareLearningPostgres({ root, temporaryRoot, destination });
     const { files, manifest } = validateReplayInventory(root);
     assert.equal(result.baselineCount, 22);
-    assert.equal(result.migrationCount, 232);
+    assert.equal(result.migrationCount, 233);
     assert.equal(result.preservedCount, 35);
-    assert.equal(manifest.sources.length, 267);
+    assert.equal(manifest.sources.length, 268);
     const bridgeMigration = '20261105233321_stock_conversion_qc_putaway_bridge.sql';
     assert.deepEqual(manifest.sources.find(file => file.file === bridgeMigration), {
       file: bridgeMigration,
@@ -39,13 +39,20 @@ test('disposable replay executes canonical baseline plus all classified forward 
       action: 'execute-forward',
     });
     assert.equal(files.find(file => file.file === bridgeMigration)?.output, bridgeMigration);
+    const actorMigration = '20261106012547_stock_conversion_putaway_authoritative_actor.sql';
+    assert.deepEqual(manifest.sources.find(file => file.file === actorMigration), {
+      file: actorMigration,
+      sha256: 'fcede47f4671ab241d9e0a04face6d626aabb559fe8e72e830d6165342339306',
+      action: 'execute-forward',
+    });
+    assert.equal(files.find(file => file.file === actorMigration)?.output, actorMigration);
     assert.deepEqual(readdirSync(path.join(destination, 'supabase')).sort(), ['config.toml', 'migrations']);
     assert.deepEqual(readdirSync(path.join(destination, 'supabase/migrations')).sort(), files.filter(file => file.output).map(file => file.output));
     for (const file of files.filter(file => file.output)) assert.deepEqual(
       readFileSync(path.join(destination, 'supabase/migrations', file.output)), file.bytes, file.file);
     const audit = JSON.parse(readFileSync(path.join(destination, 'replay-audit.json')));
     assert.match(audit.scope, /not exact applied-history replay/);
-    assert.equal(audit.files.length, 289);
+    assert.equal(audit.files.length, 290);
     assert.equal(audit.files.filter(file => !file.output && file.reason && file.sha256).length, 35);
     assert.throws(() => prepareLearningPostgres({ root, temporaryRoot, destination }), /already exists/);
     assert.throws(() => prepareLearningPostgres({ root, temporaryRoot, destination: root }), /outside.*temporary/i);

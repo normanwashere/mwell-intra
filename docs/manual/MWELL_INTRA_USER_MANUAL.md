@@ -1,6 +1,6 @@
 # Mwell Intra Standalone Operating Handbook
 
-**Current release authority:** Read the [current release manifest](../handoffs/current/release-status.json) and [Data, Technical and Tester handoff](../handoffs/current/README.md). Observed UAT application `0b7964e` is separate from the next candidate, applied database migrations and this documentation revision. The September handoff snapshot and dated checks below remain historical. **Pending deployment and retest:** the follow-up application changes, including the export-disabled explanation and sale-aware allocation display, are not yet deployed; scoped earlier results do not certify the next build. SMTP is unchanged. The [Reporting API remains disabled in a separate implementation phase](../integrations/reporting-api/SEPARATE-IMPLEMENTATION-PHASE.md).
+**Current release authority:** Read the [current release manifest](../handoffs/current/release-status.json) and [Data, Technical and Tester handoff](../handoffs/current/README.md). UAT now serves `dd9048e405bf84c2b7b0d6647309d1a8747c9378`, READY deployment `dpl_tghauqxhngHM6opHbBdyriMNyNGV`, verified at `2026-11-06T00:34:37.828Z`. All11 same-SHA CI jobs passed, with one mobile Procurement retry-pass still disclosed. Privacy, guarded return-balance and Product/export-screen checks passed within their recorded scope; no blanket workflow or human acceptance is implied. G02 is BLOCKED by missing first-putaway bridge; conversion was not run; G01 is blocked by Auth administration. This documentation revision is not yet published. September and other dated checks remain historical. SMTP is unchanged. The [Reporting API remains disabled in a separate implementation phase](../integrations/reporting-api/SEPARATE-IMPLEMENTATION-PHASE.md).
 
 **Four-QA operating guidance:**
 
@@ -15,7 +15,7 @@
 - **Accessible status:** Product workflow regions identify their record, version and product so assistive navigation can distinguish them. Their labels do not approve a package or complete Operations handoff.
 - **API access:** Anonymous protected API requests return JSON 401 with private/no-store rather than a sign-in redirect; signed-in capability denials remain 403. Page navigation still uses sign-in. This is the app's denial contract, not a new Reporting API.
 
-These instructions are not a blanket completion claim. The [current tester checklist](../handoffs/current/testers.md) retains per-finding acceptance and the outstanding cross-module journeys; the manifest distinguishes scoped `0b7964e` results from follow-up work. Preserve existing records, training, approvals, Quality independence and both Procurement-PO and emailed-PO receiving paths.
+For your test session, get assigned case letters, exact fresh records and the expected stock result from the coordinator. Work with the named independent Lead/Quality partner, refresh the same record and record your observations. Missing access or data means Blocked; an uncertain save means stop and ask, not retry. The [current tester checklist](../handoffs/current/testers.md) keeps all90 human rows PENDING and assigns the520-cell technical recovery protocol to Engineering QA. The guarded return retest blocked normal Learning synchronization and made no return; the Product/export checks made no export. Preserve existing records, training, approvals, Quality independence and both Procurement-PO and emailed-PO receiving paths. See the [November6 release/evidence trace](../releases/2026-11-06-RELEASE-READINESS.md).
 
 ## Receiving Follow-Up: October 20
 
@@ -30,6 +30,8 @@ The two source paths retain their existing bin behavior. An emailed arrival's cu
 ## October 19 Transition Update
 
 **External PO receiving** at `/warehouse/external-receiving` records the PO and documents emailed by Procurement. This is transitional coexistence: Procurement is not removed or replaced, and existing in-app Procurement-issued PO receiving remains available. Deployment and verification are tracked in the release record; this procedure does not establish live or certified status, and earlier release verification does not certify this update. Required training, current permissions and independent review remain unchanged. This documentation does not grant access or record training completion. SMTP is unchanged.
+
+Use the correct evidence input: the PO document may be a PDF, but shipment evidence accepts images, not PDF. For assigned synthetic testing, obtain a separate marked test image for the arrival; uploading the PO PDF does not supply shipment evidence.
 
 The dated release notes below describe their own historical checks. They are not the current deployment identity or a new certification of this transition. For the October rollout and remaining limits, see the [Warehouse transition release record](../releases/2026-10-20-WAREHOUSE-TRANSITION.md).
 

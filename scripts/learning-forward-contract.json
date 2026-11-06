@@ -11912,5 +11912,38 @@
         "effect": "commit"
       }
     ]
+  },
+  {
+    "name": "20261106012547_stock_conversion_putaway_authoritative_actor.sql",
+    "statements": [
+      {
+        "kind": "begin",
+        "sha256": "e6f07d43b5c21db0fbb9a31feac2dc599787763393dd5acbfad80e247eb02ad5",
+        "effect": "begin"
+      },
+      {
+        "kind": "select",
+        "sha256": "b7ffabc7ad84111fd3f99f0528d6cff6c05b1a28bdb02b4d44f79b25501c415e",
+        "effect": "select pg_catalog.set_config('lock_timeout', (case when setting::bigint=0 then 5000 else least(setting::bigint,5000) end)::text || 'ms',true) from pg_catalog.pg"
+      },
+      {
+        "kind": "select",
+        "sha256": "734d70dd79623fc8ac3f6d8331d96b48435c4aad999b3a7cad85784a77bed46f",
+        "effect": "select pg_catalog.set_config('statement_timeout', (case when setting::bigint=0 then 60000 else least(setting::bigint,60000) end)::text || 'ms',true) from pg_cat"
+      },
+      {
+        "kind": "dynamic-program",
+        "sha256": "8d1d8f1e611254ead2a369a2902a8ae92b1392959dedd1b6bd034dec3230f4cc",
+        "effect": [
+          "private.stock_conversion_capture_putaway",
+          "warehouse.authoritative_actor"
+        ]
+      },
+      {
+        "kind": "commit",
+        "sha256": "9505cacb7c710ed17125fcc6cb3669e8ddca6c8cd8af6a31f6b3cd64604c3098",
+        "effect": "commit"
+      }
+    ]
   }
 ]

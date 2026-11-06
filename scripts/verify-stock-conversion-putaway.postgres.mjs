@@ -2,10 +2,81 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 import { assertDisposableLocalDatabaseUrl } from './verify-learning-catalog.mjs';
 import { scanSql } from './verify-learning-schema.mjs';
 
 const migrationUrl = new URL('../supabase/migrations/20261105233321_stock_conversion_qc_putaway_bridge.sql', import.meta.url);
+
+export async function createNativePutawayFixture(connectionString) {
+  assertDisposableLocalDatabaseUrl(connectionString);
+  assert.equal(new URL(connectionString).search, '', 'Connection overrides are not allowed');
+  const { Client } = await import('pg');
+  const admin = new Client({ connectionString, connectionTimeoutMillis:5000 });
+  const name = `qa_g02_actor_${randomUUID().replaceAll('-','')}`;
+  const url = new URL(connectionString);
+  url.pathname = `/${name}`;
+  const client = new Client({ connectionString:url.href, connectionTimeoutMillis:5000 });
+  let created = false;
+  const close = async () => {
+    try {
+      await client.end();
+      if (created) {
+        assert.match(name,/^qa_g02_actor_[a-f0-9]{32}$/);
+        await admin.query(`drop database ${name}`);
+        created = false;
+        assert.equal((await admin.query('select count(*)::int n from pg_database where datname=$1',[name])).rows[0].n,0);
+      }
+    } finally { await admin.end(); }
+  };
+  try {
+    await admin.connect();
+    await admin.query("set statement_timeout='60s'; set lock_timeout='5s'");
+    assert.equal((await admin.query("select count(*)::int n from pg_roles where rolname in ('anon','authenticated','service_role')")).rows[0].n,3);
+    // Separate empty database: no canonical fixture rows, schemas or cluster roles are changed.
+    await admin.query(`create database ${name} template template0`);
+    created = true;
+    await client.connect();
+    await client.query("set statement_timeout='60s'; set lock_timeout='5s'");
+    return { connectionString:url.href, close };
+  } catch (error) { await close(); throw error; }
+}
+
+export async function connectNativePutawayFixture(connectionString) {
+  const url = new URL(connectionString);
+  assert.match(url.pathname,/^\/qa_g02_actor_[a-f0-9]{32}$/);
+  assert.equal(url.search,'','Connection overrides are not allowed');
+  const base = new URL(url);
+  base.pathname = '/postgres';
+  assertDisposableLocalDatabaseUrl(base.href);
+  const { Client } = await import('pg');
+  const client = new Client({ connectionString, connectionTimeoutMillis:5000 });
+  try {
+    await client.connect();
+    await client.query("set statement_timeout='60s'; set lock_timeout='5s'");
+    return { exec:sql=>client.query(sql), query:(sql,values)=>client.query(sql,values), close:()=>client.end() };
+  } catch (error) { await client.end(); throw error; }
+}
+
+async function verifyNativePutawayActor(connectionString) {
+  assertDisposableLocalDatabaseUrl(connectionString);
+  assert.equal(new URL(connectionString).search, '', 'Connection overrides are not allowed');
+  const fixture = await createNativePutawayFixture(connectionString);
+  try {
+  const { stdout, stderr } = await promisify(execFile)(process.execPath,[
+    '--test','--test-concurrency=1','--test-name-pattern=^QC putaway provenance',
+    fileURLToPath(new URL('./verify-stock-conversion-putaway.pglite.test.mjs',import.meta.url)),
+  ],{
+    env:{...process.env,QA_QC_NATIVE_DATABASE_URL:fixture.connectionString,QA_QC_BRIDGE_BASELINE:'0'},
+    timeout:180000,maxBuffer:4*1024*1024,windowsHide:true,
+  });
+  process.stdout.write(stdout);
+  process.stderr.write(stderr);
+  } finally { await fixture.close(); }
+  console.log('Native PostgreSQL putaway actor/RPC provenance fixture passed with actual source helpers and owned-database cleanup.');
+}
 
 export function putawayTimeoutProbeSql(source, schema) {
   assert.match(schema, /^qa_g02_timeout_[a-f0-9]{32}$/);
@@ -105,4 +176,5 @@ export async function verifyPutawayMigrationTimeouts(connectionString) {
     } finally { await Promise.allSettled(clients.map(client => client.end())); }
   }
   console.log('Applied PostgreSQL G02 timeout probe passed (2 actual trigger lock waits, stricter statement cancellation, commit/rollback restoration and owned-schema cleanup).');
+  await verifyNativePutawayActor(connectionString);
 }

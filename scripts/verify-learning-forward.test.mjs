@@ -60,6 +60,18 @@ test('every historical parser exception rejects appended privilege escalation', 
   }
 });
 
+test('G02 actor-only correction rejects claimed identity, weakened pins, metadata loss, timeout leakage and appended writes', () => {
+  const name='20261106012547_stock_conversion_putaway_authoritative_actor.sql';
+  for (const change of [
+    sql=>sql.replace('m.actor is distinct from warehouse.authoritative_actor()',"m.actor is distinct from auth.jwt()->>'email'"),
+    sql=>sql.replace('6b06c2077da5a460353f45e686d96377','0'.repeat(32)),
+    sql=>sql.replace('is distinct from original_metadata','is distinct from null'),
+    sql=>sql.replace("'ms',true)","'ms',false)"),
+    sql=>`${sql}\ngrant execute on function private.stock_conversion_capture_putaway() to authenticated;`,
+    sql=>`${sql}\nupdate warehouse.inventory_units set bin_id=null;`,
+  ]) assert.match(messages(mutate(name,change)), /reviewed forward.*(?:authority|digest|count|order)/i);
+});
+
 test('forward contracts reject missing migrations, unknown additions and statement reordering', () => {
   assert.match(messages(migrations.filter(entry => entry.name !== vendor)), /reviewed forward migration missing.*vendor_certification/i);
   assert.match(messages([...migrations, { name: '20990101000000_foreign_schema_escalation.sql',

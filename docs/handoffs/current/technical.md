@@ -1,6 +1,6 @@
 # Technical Handoff
 
-Use the [current release manifest](release-status.json) for observed UAT identity, candidate identity and acceptance evidence. The [September technical pack](../2026-09-22/technical.md) is historical; CI212 and its source-transfer evidence do not certify this candidate. UAT remains `0b7964e`; follow-up source and applied database versions are separate. No receiving-team acceptance is recorded here.
+Use the [current release manifest](release-status.json) for UAT `dd9048e`, READY deployment identity, all11 same-SHA CI jobs and scoped live evidence. The [September technical pack](../2026-09-22/technical.md) is historical; CI212 does not certify this release. Application, applied database versions and unpublished documentation remain distinct. No receiving-team acceptance is recorded here.
 
 ## Candidate Boundaries
 
@@ -9,11 +9,11 @@ Use the [current release manifest](release-status.json) for observed UAT identit
 - My Work paging follows the database cursor order, including mixed-case legacy IDs; repeated or invalid cursors still fail safely. A source failure is not an empty source and must not erase unrelated authorized data.
 - Picking accepts another valid source bin when no explicit order-bin constraint exists, while preserving warehouse, exact serial, hold, reservation and server command checks. A recommendation is not authority or proof of sufficient current stock.
 - CSV unknowns, Finance period labels and Product workflow-region accessible names follow the appended [pending release addendum](../../releases/2026-11-05-WMS-AUDIT-REMEDIATION.md).
-- Export repair `20261105134446` retains current live capabilities for registration/download and orphan cleanup. The report's new disabled-action explanation does not grant permission. Allocation-balance repair `20261105135318` exposes only allocation identity and quantities through an authenticated, live-capability-gated read; governed event custody uses the existing sale-aware calculation. Quantity display does not replace serial, hold, return or independent-review guards. Both follow-up client changes await deployment and retest.
+- Export repair `20261105134446` retains current live capabilities for registration/download and orphan cleanup. The deployed report explanation was checked without exporting or changing permissions. Allocation-balance repair `20261105135318` exposes only allocation identity and quantities through an authenticated, live-capability-gated read. Deployed remaining0 of issued2 and disabled submission passed a guarded read-only check; normal Learning synchronization was blocked. Neither check certifies transaction execution or replaces serial, hold, return or independent-review guards.
 
 ## Release Evidence Still Required
 
-See the [November 6 readiness update](../../releases/2026-11-06-RELEASE-READINESS.md) for the proposed Quality-to-putaway conversion bridge. It is not recorded as applied. Required CI now includes its SQL/repository regression suite as well as native full migration replay; neither substitutes for the isolated live conversion journey.
+See the [November 6 readiness update](../../releases/2026-11-06-RELEASE-READINESS.md) for the Quality-to-putaway bridge applied as `20261105233321`, byte-identical to reviewed SQL SHA256 `83d84623c9b11e0ab1659ab42f75de4cd9fe18a943af405d7517b76ff2c746df`. Independent catalog review matched6 helpers,24 trigger bindings and14 indexes. CI/native/schema verification does not pass G02: normal receipt QC was accepted and first putaway returned200, but Q4 found origin1/bridge0/history2/break0 despite the exact command receipt and movement. Conversion/recovery was not run; root cause is under independent investigation, with no replay or backfill. G01 remains blocked by Auth administration. The mobile320 CI retry-pass remains disclosed; the separately reviewed local test-only settling correction is not deployed-app or new hosted-CI evidence.
 
 Retain a clean frozen install, actual aligned coverage execution, same-SHA hosted checks, failed-check/wrong-SHA promotion-denial tests, actual UAT identity and scoped non-SMTP browser/transaction results. Source-level assertions do not replace effective authorization or live behavior. Keep local, hosted, deployment, human and physical-device results separate.
 

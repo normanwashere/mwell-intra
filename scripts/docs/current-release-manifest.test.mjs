@@ -32,7 +32,7 @@ function links(markdown) {
   return result;
 }
 
-test("current authority records observed deployment separately from an unverified candidate", () => {
+test("current authority separates deployed same-SHA CI from blocked journeys and human acceptance", () => {
   const manifest = JSON.parse(read(manifestFile));
   assert.equal(manifest.authority, "current-release");
   assert.equal(manifest.deployed.environment, "uat");
@@ -46,7 +46,43 @@ test("current authority records observed deployment separately from an unverifie
   assert.equal(manifest.documentation.basedOnDeployedAppCommit, manifest.deployed.commit);
   assert.equal(manifest.documentation.commit, null);
   assert.equal(manifest.documentation.status, "pending-publication");
-  assert.notEqual(manifest.candidate.latestPushedSourceCommit, manifest.deployed.commit);
+  assert.equal(manifest.deployed.commit, "dd9048e405bf84c2b7b0d6647309d1a8747c9378");
+  assert.equal(manifest.deployed.deploymentId, "dpl_tghauqxhngHM6opHbBdyriMNyNGV");
+  assert.equal(manifest.deployed.readyState, "READY");
+  assert.equal(manifest.deployed.aliasVerified, true);
+  assert.equal(manifest.candidate.certifiedSourceCommit, manifest.deployed.commit);
+  assert.equal(manifest.candidate.latestPushedSourceCommit, "940089557c3c5e698817e1eb96288ebd6a107fd9");
+  assert.equal(manifest.sourceFollowUps.testOnlyReachability.commit, manifest.candidate.latestPushedSourceCommit);
+  assert.equal(manifest.sourceFollowUps.testOnlyReachability.status, "pushed");
+  assert.equal(manifest.sourceFollowUps.testOnlyReachability.deployed, false);
+  assert.deepEqual(manifest.sourceFollowUps.testOnlyReachability.hostedCi, { status: "in_progress", runId: "42141617943", conclusion: null, passedChecks: 8, requiredChecks: 11, runningChecks: 3 });
+  assert.equal(manifest.sourceFollowUps.prospectiveG02DatabaseFix.commit, null);
+  assert.equal(manifest.sourceFollowUps.prospectiveG02DatabaseFix.status, "prepared-pending-ci-and-apply");
+  assert.equal(manifest.sourceFollowUps.prospectiveG02DatabaseFix.sourceFile, "supabase/migrations/20261106012547_stock_conversion_putaway_authoritative_actor.sql");
+  assert.equal(manifest.sourceFollowUps.prospectiveG02DatabaseFix.sourceSha256, "fcede47f4671ab241d9e0a04face6d626aabb559fe8e72e830d6165342339306");
+  assert.equal(manifest.sourceFollowUps.prospectiveG02DatabaseFix.deployed, false);
+  assert.equal(manifest.candidate.commit, manifest.deployed.commit);
+  assert.equal(manifest.candidate.deploymentId, manifest.deployed.deploymentId);
+  assert.equal(manifest.candidate.hostedCi.runId, "42132526254");
+  assert.equal(manifest.candidate.hostedCi.status, "passed");
+  assert.equal(manifest.candidate.hostedCi.passedChecks, 11);
+  assert.equal(manifest.candidate.hostedCi.requiredChecks, 11);
+  assert.deepEqual(manifest.candidate.hostedCi.memory, { cleanPassed: 1854, retryPassed: 1, exclusions: 143 });
+  assert.deepEqual(manifest.candidate.hostedCi.controlled, { passed: 26, exclusions: 4 });
+  assert.equal(manifest.acceptance.sameCommitHostedCi.status, "passed");
+  assert.equal(manifest.acceptance.sameCommitHostedCi.runId, manifest.candidate.hostedCi.runId);
+  assert.equal(manifest.acceptance.nonSmtpUatRetest.status, "partial");
+  assert.equal(manifest.acceptance.nonSmtpUatRetest.commit, manifest.deployed.commit);
+  assert.equal(manifest.acceptance.g01LegalToPayment.status, "blocked");
+  assert.match(manifest.acceptance.g01LegalToPayment.scope, /without Auth administration/);
+  assert.equal(manifest.acceptance.g02ConversionRecovery.status, "blocked");
+  assert.equal(manifest.acceptance.g02ConversionRecovery.reason, "missing-putaway-bridge");
+  assert.match(manifest.acceptance.g02ConversionRecovery.evidence[0], /g02-q4-post-putaway-20261106T011501Z\.json$/);
+  assert.match(manifest.acceptance.g02ConversionRecovery.scope, /conversion\/recovery NOT RUN/);
+  assert.match(manifest.acceptance.g02ConversionRecovery.scope, /Normal Learning startup.*writes/);
+  assert.match(manifest.acceptance.g02ConversionRecovery.scope, /typed\/manual.*not physical scanner/);
+  assert.equal(manifest.acceptance.humanAndPhysicalDeviceAcceptance.status, "not-recorded");
+  assert.equal(manifest.acceptance.productionGoNoGo.status, "not-granted");
   for (const migration of manifest.databaseMigrations) {
     assert.match(migration.appliedVersion, /^\d{14}$/);
     assert.match(migration.reviewedLocalVersion, /^\d{14}$/);
@@ -99,14 +135,15 @@ test("separate Reporting API phase retains approval and four-cycle acceptance ga
   assert.match(phase, /no named.*owner.*confirmed/i);
 });
 
-test("candidate operating guidance distinguishes unknown, scope and pending verification", () => {
+test("deployed operating guidance distinguishes unknown, blocked journeys and pending human verification", () => {
   const manual = read("docs/manual/MWELL_INTRA_USER_MANUAL.md");
-  for (const phrase of ["public-only", "valid source bin", "My Work", "Received Units Availability", "all time", "JSON 401", "Pending deployment and retest"]) {
+  for (const phrase of ["public-only", "valid source bin", "My Work", "Received Units Availability", "all time", "JSON 401", "UAT now serves `dd9048e405bf84c2b7b0d6647309d1a8747c9378`", "G02 is BLOCKED by missing first-putaway bridge", "G01 is blocked by Auth administration"]) {
     assert.ok(manual.includes(phrase), `missing guidance: ${phrase}`);
   }
-  for (const phrase of ["authorized colleague", "2 issued, 1 sold and 1 returned leaves 0 remaining", "unknown, not zero", "independent settlement approval", "not yet deployed"]) {
+  for (const phrase of ["authorized colleague", "2 issued, 1 sold and 1 returned leaves 0 remaining", "unknown, not zero", "independent settlement approval", "not yet published"]) {
     assert.ok(manual.includes(phrase), `missing follow-up guidance: ${phrase}`);
   }
+  assert.match(manual, /all\s*90 human rows PENDING/);
 });
 
 test("supporting handoffs reuse the existing handbook catalogue", () => {

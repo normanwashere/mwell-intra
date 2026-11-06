@@ -3,35 +3,57 @@
   "authority": "current-release",
   "asOf": "2026-11-06",
   "timezone": "Asia/Singapore",
-  "summary": "UAT still serves 0b7964e. Source d4d5967 passed all 11 required CI checks and its reviewed QC-to-putaway migration is applied. Final header/tab fixes and migration filename reconciliation require their own successful CI before application deployment and same-version live retests.",
+  "summary": "UAT serves dd9048e after all 11 same-SHA CI checks passed. Scoped privacy, guarded return-balance and Product/export-screen retests passed; one Procurement mobile320 CI retry-pass remains an open observation. G02 is BLOCKED by missing first-putaway bridge; conversion was not run. G01 is blocked by unavailable Auth administration. No full WMS readiness or human acceptance is recorded.",
   "deployed": {
-    "commit": "0b7964e5650e6908fdf861a081bc1fe27716c014",
+    "commit": "dd9048e405bf84c2b7b0d6647309d1a8747c9378",
     "environment": "uat",
     "url": "https://mwell-intra-uat.vercel.app/",
     "supabaseProjectRef": "kkoitlvydytdhlpxhuah",
-    "deploymentId": "dpl_E52Xq9WLhzsBdXFqSDHHfTWfXbkB",
-    "observedAt": "2026-11-05T12:38:45.508Z",
+    "deploymentId": "dpl_tghauqxhngHM6opHbBdyriMNyNGV",
+    "vercelProjectId": "prj_tYR1vpcOlxkAF6jja3meH9L5nL2y",
+    "readyState": "READY",
+    "aliasVerified": true,
+    "observedAt": "2026-11-06T00:34:37.828Z",
     "evidence": {
       "workspace": "parent mwell-intra-warehouse checkout",
-      "path": "outputs/four-qa-remediation-20261105/privacy-live-0b7964e5650e-attempt2/evidence.json",
-      "sha256": "6d7cc184f86414f48b5ba68ab8268a92708f3292285eb8971d0a0fe574b1d2b8",
-      "scope": "Retained start/end UAT health and scoped privacy/API checks, not a fresh probe by the documentation worker. Deployment ID supplied by main. This does not certify all workflows or hosted CI."
+      "path": "outputs/release-readiness-20261106/deployment-dd9048e.json",
+      "sha256": "492aea4ad5705985062c20ebb28567cbcf066f9cf7270f697f8d4027b76d47d8",
+      "scope": "Main's exact-Git-SHA deployment to the existing UAT project, assigned alias and health readback: appEnv uat, matching project/SHA, Supabase reachable and static CSS HTTP200. No new production target or environment/SMTP changes; not full workflow or human acceptance."
     }
   },
   "candidate": {
-    "status": "pending-deploy-and-retest",
-    "commit": null,
-    "deploymentId": null,
+    "status": "deployed-scoped-retests-complete-journeys-open",
+    "commit": "dd9048e405bf84c2b7b0d6647309d1a8747c9378",
+    "deploymentId": "dpl_tghauqxhngHM6opHbBdyriMNyNGV",
     "deployedAt": null,
-    "evidence": [],
-    "latestPushedSourceCommit": "d4d59678533aae7af330284cc628d6c617e37a1c",
-    "hostedCi": { "runId": "42124457790", "status": "passed", "passedChecks": 11, "requiredChecks": 11, "scope": "All required checks passed on d4d5967, including native PostgreSQL authority, concurrency and all three browser groups. One Procurement mobile reachability case passed on retry; ten later local repetitions passed with retries disabled, without establishing its root cause. This is not live app acceptance or CI for the subsequent header/tab and filename follow-up." },
-    "scope": "d4d5967 is not deployed as the app. Its exact reviewed SQL is applied under actual server version 20261105233321. The final UI and migration-reference commit must pass all 11 checks before application deployment."
+    "observedReadyAt": "2026-11-06T00:34:37.828Z",
+    "evidence": ["outputs/release-readiness-20261106/deployment-dd9048e.json"],
+    "certifiedSourceCommit": "dd9048e405bf84c2b7b0d6647309d1a8747c9378",
+    "latestPushedSourceCommit": "940089557c3c5e698817e1eb96288ebd6a107fd9",
+    "hostedCi": { "runId": "42132526254", "status": "passed", "passedChecks": 11, "requiredChecks": 11, "memory": { "cleanPassed": 1854, "retryPassed": 1, "exclusions": 143 }, "controlled": { "passed": 26, "exclusions": 4 }, "evidence": "outputs/release-readiness-20261106/ci-dd9048e-jobs.json", "scope": "All required same-SHA jobs succeeded. Procurement approvals command-palette mobile320 passed on retry, not a clean first-pass result. A separately reviewed local test-only measurement correction has 12 helper and 6 route passes without retries; the original hosted trigger and new hosted closure remain unproven. Not human WMS acceptance." },
+    "scope": "commit and certifiedSourceCommit identify the exact deployed dd9048e candidate and its CI only. latestPushedSourceCommit is the separate test-only follow-up9400895, not a new certified app. Health observation time is separate; deployment completion time was not supplied. G01 and G02 remain blocked."
+  },
+  "sourceFollowUps": {
+    "testOnlyReachability": {
+      "commit": "940089557c3c5e698817e1eb96288ebd6a107fd9",
+      "status": "pushed",
+      "deployed": false,
+      "hostedCi": { "status": "in_progress", "runId": "42141617943", "conclusion": null, "passedChecks": 8, "requiredChecks": 11, "runningChecks": 3 },
+      "scope": "Main-verified CI snapshot:8 checks passed,3 browser groups running; not a full pass. Test-only reachability correction has reviewed local12 helper and6 route passes with retries0. Do not inherit dd9048e CI or declare original hosted root cause proven."
+    },
+    "prospectiveG02DatabaseFix": {
+      "commit": null,
+      "status": "prepared-pending-ci-and-apply",
+      "sourceFile": "supabase/migrations/20261106012547_stock_conversion_putaway_authoritative_actor.sql",
+      "sourceSha256": "fcede47f4671ab241d9e0a04face6d626aabb559fe8e72e830d6165342339306",
+      "deployed": false,
+      "scope": "Separate prospective source/SQL repair prepared for its own CI and application review. Future commit identity will be recorded externally after commit creation; commit null does not assert an uncommitted worktree. Source hash is not live application proof. No applied migration, deployment or repaired live G02 result is recorded. No replay/backfill of the stopped fixture."
+    }
   },
   "documentation": {
     "commit": null,
     "status": "pending-publication",
-    "basedOnDeployedAppCommit": "0b7964e5650e6908fdf861a081bc1fe27716c014",
+    "basedOnDeployedAppCommit": "dd9048e405bf84c2b7b0d6647309d1a8747c9378",
     "scope": "Prepared source/manual update, not proof of a published live handbook. Record the documentation commit externally after commit creation; do not invent a self-referential final SHA. Runtime health remains authoritative for the application."
   },
   "databaseMigrations": [
@@ -57,7 +79,7 @@
       "reviewedLocalVersion": "20261105133207",
       "sourceSha256": "feae8f091a8ebbce465d7eac9a198d1d0cd6bfcf318bc52e6c7bbc5d244e945d",
       "evidence": "outputs/four-qa-remediation-20261105/docs/allocation-return-migration-version-mapping.md",
-      "scope": "Main reports UAT Warehouse SQL-claims read issued=2, returned=1, remaining=0 and expected STABLE/DEFINER/empty-search-path/ACL metadata. Updated-client live retest remains pending."
+      "scope": "Applied metadata retained. On dd9048e, actual balance RPC returned remaining0 of issued2 at 1440/390; inputs min/max0 and submit disabled, exact stock/hold/return/movement before-after unchanged. Guard blocked normal resolve_assignments; not full unintercepted startup or a submitted return."
     },
     {
       "name": "serialized_transfer_quantity_identity",
@@ -69,8 +91,10 @@
     }
   ],
   "acceptance": {
-    "sameCommitHostedCi": { "status": "failed", "commit": "0b7964e5650e6908fdf861a081bc1fe27716c014", "runId": "42027790187", "evidence": ["outputs/four-qa-remediation-20261105/qa4-release/ci-capacity-followup.json"] },
-    "nonSmtpUatRetest": { "status": "partial", "commit": "0b7964e5650e6908fdf861a081bc1fe27716c014", "evidence": ["outputs/four-qa-remediation-20261105/docs/REMEDIATION-UPDATE.md"], "scope": "Scoped privacy, picking, My Work, CSV, Finance, Product, event, bundle and export evidence; transfer follow-up, G01, recipe/conversion and remaining variants are not closed." },
+    "sameCommitHostedCi": { "status": "passed", "commit": "dd9048e405bf84c2b7b0d6647309d1a8747c9378", "runId": "42132526254", "evidence": ["outputs/release-readiness-20261106/ci-dd9048e-jobs.json"], "scope": "11/11 jobs; 1854 clean memory passes plus one retry-pass, 143 memory exclusions; 26 controlled passes and four exclusions. Flake observation remains open." },
+    "nonSmtpUatRetest": { "status": "partial", "commit": "dd9048e405bf84c2b7b0d6647309d1a8747c9378", "evidence": ["outputs/four-qa-remediation-20261105/privacy-live-dd9048e405bf-attempt1/evidence.json", "outputs/four-qa-remediation-20261105/qa2-workflows/f03-live-dd9048e405bf-2026-11-06T00-37-10-500Z/evidence.json", "outputs/four-qa-remediation-20261105/qa3-experience/final-browser/dd9048e405bf-2026-11-06T00-38-16-740Z/evidence.json", "outputs/release-readiness-20261106/live-dd9048e-screen-review.md"], "scope": "Privacy4 passed. Guarded read-only returns at1440/390: remaining0 of issued2, disabled submit, business writes0 and exact before-after unchanged; normal Learning synchronization blocked, so not full unintercepted startup. Product/export9 automated checks passed at1440/390/320 using actual capabilities, scoped axe0 and no overflow, with no exports; main reviewed six distinct images and hash-identical cold/reload pairs. Normal navigation side effects are disclosed in source evidence. No broad transaction acceptance." },
+    "g01LegalToPayment": { "status": "blocked", "commit": "dd9048e405bf84c2b7b0d6647309d1a8747c9378", "evidence": [], "scope": "Approved isolated synthetic vendor setup cannot proceed without Auth administration. No existing vendor rebinding, fabricated approval/signature, email or real payment." },
+    "g02ConversionRecovery": { "status": "blocked", "commit": "dd9048e405bf84c2b7b0d6647309d1a8747c9378", "observedAt": "2026-11-06T01:15:01.934812Z", "reason": "missing-putaway-bridge", "evidence": ["outputs/release-readiness-20261106/qa4-ci/g02-q4-post-putaway-20261106T011501Z.json"], "scope": "Normal receiving and independent QC accepted; first putaway returned200 and exact unit is at SRC. Q4 confirms origin1, bridge0, history2, break0; captured movement/offline command receipt exist and original QC/receipt/lot snapshots are unchanged. Recipe approved only; conversion/recovery NOT RUN. Normal Learning startup synchronization writes occurred during authorized UI navigation; this was not a zero-write journey. Scans were typed/manual, not physical scanner or camera acceptance. Resolver was not evaluated because bridge was absent, not a claimed false resolver result. Root cause remains under independent investigation. Preserve the fixture: no old-stock writes, repeat putaway, replay, QC rewrite or backfill. Any confirmed source repair is prospective and requires its own release evidence." },
     "dataAndWorkflowPreservation": { "status": "pending", "commit": null, "evidence": [] },
     "rel04DeployedHandoff": { "status": "pending", "commit": null, "evidence": [] },
     "humanAndPhysicalDeviceAcceptance": { "status": "not-recorded", "commit": null, "evidence": [] },
@@ -86,6 +110,22 @@
   },
   "smtp": { "status": "excluded", "scope": "No configuration or delivery certification; excluded checks are not passes." },
   "history": [
+    {
+      "status": "superseded-observation",
+      "commit": "0b7964e5650e6908fdf861a081bc1fe27716c014",
+      "deploymentId": "dpl_E52Xq9WLhzsBdXFqSDHHfTWfXbkB",
+      "observedAt": "2026-11-05T12:38:45.508Z",
+      "evidence": "outputs/four-qa-remediation-20261105/privacy-live-0b7964e5650e-attempt2/evidence.json",
+      "sha256": "6d7cc184f86414f48b5ba68ab8268a92708f3292285eb8971d0a0fe574b1d2b8",
+      "scope": "Retained 0b deployment/privacy and partial workflow evidence. Its hosted run42027790187 failed; later dd checks do not relabel those results."
+    },
+    {
+      "status": "historical-source-ci-not-app-deployment",
+      "commit": "d4d59678533aae7af330284cc628d6c617e37a1c",
+      "runId": "42124457790",
+      "passedChecks": 11,
+      "scope": "All 11 jobs passed with one Procurement mobile retry-pass; 10 later local no-retry repetitions did not establish root cause. Reviewed SQL applied as20261105233321; d4 was not deployed as the app."
+    },
     {
       "status": "superseded-observation",
       "asOf": "2026-11-05",

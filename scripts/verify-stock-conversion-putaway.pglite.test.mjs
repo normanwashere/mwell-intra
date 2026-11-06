@@ -6,7 +6,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { registerHooks } from 'node:module';
 import ts from 'typescript';
 import { scanSql } from './verify-learning-schema.mjs';
-import { putawayTimeoutProbeSql, verifyPutawayMigrationTimeouts } from './verify-stock-conversion-putaway.postgres.mjs';
+import { connectNativePutawayFixture, createNativePutawayFixture, putawayTimeoutProbeSql, verifyPutawayMigrationTimeouts } from './verify-stock-conversion-putaway.postgres.mjs';
 
 registerHooks({
   resolve(specifier, context, next) {
@@ -25,6 +25,7 @@ const { SupabaseRepository } = await import('../packages/data-kit/src/supabase/S
 
 const migration = name => readFile(new URL(`../supabase/migrations/${name}`, import.meta.url), 'utf8');
 const fixName = '20261105233321_stock_conversion_qc_putaway_bridge.sql';
+const actorFixName = '20261106012547_stock_conversion_putaway_authoritative_actor.sql';
 
 test('native putaway timeout probe is source-bound and refuses external or override connections', async t => {
   const source = await migration(fixName);
@@ -37,7 +38,11 @@ test('native putaway timeout probe is source-bound and refuses external or overr
     ['different local database','postgresql://postgres:unused@127.0.0.1:54322/existing'],
     ['different local port','postgresql://postgres:unused@127.0.0.1:5432/postgres'],
     ['connection override','postgresql://postgres:unused@127.0.0.1:54322/postgres?host=example.invalid'],
-  ]) await t.test(entry[0], () => assert.rejects(verifyPutawayMigrationTimeouts(entry[1])));
+  ]) await t.test(entry[0], async () => {
+    await assert.rejects(verifyPutawayMigrationTimeouts(entry[1]));
+    await assert.rejects(createNativePutawayFixture(entry[1]));
+    await assert.rejects(connectNativePutawayFixture(entry[1]));
+  });
   for (const [name, mutate] of [
     ['missing local limits',sql => sql.replace(/select pg_catalog\.set_config\('lock_timeout'[\s\S]*?name='lock_timeout';/,'')],
     ['session-setting leak',sql => sql.replace("'ms',true)","'ms',false)")],
@@ -48,8 +53,8 @@ test('native putaway timeout probe is source-bound and refuses external or overr
   assert.match(nativeGate,/await verifyPutawayMigrationTimeouts\(connectionString\);/);
 });
 
-test('putaway migration timeout caps precede DDL and preserve stricter session limits', async t => {
-  const statements = scanSql(await migration(fixName));
+for (const migrationName of [fixName,actorFixName]) test(`${migrationName}: timeout caps precede DDL and preserve stricter session limits`, async t => {
+  const statements = scanSql(await migration(migrationName));
   assert.equal(statements[0].toLowerCase(), 'begin');
   for (const [index, setting] of ['lock_timeout', 'statement_timeout'].entries()) {
     assert.match(statements[index + 1], new RegExp(`^select pg_catalog\\.set_config\\(\\s*'${setting}'`, 'i'));
@@ -83,6 +88,7 @@ test('putaway migration timeout caps precede DDL and preserve stricter session l
   } finally { await db.close(); }
 });
 const operator = '11111111-1111-4111-8111-111111111111';
+const operatorEmail = 'putaway-operator@example.invalid';
 const quality = '22222222-2222-4222-8222-222222222222';
 const owner = '33333333-3333-4333-8333-333333333333';
 const orderId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -99,9 +105,11 @@ const extract = (sql, name) => {
 };
 
 async function database() {
-  const db = new PGlite();
+  const nativeUrl = process.env.QA_QC_NATIVE_DATABASE_URL;
+  const db = nativeUrl ? await connectNativePutawayFixture(nativeUrl) : new PGlite();
+  try {
+  if (!nativeUrl) await db.exec('create role anon; create role authenticated; create role service_role');
   await db.exec(`
-    create role anon; create role authenticated; create role service_role;
     create schema auth; create schema core; create schema private; create schema warehouse; create schema storage; create schema product;
     grant usage on schema warehouse,private,core,auth to authenticated;
     grant usage on schema warehouse,private to anon,service_role;
@@ -112,9 +120,7 @@ async function database() {
     create function core.has_cap(text,text) returns boolean language sql stable as $$ select auth.uid() is not null and current_setting('test.cap',true)='yes' $$;
     create function product.can_launch(text) returns boolean language sql stable as $$ select current_setting('test.launch',true)='yes' $$;
     create function private.can_read_warehouse_table(text) returns boolean language sql stable as $$ select true $$;
-    create function warehouse.authoritative_actor() returns text language sql as $$ select auth.uid()::text $$;
-    create function warehouse.force_actor_on_object(jsonb,text) returns jsonb language sql as $$ select $1||jsonb_build_object('actor',$2) $$;
-    create table core.profiles(id uuid primary key,status text,kind text);
+    create table core.profiles(id uuid primary key,status text,kind text,email text);
     create table core.roles(module text,role text,is_active boolean);
     create table core.user_roles(user_id uuid,module text,role text,effective_at timestamptz,expires_at timestamptz);
     create table core.activity_log(id bigserial,module text,entity_type text,entity_id text,action text,actor uuid,detail jsonb);
@@ -146,7 +152,7 @@ async function database() {
     create function private.warehouse_inspect_quality_v3(jsonb) returns jsonb language plpgsql as $$ begin raise exception 'Unreviewed legacy fixture path'; end $$;
     create function private.inspect_return_intake(jsonb) returns jsonb language plpgsql as $$ begin raise exception 'Unreviewed return fixture path'; end $$;
     create function warehouse.issue(jsonb) returns jsonb language sql as $$ select $1 $$;
-    insert into core.profiles values('${operator}','active','employee'),('${quality}','active','employee'),('${owner}','active','employee');
+    insert into core.profiles values('${operator}','active','employee','${operatorEmail}'),('${quality}','active','employee','putaway-quality@example.invalid'),('${owner}','active','employee','putaway-owner@example.invalid');
     insert into core.roles values('warehouse','warehouse_supervisor',true);
     insert into core.user_roles values('${owner}','warehouse','warehouse_supervisor',now()-interval '1 day',null);
     insert into warehouse.locations values('wh','warehouse',true),('other','warehouse',true);
@@ -158,6 +164,7 @@ async function database() {
     insert into storage.objects(bucket_id,name,owner_id,owner) values('warehouse-po-evidence','${operator}/po.pdf','${operator}','${operator}'),('evidence','external/shipment.png','${operator}','${operator}'),('evidence','external/quality.png','${quality}','${quality}');
     set test.live='yes'; set test.cap='yes'; set test.launch='yes';
   `);
+  await db.exec(await migration('20260718191000_restore_warehouse_actor_helpers.sql'));
   const helpers = await migration('20260710160000_warehouse_w1_quality_and_approval_rpcs.sql');
   await db.exec(extract(helpers, 'private.begin_idempotent_command'));
   await db.exec(extract(helpers, 'private.finish_idempotent_command'));
@@ -178,6 +185,7 @@ async function database() {
   await db.exec(await migration('20260920025920_approved_stock_origin_conversion.sql'));
   await db.exec(await migration('20261019142956_warehouse_external_po_receiving.sql'));
   return db;
+  } catch (error) { await db.close(); throw error; }
 }
 
 test('QC putaway provenance uses actual receipt, inspection, transfer and conversion SQL', async t => {
@@ -203,7 +211,9 @@ test('QC putaway provenance uses actual receipt, inspection, transfer and conver
     const unit = (await db.query('select * from warehouse.inventory_units')).rows[0];
     const wrapperState = () => db.query("select oid::text,pg_get_functiondef(oid) body,proacl::text,prosecdef,proconfig from pg_proc where oid in ('warehouse.transfer(jsonb)'::regprocedure,'warehouse.transfer_pre_offline_identity(jsonb)'::regprocedure,'private.warehouse_offline_action(text,jsonb)'::regprocedure,'private.warehouse_transfer(jsonb)'::regprocedure,'private.warehouse_transfer_pre_lot_putaway(jsonb)'::regprocedure,'warehouse.execute_stock_conversion(jsonb)'::regprocedure,'warehouse.inspect_quality(jsonb)'::regprocedure,'private.external_po_inspect(jsonb)'::regprocedure) order by oid");
     const originalWrappers = (await wrapperState()).rows;
-    if (process.env.QA_QC_BRIDGE_BASELINE !== '1') await db.exec(await migration(fixName));
+    if (process.env.QA_QC_BRIDGE_BASELINE !== '1') {
+      await db.exec(await migration(fixName));
+    }
     await actor(quality);
     await command('inspect_quality', {source_type:'receipt',source_id:receipt.receipt_id,product_id:'base',lot_id:q.lot_id,serial_number:unit.serial_number,quantity:1,disposition:'accepted',evidence_urls:['external/quality.png']});
     const accepted = (await db.query('select * from warehouse.quality_inspections')).rows[0];
@@ -233,13 +243,77 @@ test('QC putaway provenance uses actual receipt, inspection, transfer and conver
       await denied(() => create(r),/exact-source|held|allocations|custody|source bin|Active source and destination warehouse bins/);
     };
 
+    if (process.env.QA_QC_BRIDGE_BASELINE !== '1') {
+      await scenario('pre-fix email putaway remains unbridged and ineligible after correction without replay',async()=>{
+        await actualPutaway();
+        assert.equal((await db.query("select actor from warehouse.movements where type='transfer'")).rows[0].actor,operatorEmail);
+        assert.equal(await bridgeCount(),0);
+        assert.equal((await workspace()).candidates.length,0);
+        const before=await snapshot();
+        const lineage=async()=> (await db.query("select jsonb_build_object('history',(select jsonb_agg(h order by id) from private.warehouse_unit_history h),'receipts',(select jsonb_agg(r) from private.warehouse_offline_receipts r),'origins',(select jsonb_agg(o) from private.stock_conversion_qc_origins o)) data")).rows[0].data;
+        const beforeLineage=await lineage();
+        // Run the exact migration contents inside this scenario's rollback boundary.
+        // Full-file commit/rollback and metadata preservation are tested separately.
+        await db.exec(`${scanSql(await migration(actorFixName)).slice(1,-1).join(';\n')};`);
+        assert.equal(await bridgeCount(),0);
+        assert.equal((await workspace()).candidates.length,0);
+        assert.deepEqual(await snapshot(),before);
+        assert.deepEqual(await lineage(),beforeLineage);
+      });
+      await db.exec(await migration(actorFixName));
+    }
     await scenario('eligible putaway exposes exact accepted QC without rewriting it', async () => {
       await actualPutaway();
+      assert.equal((await db.query("select actor from warehouse.movements where type='transfer'")).rows[0].actor,operatorEmail);
+      const txRows=(await db.query(`select m.xmin::text movement_xmin,u.xmin::text unit_xmin,h.xmin::text history_xmin,c.xmin::text receipt_xmin,c.actor_id receipt_actor,h.actor_id history_actor
+        from private.warehouse_offline_receipts c join warehouse.movements m on m.id=c.result->>'id'
+        cross join warehouse.inventory_units u join private.warehouse_unit_history h on h.unit_id=u.id and h.operation='changed'
+        where c.method='transfer'`)).rows;
+      assert.equal(txRows.length,1);
+      const tx=txRows[0];
+      assert.equal(tx.movement_xmin,tx.receipt_xmin);
+      assert.equal(tx.unit_xmin,tx.receipt_xmin);
+      assert.equal(tx.history_xmin,tx.receipt_xmin);
+      assert.equal(tx.receipt_actor,operator);
+      assert.equal(tx.history_actor,operator);
       assert.equal((await workspace()).candidates.length,1, 'fresh accepted external stock is selectable after putaway');
       assert.deepEqual((await db.query('select * from warehouse.quality_inspections')).rows[0],accepted);
       assert.equal((await db.query('select count(*)::int n from private.stock_conversion_putaway_bridges')).rows[0].n,1);
     });
     if (process.env.QA_QC_BRIDGE_BASELINE === '1') return;
+    for (const email of [null,'']) await scenario(`canonical actor UUID fallback for ${email===null?'null':'empty'} profile email`,async()=>{
+      await db.query('update core.profiles set email=$1 where id=$2',[email,operator]);
+      await actualPutaway();
+      assert.equal((await db.query("select actor from warehouse.movements where type='transfer'")).rows[0].actor,operator);
+      assert.equal(await bridgeCount(),1);
+      assert.equal((await workspace()).candidates.length,1);
+    });
+    await scenario('normal wrapper ignores another claimed actor and retains authenticated UUID lineage',async()=>{
+      const input=transferPayload();
+      input.movement.actor='putaway-owner@example.invalid';
+      const result=await command('transfer',input);
+      assert.equal(result.actor,operatorEmail);
+      assert.notEqual(result.actor,input.movement.actor);
+      assert.equal(await bridgeCount(),1);
+      assert.equal((await db.query('select actor_id from private.stock_conversion_putaway_bridges')).rows[0].actor_id,operator);
+      assert.equal((await db.query("select actor_id from private.warehouse_unit_history where operation='changed'")).rows[0].actor_id,operator);
+    });
+    await scenario('capture rejects a privileged injected mismatching stored movement actor',async()=>{
+      // Only this isolated adversarial fixture changes stored output; RPC stamping remains real.
+      await db.exec(`create function private.synthetic_forge_movement_actor() returns trigger language plpgsql as $$
+        begin new.actor:='putaway-owner@example.invalid'; return new; end $$;
+        create trigger synthetic_forge_movement_actor before insert on warehouse.movements
+        for each row execute function private.synthetic_forge_movement_actor()`);
+      const result=await move();
+      assert.equal(result.actor,'putaway-owner@example.invalid');
+      assert.equal(await bridgeCount(),0);
+      assert.equal((await workspace()).candidates.length,0);
+    });
+    await scenario('unauthenticated transfer cannot create putaway provenance',async()=>{
+      await actor('');
+      await denied(()=>move(),/Not authorized|Authentication|authenticated|actor/i);
+      assert.equal(await bridgeCount(),0);
+    });
     await scenario('conversion preserves serial, releases claim and retains original QC', async () => {
       await actualPutaway(); await actor(owner); const r=await recipe(); await actor(operator); const batch=await create(r);
       await actor(quality); await command('execute_stock_conversion',{action:'approve',batch_id:batch.id,inspected_serial_numbers:[unit.serial_number],evidence_urls:['https://evidence.test/quality']});
@@ -406,6 +480,44 @@ test('QC putaway provenance uses actual receipt, inspection, transfer and conver
       }
     });
   } finally { await db.close(); }
+});
+
+test('actor correction is prospective, body-only, pinned and preserves OID ACL and every other guard',async t=>{
+  const db=await database();
+  const sql=await migration(actorFixName);
+  const signature='private.stock_conversion_capture_putaway()';
+  const state=async()=> (await db.query("select prosrc body,to_jsonb(p)-'prosrc' metadata from pg_proc p where oid=$1::regprocedure",[signature])).rows[0];
+  try{
+    await db.exec(await migration(fixName));
+    const before=await state();
+    const statements=scanSql(sql);
+    assert.deepEqual(statements.map(statement=>statement.match(/^\w+/)[0].toLowerCase()),['begin','select','select','do','commit']);
+    assert.match(sql,/6b06c2077da5a460353f45e686d96377/);
+    await t.test('exact predecessor only, with atomic rejection',async()=>{
+      const definition=(await db.query('select pg_get_functiondef($1::regprocedure) body',[signature])).rows[0].body;
+      await db.exec(definition.replace(/AS (\$\w*\$)/,'$&\n-- synthetic actor predecessor drift'));
+      const drifted=await state();
+      await assert.rejects(db.exec(sql),/actor predecessor drift/);
+      await db.exec('rollback');
+      assert.deepEqual(await state(),drifted);
+      await db.exec(definition);
+    });
+    await t.test('one comparison changes, metadata and historical rows do not',async()=>{
+      const rows=async()=> (await db.query("select jsonb_build_object('origins',(select jsonb_agg(o) from private.stock_conversion_qc_origins o),'bridges',(select jsonb_agg(b) from private.stock_conversion_putaway_bridges b),'breaks',(select jsonb_agg(b) from private.stock_conversion_qc_breaks b)) data")).rows[0].data;
+      // Isolated pre-existing provenance models the blocked old putaway; no migration backfill is allowed.
+      await db.exec("insert into private.stock_conversion_qc_origins(inspection_id,unit_id,registration_id,unit_state,inspection_state,receipt_state,lot_state,hold_state) values(gen_random_uuid(),'historical-unbridged',1,'{}','{}','{}','{}','{}')");
+      const oldRows=await rows();
+      await db.exec(sql);
+      const after=await state();
+      assert.deepEqual(after.metadata,before.metadata);
+      assert.equal(after.body,before.body.replace('m.actor is distinct from new.actor_id','m.actor is distinct from warehouse.authoritative_actor()'));
+      assert.deepEqual(await rows(),oldRows);
+      assert.equal((await db.query("select count(*)::int n from pg_proc where oid=$1::regprocedure and (has_function_privilege('anon',oid,'execute') or has_function_privilege('authenticated',oid,'execute') or has_function_privilege('service_role',oid,'execute'))",[signature])).rows[0].n,0);
+      await assert.rejects(db.exec(sql),/actor predecessor drift/);
+      await db.exec('rollback');
+      assert.deepEqual(await state(),after,'already corrected body is not silently reprocessed');
+    });
+  }finally{await db.close();}
 });
 
 test('QC bridge migration fails closed on each authority/coordinate predecessor drift',async t=>{

@@ -1486,6 +1486,11 @@
       "file": "20261105233321_stock_conversion_qc_putaway_bridge.sql",
       "sha256": "83d84623c9b11e0ab1659ab42f75de4cd9fe18a943af405d7517b76ff2c746df",
       "action": "execute-forward"
+    },
+    {
+      "file": "20261106012547_stock_conversion_putaway_authoritative_actor.sql",
+      "sha256": "fcede47f4671ab241d9e0a04face6d626aabb559fe8e72e830d6165342339306",
+      "action": "execute-forward"
     }
   ]
 }
