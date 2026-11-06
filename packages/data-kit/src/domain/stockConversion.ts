@@ -60,6 +60,7 @@ export interface StockConversionRecipe {
 
 export interface StockConversionBatch {
   id: string;
+  archived?: boolean;
   recipe_id: string;
   event_id: string;
   status: "inspection" | "ready" | "completed" | "cancelled";

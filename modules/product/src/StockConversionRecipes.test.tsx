@@ -109,3 +109,16 @@ it("does not simulate a governed approval in demo", () => {
   expect(screen.getByText(/requires the governed live service/)).toBeInTheDocument();
   expect(mock.rpc).not.toHaveBeenCalled();
 });
+
+it("labels archived recipe history and keeps the original approval evidence", async () => {
+  mock.rpc.mockResolvedValue({ data: { ...options, recipes: [{ id: "archived-recipe", archived: true, kit_name: "Old kit", kit_version: 1,
+    event_name: "Past event", source_product_name: "Base", output_product_name: "Variant", direction: "conversion",
+    approval_reference: "Past decision", approved_by: "Original approver", approved_at: "2026-09-01T00:00:00Z",
+    packaging: [], evidence_urls: ["https://evidence.test/original"] }] }, error: null });
+  render(<StockConversionRecipes />);
+  expect(await screen.findByText("Archived test record")).toBeInTheDocument();
+  fireEvent.click(screen.getByText(/Past event: Base to Variant/));
+  expect(screen.getByText("Past decision")).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Approval evidence 1" })).toHaveAttribute("href", "https://evidence.test/original");
+  expect(mock.rpc.mock.calls.every(([name]) => name === "stock_conversion_recipe_workspace")).toBe(true);
+});

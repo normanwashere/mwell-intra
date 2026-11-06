@@ -9,11 +9,21 @@ Scope: live UAT only. Masterlist stock, Procurement records, user accounts, appr
 - A wholly archived sample emailed PO leaves the active receiving list. Its existing authorized history link still shows the original order, lines and shipments. Empty drafts and mixed orders remain visible.
 - Archived event custody is historical: original sales and totals stay visible, but its stock cannot be used for new outcomes or reversals. Normal active-event work is unchanged.
 - Event Reserved totals use active allocations only. Historical issued and returned quantities still use the existing custody totals; settlement calculations are not rewritten.
+- Archived conversion history keeps its serials, approvals and evidence. It is labelled as test history and offers no new approval, completion or cancellation action. Saved submissions retain their original retry identity.
+- Receiving checks archived receipt and mapped-product references, including unresolved receiving records. Serial-duplicate checks still use the original history; archival does not make old serials reusable.
+- A specifically retired emailed-PO test journey cannot accept another shipment. The original PO, its lines, shipment evidence and authorized history remain unchanged. This does not retire the master products used by that test.
+- Availability excludes exact archived stock, units, reservations and holds. The Warehouse receiving queue excludes a Procurement PO only when it has lines and every line is mapped to an archived product. Empty, unmapped and mixed orders stay available; Procurement's original history is unchanged.
 - Power, Prodigy and Sport masterlist discrepancies still require Warehouse confirmation; cleanup does not guess missing serials or reconcile their counts.
 
 ## Verification
 
 The Tasks/Exceptions access tests passed 49 cases. The released Tasks change passed live Inventory, Quality and Tasks checks for Operations Associate and Operations Lead at 1440px and 390px, 12 screens total. The emailed-PO safeguard passed 9 focused database tests. Event custody passed 13 focused database tests, and the Events suite passed 85 tests.
+
+The receiving and conversion boundary suites passed 76 focused database tests. Independent review also checked the original adjacent receiving/archive suites. Seventeen focused component tests cover archived history, unchanged active controls and saved-command recovery; three module typechecks and scoped lint passed. Four local desktop/mobile component screenshots were inspected. Those local fixtures are not live transaction certification.
+
+The two boundary migrations were applied as `20261106190736` and `20261106190738`. All 14 expected function definitions/authority settings and ten trigger definitions matched installed readback. The 118 protected source-table snapshots matched before and after. No live business-command probes or new stock fixtures were run for this check.
+
+Availability and PO-queue tests passed seven database cases and 79 repository cases. The read migration was applied as `20261106191404`; installed function/view fingerprints, owner and grants matched the reviewed candidate. Protected snapshots remained unchanged across all three migrations. Raw movement history and its ledger exports are retained; they are not active stock balances.
 
 Before each archive commit, rehearse the exact manifest with rollback; pin the UAT project, source hashes and incoming dependencies; use the archive fence; compare protected base-table counts/digests; verify active absence and unchanged authorized history. The execution report records committed batches separately from rehearsals.
 

@@ -1,0 +1,28 @@
+{
+  "observed_at": "2026-11-06T19:01:48.688863+00:00",
+  "server_version": "17.6",
+  "atp": {
+    "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "owner": "postgres",
+    "config": [
+      "search_path=\"\""
+    ],
+    "signature": "warehouse.available_to_promise(text)",
+    "definition": "CREATE OR REPLACE FUNCTION warehouse.available_to_promise(p_product_id text)\n RETURNS integer\n LANGUAGE sql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\n  select greatest(0,(\n    coalesce((select sum(quantity) from warehouse.stock_levels where product_id=p_product_id),0)\n    + coalesce((select count(*) from warehouse.inventory_units\n      where product_id=p_product_id and status='in_stock'),0)\n    - coalesce((select sum(quantity) from warehouse.allocations\n      where product_id=p_product_id and status in ('reserved','allocated')),0)\n    - coalesce((select sum(quantity) from warehouse.inventory_holds\n      where product_id=p_product_id and status='active'),0)\n  ))::integer;\n$function$\n",
+    "prosrc_md5": "dce5073ca82b12e60d00ef94917170fe",
+    "volatility": "v",
+    "prosrc_lf_md5": "dce5073ca82b12e60d00ef94917170fe",
+    "definition_md5": "a163a83eb31e8e33846963d7c9842c7d",
+    "security_definer": true
+  },
+  "handoff": {
+    "acl": "{postgres=arwdDxtm/postgres,authenticated=arwdDxtm/postgres,service_role=arwdDxtm/postgres}",
+    "owner": "postgres",
+    "options": [
+      "security_invoker=true"
+    ],
+    "definition": " SELECT purchase_order.id,\n    COALESCE(purchase_order.po_number, purchase_order.id) AS po_number,\n    COALESCE(purchase_order.vendor_name, 'Unknown vendor'::text) AS vendor_name,\n    purchase_order.status,\n    purchase_order.expected_date,\n    COALESCE(jsonb_agg(jsonb_build_object('id', line.id, 'productId', line.warehouse_product_id, 'description', line.description, 'quantity', line.quantity, 'receivedQuantity', line.received_quantity, 'uom', line.uom, 'unitPrice', line.unit_price) ORDER BY line.line_no, line.id) FILTER (WHERE line.id IS NOT NULL), '[]'::jsonb) AS lines,\n    purchase_order.created_at,\n    purchase_order.total\n   FROM procurement.purchase_orders purchase_order\n     LEFT JOIN procurement.purchase_order_lines line ON line.purchase_order_id = purchase_order.id\n  WHERE (purchase_order.status = ANY (ARRAY['approved'::text, 'issued'::text])) AND private.is_goods_procurement_request(purchase_order.request_id)\n  GROUP BY purchase_order.id, purchase_order.po_number, purchase_order.vendor_name, purchase_order.status, purchase_order.expected_date, purchase_order.total, purchase_order.created_at;",
+    "definition_md5": "908013b663e945067ca31c46bcee4b3f",
+    "definition_default_md5": "92f218fa25f5eb3c7b32eefb5203fafe"
+  }
+}

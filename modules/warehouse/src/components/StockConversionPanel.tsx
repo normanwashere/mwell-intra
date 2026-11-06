@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { useSession } from "@intra/auth";
 import { StockConversionRejectedError, validateStockConversion, type StockConversionBatch, type StockConversionCommand, type StockConversionWorkspace } from "@intra/data-kit";
 import { useWarehouse } from "@/app/store";
-import { Field, Icon } from "@/components/ui";
+import { Badge, Field, Icon } from "@/components/ui";
 
 type DraftCommand = StockConversionCommand extends infer C ? C extends StockConversionCommand ? Omit<C, "idempotency_key"> : never : never;
 const emptyWorkspace: StockConversionWorkspace = { recipes: [], batches: [], candidates: [], recovery_available: false };
@@ -150,13 +150,14 @@ function ConversionWorkRow({ batch, label, actorId, canQuality, canOperate, disa
   const [evidence, setEvidence] = useState("");
   const [reason, setReason] = useState("");
   const terminal = batch.status === "completed" || batch.status === "cancelled";
-  return <details style={{ borderTop: "1px solid var(--border)", paddingTop: 12, minWidth: 0 }}><summary style={{ overflowWrap: "anywhere" }}>{label}: {batch.units.length} devices, {batch.status} ({batch.id.slice(0, 8)})</summary>
+  const actionable = !batch.archived && !terminal;
+  return <details style={{ borderTop: "1px solid var(--border)", paddingTop: 12, minWidth: 0 }}><summary style={{ overflowWrap: "anywhere" }}>{label}: {batch.units.length} devices, {batch.status} ({batch.id.slice(0, 8)}){batch.archived && <span style={{ marginInlineStart: 8 }}><Badge>Archived test record</Badge></span>}</summary>
     <fieldset disabled={disabled} style={{ border: 0, padding: "12px 0", minWidth: 0, display: "grid", gap: 12 }}>
-      {batch.units.map((unit) => <label key={unit.serial_number} style={{ display: "flex", gap: 8, overflowWrap: "anywhere" }}>{canQuality && batch.status === "inspection" && actorId !== batch.created_by && <input type="checkbox" checked={confirmed.includes(unit.serial_number)} onChange={(e) => setConfirmed((items) => e.target.checked ? [...items, unit.serial_number] : items.filter((value) => value !== unit.serial_number))} />}{unit.serial_number}</label>)}
-      {!terminal && <Field label="Action evidence URL" htmlFor={`evidence-${batch.id}`}><input id={`evidence-${batch.id}`} className="input" type="url" value={evidence} onChange={(e) => setEvidence(e.target.value)} /></Field>}
-      {canQuality && batch.status === "inspection" && actorId !== batch.created_by && <button className="btn btn-primary" type="button" disabled={!evidence || confirmed.length !== batch.units.length} onClick={() => void submit({ action: "approve", batch_id: batch.id, inspected_serial_numbers: confirmed, evidence_urls: [evidence] })}>Approve inspected open-box devices</button>}
-      {canOperate && batch.status === "ready" && actorId !== batch.approved_by && <button className="btn btn-primary" type="button" disabled={!evidence} onClick={() => void submit({ action: "complete", batch_id: batch.id, evidence_urls: [evidence] })}>Complete conversion</button>}
-      {canOperate && !terminal && <><Field label="Cancellation reason" htmlFor={`reason-${batch.id}`}><input id={`reason-${batch.id}`} className="input" value={reason} onChange={(e) => setReason(e.target.value)} /></Field><button className="btn" type="button" disabled={!evidence || !reason.trim()} onClick={() => void submit({ action: "cancel", batch_id: batch.id, reason, evidence_urls: [evidence] })}>Cancel unconsumed batch</button></>}
+      {batch.units.map((unit) => <label key={unit.serial_number} style={{ display: "flex", gap: 8, overflowWrap: "anywhere" }}>{actionable && canQuality && batch.status === "inspection" && actorId !== batch.created_by && <input type="checkbox" checked={confirmed.includes(unit.serial_number)} onChange={(e) => setConfirmed((items) => e.target.checked ? [...items, unit.serial_number] : items.filter((value) => value !== unit.serial_number))} />}{unit.serial_number}</label>)}
+      {actionable && <Field label="Action evidence URL" htmlFor={`evidence-${batch.id}`}><input id={`evidence-${batch.id}`} className="input" type="url" value={evidence} onChange={(e) => setEvidence(e.target.value)} /></Field>}
+      {actionable && canQuality && batch.status === "inspection" && actorId !== batch.created_by && <button className="btn btn-primary" type="button" disabled={!evidence || confirmed.length !== batch.units.length} onClick={() => void submit({ action: "approve", batch_id: batch.id, inspected_serial_numbers: confirmed, evidence_urls: [evidence] })}>Approve inspected open-box devices</button>}
+      {actionable && canOperate && batch.status === "ready" && actorId !== batch.approved_by && <button className="btn btn-primary" type="button" disabled={!evidence} onClick={() => void submit({ action: "complete", batch_id: batch.id, evidence_urls: [evidence] })}>Complete conversion</button>}
+      {actionable && canOperate && <><Field label="Cancellation reason" htmlFor={`reason-${batch.id}`}><input id={`reason-${batch.id}`} className="input" value={reason} onChange={(e) => setReason(e.target.value)} /></Field><button className="btn" type="button" disabled={!evidence || !reason.trim()} onClick={() => void submit({ action: "cancel", batch_id: batch.id, reason, evidence_urls: [evidence] })}>Cancel unconsumed batch</button></>}
     </fieldset>
   </details>;
 }

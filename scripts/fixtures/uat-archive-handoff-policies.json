@@ -1,0 +1,22 @@
+[
+  {
+    "schemaname": "procurement",
+    "tablename": "purchase_order_lines",
+    "policyname": "procurement_purchase_order_lines_read",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "SELECT",
+    "qual": "(EXISTS ( SELECT 1\n   FROM procurement.purchase_orders purchase_order\n  WHERE ((purchase_order.id = purchase_order_lines.purchase_order_id) AND (core.has_cap('procurement'::text, 'author_po'::text) OR core.has_cap('procurement'::text, 'approve_award'::text) OR core.has_cap('procurement'::text, 'view_finance'::text) OR core.has_cap('procurement'::text, 'admin'::text) OR (core.has_cap('warehouse'::text, 'receive_stock'::text) AND (purchase_order.status = ANY (ARRAY['approved'::text, 'issued'::text])) AND private.is_goods_procurement_request(purchase_order.request_id)) OR private.can_read_procurement_request(purchase_order.request_id)))))",
+    "with_check": null
+  },
+  {
+    "schemaname": "procurement",
+    "tablename": "purchase_orders",
+    "policyname": "procurement_purchase_orders_read",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "SELECT",
+    "qual": "(core.has_cap('procurement'::text, 'author_po'::text) OR core.has_cap('procurement'::text, 'approve_award'::text) OR core.has_cap('procurement'::text, 'view_finance'::text) OR core.has_cap('procurement'::text, 'admin'::text) OR (core.has_cap('warehouse'::text, 'receive_stock'::text) AND (status = ANY (ARRAY['approved'::text, 'issued'::text])) AND private.is_goods_procurement_request(request_id)) OR private.can_read_procurement_request(request_id))",
+    "with_check": null
+  }
+]

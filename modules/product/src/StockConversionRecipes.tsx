@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useCan, useSession } from "@intra/auth";
-import { Field, Icon } from "@intra/ui";
+import { Badge, Field, Icon } from "@intra/ui";
 import { approveStockRecipe, isEvidenceUrl, loadRecipeWorkspace, RecipeApprovalRejected, recipeServiceMessage, validateRecipeApproval,
   type RecipeApproval, type RecipeClient, type RecipePackaging, type RecipeWorkspace } from "./stockConversionRecipeRpc";
 
@@ -130,7 +130,7 @@ function RecipeApprovalWorkspace({ actorId, client }: { actorId: string; client:
       <h3 className="text-base font-semibold">Recent recipe approvals</h3>
       {loaded && !workspace.recipes.length && <p className="text-sm text-muted">No recipes approved.</p>}
       {workspace.recipes.map((row) => <details key={row.id} className="min-w-0 border-b border-line pb-3 text-sm">
-        <summary className="min-h-11 cursor-pointer py-2">{row.event_name}: {row.source_product_name} to {row.output_product_name} ({row.direction}, v{row.kit_version})</summary>
+        <summary className="min-h-11 cursor-pointer py-2">{row.event_name}: {row.source_product_name} to {row.output_product_name} ({row.direction}, v{row.kit_version}){row.archived && <span className="ml-2"><Badge>Archived test record</Badge></span>}</summary>
         <div className="space-y-2 pt-2">
           <p>{row.approval_reference}</p><p>Approved by {row.approved_by} at {new Date(row.approved_at).toLocaleString()}</p>
           <p>Kit: {row.kit_name}. Recipe: {row.id}</p>

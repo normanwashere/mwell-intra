@@ -1237,7 +1237,7 @@ describe("SupabaseRepository W1 control boundary", () => {
       }),
     ]);
     const query = queries.find(
-      (item) => item.table === "procurement_po_handoff",
+      (item) => item.table === "active_procurement_po_handoff",
     )!;
     expect(query.projection).not.toBe("*");
     expect(query.projection).toContain("created_at");

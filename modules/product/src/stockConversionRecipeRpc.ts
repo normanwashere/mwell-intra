@@ -20,6 +20,7 @@ export interface RecipeKit {
   packaging: { product_id: string; name: string; quantity: number }[];
 }
 export interface ApprovedRecipe extends Omit<RecipeApproval, "action" | "idempotency_key"> {
+  archived?: boolean;
   id: string; kit_version: number; kit_name: string; event_name: string;
   source_product_name: string; output_product_name: string; approved_by: string; approved_at: string;
 }

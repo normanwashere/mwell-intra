@@ -25,6 +25,23 @@ function harness(respond: (request: RequestRecord) => Response = () => Response.
 }
 
 describe("archive-aware warehouse REST reads", () => {
+  it("uses the Warehouse-only active procurement handoff without changing its projection or limit", async () => {
+    const { repo, requests } = harness();
+    await repo.getReceivableProcurementPOs();
+    expect(requests).toHaveLength(1);
+    expect(requests[0]!.table).toBe("active_procurement_po_handoff");
+    expect(requests[0]!.method).toBe("GET");
+    expect(requests[0]!.url.searchParams.get("limit")).toBe("500");
+    expect(requests[0]!.url.searchParams.get("select")).toContain("lines");
+  });
+
+  it("does not substitute the raw PO queue when the active handoff is unavailable", async () => {
+    const { repo, requests } = harness(({ table }) => table === "active_procurement_po_handoff"
+      ? Response.json({ message: "active handoff unavailable" }, { status: 403 }) : Response.json([]));
+    await expect(repo.getReceivableProcurementPOs()).rejects.toThrow("active handoff unavailable");
+    expect(requests.map(r => r.table)).toEqual(["active_procurement_po_handoff"]);
+  });
+
   it("maps exactly the supported archive tables without inferring other view names", () => {
     const tables = [
       "products", "inventory_units", "stock_levels", "lots", "allocations", "fulfillment_orders",

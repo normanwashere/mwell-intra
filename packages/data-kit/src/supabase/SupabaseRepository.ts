@@ -773,7 +773,7 @@ export class SupabaseRepository implements WarehouseControlRepository {
   async getReceivableProcurementPOs(): Promise<ProcurementPOHandoff[]> {
     const projection = TABLE_PROJECTIONS.procurement_po_handoff!;
     const { data, error } = await this.db
-      .from("procurement_po_handoff")
+      .from("active_procurement_po_handoff")
       .select(projection)
       .order("expected_date", { ascending: true })
       .limit(500);

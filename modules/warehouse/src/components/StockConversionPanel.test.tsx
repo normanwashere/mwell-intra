@@ -59,4 +59,32 @@ describe("StockConversionPanel", () => {
     await waitFor(() => expect(sessionStorage.getItem("warehouse-stock-conversion:operator")).toBeNull());
     expect(screen.queryByRole("button", { name: "Retry saved submission" })).not.toBeInTheDocument();
   });
+  it.each(["inspection", "ready", "completed"])("keeps archived %s history without fresh actions", async (status) => {
+    mocks.session.userCapabilities.warehouse = ["manage_returns", "inspect_quality"];
+    mocks.load.mockResolvedValue({ recipes: [], candidates: [], batches: [{ id: "batch-old", event_id: "Past event", status,
+      archived: true, created_by: "other", approved_by: "quality", units: [{ serial_number: "TEST-001" }] }], recovery_available: false });
+    render(<StockConversionPanel />);
+    expect(await screen.findByText("Archived test record")).toBeInTheDocument();
+    expect(screen.getByText("TEST-001")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Approve inspected|Complete conversion|Cancel unconsumed/ })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Action evidence URL")).not.toBeInTheDocument();
+    expect(mocks.execute).not.toHaveBeenCalled();
+  });
+  it("removes fresh actions when refresh archives a batch but preserves saved-command recovery", async () => {
+    const batch = { id: "batch-1", event_id: "Event", status: "ready", created_by: "other", approved_by: "quality", units: [{ serial_number: "TEST-001" }] };
+    mocks.load.mockResolvedValueOnce({ recipes: [], candidates: [], batches: [batch], recovery_available: false })
+      .mockResolvedValue({ recipes: [], candidates: [], batches: [{ ...batch, archived: true }], recovery_available: false });
+    const command = { action: "complete", batch_id: "batch-1", idempotency_key: "conversion-complete-123", evidence_urls: ["https://evidence.test/check"] };
+    sessionStorage.setItem("warehouse-stock-conversion:operator", JSON.stringify(command));
+    mocks.execute.mockResolvedValue(false);
+    render(<StockConversionPanel />);
+    await screen.findByText(/1 devices, ready/);
+    fireEvent.click(screen.getByText(/1 devices, ready/));
+    expect(screen.getByRole("button", { name: "Complete conversion" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Refresh conversion work" }));
+    await screen.findByText("Archived test record");
+    expect(screen.queryByRole("button", { name: "Complete conversion" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Retry saved submission" }));
+    await waitFor(() => expect(mocks.execute).toHaveBeenCalledExactlyOnceWith(command));
+  });
 });
