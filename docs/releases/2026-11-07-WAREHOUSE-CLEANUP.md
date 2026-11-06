@@ -23,4 +23,6 @@ Existing Warehouse mutation runners remain paused unless their exact ownership a
 
 The new PostgreSQL lifecycle adapter is a separate bounded one-serial proof, not blanket permission to resume legacy runners. The user has paused live mutation tests; its ledger migration and live fixture run remain unapplied/not run. Independent-session recovery checks, an approved connection and live readback must pass before live enablement. Never reset other testers' changes to make cleanup pass.
 
+The disabled candidate passed 38 focused tests and 11 local native PostgreSQL checks, including two actual worker-process deaths and repeated recovery. Independent review reran eight boundary regressions. Both live entrypoints stop before database connection or journal access; there is no environment switch to bypass the pause. Logical non-FK writer coordination and full migration-chain replay remain required before a later live enablement review.
+
 Execution evidence: `outputs/warehouse-sample-cleanup-20261107/` in the project workspace. The report distinguishes retained records, committed archives, unconfirmed ownership and automation limits.
