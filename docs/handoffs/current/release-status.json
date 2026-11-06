@@ -3,7 +3,7 @@
   "authority": "current-release",
   "asOf": "2026-11-06",
   "timezone": "Asia/Singapore",
-  "summary": "UAT serves d45fd6f, READY/PROMOTED with exact health at2026-11-06T03:35:37.142Z and all11 same-SHA CI jobs passed without retries. Actor correction applied as20261106032602, exact bytes and original fixture preservation verified. G02 fresh retest remains blocked awaiting synthetic-serial approval; G01 remains Auth-admin blocked. All90 human rows PENDING and520 engineering cells NOT RUN.",
+  "summary": "UAT remains d45fd6f, READY/PROMOTED with verified exact health and all 11 same-SHA CI jobs passed without retries. After applied actor correction032602, approved fresh002 receiving/QC/putaway and conversion passed scoped live checks. G02 is now blocked by Events converted-product eligibility; recovery NOT RUN. The local Events/availability fix is not applied or deployed, with shipping and continuation approved but release steps pending. G01 remains Auth-admin blocked. All90 human rows PENDING and520 engineering cells NOT RUN.",
   "deployed": {
     "commit": "d45fd6f6827c57e3db1479e25f3207fd6795616d",
     "environment": "uat",
@@ -53,7 +53,7 @@
       "evidence": "outputs/release-readiness-20261106/qa4-ci/ci-d45fd6f-final-summary.json",
       "scope": "All11 same-SHA jobs succeeded:1861 memory passes,143 exclusions;26 controlled passes,4 exclusions;0 failures/retries. Corrected fixture and real approvals navigation passed first attempt at all six viewports. This closes the eb fixture failure, not proof of the original dd hosted retry trigger or human acceptance."
     },
-    "scope": "Certified/deployed application and latest known pushed source are d45fd6f. Later documentation and byte-identical migration-filename reconciliation are offline changes, not a new functional app release; their future commit is recorded externally. No self-referential SHA or unobserved CI is invented."
+    "scope": "Certified/deployed application and latest known pushed candidate are d45fd6f. The Events converted-product/availability correction is a separate local functional candidate, not covered by d45 CI or deployment. Its future commit and CI must be recorded externally; no SHA is invented."
   },
   "sourceFollowUps": {
     "testOnlyReachability": {
@@ -117,7 +117,7 @@
         "concreteSubtestsPerExecution": 51,
         "evidence": "outputs/release-readiness-20261106/qa4-ci/g02-native-actor-proof-eb2148c-127656898709.md"
       },
-      "scope": "Legacy key retains the original prospective repair identity. Canonical profile-email movement actor versus offline receipt UUID mismatch corrected by unchanged reviewed SQL applied once at03:26:02UTC after all11 d45 CI checks. Actual native helper52 passes/0 skips twice in d45 as well as eb;123 local checks retained. Read-only live11/11, exact comparisons45/45, offline11/11 passed; security39 INFO/0 WARN/0 ERROR unchanged. Original fixture and xmin unchanged:origin1/history2/bridge0/break0/receipt1/claim0. No history backfill or fresh live workflow acceptance.",
+      "scope": "Legacy key retains the original prospective repair identity. Canonical profile-email movement actor versus offline receipt UUID mismatch corrected by unchanged reviewed SQL applied once at03:26:02UTC after all11 d45 CI checks. Actual native helper52 passes/0 skips twice in d45 as well as eb;123 local checks retained. Read-only live11/11, exact comparisons45/45, offline11/11 passed; security39 INFO/0 WARN/0 ERROR unchanged. Original fixture and xmin unchanged:origin1/history2/bridge0/break0/receipt1/claim0. No history backfill. These post-apply checks alone were not fresh live acceptance; later fresh002 phase evidence is recorded separately under acceptance.",
       "reviewedLocalVersion": "20261106012547",
       "appliedVersion": "20261106032602",
       "applied": true,
@@ -142,6 +142,20 @@
       "commit": null,
       "status": "prepared-pending-publication",
       "scope": "Byte-identical actor migration renamed to actual032602 version; documentation checkpoint and filename references only, no functional app/SQL change. Future source/docs commit must be recorded externally after creation."
+    },
+    "eventConvertedProductDemand": {
+      "commit": null,
+      "status": "local-pending-validation-and-release",
+      "sourceFile": "supabase/migrations/20261106044000_event_converted_product_demand.sql",
+      "applied": false,
+      "deployed": false,
+      "shipApprovalReceived": true,
+      "hostedCi": null,
+      "clientLocalPassed": 81,
+      "sqlValidation": "passed-local-pglite",
+      "sqlLocalPassed": 61,
+      "predecessorEvidence": "outputs/release-readiness-20261106/g02-live-d45fd6f-r2/qa3-event-eligibility-definitions.json",
+      "scope": "Local client catalog includes re_kitted_item. The SQL candidate permits that class for event requests and availability, and replaces ambiguous p.id=id with p.id=requested.product_id inside the full unnest predicate. The predecessor availability check accepted excluded/missing IDs; request creation still rejected excluded products, so this is availability validation, not a stock-write bypass. Exact predecessor/body/metadata guards remain; approval, Learning, readiness, stock, ordinary department request and return/recovery rules are unchanged. Main independently verified client81/81 and SQL PGlite61/61 passes, including excluded/missing-ID negatives. The user approved shipping and continuation. No new hosted CI, apply or deployment is claimed."
     }
   },
   "documentation": {
@@ -151,7 +165,7 @@
     "pendingRevision": {
       "commit": null,
       "status": "prepared-pending-publication",
-      "scope": "Current post-deploy documentation and byte-identical migration-filename reconciliation await a future externally recorded commit; no self-referential SHA."
+      "scope": "Fresh002 phase results and the Events blocker checkpoint, including minimal KB safety guidance, await a future externally recorded commit. This is not delivery of the proposed Events fix or verified live handbook content."
     },
     "scope": "Last published documentation source is d45fd6f. This final checkpoint is pending publication; deployed health does not independently verify the delivered handbook content."
   },
@@ -163,7 +177,7 @@
       "sourceFile": "supabase/migrations/20261106032602_stock_conversion_putaway_authoritative_actor.sql",
       "sourceSha256": "fcede47f4671ab241d9e0a04face6d626aabb559fe8e72e830d6165342339306",
       "evidence": "outputs/release-readiness-20261106/qa4-ci/g02-actor-postapply-verification-20261106032602.json",
-      "scope": "Legacy key retains the original prospective repair identity. Canonical profile-email movement actor versus offline receipt UUID mismatch corrected by unchanged reviewed SQL applied once at03:26:02UTC after all11 d45 CI checks. Actual native helper52 passes/0 skips twice in d45 as well as eb;123 local checks retained. Read-only live11/11, exact comparisons45/45, offline11/11 passed; security39 INFO/0 WARN/0 ERROR unchanged. Original fixture and xmin unchanged:origin1/history2/bridge0/break0/receipt1/claim0. No history backfill or fresh live workflow acceptance."
+      "scope": "Legacy key retains the original prospective repair identity. Canonical profile-email movement actor versus offline receipt UUID mismatch corrected by unchanged reviewed SQL applied once at03:26:02UTC after all11 d45 CI checks. Actual native helper52 passes/0 skips twice in d45 as well as eb;123 local checks retained. Read-only live11/11, exact comparisons45/45, offline11/11 passed; security39 INFO/0 WARN/0 ERROR unchanged. Original fixture and xmin unchanged:origin1/history2/bridge0/break0/receipt1/claim0. No history backfill. These post-apply checks alone were not fresh live acceptance; later fresh002 phase evidence is recorded separately under acceptance."
     },
     {
       "name": "stock_conversion_qc_putaway_bridge",
@@ -171,7 +185,7 @@
       "reviewedLocalVersion": "20261105195433",
       "sourceSha256": "83d84623c9b11e0ab1659ab42f75de4cd9fe18a943af405d7517b76ff2c746df",
       "evidence": "outputs/release-readiness-20261106/qa4-ci/g02-applied-20261105233321.json",
-      "scope": "Applied after all 11 d4d5967 CI checks. Stored SQL bytes match; five predecessor guards and existing OIDs/ACLs verified, three private tables and six helpers deny client access, expected 24 triggers and 14 indexes present. Schema verification only; live conversion transaction remains pending."
+      "scope": "Applied after all 11 d4d5967 CI checks. Stored SQL bytes match; five predecessor guards and existing OIDs/ACLs verified, three private tables and six helpers deny client access, expected 24 triggers and 14 indexes present. Schema verification only at that checkpoint; later fresh002 conversion evidence is recorded separately under acceptance."
     },
     {
       "name": "warehouse_export_command_authority",
@@ -209,10 +223,15 @@
       "scope": "All11 same-SHA jobs succeeded:1861 memory passes,143 exclusions;26 controlled passes,4 exclusions;0 failures/retries. Corrected fixture and real approvals navigation passed first attempt at all six viewports. This closes the eb fixture failure, not proof of the original dd hosted retry trigger or human acceptance."
     },
     "nonSmtpUatRetest": {
-      "status": "not-run",
+      "status": "partial",
       "commit": "d45fd6f6827c57e3db1479e25f3207fd6795616d",
-      "evidence": [],
-      "scope": "New d45 public health and read-only database postchecks are verified separately. Earlier dd privacy4, guarded return-balance and Product/export9 checks remain in history, not relabeled d45. No fresh d45 business journey or full transaction/hardware/human acceptance recorded."
+      "evidence": [
+        "outputs/release-readiness-20261106/g02-live-d45fd6f-r2/qa3-post-putaway.json",
+        "outputs/release-readiness-20261106/g02-live-d45fd6f-r2/qa3-conversion-create-barrier.json",
+        "outputs/release-readiness-20261106/g02-live-d45fd6f-r2/qa3-conversion-precomplete-barrier.json",
+        "outputs/release-readiness-20261106/g02-live-d45fd6f-r2/qa3-post-conversion.json"
+      ],
+      "scope": "Fresh002 on d45: receiving/independent QC/first putaway21, conversion create14, pre-complete15 and post-complete16 checks passed. This is scoped live conversion evidence, not completed event fulfillment, return, recovery, hardware or human acceptance. Earlier dd privacy4, guarded return-balance and Product/export9 checks remain historical and are not relabeled d45."
     },
     "g01LegalToPayment": {
       "status": "blocked",
@@ -223,15 +242,30 @@
     "g02ConversionRecovery": {
       "status": "blocked",
       "commit": "d45fd6f6827c57e3db1479e25f3207fd6795616d",
-      "reason": "awaiting-fresh-serial-approval",
-      "freshRetest": "NOT RUN",
-      "freshSerialApprovalReceived": false,
+      "reason": "events-converted-product-eligibility",
+      "freshRetest": "PARTIAL",
+      "freshSerialApprovalReceived": true,
       "originalFixtureAppCommit": "dd9048e405bf84c2b7b0d6647309d1a8747c9378",
       "evidence": [
         "outputs/release-readiness-20261106/qa4-ci/g02-q4-post-putaway-20261106T011501Z.json",
-        "outputs/release-readiness-20261106/qa4-ci/g02-actor-postapply-verification-20261106032602.json"
+        "outputs/release-readiness-20261106/qa4-ci/g02-actor-postapply-verification-20261106032602.json",
+        "outputs/release-readiness-20261106/g02-live-d45fd6f-r2/qa3-post-putaway.json",
+        "outputs/release-readiness-20261106/g02-live-d45fd6f-r2/qa3-conversion-create-barrier.json",
+        "outputs/release-readiness-20261106/g02-live-d45fd6f-r2/qa3-conversion-precomplete-barrier.json",
+        "outputs/release-readiness-20261106/g02-live-d45fd6f-r2/qa3-post-conversion.json",
+        "outputs/release-readiness-20261106/g02-live-d45fd6f-r2/12-event-product-blocker.json",
+        "outputs/release-readiness-20261106/g02-live-d45fd6f-r2/qa3-event-eligibility-definitions.json",
+        "outputs/release-readiness-20261106/g02-live-d45fd6f-r2/qa3-event-custody-preorder.json"
       ],
-      "scope": "Original dd journey completed receiving, independent accepted QC and first putaway but found no bridge. Canonical profile-email movement actor versus offline receipt UUID mismatch is corrected by applied032602 SQL; catalog/preservation verification is not a fresh journey. Original fixture remains origin1/history2/bridge0/break0, with all row data/xmin unchanged. Normal Learning startup synchronization writes occurred on that earlier authorized journey; typed/manual scans were not physical scanner acceptance. Fresh d45 conversion/recovery NOT RUN, awaiting fresh synthetic-serial approval. No repeat putaway, replay, QC rewrite, old-stock changes or backfill."
+      "scope": "Approved fresh002 receiving, independent accepted QC and first putaway passed21 checks; conversion create14, pre-complete15 and post-complete16 passed. The single serial and accepted QC were retained, the conversion completed with two movement legs and its claim released; recovery NOT RUN. Events cannot yet select the re_kitted_item output. Its local client/SQL correction is not applied or deployed. Original001 remains unchanged:origin1/history2/bridge0/break0, with no replay or backfill. That historical missing bridge was the canonical profile-email movement actor versus offline receipt UUID mismatch, corrected by applied032602 SQL. Normal Learning startup synchronization writes occurred during authorized UI navigation; typed/manual scans were not physical scanner acceptance. No packaging, downstream event fulfillment, return, recovery or human sign-off is inferred.",
+      "fresh002Checks": {
+        "receivingQcPutaway": 21,
+        "conversionCreate": 14,
+        "preComplete": 15,
+        "postComplete": 16
+      },
+      "recovery": "NOT RUN",
+      "nextPrerequisite": "The existing event has no custody session and requests/orders/allocations/custody sources/returns are all0. After the approved fix is deployed, the normal Event owner must enable prospective custody before order creation; verify the session predates the saved order. Preserve the same event master and approved recipe. This is a setup prerequisite, not a code defect. Main owns the approved continuation; no Events writes are recorded at this checkpoint."
     },
     "dataAndWorkflowPreservation": {
       "status": "pending",

@@ -1,6 +1,6 @@
 # Data Handoff
 
-Read the [current release manifest](release-status.json). UAT serves d45fd6f with verified health and actor correction032602 applied. Earlier dd privacy/guarded returns/Product-export checks and [September Data evidence](../2026-09-22/data.md) remain historical, not fresh d45 transaction acceptance. G01/G02 remain blocked.
+Read the [current release manifest](release-status.json). UAT serves d45fd6f with verified health and actor correction032602 applied. Earlier dd privacy/guarded returns/Product-export checks and [September Data evidence](../2026-09-22/data.md) remain historical, not fresh d45 transaction acceptance. Fresh002 receiving, independent QC, putaway and conversion now have scoped d45 live proof; original001 is unchanged. G02 remains blocked because Events excludes the converted product, with return/recovery NOT RUN. A local eligibility/availability fix is not applied or deployed. G01 remains Auth-admin blocked.
 
 The operational app and governed CSV exports are separate from the Reporting API. The API and recipient connector remain undelivered and disabled. Follow the [separate implementation phase](../../integrations/reporting-api/SEPARATE-IMPLEMENTATION-PHASE.md), [delivery gates](../../integrations/reporting-api/RELEASE-READINESS.md) and [proposed Data setup](../../integrations/reporting-api/DATA-TEAM-QUICKSTART.md). No named recipient owner, provider profile or field dictionary approval is inferred from those documents.
 

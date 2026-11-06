@@ -92,7 +92,7 @@ test("current authority separates deployed same-SHA CI from blocked journeys and
   assert.deepEqual(manifest.candidate.hostedCi.controlled, { passed: 26, exclusions: 4 });
   assert.equal(manifest.acceptance.sameCommitHostedCi.status, "passed");
   assert.equal(manifest.acceptance.sameCommitHostedCi.runId, manifest.candidate.hostedCi.runId);
-  assert.equal(manifest.acceptance.nonSmtpUatRetest.status, "not-run");
+  assert.equal(manifest.acceptance.nonSmtpUatRetest.status, "partial");
   const previous = manifest.history.find(item => item.commit === "dd9048e405bf84c2b7b0d6647309d1a8747c9378");
   assert.equal(previous.hostedCi.memory.retryPassed, 1);
   assert.equal(previous.scopedRetests.status, "partial");
@@ -100,14 +100,36 @@ test("current authority separates deployed same-SHA CI from blocked journeys and
   assert.equal(manifest.acceptance.g01LegalToPayment.status, "blocked");
   assert.match(manifest.acceptance.g01LegalToPayment.scope, /without Auth administration/);
   assert.equal(manifest.acceptance.g02ConversionRecovery.status, "blocked");
-  assert.equal(manifest.acceptance.g02ConversionRecovery.reason, "awaiting-fresh-serial-approval");
+  assert.equal(manifest.acceptance.g02ConversionRecovery.reason, "events-converted-product-eligibility");
   assert.match(manifest.acceptance.g02ConversionRecovery.evidence[0], /g02-q4-post-putaway-20261106T011501Z\.json$/);
-  assert.match(manifest.acceptance.g02ConversionRecovery.scope, /conversion\/recovery NOT RUN/);
+  assert.match(manifest.acceptance.g02ConversionRecovery.scope, /conversion completed.*recovery NOT RUN/);
   assert.match(manifest.acceptance.g02ConversionRecovery.scope, /Normal Learning startup.*writes/);
   assert.match(manifest.acceptance.g02ConversionRecovery.scope, /typed\/manual.*not physical scanner/);
   assert.match(manifest.acceptance.g02ConversionRecovery.scope, /canonical profile-email.*offline receipt UUID/i);
-  assert.equal(manifest.acceptance.g02ConversionRecovery.freshRetest, "NOT RUN");
-  assert.equal(manifest.acceptance.g02ConversionRecovery.freshSerialApprovalReceived, false);
+  assert.equal(manifest.acceptance.g02ConversionRecovery.freshRetest, "PARTIAL");
+  assert.equal(manifest.acceptance.g02ConversionRecovery.freshSerialApprovalReceived, true);
+  assert.deepEqual(manifest.acceptance.g02ConversionRecovery.fresh002Checks, {
+    receivingQcPutaway: 21, conversionCreate: 14, preComplete: 15, postComplete: 16,
+  });
+  assert.equal(manifest.acceptance.g02ConversionRecovery.recovery, "NOT RUN");
+  assert.match(manifest.acceptance.g02ConversionRecovery.nextPrerequisite, /Event owner.*custody.*before order creation/);
+  assert.match(manifest.acceptance.g02ConversionRecovery.nextPrerequisite, /After the approved fix is deployed/);
+  for (const name of ["qa3-post-putaway.json", "qa3-conversion-create-barrier.json", "qa3-conversion-precomplete-barrier.json", "qa3-post-conversion.json", "12-event-product-blocker.json", "qa3-event-custody-preorder.json"]) {
+    assert.ok(manifest.acceptance.g02ConversionRecovery.evidence.includes(`outputs/release-readiness-20261106/g02-live-d45fd6f-r2/${name}`));
+  }
+  const eventsFix = manifest.sourceFollowUps.eventConvertedProductDemand;
+  assert.equal(eventsFix.commit, null);
+  assert.equal(eventsFix.applied, false);
+  assert.equal(eventsFix.deployed, false);
+  assert.equal(eventsFix.shipApprovalReceived, true);
+  assert.equal(eventsFix.hostedCi, null);
+  assert.equal(eventsFix.clientLocalPassed, 81);
+  assert.equal(eventsFix.sqlValidation, "passed-local-pglite");
+  assert.equal(eventsFix.sqlLocalPassed, 61);
+  assert.match(eventsFix.scope, /requested\.product_id/);
+  assert.match(eventsFix.scope, /not a stock-write bypass/);
+  assert.ok(!manifest.databaseMigrations.some(item => item.name === "event_converted_product_demand"));
+  assert.equal(previous.g02Observation.reason, "missing-putaway-bridge");
   assert.equal(manifest.acceptance.humanAndPhysicalDeviceAcceptance.status, "not-recorded");
   assert.equal(manifest.acceptance.productionGoNoGo.status, "not-granted");
   for (const migration of manifest.databaseMigrations) {
@@ -164,13 +186,18 @@ test("separate Reporting API phase retains approval and four-cycle acceptance ga
 
 test("deployed operating guidance distinguishes unknown, blocked journeys and pending human verification", () => {
   const manual = read("docs/manual/MWELL_INTRA_USER_MANUAL.md");
-  for (const phrase of ["public-only", "valid source bin", "My Work", "Received Units Availability", "all time", "JSON 401", "UAT serves `d45fd6f6827c57e3db1479e25f3207fd6795616d`", "G02 is BLOCKED awaiting fresh synthetic-serial approval", "G01 is blocked by Auth administration"]) {
+  for (const phrase of ["public-only", "valid source bin", "My Work", "Received Units Availability", "all time", "JSON 401", "UAT serves `d45fd6f6827c57e3db1479e25f3207fd6795616d`", "G02 is BLOCKED by Events converted-product eligibility", "G01 is blocked by Auth administration"]) {
     assert.ok(manual.includes(phrase), `missing guidance: ${phrase}`);
   }
   for (const phrase of ["authorized colleague", "2 issued, 1 sold and 1 returned leaves 0 remaining", "unknown, not zero", "independent settlement approval", "published to GitHub", "not a live handbook update"]) {
     assert.ok(manual.includes(phrase), `missing follow-up guidance: ${phrase}`);
   }
   assert.match(manual, /All\s*90 human rows PENDING/i);
+  for (const file of ["docs/handoffs/current/README.md", "docs/handoffs/current/testers.md", "docs/handoffs/current/technical.md", "docs/handoffs/current/data.md", "docs/USER_TRAINING_AND_OPERATIONS_MANUAL.md", "docs/TECHNICAL_AND_FUNCTIONAL_SPECIFICATION.md", "docs/TRAINING_AND_HANDOVER_CONTENT.md", "docs/releases/2026-11-06-RELEASE-READINESS.md"]) {
+    assert.doesNotMatch(read(file), /awaiting (?:fresh )?(?:synthetic-)?serial approval/i, file);
+  }
+  assert.match(read("docs/handoffs/current/testers.md"), /Historical dd evidence/);
+  assert.match(read("apps/shell/lib/knowledge/features.ts"), /Do not substitute the base SKU or change its class/);
 });
 
 test("supporting handoffs reuse the existing handbook catalogue", () => {

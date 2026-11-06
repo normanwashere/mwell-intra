@@ -113,8 +113,44 @@ describe('event lifecycle rules', () => {
 
     await loadLiveEvents(client as never);
 
-    expect(filters).toContainEqual(['item_class', ['sellable_sku', 'merchandise', 'event_material']]);
+    expect(filters).toContainEqual(['item_class', ['sellable_sku', 're_kitted_item', 'merchandise', 'event_material']]);
     expect(filters.some(([column]) => column === 'active')).toBe(false);
+  });
+
+  it.each([
+    ['sellable_sku', true],
+    ['re_kitted_item', true],
+    ['merchandise', true],
+    ['event_material', true],
+    ['fulfillment_supply', false],
+    ['warehouse_tool', false],
+    ['unknown_class', false],
+  ] as const)('event demand catalog class %s has eligibility %s', async (itemClass, eligible) => {
+    const product = { id: 'catalog-product', name: 'Catalog product', item_class: itemClass };
+    const client = {
+      schema: () => ({ from: (table: string) => {
+        let rows = table === 'products' ? [product] : [];
+        const query = {
+          select: () => query,
+          order: () => query,
+          eq: () => query,
+          in: (column: string, values: readonly string[]) => {
+            expect(table).toBe('products');
+            expect(column).toBe('item_class');
+            rows = rows.filter(row => values.includes(row.item_class));
+            return query;
+          },
+          limit: async () => ({ data: rows, error: null }),
+        };
+        return query;
+      } }),
+    };
+
+    const result = await loadLiveEvents(client as never);
+
+    expect(result.products).toEqual(eligible
+      ? [{ id: 'catalog-product', name: 'Catalog product', itemClass }]
+      : []);
   });
 
   it('loads active departments and cost centers for governed fulfillment choices', async () => {

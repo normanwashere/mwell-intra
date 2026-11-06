@@ -9,13 +9,14 @@ const historical = await migration('20260710160000_warehouse_w1_quality_and_appr
 const returnIntake = await migration('20260828033036_return_intake_atomic_quarantine');
 const fulfillment = await migration('20260828011200_fulfillment_zero_line_backorder');
 const integrity = await migration('20260905092000_warehouse_integrity');
+const convertedDemandMigration = await migration('20261106044000_event_converted_product_demand');
 const extractFunction = (source,name) => source.match(new RegExp(`create or replace function ${name.replaceAll('.', '\\.')}\\([\\s\\S]*?\\$\\$;`))[0];
 const A='11111111-1111-4111-8111-111111111111',B='22222222-2222-4222-8222-222222222222',O='33333333-3333-4333-8333-333333333333';
 const seller=['events.view_event_custody','events.record_event_outcome'];
 async function actor(db,id=A,caps=seller){await db.query("select set_config('app.actor',$1,false),set_config('app.caps',$2,false)",[id,caps.join(',')]);}
 async function rpc(db,name,payload){return (await db.query(`select warehouse.${name}($1::jsonb) result`,[payload])).rows[0].result;}
 const sale=extra=>({event_id:'e1',allocation_id:'a1',kind:'sale',quantity:1,serial_numbers:['S1'],amount:125,external_reference:'SALE-1',idempotency_key:'outcome-command-1',...extra});
-async function fixture(){
+async function fixture({ convertedProducts = true } = {}){
   const db=new PGlite();
   await db.exec(`create role anon; create role authenticated; create role service_role;
     create schema auth;create schema core;create schema private;create schema warehouse;create schema learning;
@@ -90,6 +91,12 @@ async function fixture(){
   await db.exec(extractFunction(await migration('20260706092400_warehouse_rpcs'),'warehouse.cancel_allocation'));
   await db.exec(sql);
   await db.exec(await migration('20261105135318_warehouse_allocation_return_balance'));
+  // Restore the extracted request ACLs from the August 4 grant and August 13 wrapper migration.
+  await db.exec(`revoke all on function warehouse.request_event_fulfillment_uncertified_impl(jsonb) from public,anon,authenticated;
+    grant execute on function warehouse.request_event_fulfillment_uncertified_impl(jsonb) to service_role;
+    revoke all on function warehouse.request_event_fulfillment(jsonb) from public,anon;
+    grant execute on function warehouse.request_event_fulfillment(jsonb) to authenticated,service_role;`);
+  if (convertedProducts) await db.exec(convertedDemandMigration);
   await actor(db);return db;
 }
 async function setup(db,acknowledge=true){
@@ -232,6 +239,237 @@ test('multi-product event demand persists once with scoped eligibility and uncha
   await assert.rejects(rpc(db,'request_event_fulfillment',{...input,idempotency_key:'fraction-demand',lines:[{productId:'watch',quantity:1.5}]}),/whole|integer/);
   await actor(db);await assert.rejects(rpc(db,'event_demand_availability',{event_id:'e1',product_ids:['watch']}),/Not authorized/);
   await assert.rejects(rpc(db,'request_event_fulfillment',{...input,idempotency_key:'seller-request-denied'}),/Not authorized/);
+});
+
+const convertedDemand = extra => ({
+  event_id: 'e1', requesting_department: 'marketing', purpose: 'Synthetic converted event stock',
+  cost_center: 'MKT', required_date: '2026-11-06', expense_treatment: 'sale',
+  lines: [{ productId: 'converted', quantity: 1 }], idempotency_key: 'converted-event-demand', ...extra,
+});
+
+const demandState = async db => (await db.query(`select
+  (select count(*)::int from warehouse.department_stock_requests) requests,
+  (select count(*)::int from warehouse.fulfillment_orders) orders,
+  (select count(*)::int from warehouse.movements) movements,
+  (select count(*)::int from warehouse.command_log) commands,
+  (select count(*)::int from core.activity_log) activities`)).rows[0];
+
+const demandFunctions = [
+  'warehouse.request_event_fulfillment_uncertified_impl(jsonb)',
+  'warehouse.event_demand_availability(jsonb)',
+  'warehouse.request_event_fulfillment(jsonb)',
+  'private.assert_event_demand(jsonb)',
+];
+
+async function demandCatalog(db) {
+  return (await db.query(`select signature, p.prosrc body, md5(p.prosrc) body_md5,
+    to_jsonb(p)-'prosrc' metadata,
+    has_function_privilege('anon',p.oid,'EXECUTE') anon_execute,
+    has_function_privilege('authenticated',p.oid,'EXECUTE') authenticated_execute,
+    has_function_privilege('service_role',p.oid,'EXECUTE') service_execute
+    from unnest($1::text[]) signatures(signature)
+    join pg_proc p on p.oid=to_regprocedure(signature) order by signature`, [demandFunctions])).rows;
+}
+
+async function seedConvertedDemand(db) {
+  await db.exec(`insert into warehouse.products values
+    ('converted','Converted item',true,'re_kitted_item'),
+    ('packaging','Packaging',false,'packaging'),
+    ('supply','Fulfillment supply',false,'fulfillment_supply'),
+    ('tool','Warehouse tool',false,'warehouse_tool'),
+    ('material','Event material',false,'event_material')`);
+  await actor(db, B, ['events.request_fulfillment']);
+}
+
+test('converted event predecessor reproduces request denial and unbound availability validation', async t => {
+  const db = await fixture({ convertedProducts: false }); t.after(() => db.close()); await seedConvertedDemand(db);
+  await assert.rejects(rpc(db, 'request_event_fulfillment', convertedDemand()),
+    /Event requests may include only sellable SKU, merchandise, and event material items/);
+  assert.deepEqual(await rpc(db, 'event_demand_availability', { event_id: 'e1', product_ids: ['supply', 'missing'] }), [
+    { product_id: 'missing', eligible_quantity: 5 }, { product_id: 'supply', eligible_quantity: 5 },
+  ]);
+  assert.deepEqual(await demandState(db), { requests: 0, orders: 0, movements: 0, commands: 0, activities: 0 });
+});
+
+test('converted event demand accepts converted products without releasing stock', async t => {
+  const db = await fixture(); t.after(() => db.close()); await seedConvertedDemand(db);
+  await db.exec('set role authenticated');
+  await t.test('request accepts re_kitted_item and remains pending approval', async () => {
+    const requested = await rpc(db, 'request_event_fulfillment', convertedDemand());
+    assert.deepEqual(requested.lines, convertedDemand().lines);
+    assert.equal(requested.status, 'pending_approval');
+    assert.equal(requested.requested_by, B);
+    assert.equal(requested.fulfillment_order_id, null);
+  });
+  await t.test('availability includes re_kitted_item through the existing ATP projection', async () => {
+    assert.deepEqual(await rpc(db, 'event_demand_availability', { event_id: 'e1', product_ids: ['converted'] }),
+      [{ product_id: 'converted', eligible_quantity: 5 }]);
+  });
+  await db.exec('reset role');
+  const beforeReplay = await demandState(db);
+  await t.test('identical replay adds no request, order, movement, command or activity', async () => {
+    await db.exec('set role authenticated');
+    const first = await rpc(db, 'request_event_fulfillment', convertedDemand());
+    assert.deepEqual(await rpc(db, 'request_event_fulfillment', convertedDemand()), first);
+    await db.exec('reset role');
+    assert.deepEqual(await demandState(db), beforeReplay);
+    assert.deepEqual(beforeReplay, { requests: 1, orders: 0, movements: 0, commands: 1, activities: 1 });
+  });
+  await t.test('reused command cannot change converted quantity', async () => {
+    await assert.rejects(rpc(db, 'request_event_fulfillment', convertedDemand({ lines: [{ productId: 'converted', quantity: 2 }] })), /different payload/);
+    assert.deepEqual(await demandState(db), beforeReplay);
+  });
+  await t.test('existing classes remain available alongside the converted product', async () => {
+    assert.deepEqual(await rpc(db, 'event_demand_availability', { event_id: 'e1', product_ids: ['converted', 'watch', 'bag', 'material'] }), [
+      { product_id: 'bag', eligible_quantity: 5 }, { product_id: 'converted', eligible_quantity: 5 },
+      { product_id: 'material', eligible_quantity: 5 }, { product_id: 'watch', eligible_quantity: 2 },
+    ]);
+    const lines = ['converted', 'watch', 'bag', 'material'].map(productId => ({ productId, quantity: 1 }));
+    const request = await rpc(db, 'request_event_fulfillment', convertedDemand({ lines, expense_treatment: 'expense', idempotency_key: 'converted-mixed-demand' }));
+    assert.deepEqual(request.lines, lines);
+    assert.equal(request.status, 'pending_approval');
+  });
+});
+
+test('converted event demand retains product, accounting, authority and quantity denials', async t => {
+  const db = await fixture(); t.after(() => db.close()); await seedConvertedDemand(db);
+  const unchanged = await demandState(db);
+  await db.exec('set role authenticated');
+  for (const productId of ['packaging', 'supply', 'tool', 'missing']) {
+    await t.test(`availability rejects excluded or missing product ${productId}`, async () => {
+      await assert.rejects(rpc(db, 'event_demand_availability', { event_id: 'e1', product_ids: [productId] }),
+        /Invalid event product/);
+    });
+    await t.test(`request rejects excluded or missing product ${productId}`, async () => {
+      await assert.rejects(rpc(db, 'request_event_fulfillment', convertedDemand({
+        lines: [{ productId, quantity: 1 }], idempotency_key: `excluded-${productId}-demand`,
+      })), productId === 'missing' ? /identify a product/ : /Choose a sellable product, converted product, merchandise, or event material/);
+    });
+  }
+  await t.test('mixed eligibility cannot hide an excluded product', async () => {
+    await assert.rejects(rpc(db, 'event_demand_availability', { event_id: 'e1', product_ids: ['converted', 'supply'] }), /Invalid event product/);
+    await assert.rejects(rpc(db, 'request_event_fulfillment', convertedDemand({
+      lines: [{ productId: 'converted', quantity: 1 }, { productId: 'supply', quantity: 1 }], idempotency_key: 'mixed-excluded-demand',
+    })), /Choose a sellable product/);
+  });
+  for (const expense_treatment of ['sale', 'custody']) {
+    await t.test(`merchandise still rejects ${expense_treatment} accounting`, async () => {
+      await assert.rejects(rpc(db, 'request_event_fulfillment', convertedDemand({
+        lines: [{ productId: 'converted', quantity: 1 }, { productId: 'bag', quantity: 1 }],
+        expense_treatment, idempotency_key: `merchandise-${expense_treatment}-demand`,
+      })), /All merchandise requests must use expense treatment/);
+    });
+  }
+  for (const [index, quantity] of [0, -1, 1.5, '1', null, 2147483648].entries()) {
+    await t.test(`converted quantity ${JSON.stringify(quantity)} is rejected`, async () => {
+      await assert.rejects(rpc(db, 'request_event_fulfillment', convertedDemand({
+        lines: [{ productId: 'converted', quantity }], idempotency_key: `invalid-quantity-${index}`,
+      })), /Positive whole demand quantity required/);
+    });
+  }
+  await t.test('duplicate converted lines remain rejected', async () => {
+    await assert.rejects(rpc(db, 'request_event_fulfillment', convertedDemand({
+      lines: [{ productId: 'converted', quantity: 1 }, { productId: 'converted', quantity: 1 }],
+      idempotency_key: 'duplicate-converted-demand',
+    })), /Duplicate demand product/);
+  });
+  await t.test('authenticated seller cannot request or inspect converted demand', async () => {
+    await actor(db); await db.exec('set role authenticated');
+    await assert.rejects(rpc(db, 'request_event_fulfillment', convertedDemand()), /Not authorized: events.request_fulfillment/);
+    await assert.rejects(rpc(db, 'event_demand_availability', { event_id: 'e1', product_ids: ['converted'] }), /Not authorized: events.request_fulfillment/);
+    await assert.rejects(rpc(db, 'request_event_fulfillment_uncertified_impl', convertedDemand()), /permission denied/);
+    await db.exec('reset role');
+  });
+  await t.test('anonymous SQL role cannot reach either demand RPC', async () => {
+    await actor(db, '', []); await db.exec('set role anon');
+    await assert.rejects(rpc(db, 'request_event_fulfillment', convertedDemand()), /permission denied/);
+    await assert.rejects(rpc(db, 'event_demand_availability', { event_id: 'e1', product_ids: ['converted'] }), /permission denied/);
+    await db.exec('reset role');
+  });
+  await t.test('missing authenticated identity is denied despite a capability result', async () => {
+    await actor(db, '', ['events.request_fulfillment']); await db.exec('set role authenticated');
+    await assert.rejects(rpc(db, 'request_event_fulfillment', convertedDemand()), /Authentication required/);
+    await assert.rejects(rpc(db, 'event_demand_availability', { event_id: 'e1', product_ids: ['converted'] }), /Not authorized/);
+    await db.exec('reset role');
+  });
+  assert.deepEqual(await demandState(db), unchanged);
+});
+
+test('converted event demand cannot reopen a closed or settled event gate', async t => {
+  const db = await fixture(); t.after(() => db.close()); await seedConvertedDemand(db);
+  await actor(db, B, ['events.manage_events']);
+  await rpc(db, 'configure_event_custody', { event_id: 'e1', action: 'enable', idempotency_key: 'converted-gate-enable' });
+  await actor(db, B, ['events.request_fulfillment']);
+  const unchanged = await demandState(db);
+  for (const status of ['closed', 'cancelled']) {
+    await t.test(`${status} event rejects converted demand and availability`, async () => {
+      await db.query("update warehouse.events set status=$1 where id='e1'", [status]);
+      await assert.rejects(rpc(db, 'request_event_fulfillment', convertedDemand()), /settlement is locked/);
+      await assert.rejects(rpc(db, 'event_demand_availability', { event_id: 'e1', product_ids: ['converted'] }), /Active event required/);
+    });
+  }
+  await t.test('submitted settlement still blocks new converted demand', async () => {
+    await db.exec("update warehouse.events set status='active' where id='e1'; insert into warehouse.event_reconciliations(event_id,status,sold_units,giveaway_units,gross_sales_amount) values ('e1','submitted',0,0,0)");
+    await assert.rejects(rpc(db, 'request_event_fulfillment', convertedDemand()), /settlement is locked/);
+  });
+  assert.deepEqual(await demandState(db), unchanged);
+});
+
+test('converted event migration preserves all pg_proc metadata, OIDs, ACLs and certified wrapper', async t => {
+  const db = await fixture({ convertedProducts: false }); t.after(() => db.close());
+  const before = await demandCatalog(db);
+  assert.equal(before.find(row => row.signature === demandFunctions[0]).body_md5, 'ecbd995f23517b33abc4076a2b07755e');
+  assert.equal(before.find(row => row.signature === demandFunctions[1]).body_md5, '45ee5d3ce5f39f36d289991392efa7b9');
+  await db.exec(convertedDemandMigration);
+  const after = await demandCatalog(db);
+  assert.equal(after.length, before.length);
+  for (let i = 0; i < before.length; i++) {
+    const { body: oldBody, body_md5: oldHash, ...oldMetadata } = before[i];
+    const { body: newBody, body_md5: newHash, ...newMetadata } = after[i];
+    assert.deepEqual(newMetadata, oldMetadata, before[i].signature);
+    let expectedBody = oldBody;
+    if (before[i].signature === demandFunctions[0]) {
+      expectedBody = oldBody.replace(
+        "v_product.item_class not in ('sellable_sku', 'merchandise', 'event_material')",
+        "v_product.item_class not in ('sellable_sku', 're_kitted_item', 'merchandise', 'event_material')",
+      ).replace(
+        'Event requests may include only sellable SKU, merchandise, and event material items',
+        'Choose a sellable product, converted product, merchandise, or event material',
+      );
+    } else if (before[i].signature === demandFunctions[1]) {
+      expectedBody = oldBody.replace(
+        "select 1 from unnest(ids) id where not exists(select 1 from warehouse.products p where p.id=id and p.item_class in ('sellable_sku','merchandise','event_material'))",
+        "select 1 from unnest(ids) requested(product_id) where not exists(select 1 from warehouse.products p where p.id=requested.product_id and p.item_class in ('sellable_sku','re_kitted_item','merchandise','event_material'))",
+      );
+    }
+    assert.equal(newBody, expectedBody, 'Only the reviewed eligibility, requested-ID binding and error text may change');
+    if (demandFunctions.slice(0, 2).includes(before[i].signature)) assert.notEqual(newHash, oldHash);
+  }
+  assert.equal(after.find(row => row.signature === demandFunctions[0]).authenticated_execute, false);
+  assert.equal(after.find(row => row.signature === demandFunctions[0]).service_execute, true);
+  assert.equal(after.find(row => row.signature === demandFunctions[1]).anon_execute, false);
+  assert.equal(after.find(row => row.signature === demandFunctions[1]).authenticated_execute, true);
+  assert.equal(after.find(row => row.signature === demandFunctions[1]).service_execute, false);
+  assert.equal(after.find(row => row.signature === demandFunctions[2]).anon_execute, false);
+  assert.equal(after.find(row => row.signature === demandFunctions[2]).authenticated_execute, true);
+  assert.equal(after.find(row => row.signature === demandFunctions[2]).service_execute, true);
+});
+
+test('converted event migration fails atomically on either predecessor body drift', async t => {
+  for (const signature of demandFunctions.slice(0, 2)) {
+    await t.test(signature, async t => {
+      const db = await fixture({ convertedProducts: false }); t.after(() => db.close());
+      const { definition, body } = (await db.query('select pg_get_functiondef(oid) definition,prosrc body from pg_proc where oid=to_regprocedure($1)', [signature])).rows[0];
+      await db.exec(definition.replace(body, `${body}\n-- synthetic predecessor drift\n`));
+      const before = await demandCatalog(db);
+      try {
+        await assert.rejects(db.exec(convertedDemandMigration), /Event product eligibility predecessor drift/);
+      } finally {
+        await db.exec('rollback');
+      }
+      assert.deepEqual(await demandCatalog(db), before, 'Even the first replacement rolls back if the second target drifts');
+    });
+  }
 });
 
 test('cancellation cannot strand a released handover before independent acknowledgment',async t=>{

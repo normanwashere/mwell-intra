@@ -749,7 +749,7 @@ const definitions: FeatureDefinition[] = [
     statuses:
       "Planned, active, completed, loading, unavailable, validation failed, or access denied.",
     exception:
-      "Correct invalid dates before creation; resolve stock or custody exceptions in Warehouse instead of changing event totals directly.",
+      "Correct invalid dates before creation; resolve stock or custody exceptions in Warehouse instead of changing event totals directly. If a converted product is missing from the request list, stop and report the event and product references. Do not substitute the base SKU or change its class. For a custody-tracked journey, the authorized Event owner enables custody before order creation; conversion completion alone does not prove event fulfillment, return or recovery.",
     completionEvidence:
       "The event appears with dates and lifecycle, and its Warehouse source shows attributable reservation, issue, and return records.",
   },

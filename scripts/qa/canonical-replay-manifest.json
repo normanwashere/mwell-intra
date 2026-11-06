@@ -1491,6 +1491,11 @@
       "file": "20261106032602_stock_conversion_putaway_authoritative_actor.sql",
       "sha256": "fcede47f4671ab241d9e0a04face6d626aabb559fe8e72e830d6165342339306",
       "action": "execute-forward"
+    },
+    {
+      "file": "20261106044000_event_converted_product_demand.sql",
+      "sha256": "c11b32d5c1c15e6801cd267c8c64e0c6370f289c7998e2cfb87bbf8846bfedc4",
+      "action": "execute-forward"
     }
   ]
 }

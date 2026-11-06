@@ -72,6 +72,18 @@ test('G02 actor-only correction rejects claimed identity, weakened pins, metadat
   ]) assert.match(messages(mutate(name,change)), /reviewed forward.*(?:authority|digest|count|order)/i);
 });
 
+test('event converted demand contract rejects unbound IDs, expanded classes, weakened pins, metadata loss, timeout leakage and appended grants', () => {
+  const name='20261106044000_event_converted_product_demand.sql';
+  for (const change of [
+    sql=>sql.replace('p.id=requested.product_id','p.id=p.id'),
+    sql=>sql.replaceAll("''re_kitted_item''", "''re_kitted_item'',''fulfillment_supply''"),
+    sql=>sql.replace('ecbd995f23517b33abc4076a2b07755e','0'.repeat(32)),
+    sql=>sql.replace('is distinct from original_metadata','is distinct from null'),
+    sql=>sql.replace("'ms',true)","'ms',false)"),
+    sql=>`${sql}\ngrant service_role to authenticated;`,
+  ]) assert.match(messages(mutate(name,change)), /reviewed forward.*(?:authority|digest|count|order)/i);
+});
+
 test('forward contracts reject missing migrations, unknown additions and statement reordering', () => {
   assert.match(messages(migrations.filter(entry => entry.name !== vendor)), /reviewed forward migration missing.*vendor_certification/i);
   assert.match(messages([...migrations, { name: '20990101000000_foreign_schema_escalation.sql',
