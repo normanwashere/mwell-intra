@@ -512,6 +512,35 @@ export async function loadLiveEvents(
     warnings.push("Departments: " + departmentResult.error.message);
   if (costCenterResult.error)
     warnings.push("Cost centers: " + costCenterResult.error.message);
+  const rows = Array.isArray(eventResult.data)
+    ? (eventResult.data as UnknownRow[])
+    : [];
+  // Reservations describe current work; issued/returned totals remain historical for settlement.
+  const activeReserved = new Map<string, number>();
+  const visibleEventIds = [...new Set(rows.map(row => text(row.id)).filter(Boolean))];
+  for (let offset = 0; offset < visibleEventIds.length; offset += 50) {
+    let reservationCursor: string | undefined;
+    for (;;) {
+      let query = client.schema("warehouse").from("active_allocations")
+        .select("id,event_id,quantity")
+        .in("event_id", visibleEventIds.slice(offset, offset + 50))
+        .in("status", ["reserved", "allocated"])
+        .order("id", { ascending: true });
+      if (reservationCursor) query = query.gt("id", reservationCursor);
+      const result = await query.limit(1000);
+      if (result.error) throw new Error(`Event reservations unavailable: ${result.error.message}`);
+      if (!Array.isArray(result.data)) throw new Error("Event reservations unavailable: Invalid allocation response.");
+      const page = result.data as UnknownRow[];
+      if (page.length === 0) break;
+      const nextCursor = text(page[page.length - 1]?.id);
+      if (!nextCursor || nextCursor === reservationCursor) throw new Error("Event reservations unavailable: Allocation pagination did not advance.");
+      for (const row of page) {
+        const eventId = text(row.event_id);
+        activeReserved.set(eventId, (activeReserved.get(eventId) ?? 0) + count(row.quantity));
+      }
+      reservationCursor = nextCursor;
+    }
+  }
   const allocations = Array.isArray(allocationResult.data)
     ? (allocationResult.data as UnknownRow[])
     : [];
@@ -522,14 +551,11 @@ export async function loadLiveEvents(
   for (const row of allocations) {
     const eventId = text(row.event_id);
     totals.set(eventId, {
-      reserved: count(row.reserved_units),
+      reserved: activeReserved.get(eventId) ?? 0,
       issued: count(row.issued_units),
       returned: count(row.returned_units),
     });
   }
-  const rows = Array.isArray(eventResult.data)
-    ? (eventResult.data as UnknownRow[])
-    : [];
   const costCenters = Array.isArray(costCenterResult.data)
     ? (costCenterResult.data as UnknownRow[])
     : [];
@@ -539,7 +565,7 @@ export async function loadLiveEvents(
       .map(row => ({ id: text(row.id), eventId: text(row.event_id), status: text(row.status), createdAt: text(row.created_at) })),
     events: rows.map((row): EventRecord => {
       const id = text(row.id);
-      const total = totals.get(id) ?? { reserved: 0, issued: 0, returned: 0 };
+      const total = totals.get(id) ?? { reserved: activeReserved.get(id) ?? 0, issued: 0, returned: 0 };
       return mapEventRow(row, total);
     }),
     products: (Array.isArray(productResult.data)

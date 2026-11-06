@@ -49,7 +49,7 @@ describe('event fulfillment archive boundary', () => {
     expect(reads).toEqual([
       'warehouse.events', 'warehouse.event_custody_totals', 'warehouse.active_products',
       'warehouse.event_reconciliations', 'core.departments', 'core.department_cost_centers',
-      'warehouse.department_stock_requests',
+      'warehouse.department_stock_requests', 'warehouse.active_allocations',
     ]);
     const productCalls = calls.filter(call => call.relation === 'warehouse.active_products');
     expect(productCalls).toEqual([
