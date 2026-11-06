@@ -39,10 +39,12 @@ interface TargetIssue {
   readonly width: number;
   readonly height: number;
   readonly scrollY?: number;
+  readonly rect?: { x: number; y: number; width: number; height: number };
 }
 
 interface BlockedTargetIssue extends TargetIssue {
   readonly blocker: string;
+  readonly blockerRect?: TargetIssue["rect"];
 }
 
 const ROUTES: readonly RouteCase[] = [
@@ -516,6 +518,41 @@ test('reachability samples overlap between fixed chrome and retain real obstruct
   await expect(assertControlsAreReachable(page, 'scrollable-persistent-overlay', testInfo)).rejects.toThrow(/intercepted/);
 });
 
+test('reachability recovers a late scroll reset without overlooking permanent chrome obstruction', async ({ page }, testInfo) => {
+  await page.setContent(`<meta name="viewport" content="width=device-width, initial-scale=1"><style>
+    body { margin: 0; min-height: calc(200vh + 215px); }
+    header, footer { position: fixed; inset-inline: 0; height: 150px; background: white; z-index: 2; }
+    header { top: 0; } footer { bottom: 0; }
+    button { position: absolute; top: calc(100vh + 268px); width: 140px; height: 48px; }
+  </style><header></header><button onclick="this.dataset.clicked='true'">Late reset action</button><footer></footer>
+  <script>
+    document.body.dataset.resets = '0';
+    addEventListener('scroll', () => {
+      if (document.body.dataset.resets === '0' && Math.abs(scrollY - innerHeight) < 1) {
+        document.body.dataset.resets = '1';
+        queueMicrotask(() => scrollTo(0, 0));
+      }
+    });
+  </script>`);
+  await assertControlsAreReachable(page, 'late-scroll-reset', testInfo);
+  await expect(page.locator('body')).toHaveAttribute('data-resets', '1');
+  const attachment = testInfo.attachments.find(item => item.name === 'reachability-late-scroll-reset');
+  expect(attachment).toBeDefined();
+  const evidence = JSON.parse((attachment!.body ?? readFileSync(attachment!.path!)).toString());
+  const height = await page.evaluate(() => innerHeight);
+  expect(evidence.measurements.some((sample: { requestedScrollY: number; actualScrollY: number }) =>
+    sample.requestedScrollY === height && sample.actualScrollY === 0)).toBe(true);
+  const centered = evidence.measurements.find((sample: { targetIdentity?: number }) => sample.targetIdentity !== undefined);
+  expect(centered.reachableTargets).toEqual(expect.arrayContaining([
+    expect.objectContaining({ identity: centered.targetIdentity, label: 'Late reset action', rect: expect.objectContaining({ height: 48 }) }),
+  ]));
+  const action = page.getByRole('button', { name: 'Late reset action' });
+  await action.click();
+  await expect(action).toHaveAttribute('data-clicked', 'true');
+  await page.locator('header').evaluate(element => { element.style.height = '100vh'; });
+  await expect(assertControlsAreReachable(page, 'late-reset-permanent-cover', testInfo)).rejects.toThrow(/intercepted/);
+});
+
 test('reachability allows subpixel arithmetic only, not undersized controls', async ({ page }, testInfo) => {
   const minimum = testInfo.project.name.includes('mobile') ? 44 : 32;
   await page.setContent(`<meta name="viewport" content="width=device-width, initial-scale=1"><button style="width:150px;height:${minimum}px;border:0;padding:0;transform:scaleY(0.99999)">Exact target</button>`);
@@ -596,28 +633,67 @@ async function assertControlsAreReachable(
   const hiddenTargets: TargetIssue[] = [];
   const blockedTargets: BlockedTargetIssue[] = [];
   const reachableTargetKeys = new Set<string>();
+  const measurements: unknown[] = [];
   // Repeated row actions must not clear each other's obstruction failures.
   const identities = await page.evaluateHandle(() => ({ ids: new WeakMap<Element, number>(), nextId: 1 }));
 
   try {
-    for (const scrollY of samples) {
-      await page.evaluate(
-        ({ selector, useRegion, y }) => {
+    const inspectAt = async (scrollY: number, targetIdentity?: number) => {
+      const requestedScrollY = await page.evaluate(
+        ({ selector, controls, useRegion, y, targetIdentity, identities }) => {
           const region = useRegion
             ? document.querySelector<HTMLElement>(selector)
             : null;
-          if (region) region.scrollTo(0, y);
-          else window.scrollTo(0, y);
+          if (targetIdentity !== undefined) {
+            const target = Array.from(document.querySelectorAll<HTMLElement>(controls))
+              .find(element => identities.ids.get(element) === targetIdentity);
+            if (!target?.isConnected) throw new Error(`Reachability target ${targetIdentity} disconnected during measurement`);
+            const rect = target.getBoundingClientRect();
+            const center = region
+              ? region.getBoundingClientRect().top + region.clientTop + region.clientHeight / 2
+              : window.innerHeight / 2;
+            y = (region?.scrollTop ?? window.scrollY) + rect.top + rect.height / 2 - center;
+          }
+          if (region) region.scrollTo({ top: y, behavior: 'instant' });
+          else window.scrollTo({ top: y, behavior: 'instant' });
+          return y;
         },
         {
           selector: scrollRegionSelector,
+          controls: CONTROL_SELECTOR,
           useRegion: useScrollRegion,
           y: scrollY,
+          targetIdentity,
+          identities,
         },
       );
-      await page.waitForTimeout(50);
       const result = await page.evaluate(
-        ({ selector, minSize, identities }) => {
+        async ({ selector, minSize, identities, scrollRegionSelector, useScrollRegion }) => {
+          const region = useScrollRegion ? document.querySelector<HTMLElement>(scrollRegionSelector) : null;
+          // Scroll effects and route layout can settle after scrollTo returns.
+          // Require consecutive unchanged frames, never an eventual unblocked hit.
+          await new Promise<void>((resolve, reject) => {
+            let previous = '', stableFrames = 0, frame = 0;
+            const timer = setTimeout(() => {
+              cancelAnimationFrame(frame);
+              reject(new Error('Reachability geometry did not settle within 2000ms'));
+            }, 2000);
+            const sample = () => {
+              const geometry = JSON.stringify([
+                region?.scrollTop ?? window.scrollY, window.scrollX, window.innerWidth, window.innerHeight,
+                region?.scrollHeight ?? document.documentElement.scrollHeight, region?.clientHeight,
+                ...Array.from(document.querySelectorAll(`${selector}, header, footer, [data-shell-mobile-nav]`), element => {
+                  const rect = element.getBoundingClientRect();
+                  return [rect.x, rect.y, rect.width, rect.height];
+                }),
+              ]);
+              stableFrames = geometry === previous && document.fonts.status === 'loaded' ? stableFrames + 1 : 0;
+              previous = geometry;
+              if (stableFrames >= 3) { clearTimeout(timer); resolve(); }
+              else frame = requestAnimationFrame(sample);
+            };
+            frame = requestAnimationFrame(sample);
+          });
           const hasHiddenAncestor = (element: Element): boolean => {
             for (
               let current: Element | null = element;
@@ -685,6 +761,7 @@ async function assertControlsAreReachable(
               selector: describeElement(element),
               width: Math.round(rect.width),
               height: Math.round(rect.height),
+              rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
             };
           };
 
@@ -756,11 +833,16 @@ async function assertControlsAreReachable(
               return {
                 ...describe(element),
                 blocker: describeElement(blocker),
+                blockerRect: (() => {
+                  const bounds = blocker.getBoundingClientRect();
+                  return { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height };
+                })(),
               };
             })
             .filter((item): item is BlockedTargetIssue => item !== null);
 
           return {
+            actualScrollY: region?.scrollTop ?? window.scrollY,
             reachableTargets,
             hiddenTargets,
             smallTargets,
@@ -781,20 +863,30 @@ async function assertControlsAreReachable(
             return `${element.tagName.toLowerCase()}${id}${classes}`;
           }
         },
-        { selector: CONTROL_SELECTOR, minSize, identities },
+        { selector: CONTROL_SELECTOR, minSize, identities, scrollRegionSelector, useScrollRegion },
       );
+      measurements.push({ requestedScrollY, actualScrollY: result.actualScrollY, targetIdentity, ...result });
       smallTargets.push(
-        ...result.smallTargets.map((item) => ({ ...item, scrollY })),
+        ...result.smallTargets.map((item) => ({ ...item, scrollY: result.actualScrollY })),
       );
       hiddenTargets.push(
-        ...result.hiddenTargets.map((item) => ({ ...item, scrollY })),
+        ...result.hiddenTargets.map((item) => ({ ...item, scrollY: result.actualScrollY })),
       );
       for (const item of result.reachableTargets) {
         reachableTargetKeys.add(targetKey(item));
       }
       blockedTargets.push(
-        ...result.blockedTargets.map((item) => ({ ...item, scrollY })),
+        ...result.blockedTargets.map((item) => ({ ...item, scrollY: result.actualScrollY })),
       );
+    };
+    for (const scrollY of samples) await inspectAt(scrollY);
+    // One ordinary centered scroll per still-blocked identity closes sampling
+    // gaps without ignoring chrome or retrying a persistent obstruction.
+    const unresolved = [...new Set(blockedTargets
+      .filter(item => !reachableTargetKeys.has(targetKey(item)))
+      .map(item => item.identity))];
+    for (const identity of unresolved) {
+      if (!reachableTargetKeys.has(String(identity))) await inspectAt(0, identity);
     }
   } finally {
     await page.evaluate(
@@ -811,6 +903,10 @@ async function assertControlsAreReachable(
         y: originalY,
       },
     ).finally(() => identities.dispose());
+    await testInfo.attach(`reachability-${path.replace(/[^a-z0-9-]/gi, '-')}`, {
+      body: Buffer.from(JSON.stringify({ path, measurements }, null, 2)),
+      contentType: 'application/json',
+    });
   }
 
   expect(
