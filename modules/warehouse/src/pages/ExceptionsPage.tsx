@@ -22,7 +22,7 @@ export function ExceptionsPage() {
   const loaders = useRef({ loadExceptions, loadStockChangeRequests, loadQualityInspectionSummaries });
   useEffect(() => { loaders.current = { loadExceptions, loadStockChangeRequests, loadQualityInspectionSummaries }; });
   const accessScope = [...capabilities].sort().join('|');
-  const mayReadChanges = canOpenRoute('approvals') || can('cycle_count') || can('manage_inventory');
+  const mayReadChanges = can('approve_stock_adjustment') || can('approve_stock_adjustment_finance');
   const mayReadQuality = canOpenRoute('quality');
   const [selected, setSelected] = useState<WarehouseException | null>(null);
   const [resolution, setResolution] = useState('');

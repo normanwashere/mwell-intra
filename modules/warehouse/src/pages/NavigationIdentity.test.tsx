@@ -101,13 +101,18 @@ describe('F13-F15 navigation identity', () => {
   });
 
   it('identifies a count variance and links an operator to its exact count without resolution authority', async () => {
-    const { repo } = await identityRepo();
+    const { repo, data } = await identityRepo();
+    data.cycleCounts = [{ id: 'count/second', locationId: 'loc-wh', actor: 'counter',
+      createdAt: '2026-11-05T00:00:00Z', lines: [{ productId: 'shirt-l', expected: 2, counted: 1 }] }];
+    vi.spyOn(repo, 'getData').mockResolvedValue(data);
+    vi.mocked(repo.listExceptions).mockResolvedValue({ rows: [{ ...exception, sourceType: 'cycle_count', sourceId: 'count/second' }] });
     const resolve = vi.spyOn(repo, 'resolveException');
     renderWithProviders(<ExceptionsPage />, { repo, role: 'warehouse_operator' });
     const list = await screen.findByRole('list', { name: 'Warehouse exceptions' });
     expect(await within(list).findByText(/Same name product.*SAME-L/)).toBeVisible();
     expect(within(list).getByRole('link', { name: 'View source' })).toHaveAttribute('href', '/cycle-counts?count=count%2Fsecond');
     expect(within(list).queryByRole('button', { name: 'Review exception' })).not.toBeInTheDocument();
+    expect(repo.listStockChangeRequests).not.toHaveBeenCalled();
     expect(resolve).not.toHaveBeenCalled();
   });
 
@@ -121,13 +126,14 @@ describe('F13-F15 navigation identity', () => {
     expect(within(list).getByRole('link', { name: 'View source' })).toHaveAttribute('href', '/quality?inspection=inspection%2Fsecond');
   });
 
-  it('keeps a variance visible when its source details are denied and never guesses a count ID', async () => {
+  it('keeps a variance visible without approval-read access and never guesses a count ID', async () => {
     const { repo } = await identityRepo();
     vi.mocked(repo.listStockChangeRequests).mockRejectedValue(new Error('Not authorized'));
     renderWithProviders(<ExceptionsPage />, { repo, role: 'warehouse_operator' });
     const list = await screen.findByRole('list', { name: 'Warehouse exceptions' });
     expect(await within(list).findByText(/source details unavailable or outside your access/i)).toBeVisible();
     expect(within(list).queryByRole('link', { name: 'View source' })).not.toBeInTheDocument();
+    expect(repo.listStockChangeRequests).not.toHaveBeenCalled();
     await userEvent.click(within(list).getByText('Source reference'));
     expect(within(list).getByText(/request-second/)).toBeVisible();
   });

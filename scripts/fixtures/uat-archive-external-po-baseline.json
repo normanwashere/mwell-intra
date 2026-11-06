@@ -1,0 +1,14 @@
+[
+  {
+    "signature": "private.external_po_workspace(jsonb)",
+    "definition": "CREATE OR REPLACE FUNCTION private.external_po_workspace(payload jsonb)\n RETURNS jsonb\n LANGUAGE plpgsql\n STABLE SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare result jsonb; offset_rows integer:=coalesce((payload->>'offset')::integer,0);\nbegin\n  if not private.external_po_can_read() then raise exception 'Not authorized to view external purchase orders.' using errcode='42501';end if;\n  if offset_rows<0 then raise exception 'Invalid queue position.';end if;\n  select coalesce(jsonb_agg(to_jsonb(p)||jsonb_build_object(\n    'lines',coalesce((select jsonb_agg(to_jsonb(l) order by l.id) from private.external_po_lines l where l.order_id=p.id),'[]'),\n    'shipments',coalesce((select jsonb_agg(to_jsonb(s) order by s.created_at,s.id) from private.external_po_shipments s where s.order_id=p.id),'[]')) order by p.created_at desc,p.id),'[]') into result\n  from (select * from private.external_po_orders where nullif(payload->>'order_id','') is null or id=(payload->>'order_id')::uuid order by created_at desc,id limit 100 offset offset_rows) p;\n  return jsonb_build_object('can_confirm',private.external_po_can_confirm(),'orders',result,\n    'has_more',nullif(payload->>'order_id','') is null and exists(select 1 from private.external_po_orders offset offset_rows+100),\n    'next_offset',offset_rows+100);\nend $function$\n",
+    "def_md5": "694daea75c4b9da70cf7774c4c0fb911",
+    "owner": "postgres",
+    "proacl": "{postgres=X/postgres,authenticated=X/postgres}",
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "prosecdef": true,
+    "provolatile": "s"
+  }
+]

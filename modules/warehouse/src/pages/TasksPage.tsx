@@ -18,7 +18,7 @@ export function TasksPage() {
   const accessScope = [...capabilities].sort().join('|');
   useEffect(() => { loaders.current = { tasks: loadWarehouseTasks, inspections: loadQualityInspectionSummaries, exceptions: loadExceptions, requests: loadStockChangeRequests }; });
   const mayReadExceptions = canOpenRoute('exceptions');
-  const mayReadChanges = canOpenRoute('approvals') || can('cycle_count') || can('manage_inventory');
+  const mayReadChanges = can('approve_stock_adjustment') || can('approve_stock_adjustment_finance');
   const [params, setParams] = useSearchParams();
   const status = parseTaskStatus(params.get('status'));
   const setStatus = (next: TaskStatus) => {
