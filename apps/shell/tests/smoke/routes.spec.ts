@@ -520,10 +520,10 @@ test('reachability samples overlap between fixed chrome and retain real obstruct
 
 test('reachability recovers a late scroll reset without overlooking permanent chrome obstruction', async ({ page }, testInfo) => {
   await page.setContent(`<meta name="viewport" content="width=device-width, initial-scale=1"><style>
-    body { margin: 0; min-height: calc(200vh + 215px); }
+    body { margin: 0; min-height: calc(250vh - 200px); }
     header, footer { position: fixed; inset-inline: 0; height: 150px; background: white; z-index: 2; }
     header { top: 0; } footer { bottom: 0; }
-    button { position: absolute; top: calc(100vh + 268px); width: 140px; height: 48px; }
+    button { position: absolute; top: calc(150vh - 124px); width: 140px; height: 48px; }
   </style><header></header><button onclick="this.dataset.clicked='true'">Late reset action</button><footer></footer>
   <script>
     document.body.dataset.resets = '0';
@@ -543,6 +543,7 @@ test('reachability recovers a late scroll reset without overlooking permanent ch
   expect(evidence.measurements.some((sample: { requestedScrollY: number; actualScrollY: number }) =>
     sample.requestedScrollY === height && sample.actualScrollY === 0)).toBe(true);
   const centered = evidence.measurements.find((sample: { targetIdentity?: number }) => sample.targetIdentity !== undefined);
+  expect(centered, 'Late reset fixture must exercise the centered measurement').toBeDefined();
   expect(centered.reachableTargets).toEqual(expect.arrayContaining([
     expect.objectContaining({ identity: centered.targetIdentity, label: 'Late reset action', rect: expect.objectContaining({ height: 48 }) }),
   ]));

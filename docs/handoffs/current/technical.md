@@ -1,6 +1,6 @@
 # Technical Handoff
 
-Use the [current release manifest](release-status.json) for UAT `dd9048e`, READY deployment identity, all11 same-SHA CI jobs and scoped live evidence. The [September technical pack](../2026-09-22/technical.md) is historical; CI212 does not certify this release. Application, applied database versions and unpublished documentation remain distinct. No receiving-team acceptance is recorded here.
+Use the [current release manifest](release-status.json) for UAT `dd9048e`, READY deployment identity, all11 same-SHA CI jobs and scoped live evidence. The [September technical pack](../2026-09-22/technical.md) is historical; CI212 does not certify this release. Application, applied database versions and GitHub-published documentation remain distinct; eb2148c documentation is not a live handbook update. No receiving-team acceptance is recorded here.
 
 ## Candidate Boundaries
 
@@ -13,7 +13,9 @@ Use the [current release manifest](release-status.json) for UAT `dd9048e`, READY
 
 ## Release Evidence Still Required
 
-See the [November 6 readiness update](../../releases/2026-11-06-RELEASE-READINESS.md) for the Quality-to-putaway bridge applied as `20261105233321`, byte-identical to reviewed SQL SHA256 `83d84623c9b11e0ab1659ab42f75de4cd9fe18a943af405d7517b76ff2c746df`. Independent catalog review matched6 helpers,24 trigger bindings and14 indexes. CI/native/schema verification does not pass G02: normal receipt QC was accepted and first putaway returned200, but Q4 found origin1/bridge0/history2/break0 despite the exact command receipt and movement. Conversion/recovery was not run; root cause is under independent investigation, with no replay or backfill. G01 remains blocked by Auth administration. The mobile320 CI retry-pass remains disclosed; the separately reviewed local test-only settling correction is not deployed-app or new hosted-CI evidence.
+See the [November 6 readiness update](../../releases/2026-11-06-RELEASE-READINESS.md) for the Quality-to-putaway bridge applied as `20261105233321`, byte-identical to reviewed SQL SHA256 `83d84623c9b11e0ab1659ab42f75de4cd9fe18a943af405d7517b76ff2c746df`. Independent catalog review matched6 helpers,24 trigger bindings and14 indexes. CI/native/schema verification does not pass G02: normal receipt QC was accepted and first putaway returned200, but Q4 found origin1/bridge0/history2/break0 despite the exact command receipt and movement. Confirmed cause: canonical profile-email movement actor versus offline receipt UUID. The narrow prospective actor repair in eb2148c has123 local passes and actual native helper52 passes/0 skips twice, with cleanup proven; it is not applied. Conversion/recovery remains NOT RUN, without replay or backfill. G01 remains blocked by Auth administration. The mobile320 CI retry-pass remains disclosed.
+
+Latest eb2148c run42145515659 ended9 successful jobs/2 failed jobs: new late-scroll-reset helper fixture at desktop1440/tablet768, where centered is undefined because the real checker already passed via a regular sample. This is not an application-defect claim or CI waiver. Earlier940 run42141617943 ended8 successful/3 cancelled, not full pass. Erdos owns the test-only correction; its future commit/run must be recorded externally. Require all11 next-candidate checks before prospective database application, then controlled fresh-serial acceptance.
 
 Retain a clean frozen install, actual aligned coverage execution, same-SHA hosted checks, failed-check/wrong-SHA promotion-denial tests, actual UAT identity and scoped non-SMTP browser/transaction results. Source-level assertions do not replace effective authorization or live behavior. Keep local, hosted, deployment, human and physical-device results separate.
 

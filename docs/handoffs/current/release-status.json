@@ -29,32 +29,49 @@
     "observedReadyAt": "2026-11-06T00:34:37.828Z",
     "evidence": ["outputs/release-readiness-20261106/deployment-dd9048e.json"],
     "certifiedSourceCommit": "dd9048e405bf84c2b7b0d6647309d1a8747c9378",
-    "latestPushedSourceCommit": "940089557c3c5e698817e1eb96288ebd6a107fd9",
+    "latestPushedSourceCommit": "eb2148c8e287d6288041d85cd944375f6a17dfd6",
     "hostedCi": { "runId": "42132526254", "status": "passed", "passedChecks": 11, "requiredChecks": 11, "memory": { "cleanPassed": 1854, "retryPassed": 1, "exclusions": 143 }, "controlled": { "passed": 26, "exclusions": 4 }, "evidence": "outputs/release-readiness-20261106/ci-dd9048e-jobs.json", "scope": "All required same-SHA jobs succeeded. Procurement approvals command-palette mobile320 passed on retry, not a clean first-pass result. A separately reviewed local test-only measurement correction has 12 helper and 6 route passes without retries; the original hosted trigger and new hosted closure remain unproven. Not human WMS acceptance." },
-    "scope": "commit and certifiedSourceCommit identify the exact deployed dd9048e candidate and its CI only. latestPushedSourceCommit is the separate test-only follow-up9400895, not a new certified app. Health observation time is separate; deployment completion time was not supplied. G01 and G02 remain blocked."
+    "scope": "commit and certifiedSourceCommit identify the exact deployed dd9048e candidate and its CI only. latestPushedSourceCommit is eb2148c: published source/docs and prospective actor repair, not a new certified app. Its CI ended with9 successful jobs and2 failures. Health observation time is separate; deployment completion time was not supplied. G01 and G02 remain blocked."
   },
   "sourceFollowUps": {
     "testOnlyReachability": {
       "commit": "940089557c3c5e698817e1eb96288ebd6a107fd9",
       "status": "pushed",
       "deployed": false,
-      "hostedCi": { "status": "in_progress", "runId": "42141617943", "conclusion": null, "passedChecks": 8, "requiredChecks": 11, "runningChecks": 3 },
-      "scope": "Main-verified CI snapshot:8 checks passed,3 browser groups running; not a full pass. Test-only reachability correction has reviewed local12 helper and6 route passes with retries0. Do not inherit dd9048e CI or declare original hosted root cause proven."
+      "hostedCi": { "status": "completed", "runId": "42141617943", "conclusion": "cancelled", "passedChecks": 8, "requiredChecks": 11, "cancelledChecks": 3, "fullPass": false },
+      "scope": "Main-verified final result:8 jobs succeeded and3 were cancelled by the newer push; not a full pass. Test-only reachability correction has reviewed local12 helper and6 route passes with retries0. Do not inherit dd9048e CI or declare original hosted root cause proven."
+    },
+    "latestPushedCandidate": {
+      "commit": "eb2148c8e287d6288041d85cd944375f6a17dfd6",
+      "status": "pushed-ci-failed",
+      "deployed": false,
+      "hostedCi": { "status": "completed", "runId": "42145515659", "conclusion": "failure", "passedChecks": 9, "requiredChecks": 11, "failedChecks": 2, "fullPass": false },
+      "scope": "Main-verified final result:9 jobs succeeded and2 failed. Only failure is the new late-scroll-reset helper fixture at desktop1440 and tablet768: centered was undefined because the real checker already found a reachable target through a regular sample. No app defect is claimed. Native actor proof passed separately; overall CI is not green and the actor repair is not applied."
+    },
+    "reachabilityFixtureCorrection": {
+      "commit": null,
+      "status": "pending-candidate-ci",
+      "deployed": false,
+      "hostedCi": null,
+      "scope": "Erdos owns the bounded test-only deterministic viewport fixture correction. Future commit and CI identities must be recorded externally after they exist; no future pass is inferred."
     },
     "prospectiveG02DatabaseFix": {
-      "commit": null,
-      "status": "prepared-pending-ci-and-apply",
+      "commit": "eb2148c8e287d6288041d85cd944375f6a17dfd6",
+      "status": "pushed-awaiting-green-ci-and-apply",
       "sourceFile": "supabase/migrations/20261106012547_stock_conversion_putaway_authoritative_actor.sql",
       "sourceSha256": "fcede47f4671ab241d9e0a04face6d626aabb559fe8e72e830d6165342339306",
       "deployed": false,
-      "scope": "Separate prospective source/SQL repair prepared for its own CI and application review. Future commit identity will be recorded externally after commit creation; commit null does not assert an uncommitted worktree. Source hash is not live application proof. No applied migration, deployment or repaired live G02 result is recorded. No replay/backfill of the stopped fixture."
+      "localPassed": 123,
+      "nativeProof": { "runId": "42145515659", "jobId": "127656898709", "executions": 2, "passedPerExecution": 52, "skippedPerExecution": 0, "concreteSubtestsPerExecution": 51, "evidence": "outputs/release-readiness-20261106/qa4-ci/g02-native-actor-proof-eb2148c-127656898709.md" },
+      "scope": "Confirmed canonical profile-email movement actor versus offline receipt UUID mismatch; narrow prospective authoritative-actor repair is published in eb2148c.123 local checks passed; actual native helper fixture passed52 with0 skips twice, each51 concrete subtests plus aggregate parent, not104 unique cases. Overall eb CI failed. No live application or repaired G02 result is recorded; await all11 next-candidate CI checks before application and a controlled fresh-serial retest. No replay/backfill of the stopped fixture."
     }
   },
   "documentation": {
-    "commit": null,
-    "status": "pending-publication",
+    "commit": "eb2148c8e287d6288041d85cd944375f6a17dfd6",
+    "status": "published-source-live-handbook-unverified",
     "basedOnDeployedAppCommit": "dd9048e405bf84c2b7b0d6647309d1a8747c9378",
-    "scope": "Prepared source/manual update, not proof of a published live handbook. Record the documentation commit externally after commit creation; do not invent a self-referential final SHA. Runtime health remains authoritative for the application."
+    "pendingRevision": { "commit": null, "status": "prepared-pending-publication", "scope": "This later checkpoint and the fixture correction need their future commit identity recorded externally after creation, not a self-referential final SHA." },
+    "scope": "commit identifies the last documentation source published to GitHub in eb2148c, not a live handbook update. This checkpoint revision is still pending publication. Runtime health remains authoritative for the deployed dd9048e application."
   },
   "databaseMigrations": [
     {
@@ -94,7 +111,7 @@
     "sameCommitHostedCi": { "status": "passed", "commit": "dd9048e405bf84c2b7b0d6647309d1a8747c9378", "runId": "42132526254", "evidence": ["outputs/release-readiness-20261106/ci-dd9048e-jobs.json"], "scope": "11/11 jobs; 1854 clean memory passes plus one retry-pass, 143 memory exclusions; 26 controlled passes and four exclusions. Flake observation remains open." },
     "nonSmtpUatRetest": { "status": "partial", "commit": "dd9048e405bf84c2b7b0d6647309d1a8747c9378", "evidence": ["outputs/four-qa-remediation-20261105/privacy-live-dd9048e405bf-attempt1/evidence.json", "outputs/four-qa-remediation-20261105/qa2-workflows/f03-live-dd9048e405bf-2026-11-06T00-37-10-500Z/evidence.json", "outputs/four-qa-remediation-20261105/qa3-experience/final-browser/dd9048e405bf-2026-11-06T00-38-16-740Z/evidence.json", "outputs/release-readiness-20261106/live-dd9048e-screen-review.md"], "scope": "Privacy4 passed. Guarded read-only returns at1440/390: remaining0 of issued2, disabled submit, business writes0 and exact before-after unchanged; normal Learning synchronization blocked, so not full unintercepted startup. Product/export9 automated checks passed at1440/390/320 using actual capabilities, scoped axe0 and no overflow, with no exports; main reviewed six distinct images and hash-identical cold/reload pairs. Normal navigation side effects are disclosed in source evidence. No broad transaction acceptance." },
     "g01LegalToPayment": { "status": "blocked", "commit": "dd9048e405bf84c2b7b0d6647309d1a8747c9378", "evidence": [], "scope": "Approved isolated synthetic vendor setup cannot proceed without Auth administration. No existing vendor rebinding, fabricated approval/signature, email or real payment." },
-    "g02ConversionRecovery": { "status": "blocked", "commit": "dd9048e405bf84c2b7b0d6647309d1a8747c9378", "observedAt": "2026-11-06T01:15:01.934812Z", "reason": "missing-putaway-bridge", "evidence": ["outputs/release-readiness-20261106/qa4-ci/g02-q4-post-putaway-20261106T011501Z.json"], "scope": "Normal receiving and independent QC accepted; first putaway returned200 and exact unit is at SRC. Q4 confirms origin1, bridge0, history2, break0; captured movement/offline command receipt exist and original QC/receipt/lot snapshots are unchanged. Recipe approved only; conversion/recovery NOT RUN. Normal Learning startup synchronization writes occurred during authorized UI navigation; this was not a zero-write journey. Scans were typed/manual, not physical scanner or camera acceptance. Resolver was not evaluated because bridge was absent, not a claimed false resolver result. Root cause remains under independent investigation. Preserve the fixture: no old-stock writes, repeat putaway, replay, QC rewrite or backfill. Any confirmed source repair is prospective and requires its own release evidence." },
+    "g02ConversionRecovery": { "status": "blocked", "commit": "dd9048e405bf84c2b7b0d6647309d1a8747c9378", "observedAt": "2026-11-06T01:15:01.934812Z", "reason": "missing-putaway-bridge", "evidence": ["outputs/release-readiness-20261106/qa4-ci/g02-q4-post-putaway-20261106T011501Z.json"], "scope": "Normal receiving and independent QC accepted; first putaway returned200 and exact unit is at SRC. Q4 confirms origin1, bridge0, history2, break0; captured movement/offline command receipt exist and original QC/receipt/lot snapshots are unchanged. Recipe approved only; conversion/recovery NOT RUN. Normal Learning startup synchronization writes occurred during authorized UI navigation; this was not a zero-write journey. Scans were typed/manual, not physical scanner or camera acceptance. Resolver was not evaluated because bridge was absent, not a claimed false resolver result. Confirmed root cause: canonical profile-email movement actor versus offline receipt UUID mismatch. Prospective eb2148c repair passed123 local checks and the actual native helper52 twice with0 skips, but is not applied; fresh live acceptance remains blocked. Preserve the fixture: no old-stock writes, repeat putaway, replay, QC rewrite or backfill. All11 next-candidate CI checks remain required before application." },
     "dataAndWorkflowPreservation": { "status": "pending", "commit": null, "evidence": [] },
     "rel04DeployedHandoff": { "status": "pending", "commit": null, "evidence": [] },
     "humanAndPhysicalDeviceAcceptance": { "status": "not-recorded", "commit": null, "evidence": [] },
