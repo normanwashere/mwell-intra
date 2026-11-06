@@ -5,6 +5,7 @@ import { readFile, writeFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { assertExecutionGate, validateManifest } from './sep20-event-live-manifest.mjs';
+import { assertWmsLiveFixtureCleanupReady } from './wms-live-fixture-guard.mjs';
 
 const RUN='13ec2166-93be-4902-b323-bacc857dad5d';
 const SHA='9ec7311f9062c2c185682db21a5f9bddc7b72943';
@@ -26,6 +27,7 @@ export function productsFor(m){
 }
 
 if(process.argv[1]&&import.meta.url===pathToFileURL(path.resolve(process.argv[1])).href){
+  assertWmsLiveFixtureCleanupReady();
   assert.equal(process.argv.length,3,'Supply only the prepared output directory');
   const output=await realpath(process.argv[2]);
   assert.equal(output.toLowerCase().replaceAll('\\','/'),'c:/users/normanarisdeocareza/projects/mwell-intra-warehouse/outputs/sep21-event-run');

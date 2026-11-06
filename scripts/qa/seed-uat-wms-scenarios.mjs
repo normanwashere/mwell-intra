@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { fileURLToPath } from "node:url";
+import { assertWmsLiveFixtureCleanupReady } from './wms-live-fixture-guard.mjs';
 
 import { assertApprovedMutationTarget } from "../lib/target-environment.mjs";
 import {
@@ -211,6 +212,7 @@ export async function seedUatWmsScenarios({
   fetchImpl = fetch,
   log = console.log,
 }) {
+  assertWmsLiveFixtureCleanupReady();
   validateUatWmsSeedInputs({
     url,
     serviceKey,

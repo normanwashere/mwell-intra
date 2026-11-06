@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { auditPersonas } from './uat-audit-identities.mjs';
+import { assertWmsLiveFixtureCleanupReady } from './wms-live-fixture-guard.mjs';
 
 // Opening inventory is a synthetic prerequisite, never receiving/putaway evidence.
 // Business transitions use authenticated users; privileged fixture SQL is separate.
@@ -45,9 +46,11 @@ if (command === 'prepare') {
 insert into warehouse.storage_areas(id,location_id,code,label,zone) values('${c.binId}','${c.locationId}','${c.binCode}','${c.productName} isolated bin','WMS-SIGNOFF');
 insert into warehouse.products(id,sku,name,category,serialized,attributes,unit_cost,item_class) values('${c.productId}','${c.sku}','${c.productName}','merchandise',false,'{"signoffRun":"${runId}","synthetic":true}',1,'merchandise');
 insert into warehouse.stock_levels(product_id,location_id,bin_id,quantity) values('${c.productId}','${c.locationId}','${c.binId}',${c.openingQuantity});`).join('\n');
-  await writeFile(path.join(folder, 'prepare.sql'), `-- UAT ${project} only. Unique inserts fail on collisions. No authority changes.\nbegin;\n${sql}\ncommit;\n`, { flag: 'wx' });
-  console.log(JSON.stringify({ folder, manifestPath, commit: deployed.commit, next: 'Review and apply prepare.sql to the named UAT project, then run with this folder.' }));
+  await writeFile(path.join(folder, 'prepare.sql'), `-- LIVE MUTATIONS PAUSED: DO NOT APPLY to UAT. Supported history-preserving cleanup is not implemented.\n-- Offline review/local tests only; this file is not execution approval.\n-- UAT ${project} only. Unique inserts fail on collisions. No authority changes.\nbegin;\n${sql}\ncommit;\n`, { flag: 'wx' });
+  console.log(JSON.stringify({ folder, manifestPath, commit: deployed.commit, liveMutationsPaused: true,
+    next: 'Offline review only. Do not apply prepare.sql or start/resume the live journey until supported history-preserving cleanup is implemented and reviewed.' }));
 } else if (command === 'run') {
+  assertWmsLiveFixtureCleanupReady();
   assert.equal(process.env.APP_ENV, 'uat');
   assert.equal(process.env.AUDIT_MUTATIONS, 'true');
   assert(process.env.AUDIT_PASSWORD, 'AUDIT_PASSWORD must be supplied securely');

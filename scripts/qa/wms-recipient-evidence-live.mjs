@@ -4,6 +4,9 @@ import { createRequire } from 'node:module';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { auditPersonas } from './uat-audit-identities.mjs';
+import { assertWmsLiveFixtureCleanupReady } from './wms-live-fixture-guard.mjs';
+
+assertWmsLiveFixtureCleanupReady();
 
 // Continue the exact already-released orders from the department journey.
 // This is post-fix acknowledgment evidence, not a fresh whole-journey pass.

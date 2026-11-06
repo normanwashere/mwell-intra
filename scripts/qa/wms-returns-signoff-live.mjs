@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { assertWmsLiveFixtureCleanupReady } from './wms-live-fixture-guard.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { mkdir, readFile, writeFile, open, unlink, readdir, realpath, lstat } from 'node:fs/promises';
@@ -626,6 +627,7 @@ async function health(m) {
 export async function run(folder, env = process.env) {
   folder = path.resolve(folder);
   const m = validateManifest(JSON.parse(await readFile(path.join(folder, 'manifest.json'), 'utf8'))); assertRunPermission(m, env);
+  assertWmsLiveFixtureCleanupReady();
   assert.deepEqual(JSON.parse(await readFile(path.join(folder, 'source', 'manifest.json'), 'utf8')), m.source);
   const pins = continuationPinsFromEnv(env);
   const continuation = pins ? await inspectPreReturnContinuation(folder, pins.failedAttempt, pins.sourceAttempt) : null;
@@ -1086,7 +1088,11 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       assert(commit && runId && !orderDate); const inspection = await inspectPreReturnContinuation(folder, commit, runId);
       console.log(json({ offlineOnly: true, runId: inspection.manifest.runId, commit: inspection.manifest.commit, sourceChecks: inspection.source.checks.length,
         archiveFiles: inspection.archive.length, pins: inspection.pins, visualReview: 'Original screenshots retained; no new visual certification or viewport-height claim.' }));
-    } else if (mode === 'prepare') console.log(json(await prepare(folder, { commit, ...(runId ? { runId } : {}), ...(orderDate ? { orderDate } : {}) })));
+    } else if (mode === 'prepare') {
+      const m = await prepare(folder, { commit, ...(runId ? { runId } : {}), ...(orderDate ? { orderDate } : {}) });
+      console.log(json({ ...m, liveMutationsPaused: true,
+        next: 'Do not apply prepare.sql or run/resume live fixtures; supported history-preserving cleanup is not implemented.' }));
+    }
     else { assert(mode === 'run' && !commit && !runId && !orderDate); const result = await run(folder); console.log(json({ attempt: result.attempt, complete: result.report.complete, failures: result.report.failures })); if (!result.report.complete) process.exitCode = 1; }
   } catch (error) { console.error(`Returns signoff stopped: ${safeFailure(error, [process.env.AUDIT_PASSWORD])}`); process.exitCode = 1; }
 }

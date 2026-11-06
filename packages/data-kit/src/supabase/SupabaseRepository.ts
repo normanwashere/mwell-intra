@@ -53,6 +53,7 @@ import {
 import { primaryStockLocation, validateTransfer } from "../domain/transfers";
 import { poStatusAfterReceipt } from "../domain/purchaseOrders";
 import { applyProductPatch, buildNewProduct } from "../domain/products";
+import { activeReadRelation } from "./activeReadRelation";
 import { normalizeSafeHttpsUrl } from "../domain/urlSafety";
 import {
   type CancelAllocationInput,
@@ -246,7 +247,7 @@ export class SupabaseRepository implements WarehouseControlRepository {
       const seen = new Set<string>();
       let afterId: string | undefined;
       for (;;) {
-        let page = this.db.from(table).select<string, Row>(projection)
+        let page = this.db.from(activeReadRelation(table)).select<string, Row>(projection)
           .order("id", { ascending: true }).limit(OPERATIONAL_PAGE_SIZE);
         if (afterId !== undefined) page = page.gt("id", afterId);
         const { data, error } = await page;
@@ -265,7 +266,7 @@ export class SupabaseRepository implements WarehouseControlRepository {
         }
       }
     }
-    let query: any = this.db.from(table).select(projection);
+    let query: any = this.db.from(activeReadRelation(table)).select(projection);
     if (BOUNDED_HISTORY.has(table)) {
       query = query
         .order("created_at", { ascending: false })
@@ -423,7 +424,7 @@ export class SupabaseRepository implements WarehouseControlRepository {
     if (!projection)
       throw new Error(`No safe projection configured for ${table}.`);
     const timestampColumn = CONTROL_TIMESTAMP_COLUMNS[table] ?? "created_at";
-    let request: any = this.db.from(table).select(projection);
+    let request: any = this.db.from(activeReadRelation(table)).select(projection);
     if (normalized.status && statusColumn) {
       request = request.eq(statusColumn, normalized.status);
     }

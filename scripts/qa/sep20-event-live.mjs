@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createManifest,validateManifest,assertExecutionGate,assertReleaseEvidence,smokeCommands,REQUIRED_MIGRATIONS } from './sep20-event-live-manifest.mjs';
 import { assertSellerPreflight } from './sep20-event-live-preflight.mjs';
+import { assertWmsLiveFixtureCleanupReady } from './wms-live-fixture-guard.mjs';
 const root=fileURLToPath(new URL('../../',import.meta.url));
 const [command,output,commit,origin,date]=process.argv.slice(2);
 assert(['prepare','run'].includes(command),'Use prepare or explicitly authorized run');
@@ -24,8 +25,10 @@ if(command==='prepare'){
     verifiedBy:null,verifiedAt:null,evidenceReference:null,fixtureEvidenceReference:null,sellerUiEvidenceReference:null,
     migrations,installedDefinitionsVerified:false,rawRlsVerified:false,learningPublishedApproved:false,sellerLearningCompleted:false,
     sellerUiVerified:false,newSyntheticProductsOnly:false},null,2),{flag:'wx'});
-  console.log(JSON.stringify({prepared:true,networkRequests:0,mutations:0,runId:m.runId,output,scope:m.scope}));
+  console.log(JSON.stringify({prepared:true,networkRequests:0,mutations:0,runId:m.runId,output,scope:m.scope,
+    liveMutationsPaused:true,next:'Offline review only. Do not create product/stock fixtures or execute planned commands; supported history-preserving cleanup is not implemented.'}));
 }else{
+  assertWmsLiveFixtureCleanupReady();
   const m=JSON.parse(await readFile(path.join(output,'manifest.json'),'utf8'));
   assertExecutionGate(m,process.env);
   const release=JSON.parse(await readFile(path.join(output,'release-evidence.json'),'utf8'));assertReleaseEvidence(m,release,migrations);

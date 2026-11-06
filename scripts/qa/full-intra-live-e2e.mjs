@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import { assertWmsLiveFixtureCleanupReady } from './wms-live-fixture-guard.mjs';
 import { mkdirSync, writeFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -108,6 +109,7 @@ assertAuditIdentityScope(identityScope, process.env.APP_ENV, auditPhase);
 const runRouteAudit = auditPhase !== "transactions";
 const runTransactionAudit = ['all', 'transactions'].includes(auditPhase);
 const mutatingPhase = allowMutations && runTransactionAudit;
+assertWmsLiveFixtureCleanupReady(mutatingPhase);
 const requireVendorDelivery =
   process.env.AUDIT_REQUIRE_VENDOR_DELIVERY === "true";
 const vendorDeliveryViewport =

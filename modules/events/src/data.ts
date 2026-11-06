@@ -468,7 +468,7 @@ export async function loadLiveEvents(
         .limit(10000),
       client
         .schema("warehouse")
-        .from("products")
+        .from("active_products")
         .select("id,name,item_class")
         .in("item_class", ["sellable_sku", "merchandise", "event_material"])
         .order("name", { ascending: true })

@@ -34,7 +34,9 @@ export function renderSep07MerchSql({ projectRef, mode = 'rehearse' } = {}) {
  insert into ${table} (${columns}) select ${columns} from jsonb_populate_recordset(null::${table}, ${data}) on conflict (id) do nothing;`;
   });
   return [
-    `-- UAT ONLY ${MERCH_PROJECT}. Renderer does not connect. Executor MUST independently verify selected project.
+    `-- LIVE MUTATIONS PAUSED: DO NOT APPLY to UAT. Supported history-preserving cleanup is not implemented.
+-- Offline review/local tests only; this file is not execution approval.
+-- UAT ONLY ${MERCH_PROJECT}. Renderer does not connect. Executor MUST independently verify selected project.
 -- Synthetic issued setup, NOT human approval: no approval attribution, receipts, inventory, grants or resets.
 -- Default rollback rehearsal. Costs: jacket PHP500/unit, tumbler PHP150/unit; synthetic placeholders.
 begin;

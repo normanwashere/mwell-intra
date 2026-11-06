@@ -1,0 +1,313 @@
+{
+  "ddl": [
+    {
+      "schema_name": "core",
+      "table_name": "approval_groups",
+      "ddl": "create table core.approval_groups (entity_type text,group_code text,module text,capability text,request_status text,is_active boolean,member_roles text[]);"
+    },
+    {
+      "schema_name": "core",
+      "table_name": "approvals",
+      "ddl": "create table core.approvals (id bigint,entity_type text,entity_id text,step integer,approver_role text,decision text,decided_by uuid,decided_at timestamp with time zone,note text,sla_due_at timestamp with time zone,created_at timestamp with time zone);"
+    },
+    {
+      "schema_name": "core",
+      "table_name": "roles",
+      "ddl": "create table core.roles (module text,role text,label text,description text,is_active boolean,is_protected boolean,updated_at timestamp with time zone);"
+    },
+    {
+      "schema_name": "core",
+      "table_name": "user_roles",
+      "ddl": "create table core.user_roles (user_id uuid,module text,role text,id uuid,effective_at timestamp with time zone,expires_at timestamp with time zone);"
+    },
+    {
+      "schema_name": "legal",
+      "table_name": "accreditation_cases",
+      "ddl": "create table legal.accreditation_cases (id text,vendor_id uuid,vendor_name text,status text,category text,jurisdiction text,origin_country text,entity_type text,vendor_category text,risk_tier text,contract_type text,expected_annual_spend text,handles_personal_data boolean,contact_email text,opened_at timestamp with time zone,submitted_at timestamp with time zone,decided_at timestamp with time zone,decided_by_email text,decision_note text,expires_at date,scope text,invited_by_email text,last_reminder_at timestamp with time zone,created_at timestamp with time zone,updated_at timestamp with time zone,pending_decision_status text,pending_decision_proposed_by_email text,correction_source_version integer,correction_revision integer,correction_requested_at timestamp with time zone,correction_requested_by uuid,invited_by_user_id uuid,technology_service_provider boolean);"
+    },
+    {
+      "schema_name": "private",
+      "table_name": "stock_conversion_batches",
+      "ddl": "create table private.stock_conversion_batches (id uuid,recipe_id uuid,event_id text,status text,source_location_id text,source_bin_id text,destination_location_id text,destination_bin_id text,units jsonb,condition text,evidence_urls jsonb,approval_evidence_urls jsonb,completion_evidence_urls jsonb,created_by uuid,created_at timestamp with time zone,approved_by uuid,approved_at timestamp with time zone,completed_by uuid,completed_at timestamp with time zone,cancelled_by uuid,cancelled_at timestamp with time zone,cancellation_reason text);"
+    },
+    {
+      "schema_name": "private",
+      "table_name": "stock_conversion_lines",
+      "ddl": "create table private.stock_conversion_lines (sequence bigint,applied_xid xid8,applied_by uuid,batch_id uuid,unit_id text,serial_number text,source_product_id text,output_product_id text,source_lot_id text,inspection_id uuid,return_id text,allocation_id text,original_conversion_id uuid);"
+    },
+    {
+      "schema_name": "private",
+      "table_name": "stock_conversion_recipes",
+      "ddl": "create table private.stock_conversion_recipes (id uuid,kit_definition_id uuid,kit_version integer,event_id text,direction text,source_product_id text,output_product_id text,packaging jsonb,approval_reference text,evidence_urls jsonb,approved_by uuid,approved_at timestamp with time zone);"
+    },
+    {
+      "schema_name": "procurement",
+      "table_name": "payment_readiness_packs",
+      "ddl": "create table procurement.payment_readiness_packs (id uuid,purchase_order_id text,acceptance_pack_id uuid,policy_version text,po_match boolean,invoice_or_si_storage_path text,milestone_support_storage_path text,tax_withholding_support_storage_path text,payment_terms jsonb,status text,prepared_by uuid,prepared_at timestamp with time zone,finance_reviewed_by uuid,finance_reviewed_at timestamp with time zone,finance_note text,corrected_from uuid,acceptance_pack_ids uuid[],accepted_quantity numeric,acceptance_evidence_version bigint,evidence_stale boolean,evidence_stale_at timestamp with time zone,invoice_number text,invoice_date date,due_date date,invoice_amount numeric(14,2),tax_amount numeric(14,2),withholding_amount numeric(14,2),purchase_order_amount numeric(14,2),accepted_amount numeric(14,2),variance_amount numeric(14,2),released_amount numeric(14,2),foreign_vendor_evidence_storage_path text,document_ids jsonb);"
+    },
+    {
+      "schema_name": "procurement",
+      "table_name": "requests",
+      "ddl": "create table procurement.requests (id text,title text,description text,requester_id uuid,requester_name text,requester_email text,department text,cost_center text,project_code text,budget_code text,needed_by date,status text,core_vendor_id uuid,vendor_name text,estimated_amount numeric(14,2),category text,sourcing_method text,sourcing_override boolean,justification jsonb,attachments jsonb,compliance jsonb,lines jsonb,submitted_at timestamp with time zone,decided_at timestamp with time zone,decision_note text,decided_by_email text,created_at timestamp with time zone,updated_at timestamp with time zone,draft_client_key text,draft_version integer,draft_payload jsonb,cancellation_version integer,cancellation_reason text,cancelled_by uuid,cancelled_at timestamp with time zone,requirement_kind text,solicitation_type text,procurement_mode text,governance_tier text,policy_profile_id uuid,route_reasons jsonb,route_version integer,route_confirmed_at timestamp with time zone,route_confirmed_by uuid,solicitation_requirements jsonb,revision integer);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "allocations",
+      "ddl": "create table warehouse.allocations (id text,event_id text,product_id text,quantity integer,status text,promotional boolean,created_at timestamp with time zone);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "command_log",
+      "ddl": "create table warehouse.command_log (id uuid,actor_id uuid,command_name text,idempotency_key text,payload_hash text,response jsonb,created_at timestamp with time zone,completed_at timestamp with time zone);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "customer_return_cases",
+      "ddl": "create table warehouse.customer_return_cases (id uuid,source_order_id uuid,serial_number text,product_id text,defect_description text,requesting_department text,status text,resolution text,quarantine_bin_id text,replacement_order_id uuid,refund_reference text,supplier_reference text,created_by uuid,created_at timestamp with time zone,resolved_by uuid,resolved_at timestamp with time zone,finance_evidence_url text,customer_resolution_reference text,customer_closure_evidence_url text,customer_closed_by uuid,customer_closed_at timestamp with time zone,replacement_delivery jsonb);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "cycle_counts",
+      "ddl": "create table warehouse.cycle_counts (id text,location_id text,category text,lines jsonb,actor text,created_at timestamp with time zone,bin_id text,status text,requested_by uuid,submitted_at timestamp with time zone);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "department_stock_requests",
+      "ddl": "create table warehouse.department_stock_requests (id uuid,requesting_department text,purpose text,cost_center text,required_date date,expense_treatment text,status text,lines jsonb,requested_by uuid,requested_at timestamp with time zone,created_at timestamp with time zone,approved_by uuid,approved_at timestamp with time zone,fulfillment_order_id uuid,event_id text);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "event_lifecycle_events",
+      "ddl": "create table warehouse.event_lifecycle_events (id uuid,event_id text,action text,from_status text,to_status text,reason text,changes jsonb,actor_id uuid,actor_email text,created_at timestamp with time zone);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "event_reconciliations",
+      "ddl": "create table warehouse.event_reconciliations (event_id text,status text,sold_units integer,giveaway_units integer,returned_units integer,lost_units integer,damaged_units integer,rekit_units integer,gross_sales_amount numeric(14,2),finance_reference text,evidence_url text,note text,prepared_by uuid,prepared_at timestamp with time zone,approved_by uuid,approved_at timestamp with time zone,updated_at timestamp with time zone);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "event_settlements",
+      "ddl": "create table warehouse.event_settlements (id uuid,event_id text,reconciliation_event_id text,finance_close_entry_id uuid,created_by uuid,created_at timestamp with time zone);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "events",
+      "ddl": "create table warehouse.events (id text,name text,type text,site_location_id text,start_date date,end_date date,status text,owner_id uuid,owner_email text,lifecycle_reason text,updated_at timestamp with time zone);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "exceptions",
+      "ddl": "create table warehouse.exceptions (id uuid,exception_type text,severity text,source_type text,source_id text,status text,owner_id uuid,due_at timestamp with time zone,resolution text,evidence_urls jsonb,waived_by uuid,waived_at timestamp with time zone,created_by uuid,created_at timestamp with time zone,updated_at timestamp with time zone);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "export_jobs",
+      "ddl": "create table warehouse.export_jobs (id text,export_type text,filename text,storage_path text,checksum_sha256 text,row_count integer,status text,created_by uuid,created_by_email text,created_at timestamp with time zone,reviewed_by uuid,reviewed_at timestamp with time zone,review_note text,corrected_from text);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "fulfillment_orders",
+      "ddl": "create table warehouse.fulfillment_orders (id uuid,source text,external_reference text,requesting_department text,source_location_id text,source_bin_id text,customer_reference text,event_id text,third_party_location_id text,gross_sales_amount numeric(14,2),courier text,waybill_number text,status text,lines jsonb,packaging jsonb,created_by uuid,created_at timestamp with time zone,updated_at timestamp with time zone,released_by uuid,released_at timestamp with time zone,delivery_method text,handover_recipient_name text,handover_recipient_department text,handover_reference text,handover_evidence_url text,parent_order_id uuid,picked_by uuid,picked_at timestamp with time zone,packed_by uuid,packed_at timestamp with time zone,acknowledged_by uuid,acknowledged_at timestamp with time zone,acknowledgement_reference text,acknowledgement_evidence_url text,cancellation_reason text,packaging_disposition text,shipment_status text,dispatched_at timestamp with time zone,last_tracking_at timestamp with time zone,delivery_failure_reason text,failed_delivery_at timestamp with time zone,proof_of_delivery_reference text,proof_of_delivery_evidence_url text,delivered_at timestamp with time zone,ecommerce_channel text,order_date date,customer_name text,customer_contact text,customer_email text,delivery_area text,delivery_address jsonb,payment_status text,payment_method text,payment_reference text,payment_date date,payment_rrn text,payment_provider_method text,payment_provider_status text,campaign_name text,sales_invoice_number text,shipping_fee numeric(14,2),other_fees numeric(14,2),reported_total_amount numeric(14,2),order_notes text,delivery_link text,shipment_events jsonb);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "fulfillment_reservations",
+      "ddl": "create table warehouse.fulfillment_reservations (id uuid,order_id uuid,product_id text,location_id text,bin_id text,quantity integer,status text,created_by uuid,created_at timestamp with time zone,closed_at timestamp with time zone);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "import_errors",
+      "ddl": "create table warehouse.import_errors (id bigint,import_job_id uuid,row_number integer,field_name text,error_code text,message text,created_at timestamp with time zone);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "import_jobs",
+      "ddl": "create table warehouse.import_jobs (id uuid,import_kind text,schema_version text,filename text,storage_path text,checksum_sha256 text,source_rows integer,accepted_rows integer,rejected_rows integer,duplicate_rows integer,status text,created_by uuid,created_by_email text,created_at timestamp with time zone,reviewed_by uuid,reviewed_at timestamp with time zone,applied_at timestamp with time zone,corrected_from uuid);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "inventory_holds",
+      "ddl": "create table warehouse.inventory_holds (id uuid,inspection_id uuid,product_id text,location_id text,lot_id text,serial_number text,quantity integer,status text,reason text,evidence_urls jsonb,created_by uuid,created_at timestamp with time zone,released_by uuid,released_at timestamp with time zone,release_reason text,release_evidence_urls jsonb,bin_id text);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "inventory_integrity_cases",
+      "ddl": "create table warehouse.inventory_integrity_cases (id uuid,case_type text,product_id text,lot_id text,serial_number text,status text,severity text,reason text,evidence_url text,resolution_reference text,opened_by uuid,opened_at timestamp with time zone,resolved_by uuid,resolved_at timestamp with time zone);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "inventory_units",
+      "ddl": "create table warehouse.inventory_units (id text,product_id text,serial_number text,lot_id text,location_id text,status text,assigned_to text,event_id text,bin_id text);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "kit_definitions",
+      "ddl": "create table warehouse.kit_definitions (id uuid,product_id text,version integer,name text,components jsonb,status text,owner_department text,product_approval_reference text,created_by uuid,created_at timestamp with time zone);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "locations",
+      "ddl": "create table warehouse.locations (id text,name text,type text,active boolean);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "lots",
+      "ddl": "create table warehouse.lots (id text,product_id text,lot_code text,supplier_id text,unit_cost numeric,received_at timestamp with time zone,expiry_date date);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "movements",
+      "ddl": "create table warehouse.movements (id text,type text,product_id text,quantity integer,from_location_id text,to_location_id text,lot_id text,serial_number text,event_id text,reason text,reference text,evidence_urls jsonb,actor text,created_at timestamp with time zone,from_bin_id text,to_bin_id text,unit_cost_at_movement numeric);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "operation_routes",
+      "ddl": "create table warehouse.operation_routes (id uuid,operation_type_id uuid,name text,source_location_types text[],destination_location_types text[],requires_evidence boolean,requires_approval boolean,requires_online boolean,active boolean,effective_from timestamp with time zone,effective_to timestamp with time zone,created_at timestamp with time zone,updated_at timestamp with time zone);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "operation_types",
+      "ddl": "create table warehouse.operation_types (id uuid,code text,label text,active boolean,created_at timestamp with time zone);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "procurement_receipt_exception_decisions",
+      "ddl": "create table warehouse.procurement_receipt_exception_decisions (id uuid,receipt_id text,purchase_order_id text,exception_id uuid,requested_disposition text,request_reason text,request_evidence_urls jsonb,facts jsonb,status text,requested_by uuid,requested_at timestamp with time zone,decision text,decision_reason text,decision_evidence_urls jsonb,decided_by uuid,decided_at timestamp with time zone);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "procurement_receipt_exception_lines",
+      "ddl": "create table warehouse.procurement_receipt_exception_lines (decision_id uuid,po_line_id text,active boolean,created_at timestamp with time zone,released_at timestamp with time zone,outcome text);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "procurement_receipt_excess_custody",
+      "ddl": "create table warehouse.procurement_receipt_excess_custody (id uuid,decision_id uuid,receipt_id text,po_line_id text,product_id text,ordered_quantity integer,excess_quantity integer,status text,resolution_reason text,resolution_evidence_urls jsonb,resolved_by uuid,resolved_at timestamp with time zone,approved_amendment_id uuid);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "procurement_receipt_serial_claims",
+      "ddl": "create table warehouse.procurement_receipt_serial_claims (id uuid,receipt_id text,decision_id uuid,po_line_id text,product_id text,outcome text,serial_number text,status text,created_by uuid,created_at timestamp with time zone,transitioned_by uuid,transitioned_at timestamp with time zone);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "products",
+      "ddl": "create table warehouse.products (id text,sku text,name text,category text,device_type text,merchandise_type text,serialized boolean,attributes jsonb,unit_cost numeric,reorder_point integer,promotional boolean,barcode text,price numeric,expiry_tracked boolean,shelf_life_warning_days integer,item_class text,serialization_policy text,uom text);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "profiles",
+      "ddl": "create table warehouse.profiles (id text,role text,name text,email text,title text);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "purchase_orders",
+      "ddl": "create table warehouse.purchase_orders (id text,supplier_id text,status text,lines jsonb,expected_date date,actor text,created_at timestamp with time zone);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "quality_inspections",
+      "ddl": "create table warehouse.quality_inspections (id uuid,source_type text,source_id text,product_id text,lot_id text,serial_number text,location_id text,quantity integer,disposition text,reason text,evidence_urls jsonb,inspected_by uuid,inspected_by_email text,inspected_at timestamp with time zone,bin_id text,procurement_po_line_id text);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "receipts",
+      "ddl": "create table warehouse.receipts (id text,supplier_id text,location_id text,lines jsonb,evidence_urls jsonb,actor text,created_at timestamp with time zone,operation_route_id uuid,procurement_po_id text,quality_status text,actual_delivery_date date,delivery_reference text,courier_or_driver text,receipt_exception jsonb,received_by uuid);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "receiving_drafts",
+      "ddl": "create table warehouse.receiving_drafts (actor_id uuid,po_id text,body jsonb,version integer,updated_at timestamp with time zone);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "rekit_work_orders",
+      "ddl": "create table warehouse.rekit_work_orders (id uuid,source_return_case_id uuid,kit_definition_id uuid,output_serial_number text,component_serial_numbers jsonb,condition text,status text,created_by uuid,created_at timestamp with time zone,completed_by uuid,completed_at timestamp with time zone);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "returns",
+      "ddl": "create table warehouse.returns (id text,source text,event_id text,lines jsonb,evidence_urls jsonb,actor text,created_at timestamp with time zone,source_order_id uuid,return_case_id uuid);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "role_capabilities",
+      "ddl": "create table warehouse.role_capabilities (role text,capability text);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "stock_change_requests",
+      "ddl": "create table warehouse.stock_change_requests (id uuid,source_type text,source_id text,product_id text,location_id text,bin_id text,quantity_delta integer,unit_cost numeric(14,4),financial_impact numeric(16,4),reason text,evidence_urls jsonb,status text,requested_by uuid,requested_at timestamp with time zone,created_at timestamp with time zone,decided_at timestamp with time zone,gross_quantity bigint,approval_exposure numeric);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "stock_levels",
+      "ddl": "create table warehouse.stock_levels (product_id text,location_id text,lot_id text,quantity integer,bin_id text,id uuid);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "storage_areas",
+      "ddl": "create table warehouse.storage_areas (id text,location_id text,code text,label text,zone text,active boolean);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "suppliers",
+      "ddl": "create table warehouse.suppliers (id text,name text,lead_time_days integer);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "unidentified_receipt_custody",
+      "ddl": "create table warehouse.unidentified_receipt_custody (decision_id uuid,receipt_id text,po_line_id text,observed_description text,observed_identifiers jsonb,quantity integer,identified_product_id text,identified_by uuid,identified_at timestamp with time zone,created_at timestamp with time zone);"
+    },
+    {
+      "schema_name": "warehouse",
+      "table_name": "vendor_returns",
+      "ddl": "create table warehouse.vendor_returns (id uuid,hold_id uuid,supplier_id text,source_receipt_id text,source_return_id text,product_id text,lot_id text,serial_number text,quantity integer,reason text,reference text,status text,evidence_urls jsonb,created_by uuid,created_at timestamp with time zone,handed_off_by uuid,handed_off_at timestamp with time zone,completed_at timestamp with time zone);"
+    }
+  ],
+  "functions": [
+    {
+      "nspname": "warehouse",
+      "proname": "stock_conversion_workspace",
+      "definition": "CREATE OR REPLACE FUNCTION warehouse.stock_conversion_workspace(payload jsonb DEFAULT '{}'::jsonb)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\nbegin\n  if auth.uid() is null or not (coalesce(core.has_live_cap('warehouse','manage_returns'),false) or coalesce(core.has_live_cap('warehouse','inspect_quality'),false)) then raise exception 'Not authorized to view stock conversion work'; end if;\n  return jsonb_build_object(\n    'recipes',coalesce((select jsonb_agg(r order by approved_at desc) from (select * from private.stock_conversion_recipes order by approved_at desc limit 200) r),'[]'::jsonb),\n    'batches',coalesce((select jsonb_agg(b order by created_at desc) from (select * from private.stock_conversion_batches order by created_at desc limit 200) b),'[]'::jsonb),\n    'candidates',coalesce((select jsonb_agg(candidate) from (\n      select u.id unit_id,u.serial_number,u.product_id,u.location_id,u.bin_id,q.id inspection_id,\n        case when q.source_type='return' then q.source_id end return_id,\n        (select line->>'allocationId' from warehouse.returns r cross join lateral jsonb_array_elements(r.lines) line\n          where r.id=q.source_id and q.source_type='return' and line->>'serialNumber'=u.serial_number limit 1) allocation_id,\n        (select l.batch_id from private.stock_conversion_lines l join private.stock_conversion_batches b on b.id=l.batch_id\n          join private.stock_conversion_recipes r on r.id=b.recipe_id where l.unit_id=u.id and l.output_product_id=u.product_id and r.direction='conversion'\n            and not exists(select 1 from private.stock_conversion_lines recovered where recovered.original_conversion_id=l.batch_id and recovered.unit_id=l.unit_id)\n          order by b.completed_at desc limit 1) original_conversion_id\n      from warehouse.inventory_units u join lateral (\n        select * from warehouse.quality_inspections q where q.serial_number=u.serial_number and q.product_id=u.product_id\n        order by q.inspected_at desc limit 1\n      ) q on q.disposition='accepted' and coalesce(private.stock_conversion_qc_matches(u,q,null,true),false)\n      where u.status='in_stock' and u.assigned_to is null and u.bin_id is not null\n      order by u.serial_number limit 500\n    ) candidate),'[]'::jsonb),\n    'recovery_available',to_regprocedure('private.assert_event_conversion_return(text,text,text,text,text)') is not null);\nend;\n$function$\n",
+      "pin": "949bb1f1e424077351421c2e57f502fc"
+    },
+    {
+      "nspname": "private",
+      "proname": "warehouse_inventory_position_summary",
+      "definition": "CREATE OR REPLACE FUNCTION private.warehouse_inventory_position_summary()\n RETURNS TABLE(id text, product_id text, location_id text, bin_id text, on_hand bigint, committed bigint, held bigint, unavailable bigint, available bigint, created_at timestamp with time zone, unscoped_committed bigint, product_available bigint, availability_verified boolean, putaway_available bigint)\n LANGUAGE plpgsql\n STABLE SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare v_table text; v_relation regclass; v_auth oid;\nbegin\n  if auth.uid() is null or (\n    core.has_live_cap('warehouse','view_inventory')\n    or core.has_live_cap('warehouse','view_analytics')\n    or core.has_live_cap('warehouse','view_finance')\n    or core.has_live_cap('insights','view_warehouse')\n  ) is not true then\n    raise exception using errcode='42501',message='Current inventory summary read access is required';\n  end if;\n  select oid into strict v_auth from pg_catalog.pg_roles where rolname='authenticated';\n  foreach v_table in array array['products','locations','storage_areas','stock_levels','inventory_units'] loop\n    v_relation:=pg_catalog.to_regclass('warehouse.'||v_table);\n    if not exists(select 1 from pg_catalog.pg_policy p\n      where p.polrelid=v_relation and p.polcmd='r' and p.polpermissive\n        and (v_auth=any(p.polroles) or 0=any(p.polroles))\n        and pg_catalog.pg_get_expr(p.polqual,p.polrelid)='true')\n      or not exists(select 1 from pg_catalog.pg_policy p\n        where p.polrelid=v_relation and p.polcmd='r' and not p.polpermissive\n          and v_auth=any(p.polroles) and p.polname='current_capability_read_guard')\n      or exists(select 1 from pg_catalog.pg_policy p\n        where p.polrelid=v_relation and p.polcmd in ('r','*') and not p.polpermissive\n          and (v_auth=any(p.polroles) or 0=any(p.polroles))\n          and (p.polname<>'current_capability_read_guard'\n            or pg_catalog.regexp_replace(pg_catalog.pg_get_expr(p.polqual,p.polrelid),'\\s+',' ','g')\n              <>pg_catalog.format('( SELECT private.can_read_warehouse_table(%L::text) AS can_read_warehouse_table)',v_table))) then\n      raise exception using errcode='42501',message='Inventory summary row scope changed; review the summary read policy';\n    end if;\n  end loop;\n  return query\n  with active_holds as materialized (\n    select h.product_id,h.location_id,h.bin_id,h.lot_id,h.serial_number,h.quantity\n    from warehouse.inventory_holds h where h.status='active'\n  ), unverifiable_products as (\n    -- Unknown serial overlap invalidates this product, not the whole read.\n    select distinct h.product_id from active_holds h join warehouse.products p on p.id=h.product_id\n    where p.serialized and (nullif(btrim(h.serial_number),'') is null or h.quantity<>1)\n  ), held_serials as (\n    select distinct h.product_id,upper(btrim(h.serial_number)) as serial_number\n    from active_holds h where h.serial_number is not null\n  ), bulk_holds as (\n    select h.product_id,h.location_id,h.bin_id,h.lot_id,sum(h.quantity)::bigint as quantity\n    from active_holds h join warehouse.products p on p.id=h.product_id and not p.serialized\n    group by h.product_id,h.location_id,h.bin_id,h.lot_id\n  ), bulk_levels as (\n    select s.product_id,s.location_id,s.bin_id,s.lot_id,sum(s.quantity)::bigint as quantity\n    from warehouse.stock_levels s group by s.product_id,s.location_id,s.bin_id,s.lot_id\n  ), physical as (\n    select s.product_id,s.location_id,s.bin_id,s.quantity as on_hand,\n      least(greatest(s.quantity,0),coalesce(h.quantity,0))::bigint as held,0::bigint as unavailable\n    from bulk_levels s left join bulk_holds h on h.product_id=s.product_id and h.location_id=s.location_id\n      and h.bin_id is not distinct from s.bin_id and h.lot_id is not distinct from s.lot_id\n    union all\n    select u.product_id,u.location_id,u.bin_id,count(*)::bigint,\n      count(*) filter(where h.serial_number is not null)::bigint,\n      count(*) filter(where u.status='returned' and h.serial_number is null)::bigint\n    from warehouse.inventory_units u left join held_serials h\n      on h.product_id=u.product_id and h.serial_number=upper(btrim(u.serial_number))\n    where u.status in ('in_stock','returned')\n    group by u.product_id,u.location_id,u.bin_id\n  ), physical_positions as (\n    select p.product_id,p.location_id,p.bin_id,sum(p.on_hand)::bigint as on_hand,\n      sum(p.held)::bigint as held,sum(p.unavailable)::bigint as unavailable\n    from physical p group by p.product_id,p.location_id,p.bin_id\n  ), fulfillment_demand as (\n    select r.order_id,r.product_id,r.location_id,r.bin_id,r.quantity::bigint as quantity\n    from warehouse.fulfillment_reservations r where r.status='active'\n    union all\n    select o.id,line->>'productId',o.source_location_id,o.source_bin_id,sum((line->>'quantity')::bigint)::bigint\n    from warehouse.fulfillment_orders o cross join lateral jsonb_array_elements(o.lines) line\n    where o.status in ('allocated','picking','packing','ready')\n      and not exists(select 1 from warehouse.fulfillment_reservations r\n        where r.order_id=o.id and r.product_id=line->>'productId' and r.status='active')\n    group by o.id,line->>'productId',o.source_location_id,o.source_bin_id\n  ), fulfillment_remaining as (\n    select d.product_id,d.location_id,d.bin_id,\n      greatest(d.quantity-(select count(distinct u.id)\n        from warehouse.fulfillment_orders o cross join lateral jsonb_array_elements(o.lines) line\n        cross join lateral jsonb_array_elements_text(coalesce(line->'pickedSerialNumbers','[]'::jsonb)) serial\n        join warehouse.inventory_units u on u.product_id=d.product_id\n          and upper(btrim(u.serial_number))=upper(btrim(serial.value)) and u.status in ('allocated','issued')\n        where o.id=d.order_id and line->>'productId'=d.product_id),0)::bigint as quantity\n    from fulfillment_demand d\n  ), event_demand as (\n    select a.product_id,a.event_id,\n      coalesce(sum(a.quantity) filter(where a.status='reserved'),0)::bigint as reserved,\n      coalesce(sum(a.quantity) filter(where a.status='allocated'),0)::bigint as allocated\n    from warehouse.allocations a where a.status in ('reserved','allocated') group by a.product_id,a.event_id\n  ), event_remaining as (\n    select d.product_id,(d.reserved+greatest(d.allocated-(select count(*) from warehouse.inventory_units u\n      where u.product_id=d.product_id and u.event_id=d.event_id and u.status='allocated'),0))::bigint as quantity\n    from event_demand d\n  ), scoped as (\n    select d.product_id,d.location_id,d.bin_id,sum(d.quantity)::bigint as committed\n    from fulfillment_remaining d where d.location_id is not null and d.bin_id is not null\n    group by d.product_id,d.location_id,d.bin_id\n  ), unscoped as (\n    select d.product_id,sum(d.quantity)::bigint as committed from (\n      select f.product_id,f.quantity from fulfillment_remaining f where f.location_id is null or f.bin_id is null\n      union all select e.product_id,e.quantity from event_remaining e\n    ) d group by d.product_id\n  ), positions as (\n    select coalesce(p.product_id,s.product_id) as product_id,coalesce(p.location_id,s.location_id) as location_id,\n      coalesce(p.bin_id,s.bin_id) as bin_id,coalesce(p.on_hand,0)::bigint as on_hand,\n      coalesce(p.held,0)::bigint as held,coalesce(p.unavailable,0)::bigint as unavailable,\n      coalesce(s.committed,0)::bigint as committed\n    from physical_positions p full join scoped s on s.product_id=p.product_id and s.location_id=p.location_id\n      and s.bin_id is not distinct from p.bin_id\n  ), valid_positions as (\n    select p.* from positions p join warehouse.products product on product.id=p.product_id\n      join warehouse.locations location on location.id=p.location_id\n  ), totals as (\n    select p.product_id,sum(p.on_hand-p.held-p.unavailable-p.committed)::bigint as free\n    from valid_positions p group by p.product_id\n  )\n  select p.product_id||'|'||p.location_id||'|'||coalesce(p.bin_id,''),p.product_id,p.location_id,p.bin_id,\n    p.on_hand,p.committed,p.held,p.unavailable,\n    case when coalesce(u.committed,0)>0 or invalid.product_id is not null then 0::bigint\n      else greatest(p.on_hand-p.held-p.unavailable-p.committed,0)::bigint end,\n    timestamptz '1970-01-01 00:00:00+00',coalesce(u.committed,0)::bigint,\n    case when invalid.product_id is not null then null::bigint else greatest(t.free-coalesce(u.committed,0),0)::bigint end,\n    coalesce(u.committed,0)=0 and invalid.product_id is null,\n    case when invalid.product_id is not null then 0::bigint else greatest(p.on_hand-p.held-p.unavailable-p.committed,0)::bigint end\n  from valid_positions p join totals t on t.product_id=p.product_id\n    left join unscoped u on u.product_id=p.product_id\n    left join unverifiable_products invalid on invalid.product_id=p.product_id;\nend $function$\n",
+      "pin": "ef9be17a0fede0292357115ab18706f6"
+    },
+    {
+      "nspname": "private",
+      "proname": "warehouse_list_stock_change_requests",
+      "definition": "CREATE OR REPLACE FUNCTION private.warehouse_list_stock_change_requests(payload jsonb)\n RETURNS jsonb\n LANGUAGE plpgsql\n STABLE SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare\n  v_limit integer := least(greatest(coalesce((payload->>'limit')::integer,50),1),100);\n  v_status text := nullif(payload->>'status','');\n  v_search text := nullif(pg_catalog.btrim(coalesce(payload->>'search','')), '');\n  v_rows jsonb;\nbegin\n  if not (core.has_cap('warehouse','approve_stock_adjustment')\n    or core.has_cap('warehouse','approve_stock_adjustment_finance')) then\n    raise exception 'Not authorized: warehouse stock approvals';\n  end if;\n  select coalesce(\n    jsonb_agg(to_jsonb(listed) order by listed.requested_at desc,listed.id desc),\n    '[]'::jsonb\n  )\n  into v_rows from (\n    select request.*,\n      (select supervisor_step.decided_by from core.approvals supervisor_step\n        where supervisor_step.entity_type='warehouse_stock_change'\n          and supervisor_step.entity_id=request.id::text and supervisor_step.step=1\n          and supervisor_step.decision='approved' limit 1) as supervisor_approved_by,\n      (request.requested_by <> auth.uid()\n       and current_step.id is not null\n       and approval_group.is_active\n       and approval_group.request_status = request.status\n       and ((request.status='pending_supervisor'\n               and approval_group.capability='approve_stock_adjustment')\n            or (request.status='pending_finance'\n               and approval_group.capability='approve_stock_adjustment_finance'))\n       and core.has_cap(approval_group.module,approval_group.capability)\n       and exists (\n          select 1 from core.user_roles membership\n          join core.roles catalogue_role\n            on catalogue_role.module=membership.module\n           and catalogue_role.role=membership.role\n          where membership.user_id=auth.uid()\n            and membership.module=approval_group.module\n            and membership.role=any(approval_group.member_roles)\n            and catalogue_role.is_active\n       )\n       and not (request.status='pending_finance' and exists (\n         select 1 from core.approvals supervisor_step\n          where supervisor_step.entity_type='warehouse_stock_change'\n            and supervisor_step.entity_id=request.id::text and supervisor_step.step=1\n            and supervisor_step.decision='approved'\n            and supervisor_step.decided_by=auth.uid()\n       ))) as can_decide\n    from warehouse.stock_change_requests request\n    left join lateral (\n      select approval.id,approval.approver_role\n      from core.approvals approval\n      where approval.entity_type='warehouse_stock_change'\n        and approval.entity_id=request.id::text\n        and approval.decision='pending'\n      order by approval.step\n      limit 1\n    ) current_step on true\n    left join core.approval_groups approval_group\n      on approval_group.entity_type='warehouse_stock_change'\n     and approval_group.group_code=current_step.approver_role\n    where (v_status is null or request.status=v_status)\n      and (v_search is null or request.product_id ilike '%' || v_search || '%'\n        or request.reason ilike '%' || v_search || '%')\n    order by request.requested_at desc,request.id desc limit v_limit\n  ) listed;\n  return jsonb_build_object('rows',v_rows,'next_cursor',null);\nend $function$\n",
+      "pin": "ae152c1e368767fd39285985fb2e94ec"
+    },
+    {
+      "nspname": "core",
+      "proname": "platform_previous_my_work",
+      "definition": "CREATE OR REPLACE FUNCTION core.platform_previous_my_work()\n RETURNS TABLE(id text, principal_id uuid, source text, title text, description text, status text, priority text, due_at timestamp with time zone, href text, required_module text, required_capability text, source_record_exists boolean)\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO ''\nAS $function$\r\n  select\r\n    'receipt:' || receipt.id,\r\n    auth.uid(),\r\n    'warehouse',\r\n    'Inspect receipt ' || receipt.id,\r\n    'Receipt evidence and line disposition require quality review.',\r\n    receipt.quality_status,\r\n    'high',\r\n    receipt.created_at + interval '1 day',\r\n    '/warehouse/quality',\r\n    'warehouse',\r\n    'inspect_quality',\r\n    true\r\n  from warehouse.receipts receipt\r\n  where core.has_live_cap('warehouse', 'inspect_quality')\r\n    and receipt.quality_status in ('pending', 'partial')\r\n  union all\r\n  select\r\n    'count:' || cycle_count.id,\r\n    auth.uid(),\r\n    'warehouse',\r\n    'Review cycle count ' || cycle_count.id,\r\n    'A submitted stock count requires variance review.',\r\n    cycle_count.status,\r\n    'high',\r\n    coalesce(cycle_count.submitted_at, cycle_count.created_at) + interval '1 day',\r\n    '/warehouse/cycle-counts',\r\n    'warehouse',\r\n    'approve_stock_adjustment',\r\n    true\r\n  from warehouse.cycle_counts cycle_count\r\n  where core.has_live_cap('warehouse', 'approve_stock_adjustment')\r\n    and cycle_count.status in ('submitted', 'pending_approval')\r\n  union all\r\n  select\r\n    'request:' || request.id::text,\r\n    auth.uid(),\r\n    'procurement',\r\n    'Review purchase request ' || request.id::text,\r\n    request.title,\r\n    request.status,\r\n    'normal',\r\n    request.updated_at + interval '2 days',\r\n    '/procurement/approvals',\r\n    'procurement',\r\n    'approve_request',\r\n    true\r\n  from procurement.requests request\r\n  where core.has_live_cap('procurement', 'approve_request')\r\n    and request.status in ('submitted', 'under_review')\r\n  union all\r\n  select\r\n    'legal:' || accreditation.id::text,\r\n    auth.uid(),\r\n    'legal',\r\n    'Review vendor accreditation',\r\n    'The submitted vendor case needs a legal determination.',\r\n    accreditation.status,\r\n    'normal',\r\n    coalesce(accreditation.submitted_at, accreditation.created_at) + interval '3 days',\r\n    '/legal/accreditation',\r\n    'legal',\r\n    'review_accreditation',\r\n    true\r\n  from legal.accreditation_cases accreditation\r\n  where core.has_live_cap('legal', 'review_accreditation')\r\n    and accreditation.status in ('submitted', 'under_review')\r\n  union all\r\n  select\r\n    'payment:' || payment_pack.id::text,\r\n    auth.uid(),\r\n    'finance',\r\n    'Review payment readiness pack',\r\n    'A reconciled acceptance and invoice pack is ready for Finance.',\r\n    payment_pack.status,\r\n    'high',\r\n    payment_pack.prepared_at + interval '2 days',\r\n    '/procurement/purchase-orders/' || payment_pack.purchase_order_id,\r\n    'procurement',\r\n    'view_finance',\r\n    true\r\n  from procurement.payment_readiness_packs payment_pack\r\n  where core.has_live_cap('procurement', 'view_finance')\r\n    and payment_pack.status = 'ready_for_finance'\r\n  union all\r\n  select\r\n    'event:' || event.id,\r\n    auth.uid(),\r\n    'events',\r\n    'Confirm event fulfillment: ' || event.name,\r\n    'Review reservations, issue readiness, and the return plan.',\r\n    'planned',\r\n    'normal',\r\n    event.start_date::timestamptz - interval '1 day',\r\n    '/events/' || event.id,\r\n    'events',\r\n    'view_events',\r\n    true\r\n  from warehouse.events event\r\n  where core.has_live_cap('events', 'view_events')\r\n    and event.start_date between current_date and current_date + 30;\r\n$function$\n",
+      "pin": "78e3465b9571031b0a51b62d645e4f09"
+    }
+  ],
+  "taskFunction": "CREATE OR REPLACE FUNCTION private.warehouse_inventory_position_for_tasks()\n RETURNS SETOF warehouse.inventory_position_v1\n LANGUAGE plpgsql\n STABLE\n SET search_path TO ''\nAS $function$\nbegin\n  if auth.uid() is not null and (\n    core.has_live_cap('warehouse','view_inventory') or core.has_live_cap('warehouse','view_analytics')\n    or core.has_live_cap('warehouse','view_finance') or core.has_live_cap('insights','view_warehouse')\n  ) is true then\n    return query select * from private.warehouse_inventory_position_summary();\n  end if;\nend $function$\n",
+  "views": [
+    {
+      "schemaname": "warehouse",
+      "viewname": "inventory_position_v1",
+      "definition": " SELECT id,\n    product_id,\n    location_id,\n    bin_id,\n    on_hand,\n    committed,\n    held,\n    unavailable,\n    available,\n    created_at,\n    unscoped_committed,\n    product_available,\n    availability_verified,\n    putaway_available\n   FROM private.warehouse_inventory_position_summary() warehouse_inventory_position_summary(id, product_id, location_id, bin_id, on_hand, committed, held, unavailable, available, created_at, unscoped_committed, product_available, availability_verified, putaway_available);"
+    },
+    {
+      "schemaname": "warehouse",
+      "viewname": "quality_inspection_queue",
+      "definition": " SELECT id,\n    source_type,\n    source_id,\n    product_id,\n    procurement_po_line_id,\n    bin_id,\n    lot_id,\n    serial_number,\n    quantity,\n    disposition,\n    reason,\n    inspected_by,\n    inspected_at,\n        CASE\n            WHEN (jsonb_typeof(evidence_urls) = 'array'::text) THEN jsonb_array_length(evidence_urls)\n            ELSE 0\n        END AS evidence_count\n   FROM warehouse.quality_inspections;"
+    },
+    {
+      "schemaname": "warehouse",
+      "viewname": "warehouse_tasks",
+      "definition": " WITH staging AS (\n         SELECT \"position\".id,\n            \"position\".product_id,\n            \"position\".location_id,\n            \"position\".bin_id,\n            \"position\".on_hand,\n            \"position\".committed,\n            \"position\".held,\n            \"position\".unavailable,\n            \"position\".putaway_available,\n            \"position\".created_at\n           FROM (private.warehouse_inventory_position_for_tasks() \"position\"(id, product_id, location_id, bin_id, on_hand, committed, held, unavailable, available, created_at, unscoped_committed, product_available, availability_verified, putaway_available)\n             JOIN warehouse.locations location ON ((location.id = \"position\".location_id)))\n          WHERE ((\"position\".bin_id IS NULL) AND (\"position\".putaway_available > 0) AND (location.type = 'warehouse'::text) AND (core.has_cap('warehouse'::text, 'inspect_quality'::text) OR core.has_cap('warehouse'::text, 'view_exceptions'::text) OR core.has_cap('warehouse'::text, 'view_finance'::text)))\n        ), eligible_units AS (\n         SELECT unit.id,\n            unit.product_id,\n            unit.serial_number,\n            unit.lot_id,\n            unit.location_id,\n            unit.status,\n            unit.assigned_to,\n            unit.event_id,\n            unit.bin_id,\n            staging.putaway_available,\n            row_number() OVER (PARTITION BY unit.product_id, unit.location_id ORDER BY unit.id) AS ordinal\n           FROM (warehouse.inventory_units unit\n             JOIN staging ON (((staging.product_id = unit.product_id) AND (staging.location_id = unit.location_id))))\n          WHERE ((unit.bin_id IS NULL) AND (unit.status = 'in_stock'::text) AND (NOT (EXISTS ( SELECT 1\n                   FROM warehouse.inventory_holds hold\n                  WHERE ((hold.product_id = unit.product_id) AND (hold.location_id = unit.location_id) AND (hold.bin_id IS NULL) AND (hold.status = 'active'::text) AND ((hold.serial_number IS NULL) OR (hold.serial_number = unit.serial_number)))))))\n        )\n SELECT ('quality-'::text || (inspection.id)::text) AS id,\n    'quality'::text AS task_type,\n    (inspection.id)::text AS source_id,\n    'Inspect receipt stock'::text AS title,\n    'due'::text AS status,\n    NULL::uuid AS assignee_id,\n    (inspection.inspected_at + '1 day'::interval) AS due_at,\n    NULL::timestamp with time zone AS completed_at,\n    inspection.inspected_at AS created_at\n   FROM warehouse.quality_inspections inspection\n  WHERE (inspection.disposition = 'pending'::text)\nUNION ALL\n SELECT ('exception-'::text || (exception.id)::text) AS id,\n    'exception'::text AS task_type,\n    (exception.id)::text AS source_id,\n    ('Resolve '::text || replace(exception.exception_type, '_'::text, ' '::text)) AS title,\n        CASE\n            WHEN (exception.status = 'in_progress'::text) THEN 'blocked'::text\n            ELSE 'due'::text\n        END AS status,\n    exception.owner_id AS assignee_id,\n    exception.due_at,\n    NULL::timestamp with time zone AS completed_at,\n    exception.created_at\n   FROM warehouse.exceptions exception\n  WHERE (exception.status = ANY (ARRAY['open'::text, 'in_progress'::text]))\nUNION ALL\n SELECT ('putaway-unit-'::text || unit.id) AS id,\n    'putaway'::text AS task_type,\n    unit.id AS source_id,\n    ((('Put away '::text || product.name) || ' / '::text) || unit.serial_number) AS title,\n    'due'::text AS status,\n    NULL::uuid AS assignee_id,\n    NULL::timestamp with time zone AS due_at,\n    NULL::timestamp with time zone AS completed_at,\n    '1970-01-01 00:00:00+00'::timestamp with time zone AS created_at\n   FROM (eligible_units unit\n     JOIN warehouse.products product ON (((product.id = unit.product_id) AND product.serialized)))\n  WHERE (unit.ordinal <= unit.putaway_available)\nUNION ALL\n SELECT ('putaway-staging:'::text || (json_build_array(staging.product_id, staging.location_id))::text) AS id,\n    'putaway'::text AS task_type,\n    ('staging:'::text || (json_build_array(staging.product_id, staging.location_id))::text) AS source_id,\n    (((('Put away '::text || product.name) || ' / '::text) || (staging.putaway_available)::text) || ' units'::text) AS title,\n    'due'::text AS status,\n    NULL::uuid AS assignee_id,\n    NULL::timestamp with time zone AS due_at,\n    NULL::timestamp with time zone AS completed_at,\n    '1970-01-01 00:00:00+00'::timestamp with time zone AS created_at\n   FROM (staging\n     JOIN warehouse.products product ON (((product.id = staging.product_id) AND (NOT product.serialized))));"
+    }
+  ]
+}

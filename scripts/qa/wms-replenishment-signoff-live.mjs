@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { assertWmsLiveFixtureCleanupReady } from './wms-live-fixture-guard.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { mkdir, readFile, writeFile, open, unlink, realpath, lstat, link } from 'node:fs/promises';
@@ -126,7 +127,9 @@ function recommendationPayload(c) {
 }
 export function prepareSql(input) {
   const m = validateManifest(input);
-  return `-- OFFLINE product prerequisite for UAT ${m.project}; build ${m.commit}; run ${m.runId}.
+  return `-- LIVE MUTATIONS PAUSED: DO NOT APPLY to UAT. Supported history-preserving cleanup is not implemented.
+-- Offline review/local tests only; this file is not execution approval.
+-- OFFLINE product prerequisite for UAT ${m.project}; build ${m.commit}; run ${m.runId}.
 -- Parent review and separate execution required. Opening inventory is zero.
 begin;
 ${m.cases.map(c => `insert into warehouse.products(id,sku,name,category,serialized,attributes,unit_cost,item_class,reorder_point)
@@ -1315,6 +1318,7 @@ async function liveAdapter(m, env, attempt, record, mode) {
 export async function run(folder, env = process.env, apply = false, mode = 'cli') {
   folder = await realpath(folder); const m = validateManifest(JSON.parse(await readFile(path.join(folder, 'manifest.json'), 'utf8')));
   assertRunPermission(m, env, apply, mode);
+  assertWmsLiveFixtureCleanupReady();
   for (const c of m.cases) for (const d of c.documents) {
     const file = path.join(folder, d.filename), info = await lstat(file);
     assert(info.isFile() && !info.isSymbolicLink() && info.nlink === 1 && info.size === d.sizeBytes, 'Plain prepared PDF fixture required');
@@ -1378,7 +1382,8 @@ export async function main(args) {
     const m = await prepare(folder, { commit: flags['--commit'], bindings: JSON.parse(await readFile(flags['--bindings'], 'utf8')),
       completion: JSON.parse(await readFile(flags['--completion'], 'utf8')), database: JSON.parse(await readFile(flags['--database'], 'utf8')),
       ...(flags['--run-id'] ? { runId: flags['--run-id'] } : {}) });
-    return { folder: path.resolve(folder), runId: m.runId, preparedOffline: true, seeded: false };
+    return { folder: path.resolve(folder), runId: m.runId, preparedOffline: true, seeded: false,
+      liveMutationsPaused: true, next: 'Do not apply prepare.sql or run live fixtures; supported history-preserving cleanup is not implemented.' };
   }
   assert(command === 'run' && options[0] === '--apply' && (options.length === 1 || options.length === 3 && options[1] === '--readback' && ['cli', 'mcp'].includes(options[2])),
     'run FOLDER --apply [--readback cli|mcp]; no seeding, cleanup or resume command');

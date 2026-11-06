@@ -373,7 +373,8 @@ function makeMockClient(
             return query;
           },
           then: (resolve: (result: { data: unknown[]; error: null }) => unknown) => {
-            let data = tables[table] ?? [];
+            // These fixtures are all unarchived; retain the requested relation in queries.
+            let data = tables[table.replace(/^active_/, "")] ?? [];
             if (record.orders[0] === "id") {
               data = [...data].sort((a, b) => String((a as { id: string }).id).localeCompare(String((b as { id: string }).id)));
               if (record.afterId !== undefined) data = data.filter((row) => (row as { id: string }).id > record.afterId!);
@@ -620,14 +621,14 @@ describe("SupabaseRepository read model query shape", () => {
     expect(result.products).toHaveLength(seed.products.length);
     expect(result.units).toHaveLength(seed.units.length);
     expect(result.stockLevels).toHaveLength(seed.stockLevels.length);
-    expect([...new Set(queries.map(query => query.table))].sort()).toEqual(['inventory_units', 'products', 'stock_levels']);
+    expect([...new Set(queries.map(query => query.table))].sort()).toEqual(['active_inventory_units', 'active_products', 'active_stock_levels']);
   });
 
   it('does not load unrelated order and return histories before reserving stock', async () => {
     const seed = buildSeed();
     const { client, queries, calls } = makeMockClient(seed);
     await new SupabaseRepository(client).reserve({ eventId: 'evt-makati', productId: 'doctor-token', quantity: 1, actor: 'test' });
-    expect([...new Set(queries.map(query => query.table))].sort()).toEqual(['allocations', 'inventory_units', 'products', 'stock_levels']);
+    expect([...new Set(queries.map(query => query.table))].sort()).toEqual(['active_allocations', 'active_inventory_units', 'active_products', 'active_stock_levels']);
     expect(calls.at(-1)?.fn).toBe('reserve');
   });
 
@@ -643,14 +644,14 @@ describe("SupabaseRepository read model query shape", () => {
     const allocation = seed.allocations.find(row => row.status === 'reserved')!;
     const { client, queries, calls } = makeMockClient(seed);
     await new SupabaseRepository(client).cancelAllocation({ allocationId: allocation.id, actor: 'test' });
-    expect([...new Set(queries.map(query => query.table))]).toEqual(['allocations']);
+    expect([...new Set(queries.map(query => query.table))]).toEqual(['active_allocations']);
     expect(calls.at(-1)?.fn).toBe('cancel_allocation');
   });
 
   it('checks only products before rejecting an unknown product edit', async () => {
     const { client, queries, calls } = makeMockClient(buildSeed());
     await expect(new SupabaseRepository(client).updateProduct({ productId: 'missing', patch: { name: 'Changed' }, actor: 'test' })).rejects.toThrow('Product not found');
-    expect([...new Set(queries.map(query => query.table))]).toEqual(['products']);
+    expect([...new Set(queries.map(query => query.table))]).toEqual(['active_products']);
     expect(calls).toHaveLength(0);
   });
 
@@ -659,14 +660,14 @@ describe("SupabaseRepository read model query shape", () => {
     await new SupabaseRepository(client).getData();
     expect(queries.filter(query => query.afterId === undefined)).toHaveLength(23);
     expect(queries.every((query) => query.projection !== "*")).toBe(true);
-    expect(queries.find((query) => query.table === "movements")?.limit).toBe(
+    expect(queries.find((query) => query.table === "active_movements")?.limit).toBe(
       5000,
     );
     expect(
-      queries.find((query) => query.table === "products")?.limit,
+      queries.find((query) => query.table === "active_products")?.limit,
     ).toBe(1000);
     expect(
-      queries.find((query) => query.table === "fulfillment_reservations")
+      queries.find((query) => query.table === "active_fulfillment_reservations")
         ?.projection,
     ).not.toBe("*");
     expect(
@@ -699,13 +700,13 @@ describe("SupabaseRepository WMS persistence boundary", () => {
       reKitWorkOrders: [],
     });
     for (const table of [
-      "fulfillment_orders",
-      "fulfillment_reservations",
+      "active_fulfillment_orders",
+      "active_fulfillment_reservations",
       "department_request_options",
-      "department_stock_requests",
-      "customer_return_cases",
-      "kit_definitions",
-      "rekit_work_orders",
+      "active_department_stock_requests",
+      "active_customer_return_cases",
+      "active_kit_definitions",
+      "active_rekit_work_orders",
     ]) {
       expect(
         queries.find((query) => query.table === table)?.projection,
@@ -826,10 +827,10 @@ describe("SupabaseRepository W1 control boundary", () => {
       repo.listInventoryPositions({ limit: 500 }),
     ]);
     const controlTables = [
-      "quality_inspections",
-      "inventory_holds",
-      "vendor_returns",
-      "exceptions",
+      "active_quality_inspections",
+      "active_inventory_holds",
+      "active_vendor_returns",
+      "active_exceptions",
       "warehouse_tasks",
       "inventory_position_v1",
     ];
@@ -837,13 +838,13 @@ describe("SupabaseRepository W1 control boundary", () => {
       const query = queries.find((item) => item.table === table)!;
       expect(query.projection).not.toBe("*");
       expect(query.orders).toEqual([
-        table === "quality_inspections" ? "inspected_at" : "created_at",
+        table === "active_quality_inspections" ? "inspected_at" : "created_at",
         "id",
       ]);
       expect(query.limit).toBe(101);
     }
     const qualityQuery = queries.find(
-      (item) => item.table === "quality_inspections",
+      (item) => item.table === "active_quality_inspections",
     )!;
     expect(qualityQuery.projection).toContain("inspected_at");
     expect(qualityQuery.projection).not.toContain("created_at");

@@ -1,6 +1,7 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
+import { assertWmsLiveFixtureCleanupReady } from "../../../../scripts/qa/wms-live-fixture-guard.mjs";
 
 const evidence = resolve("../../docs/evidence/2026-08-28-aug27-remediation");
 const password = process.env.AUDIT_PASSWORD;
@@ -65,6 +66,7 @@ async function capture(page: Page, info: TestInfo, name: string) {
 test("Operations receiving: item selection, serial input, safe evidence and draft control", async ({
   page,
 }, info) => {
+  assertWmsLiveFixtureCleanupReady();
   await signIn(page, "operations.associate", "/warehouse/purchase-orders");
   const card = page
     .locator("li")

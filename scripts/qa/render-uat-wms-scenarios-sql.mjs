@@ -94,6 +94,7 @@ on conflict (${conflictColumns}) do nothing;`;
 
   return [
     "begin;",
+    "-- LIVE MUTATIONS PAUSED: DO NOT APPLY to UAT. Supported history-preserving cleanup is not implemented.\n-- Offline review/local tests only; this file is not execution approval.",
     actorGuard(),
     ...statements,
     ...requestLinkRepairs,

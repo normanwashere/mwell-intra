@@ -23,7 +23,9 @@ ${f.table === 'purchase_order_lines' ? `if exists(select 1 from ${table} e cross
 insert into ${table} (${columns}) select ${columns} from jsonb_populate_recordset(null::${table}, ${data}) on conflict(id) do nothing;`;
   });
   const vendors = buildSep07MerchFixtures().find(f => f.table === 'vendors').rows;
-  return `-- UAT ONLY ${MERCH_PROJECT}; executor MUST independently verify the selected connection.
+  return `-- LIVE MUTATIONS PAUSED: DO NOT APPLY to UAT. Supported history-preserving cleanup is not implemented.
+-- Offline review/local tests only; this file is not execution approval.
+-- UAT ONLY ${MERCH_PROJECT}; executor MUST independently verify the selected connection.
 -- New VERIFY/TESTER1/TESTER2 identities only. No auth, approvals, policy grants, stock, receipts or resets.
 -- VERIFY is disposable workflow input; TESTER1/TESTER2 must remain untouched by automation.
 begin;

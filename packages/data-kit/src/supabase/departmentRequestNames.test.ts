@@ -5,7 +5,7 @@ import { SupabaseRepository } from "./SupabaseRepository";
 describe("request-scoped actor names", () => {
   it("loads names only for returned request IDs and never queries profiles", async () => {
     const from = vi.fn((table: string) => {
-      const result = { data: table === "department_stock_requests" ? [{ id: "request-1", requested_by: "actor-1" }] : [], error: null };
+      const result = { data: table === "active_department_stock_requests" ? [{ id: "request-1", requested_by: "actor-1" }] : [], error: null };
       const query = { ...result, order: () => query, limit: () => query };
       return { select: () => query };
     });
@@ -29,7 +29,7 @@ describe("request-scoped actor names", () => {
 
   it("bounds name lookups to 200 IDs and does not silently accept lookup failure", async () => {
     const from = (table: string) => {
-      const query = { data: table === "department_stock_requests" ? Array.from({ length: 201 }, (_, i) => ({ id: `request-${i}`, requested_by: "actor" })) : [], error: null, order: () => query, limit: () => query };
+      const query = { data: table === "active_department_stock_requests" ? Array.from({ length: 201 }, (_, i) => ({ id: `request-${i}`, requested_by: "actor" })) : [], error: null, order: () => query, limit: () => query };
       return { select: () => query };
     };
     const rpc = vi.fn().mockResolvedValue({ data: [], error: null });

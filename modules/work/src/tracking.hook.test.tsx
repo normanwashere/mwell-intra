@@ -79,7 +79,7 @@ describe('useWorkTracking read boundary', () => {
     expect(latest.items.map(item => item.id)).toEqual(['procurement:own', 'warehouse:own']);
     expect(client.calls).toEqual([
       { source: 'procurement', table: 'requests', columns: 'id,title,description,compliance,status,requester_id,created_at,updated_at', ownerColumn: 'requester_id', owner: 'actor-a', orders: [['id', { ascending: true }]], limit: 100 },
-      { source: 'warehouse', table: 'department_stock_requests', columns: 'id,purpose,lines,status,requested_by,requested_at', ownerColumn: 'requested_by', owner: 'actor-a', orders: [['id', { ascending: true }]], limit: 100 },
+      { source: 'warehouse', table: 'active_department_stock_requests', columns: 'id,purpose,lines,status,requested_by,requested_at', ownerColumn: 'requested_by', owner: 'actor-a', orders: [['id', { ascending: true }]], limit: 100 },
     ]);
     expect(latest.coverage).toContain('All your open purchase requests and stock requests');
     expect(latest.coverage).toContain('latest 100 closed');

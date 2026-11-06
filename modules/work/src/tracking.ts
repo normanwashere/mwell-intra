@@ -36,7 +36,7 @@ const READS = {
     label: 'Procurement requests',
   },
   warehouse: {
-    table: 'department_stock_requests', owner: 'requested_by', newest: 'requested_at',
+    table: 'active_department_stock_requests', owner: 'requested_by', newest: 'requested_at',
     columns: 'id,purpose,lines,status,requested_by,requested_at',
     label: 'Warehouse department stock requests',
   },

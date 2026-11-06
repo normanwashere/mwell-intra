@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { mkdir, readFile, writeFile, open, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { assertWmsLiveFixtureCleanupReady } from './wms-live-fixture-guard.mjs';
 
 export const TARGET = Object.freeze({ origin: 'https://mwell-intra-uat.vercel.app', project: 'kkoitlvydytdhlpxhuah' });
 export const ECOMMERCE_ACTORS = Object.freeze({ creator: 'operations_associate', picker: 'operations_associate', releaser: 'operations_lead' });
@@ -72,7 +73,9 @@ export function assertRunPermission(m, env) {
 
 export function prepareSql(input) {
   const m = validateManifest(input);
-  return `-- OFFLINE ONLY: independently verify UAT ${m.project} and build ${m.commit} before execution.
+  return `-- LIVE MUTATIONS PAUSED: DO NOT APPLY to UAT. Supported history-preserving cleanup is not implemented.
+-- Offline review/local tests only; this file is not execution approval.
+-- Prepared target UAT ${m.project}, build ${m.commit}.
 -- Unique inserts only. No authority changes; no business orders or evidence are seeded.
 begin;
 ${m.cases.map(c => `insert into warehouse.locations(id,name,type) values(${sqlValue(c.locationId)},${sqlValue(c.productName)},'warehouse');
@@ -397,6 +400,7 @@ export async function run(folder, env = process.env) {
   folder = path.resolve(folder);
   const m = validateManifest(JSON.parse(await readFile(path.join(folder, 'manifest.json'), 'utf8')));
   assertRunPermission(m, env);
+  assertWmsLiveFixtureCleanupReady();
   let continuation;
   if (env.WMS_ECOMMERCE_RESUME_ATTEMPT) {
     const ref = env.WMS_ECOMMERCE_RESUME_ATTEMPT;
@@ -794,7 +798,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   if (command === 'prepare') {
     assert.equal(flag, '--commit'); assert(commit);
     const m = await prepare(path.resolve(folder), { commit });
-    console.log(JSON.stringify({ folder: path.resolve(folder), runId: m.runId, preparedOffline: true, executedLiveSql: false }));
+    console.log(JSON.stringify({ folder: path.resolve(folder), runId: m.runId, preparedOffline: true, executedLiveSql: false,
+      liveMutationsPaused: true, next: 'Do not apply prepare.sql or run/resume live fixtures; supported history-preserving cleanup is not implemented.' }));
   } else {
     assert(command === 'run' && !flag && !commit, 'Usage: prepare FOLDER --commit DEPLOYED_SHA | run FOLDER');
     const result = await run(folder);
