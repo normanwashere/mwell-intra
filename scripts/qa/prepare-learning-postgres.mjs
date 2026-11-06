@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
-const manifestDigest = 'ea2c0c6f51ffd7eda84e936a3011c9c1396de219c94f4bbe7a2cf263fd72e637';
+const manifestDigest = '7c7504200ba7afd1629a40fb7139806c7cacaf7efd6948e908889b30aaf91b0a';
 const digest = value => createHash('sha256').update(value.toString().replace(/\r\n?/g, '\n')).digest('hex');
 
 export function validateCanonicalManifest(raw) {

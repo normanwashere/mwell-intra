@@ -1,6 +1,6 @@
 # Data Handoff
 
-Read the [current release manifest](release-status.json) before relying on a build, export or test result. The [September Data pack](../2026-09-22/data.md) is historical context, not current release certification. UAT now serves `dd9048e`; scoped privacy, guarded return-balance and Product/export-screen retests are recorded separately from historical `0b7964e` transactions and outstanding G01/G02 journeys.
+Read the [current release manifest](release-status.json). UAT serves d45fd6f with verified health and actor correction032602 applied. Earlier dd privacy/guarded returns/Product-export checks and [September Data evidence](../2026-09-22/data.md) remain historical, not fresh d45 transaction acceptance. G01/G02 remain blocked.
 
 The operational app and governed CSV exports are separate from the Reporting API. The API and recipient connector remain undelivered and disabled. Follow the [separate implementation phase](../../integrations/reporting-api/SEPARATE-IMPLEMENTATION-PHASE.md), [delivery gates](../../integrations/reporting-api/RELEASE-READINESS.md) and [proposed Data setup](../../integrations/reporting-api/DATA-TEAM-QUICKSTART.md). No named recipient owner, provider profile or field dictionary approval is inferred from those documents.
 

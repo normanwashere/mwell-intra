@@ -61,7 +61,7 @@ test('every historical parser exception rejects appended privilege escalation', 
 });
 
 test('G02 actor-only correction rejects claimed identity, weakened pins, metadata loss, timeout leakage and appended writes', () => {
-  const name='20261106012547_stock_conversion_putaway_authoritative_actor.sql';
+  const name='20261106032602_stock_conversion_putaway_authoritative_actor.sql';
   for (const change of [
     sql=>sql.replace('m.actor is distinct from warehouse.authoritative_actor()',"m.actor is distinct from auth.jwt()->>'email'"),
     sql=>sql.replace('6b06c2077da5a460353f45e686d96377','0'.repeat(32)),

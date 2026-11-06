@@ -1,6 +1,6 @@
 # WMS audit remediation - November 5, 2026
 
-**Current release authority:** See the [current release manifest](../handoffs/current/release-status.json) and [November 6 deployment/evidence update](2026-11-06-RELEASE-READINESS.md) for UAT `dd9048e`. The original 19-finding WMS audit, later 20-finding four-QA review and dated checkpoints below remain attributed to their recorded builds; their then-current or pending language is historical. New scoped retests do not retroactively certify those results. September handoff/CI212 is not current authority.
+**Current release authority:** See the [current manifest](../handoffs/current/release-status.json) and [November6 update](2026-11-06-RELEASE-READINESS.md) for UAT d45fd6f and applied actor repair032602. Dated findings/checkpoints below retain their original build and then-current/pending wording; no retroactive certification. September CI212 is historical.
 
 ## Release status
 

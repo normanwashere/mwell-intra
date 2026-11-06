@@ -1,6 +1,6 @@
 # Tester Handoff
 
-Use the [current release manifest](release-status.json) and confirm deployed UAT `dd9048e` before running an assigned case. The [September tester pack](../2026-09-22/testers.md) is historical guidance; do not copy its evidence into current results. Scoped engineering checks below do not fill the human checklist: all 90 WMS result rows remain **PENDING**.
+Use the [current release manifest](release-status.json) and confirm UAT d45fd6f for an assigned case. The [September tester pack](../2026-09-22/testers.md) is historical. Actor correction032602 is applied and postverified; G02 is BLOCKED awaiting fresh synthetic-serial approval, conversion/recovery NOT RUN. G01 is blocked by Auth administration. All90 human rows PENDING;520 engineering cells NOT RUN. Technical checks are not human acceptance.
 
 The update is now on UAT. Get your case letters, exact fresh record links and stock baseline from the coordinator, then work with the named independent Lead/Quality partner. Use the actual work device, refresh the same record and record what happened. Stop on an uncertain save; do not retry, clear storage or fix stock yourself. Engineering QA owns the 520-cell interruption/replay appendix, not the Warehouse tester.
 
