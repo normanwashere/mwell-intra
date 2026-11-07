@@ -4,9 +4,18 @@ import {mkdtempSync,cpSync,mkdirSync,readFileSync,writeFileSync,rmSync,readdirSy
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {inspectReplay,prepareReplay,runSupabaseReplay,safeEnvironment,checkMigrationList} from './wms-fixture-migration-replay.mjs';
+import {inspectReplay,prepareReplay,runSupabaseReplay,safeEnvironment,checkMigrationList,summarizeReplayFailure} from './wms-fixture-migration-replay.mjs';
 const root=fileURLToPath(new URL('../../',import.meta.url));
 const ledger='20261106173133_wms_fixture_postgres_lifecycle.sql';
+
+test('failure diagnostics expose only known migration names, error codes and fixed categories',()=>{
+  const log=`Applying migration ${ledger}...\nERROR: relation "private.example" does not exist (SQLSTATE 42P01)\nDETAIL: password=never-publish postgres://user:password@private.invalid/database\nSELECT 'private customer row';`;
+  assert.deepEqual(summarizeReplayFailure(log,[ledger]),{category:'database-error',sqlstates:['42P01'],lastMigration:ledger});
+  assert.deepEqual(summarizeReplayFailure('Applying migration 20990101000000_untrusted.sql...\nconnection refused\nsecret=never-publish',[ledger]),{category:'connection-error',sqlstates:[],lastMigration:null});
+  assert.deepEqual(summarizeReplayFailure('Docker daemon is not running'),{category:'docker-unavailable',sqlstates:[],lastMigration:null});
+  assert.deepEqual(summarizeReplayFailure('pull access denied for a private image'),{category:'image-pull-error',sqlstates:[],lastMigration:null});
+  assert.deepEqual(summarizeReplayFailure('unrecognized failure with private values'),{category:'unclassified-startup-error',sqlstates:[],lastMigration:null});
+});
 function sandbox(){const home=mkdtempSync(path.join(tmpdir(),'wms-replay-test-'));return{home,close(){assert(path.basename(home).startsWith('wms-replay-test-'));rmSync(home,{recursive:true,force:true});}};}
 function copySource(home){const copy=path.join(home,'source');mkdirSync(copy);for(const n of ['supabase/config.toml','supabase/migrations','scripts/qa/canonical-replay-manifest.json','scripts/qa/fixtures/canonical-uat-baseline'])cpSync(path.join(root,n),path.join(copy,n),{recursive:true});return copy;}
 

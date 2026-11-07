@@ -86,6 +86,18 @@ export function safeEnvironment(home,source=process.env){
 }
 export function redact(text){return String(text).replace(/postgres(?:ql)?:\/\/[^\s]+/gi,'[local database URL redacted]').replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g,'[JWT redacted]').replace(/^.*(?:password|secret|publishable.?key|service.?role.?key|anon.?key|api.?key).*$/gim,'[credential line redacted]');}
 
+export function summarizeReplayFailure(output,knownFiles=[]){
+  const text=String(output),known=new Set(knownFiles.filter(file=>sqlName.test(file)));
+  const sqlstates=[...new Set([...text.matchAll(/\bSQLSTATE\s+([0-9A-Z]{5})\b/g)].map(match=>match[1]))].slice(-4);
+  const migrations=[...text.matchAll(/Applying migration (\d{14}_[a-z0-9_]+\.sql)\b/g)].map(match=>match[1]).filter(file=>known.has(file));
+  const category=sqlstates.length?'database-error'
+    :/docker daemon|cannot connect to docker/i.test(text)?'docker-unavailable'
+      :/pull access denied|failed to pull|manifest unknown|toomanyrequests/i.test(text)?'image-pull-error'
+        :/connection refused|ECONNREFUSED|ENOTFOUND|certificate verify failed/i.test(text)?'connection-error'
+          :'unclassified-startup-error';
+  return {category,sqlstates,lastMigration:migrations.at(-1)??null};
+}
+
 export function checkMigrationList(text,expected){
   // The second column is the selected database, even when an older CLI labels it Remote.
   const rows=String(text).split(/\r?\n/).map(s=>s.trim().replace(/^\u2502/,'').split(/[|\u2502]/).map(c=>c.trim()))
@@ -105,6 +117,7 @@ function assertFrozen(prepared){
 export async function runSupabaseReplay(prepared,{execute}={}){
   assertFrozen(prepared);
   const injected=Boolean(execute);
+  const nativeFailures=new WeakMap();
   const cli=path.join(prepared.root,'node_modules/supabase/dist/supabase.js');
   const result={scope:prepared.inventory.scope,inventoryDigest:prepared.inventory.digest,rawInventoryDigest:prepared.inventory.rawDigest,candidateCommit:prepared.candidateCommit,evidenceKind:injected?'test-double':'supabase-cli-native',status:'FAILED',closed:false,steps:[],fullNativeChainPassed:false};
   const persist=()=>writeFileSync(path.join(prepared.workspace,'replay-result.json'),JSON.stringify(result,null,2)+'\n');
@@ -113,10 +126,14 @@ export async function runSupabaseReplay(prepared,{execute}={}){
     const r=spawnSync(process.execPath,[cli,...args],{cwd:prepared.workspace,env:safeEnvironment(path.join(prepared.workspace,'home')),windowsHide:true,encoding:'utf8',timeout,maxBuffer:16*1024*1024});
     const output=redact((r.stdout??'')+'\n'+(r.stderr??''));
     writeFileSync(path.join(prepared.workspace,`step-${result.steps.length}-${args[0]}.log`),output);
-    if(r.status!==0)throw Error(`Local CLI ${args[0]} failed (exit ${r.status}, ${r.error?.code??'see owned step log'})`);
+    if(r.status!==0){
+      const error=Error(`Local CLI ${args[0]} failed (exit ${r.status}, ${r.error?.code??'see owned step log'})`);
+      nativeFailures.set(error,summarizeReplayFailure((r.stdout??'')+'\n'+(r.stderr??''),prepared.inventory.files.filter(file=>file.output).map(file=>file.output)));
+      throw error;
+    }
     return output;
   });
-  const command=async args=>{const start=Date.now();try{const value=await execute([...args,'--workdir',prepared.workspace]);result.steps.push({command:args,status:'PASS',durationMs:Date.now()-start});persist();return value;}catch(e){result.steps.push({command:args,status:'FAILED',durationMs:Date.now()-start,error:redact(e.message)});persist();throw e;}};
+  const command=async args=>{const start=Date.now();try{const value=await execute([...args,'--workdir',prepared.workspace]);result.steps.push({command:args,status:'PASS',durationMs:Date.now()-start});persist();return value;}catch(e){result.steps.push({command:args,status:'FAILED',durationMs:Date.now()-start,error:redact(e.message),...(nativeFailures.has(e)?{diagnostic:nativeFailures.get(e)}:{})});persist();throw e;}};
   try{
     await command(['start','--exclude',excludedServices]);
     assertFrozen(prepared);
