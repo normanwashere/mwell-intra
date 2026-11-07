@@ -4,7 +4,7 @@ import {mkdtempSync,cpSync,mkdirSync,readFileSync,writeFileSync,rmSync,readdirSy
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {inspectReplay,prepareReplay,runSupabaseReplay,safeEnvironment,checkMigrationList,checkSchemaResults,ownedContainerName,checkOwnedContainer,summarizeReplayFailure} from './wms-fixture-migration-replay.mjs';
+import {inspectReplay,prepareReplay,runSupabaseReplay,safeEnvironment,checkMigrationList,checkSchemaResults,ownedContainerName,ownedContainerFormat,checkOwnedContainer,summarizeReplayFailure} from './wms-fixture-migration-replay.mjs';
 const root=fileURLToPath(new URL('../../',import.meta.url));
 const ledger='20261106173133_wms_fixture_postgres_lifecycle.sql';
 
@@ -98,6 +98,21 @@ test('post-schema proof requires the real count-epoch trigger and exact fourth o
 });
 const migrationOutput=versions=>JSON.stringify({migrations:versions.map(version=>({local:version,remote:version,time:'fixture'})),message:'Migrations listed'});
 const schemaOutput=()=>['BEGIN','SET','DO','SELECT','ROLLBACK'].map(command=>({command,rows:command==='SELECT'?[{result:'wms_fixture_replay_schema_ok'}]:[]}));
+
+test('selected Docker template fields form one complete JSON object without environment data',()=>{
+  const prepared={project:'wms-replay-'+'b'.repeat(32),workspace:'/owned/path with spaces/"quoted"',port:23456};
+  const expected={name:'/'+ownedContainerName(prepared),running:true,ports:{'5432/tcp':[{HostIp:'127.0.0.1',HostPort:'23456'}]},project:prepared.project.slice(0,40),workdir:prepared.workspace};
+  const fields=new Map([
+    ['{{json .Name}}',expected.name],['{{json .State.Running}}',expected.running],['{{json .NetworkSettings.Ports}}',expected.ports],
+    ['{{json (index .Config.Labels "com.supabase.cli.project")}}',expected.project],['{{json (index .Config.Labels "com.supabase.cli.workdir")}}',expected.workdir],
+  ]);
+  let rendered=ownedContainerFormat;
+  for(const [token,value] of fields){assert.equal(rendered.split(token).length,2);rendered=rendered.replace(token,JSON.stringify(value));}
+  assert.deepEqual(JSON.parse(rendered),expected);
+  checkOwnedContainer(rendered+'\n',prepared);
+  assert.doesNotMatch(ownedContainerFormat,/\.Env|{{json \.}}/);
+  assert.throws(()=>JSON.parse(rendered.slice(0,-1)));
+});
 
 test('owned database identity follows the CLI 40-character project rule and requires exact workspace, labels and port',()=>{
   const prepared={project:'wms-replay-'+'a'.repeat(32),workspace:'/owned/workspace',port:23456};

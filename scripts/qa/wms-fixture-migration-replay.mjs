@@ -14,6 +14,7 @@ const canonicalHash=bytes=>hash(bytes.toString().replace(/\r\n?/g,'\n'));
 const baselineDir='scripts/qa/fixtures/canonical-uat-baseline';
 const manifestFile='scripts/qa/canonical-replay-manifest.json';
 const excludedServices='gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor';
+export const ownedContainerFormat='{"name":{{json .Name}},"running":{{json .State.Running}},"ports":{{json .NetworkSettings.Ports}},"project":{{json (index .Config.Labels "com.supabase.cli.project")}},"workdir":{{json (index .Config.Labels "com.supabase.cli.workdir")}}}';
 
 function owned(root,relative){
   const target=path.resolve(root,relative),rel=path.relative(root,target);
@@ -134,8 +135,7 @@ export function checkOwnedContainer(text,prepared){
 async function queryOwnedSchema(prepared){
   assertFrozen(prepared);
   // Inspect only non-secret identity fields; never serialize a container's environment.
-  const format='{"name":{{json .Name}},"running":{{json .State.Running}},"ports":{{json .NetworkSettings.Ports}},"project":{{json (index .Config.Labels "com.supabase.cli.project")}},"workdir":{{json (index .Config.Labels "com.supabase.cli.workdir")}}';
-  const container=spawnSync('docker',['inspect','--format',format,ownedContainerName(prepared)],{env:safeEnvironment(path.join(prepared.workspace,'home')),windowsHide:true,encoding:'utf8',timeout:10000});
+  const container=spawnSync('docker',['inspect','--format',ownedContainerFormat,ownedContainerName(prepared)],{env:safeEnvironment(path.join(prepared.workspace,'home')),windowsHide:true,encoding:'utf8',timeout:10000});
   assert.equal(container.status,0,'Owned local database container not found');
   checkOwnedContainer(container.stdout,prepared);
   const {Client}=await import('pg');
