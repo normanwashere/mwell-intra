@@ -2,7 +2,7 @@
 begin read only;
 set local statement_timeout='30s';
 do $verify$
-declare name text; relation regclass; fn regprocedure; api_role text; count_rows bigint; expected record; function_acl aclitem[]; audit_relation oid;
+declare name text; relation regclass; fn regprocedure; api_role text; count_rows bigint; expected record; function_acl aclitem[]; audit_relation oid; platform_relation regclass;
 begin
   if current_setting('server_version_num')::integer/10000<>17 then raise exception 'PostgreSQL17 required'; end if;
   if to_regclass('auth.users') is null or to_regclass('storage.objects') is null or to_regprocedure('auth.uid()') is null then
@@ -46,7 +46,7 @@ begin
   end loop;
   for expected in select * from (values
     ('private.wms_fixture_tokens(jsonb)','2c507914f36344858b484521263e4885',false,'i'),
-    ('private.wms_fixture_guard_targets()','6cdf59eb24c4598160ad2718ed7bf915',true,'s'),
+    ('private.wms_fixture_guard_targets()','b5752ac5ea1de143a66ac12f5142589b',true,'s'),
     ('private.wms_fixture_guard_write()','3c138d2eb9df1a00bbb06e9555395e9a',true,'v'),
     ('private.wms_fixture_assert_writer_coverage()','e8b746792b07622e501f6b05610fb7ae',true,'s')
   ) t(signature,body_md5,definer,volatility) loop
@@ -79,6 +79,22 @@ begin
   end loop;
   perform private.wms_fixture_assert_writer_coverage();
   if not exists(select 1 from private.wms_fixture_guard_targets()) then raise exception 'Writer coverage is empty'; end if;
+  -- pg_net owns these HTTP transport tables; fixture commands must not hook them.
+  if exists(select 1 from pg_extension where extname='pg_net') then
+    foreach name in array array['net.http_request_queue','net._http_response'] loop
+      platform_relation:=to_regclass(name);
+      if platform_relation is null or not exists(select 1 from pg_depend d join pg_extension e on e.oid=d.refobjid
+        where d.classid='pg_class'::regclass and d.objid=platform_relation and d.objsubid=0
+          and d.refclassid='pg_extension'::regclass and d.refobjsubid=0 and d.deptype='e' and e.extname='pg_net') then
+        raise exception 'pg_net infrastructure identity changed: %',name;
+      end if;
+      if exists(select 1 from private.wms_fixture_guard_targets() t where t.relation=platform_relation)
+        or exists(select 1 from pg_trigger g where g.tgrelid=platform_relation
+          and (g.tgname like 'wms_fixture_%' or g.tgfoid='private.wms_fixture_guard_write()'::regprocedure)) then
+        raise exception 'Warehouse fixture guard must not alter pg_net infrastructure: %',name;
+      end if;
+    end loop;
+  end if;
   -- This independently owned append-only sink is not a Warehouse command table.
   -- Inspect its catalog only; do not read audit rows or acquire its owner role.
   select c.oid into audit_relation from pg_class c join pg_namespace n on n.oid=c.relnamespace

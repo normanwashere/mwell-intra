@@ -7,6 +7,101 @@ import { createPostgresFixtureSessions, createRepresentativeFixturePlan } from '
 
 const sourceCommit='a'.repeat(40);
 
+async function netCatalogFixture(db,{members=true}={}){
+  // Catalog predicate fixture only: this does not install or execute pg_net.
+  await db.exec(`create role qa_net_owner nologin nosuperuser;
+    create role qa_net_migrator nosuperuser inherit in role postgres;
+    create schema net authorization qa_net_owner;
+    grant usage on schema net to postgres;
+    create table net.http_request_queue(id text primary key,payload jsonb);
+    create table net._http_response(id text primary key,payload jsonb);
+    insert into net.http_request_queue values('retained-request','{"preserved":true}');
+    insert into net._http_response values('retained-response','{"preserved":true}');
+    alter table net.http_request_queue owner to qa_net_owner;
+    alter table net._http_response owner to qa_net_owner;
+    grant select,trigger on net.http_request_queue,net._http_response to postgres;
+    insert into pg_catalog.pg_extension(oid,extname,extowner,extnamespace,extrelocatable,extversion)
+      select (select max(oid)::bigint+1 from pg_catalog.pg_extension)::oid,'pg_net',
+        (select oid from pg_catalog.pg_roles where rolname=current_user),'net'::regnamespace,false,'catalog-fixture-only';`);
+  if(members)await db.exec(`alter extension pg_net add table net.http_request_queue;
+    alter extension pg_net add table net._http_response;`);
+}
+
+async function netSnapshot(db){
+  return (await db.query(`select c.relname,c.relowner,c.relacl,c.relrowsecurity,c.relforcerowsecurity,
+    (select jsonb_agg(jsonb_build_object('name',g.tgname,'enabled',g.tgenabled,'definition',pg_get_triggerdef(g.oid)) order by g.tgname)
+      from pg_trigger g where g.tgrelid=c.oid and not g.tgisinternal) as triggers,
+    (select jsonb_agg(to_jsonb(d) order by d.refobjid,d.deptype) from pg_depend d
+      where d.classid='pg_class'::regclass and d.objid=c.oid and d.refclassid='pg_extension'::regclass) as membership,
+    case c.relname when 'http_request_queue' then (select jsonb_agg(to_jsonb(r) order by r.id) from net.http_request_queue r)
+      else (select jsonb_agg(to_jsonb(r) order by r.id) from net._http_response r) end as rows
+    from pg_class c where c.oid in ('net.http_request_queue'::regclass,'net._http_response'::regclass) order by c.relname`)).rows;
+}
+
+test('non-superuser migration preserves the exact pg_net catalog fixture, not arbitrary net business tables',async()=>{
+  const db=new PGlite();
+  let before;let verifiedRole=false;
+  try{
+    await installAdapterFixture(db,{beforeWriterGuards:async()=>{
+      await netCatalogFixture(db);
+      await db.exec(`create schema net_namesake;
+        create table net_namesake.http_request_queue(id text primary key,payload jsonb);
+        create table net_namesake._http_response(id text primary key,payload jsonb);`);
+      before=await netSnapshot(db);
+      await db.exec('set local role qa_net_migrator');
+      assert.deepEqual((await db.query(`select rolsuper as superuser,
+        pg_has_role(current_user,'postgres','USAGE') as member,
+        has_table_privilege(current_user,'net.http_request_queue','TRIGGER') as can_trigger,
+        pg_has_role(current_user,'qa_net_owner','USAGE') as owns_queue
+        from pg_roles where rolname=current_user`)).rows[0],
+      {superuser:false,member:true,can_trigger:true,owns_queue:false});
+      verifiedRole=true;
+    }});
+    assert.deepEqual(await netSnapshot(db),before);
+    assert.deepEqual((await db.query(`select relation::text from private.wms_fixture_guard_targets()
+      where relation in ('net.http_request_queue'::regclass,'net._http_response'::regclass,
+        'net_namesake.http_request_queue'::regclass,'net_namesake._http_response'::regclass) order by relation::text`)).rows,
+    [{relation:'net_namesake._http_response'},{relation:'net_namesake.http_request_queue'}]);
+    for(const relation of ['net.http_request_queue','net._http_response']){
+      await db.exec(`begin;alter extension pg_net drop table ${relation}`);
+      try{
+        assert.equal((await db.query('select count(*)::int n from private.wms_fixture_guard_targets() where relation=$1::regclass',[relation])).rows[0].n,1);
+        await db.exec(`alter extension plpgsql add table ${relation}`);
+        assert.equal((await db.query('select count(*)::int n from private.wms_fixture_guard_targets() where relation=$1::regclass',[relation])).rows[0].n,1);
+        await assert.rejects(db.query('select private.wms_fixture_assert_writer_coverage()'),/writer coverage changed/);
+      }finally{await db.exec('rollback');}
+    }
+    await db.exec(`create table net.business_payload(id text primary key,payload jsonb);
+      alter table net.business_payload owner to qa_net_owner;
+      alter extension pg_net add table net.business_payload;`);
+    assert.equal((await db.query("select count(*)::int n from private.wms_fixture_guard_targets() where relation='net.business_payload'::regclass")).rows[0].n,1);
+    await assert.rejects(db.query('select private.wms_fixture_assert_writer_coverage()'),/writer coverage changed/);
+    assert.deepEqual(await netSnapshot(db),before);
+  }catch(error){
+    if(error.code==='42501'){
+      assert.equal(verifiedRole,true,'permission failure must occur in fence installation, not catalog setup');
+      error.message=`Fence installation denied: ${error.message}`;
+    }
+    throw error;
+  }finally{await db.exec('rollback;reset role');await db.close();}
+});
+
+test('exact net table names without pg_net membership still fail closed for a non-owner migrator',async()=>{
+  const db=new PGlite();
+  let verifiedRole=false;
+  try{
+    await assert.rejects(installAdapterFixture(db,{beforeWriterGuards:async()=>{
+      await netCatalogFixture(db,{members:false});
+      assert.equal((await db.query(`select count(*)::int n from pg_depend d join pg_extension e on e.oid=d.refobjid
+        where d.classid='pg_class'::regclass and d.refclassid='pg_extension'::regclass and e.extname='pg_net'
+          and d.objid in ('net.http_request_queue'::regclass,'net._http_response'::regclass)`)).rows[0].n,0);
+      await db.exec('set local role qa_net_migrator');
+      assert.equal((await db.query('select rolsuper from pg_roles where rolname=current_user')).rows[0].rolsuper,false);
+      verifiedRole=true;
+    }}),error=>verifiedRole&&error.code==='42501'&&/must be owner of table (http_request_queue|_http_response)/.test(error.message));
+  }finally{await db.exec('rollback;reset role');await db.close();}
+});
+
 test('non-superuser migration preserves the actual reporting audit and never skips foreign business tables',async()=>{
   const db=new PGlite();
   const reporting=readFileSync(new URL('../../supabase/migrations/20260923025605_reporting_private_authority_foundation.sql',import.meta.url),'utf8');

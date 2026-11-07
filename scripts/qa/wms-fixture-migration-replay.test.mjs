@@ -89,7 +89,7 @@ test('post-schema proof requires the real count-epoch trigger and exact fourth o
   for(const name of ['warehouse_inventory_unit_serial_normalize','warehouse_work_location_guard','warehouse_unit_history','uat_archived_record_write_guard','stock_conversion_history_watch','stock_conversion_claim_guard'])assert(sql.includes(name),name);
   assert.match(sql,/40344bb25cc74e0f4b99cb201c4cfbf0/);
   assert.match(sql,/6e153048df3b2950cf06169bc86fa64c/);
-  for(const body of ['2c507914f36344858b484521263e4885','6cdf59eb24c4598160ad2718ed7bf915','3c138d2eb9df1a00bbb06e9555395e9a','e8b746792b07622e501f6b05610fb7ae'])assert(sql.includes(body),body);
+  for(const body of ['2c507914f36344858b484521263e4885','b5752ac5ea1de143a66ac12f5142589b','3c138d2eb9df1a00bbb06e9555395e9a','e8b746792b07622e501f6b05610fb7ae'])assert(sql.includes(body),body);
   assert.match(sql,/provolatile::text=expected.volatility/);
   assert.match(sql,/md5\(replace\(prosrc,chr\(13\),''\)\)=expected.body_md5/);
   assert.match(sql,/cardinality.*function_acl/);

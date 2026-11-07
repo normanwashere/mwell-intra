@@ -59,6 +59,12 @@ language sql stable security definer set search_path='' as $$
     and not (n.nspname='core' and c.relname='activity_log')
     -- Reporting authority history is a separately owned immutable audit sink.
     and not (n.nspname='reporting_authority' and c.relname='admin_audit')
+    -- pg_net transport queues must not receive application triggers; verify membership.
+    and not (n.nspname='net' and c.relname in ('http_request_queue','_http_response')
+      and exists(select 1 from pg_catalog.pg_depend d join pg_catalog.pg_extension e on e.oid=d.refobjid
+        where d.classid='pg_catalog.pg_class'::regclass and d.objid=c.oid and d.objsubid=0
+          and d.refclassid='pg_catalog.pg_extension'::regclass and d.refobjsubid=0
+          and d.deptype='e' and e.extname='pg_net'))
     and not (n.nspname='private' and c.relname in ('wms_fixture_runs','wms_fixture_leases','wms_fixture_operations','wms_fixture_owned_rows','wms_fixture_identities','uat_warehouse_archive_batches','uat_warehouse_archive_members','uat_admin_reset_archives'))
     and (n.nspname in ('warehouse','product','procurement')
       or (n.nspname='private' and (c.relname like 'stock_conversion_%' or c.relname like 'external_po_%' or c.relname like 'event_custody_%' or c.relname in ('warehouse_unit_history','warehouse_stock_epochs')))
