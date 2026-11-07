@@ -22,7 +22,12 @@ begin
       select pg_get_viewdef(c.oid),jsonb_build_object('owner',c.relowner,'acl',c.relacl,'options',c.reloptions)
         into definition,before_metadata from pg_class c where c.oid=oid_value;
     end if;
-    if definition is null or md5(definition)<>item.expected_md5 then
+    -- The captured My Work body has 102 CRLFs; the identical source body has LF.
+    -- Accept only those two exact definitions, without normalizing other drift.
+    if definition is null or (md5(definition)<>item.expected_md5 and not (
+      item.kind='function' and item.signature='core.platform_previous_my_work()'
+      and md5(definition)='79364d79fa7c77ad5811c38f3d0bba6c'
+    )) then
       raise exception 'Warehouse archive read definition drift: %',item.signature;
     end if;
     updated:=regexp_replace(definition,

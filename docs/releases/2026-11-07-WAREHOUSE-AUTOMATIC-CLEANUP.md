@@ -37,6 +37,19 @@ Status: safety changes under verification. The isolated UAT trial has not run.
 
 Keep general live mutation tests paused until their own cleanup integration is proven. A successful one-serial cleanup trial would not certify receiving, Quality, conversion or fulfillment journeys.
 
+## Hosted Checkpoint
+
+GitHub run [42341929939](https://github.com/normanwashere/mwell-intra/actions/runs/42341929939), candidate `2b129e7dab13a87cb2278ba586d02b25715e641c`:
+
+- Required contracts and native cleanup recovery passed.
+- The complete clean-database replay failed at `20261106145744_uat_warehouse_archive_active_reads.sql` with SQLSTATE `P0001`. This is an open rebuild blocker, not a passed migration check.
+- The owned disposable replay project was stopped successfully. No live migration, trial, stock change or SMTP change was made.
+- Separately reran the captured archive-read regression: four passed. That fixture result does not override the failed full replay.
+
+The rebuild failure was reproduced locally: My Work's recorded definition uses Windows line endings, while the identical Git source uses Unix line endings. The candidate now accepts only those two exact known definitions. Seven focused checks pass, including rejection of changed Procurement logic, unexpected body changes and unknown newline combinations. Permissions remain unchanged. The complete hosted replay must pass before this fix is considered verified end to end; no installed UAT migration is being reapplied.
+
+The read-only Supabase connection was confirmed as the `postgres` database role on PostgreSQL 17.6. This confirms database access, not the persistent client connection needed for the isolated two-session trial.
+
 ## Supabase Access
 
 The application already uses Supabase and management/query access is available. No second database is needed. This test additionally needs the PostgreSQL connection used by a backend client, so that its writer and independent verifier hold separate sessions while locks and interrupted commits are tested. The current local app configuration has API credentials, not that database connection. API keys must not be treated as PostgreSQL passwords. Do not reset the project's password, change role grants, or enable a new authentication method just to run the trial.

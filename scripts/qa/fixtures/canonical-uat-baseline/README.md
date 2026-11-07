@@ -33,4 +33,6 @@ The organization source `20260714175057_core_organization_extensibility.sql` als
 
 ## Remaining Scope
 
+The November 6 archive-read source now accepts exactly two reviewed predecessor hashes for `core.platform_previous_my_work()`: the captured UAT body (`78e3465b9571031b0a51b62d645e4f09`) and the unchanged Git source body with LF line endings (`79364d79fa7c77ad5811c38f3d0bba6c`). The only difference is 102 CRLF sequences. Other functions, views, replacement guards and permission checks retain their exact pins. Regression tests execute both definitions and reject changed Procurement logic, unknown mixed line endings and other body changes. The manifest pins the corrected source; this does not reapply or rewrite the installed UAT migration.
+
 The source/applied-history differences require separate installation and upgrade planning before a copied-source production deployment. This fixture must not be used to silently repair or rebaseline an existing database. SMTP, business workflows and existing UAT records are outside this packaging change.

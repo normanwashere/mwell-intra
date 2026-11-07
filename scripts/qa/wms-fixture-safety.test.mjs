@@ -97,6 +97,7 @@ test('required offline suites execute serially with propagated exit status', () 
     assert.ok(run.run.includes(`scripts/qa/${file}`), `${file} is mandatory`);
   }
   assert.match(run.run, /node --test --test-concurrency=1/);
+  assert.ok(run.run.includes('scripts/verify-uat-archive-active-reads.pglite.test.mjs'), 'Archive predecessor compatibility must be tested');
   assert.doesNotMatch(run.run, /--test-name-pattern|--test-skip-pattern|test -[ef]|continue-on-error|exit 0/);
   assert.equal(step(document, 'install').run, 'pnpm install --frozen-lockfile');
 });

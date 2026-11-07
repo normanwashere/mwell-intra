@@ -1509,7 +1509,7 @@
     },
     {
       "file": "20261106145744_uat_warehouse_archive_active_reads.sql",
-      "sha256": "2fe60133415f22f30100c70ac68db76852379ae55b420a18b3c56ed08ec41fb8",
+      "sha256": "2450cbcf2ab82ea90b062bb5fb80bb1f3d51adfe064e96ed6850ffafe33fb74f",
       "action": "execute-forward"
     },
     {
