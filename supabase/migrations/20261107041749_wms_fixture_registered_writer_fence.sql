@@ -54,7 +54,7 @@ create function private.wms_fixture_guard_targets() returns table(relation regcl
 language sql stable security definer set search_path='' as $$
   select c.oid::regclass from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid=c.relnamespace
   where c.relkind in ('r','p') and not c.relispartition
-    and n.nspname not in ('pg_catalog','information_schema','auth','storage','realtime','extensions','supabase_migrations','supabase_functions','vault','graphql','graphql_public')
+    and n.nspname not in ('pg_catalog','information_schema','auth','storage','realtime','_realtime','extensions','supabase_migrations','supabase_functions','vault','graphql','graphql_public')
     and n.nspname not like 'pg_%'
     and not (n.nspname='core' and c.relname='activity_log')
     -- Reporting authority history is a separately owned immutable audit sink.

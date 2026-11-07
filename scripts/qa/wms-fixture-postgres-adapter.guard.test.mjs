@@ -7,6 +7,70 @@ import { createPostgresFixtureSessions, createRepresentativeFixturePlan } from '
 
 const sourceCommit='a'.repeat(40);
 
+test('non-superuser migration preserves local _realtime management but guards application namesakes',async()=>{
+  const db=new PGlite();
+  const snapshot=async()=> (await db.query(`select
+    (select jsonb_build_object('owner',nspowner,'acl',nspacl) from pg_namespace where nspname='_realtime') as schema,
+    (select jsonb_agg(jsonb_build_object('name',c.relname,'owner',c.relowner,'acl',c.relacl,
+      'rls',c.relrowsecurity,'forced',c.relforcerowsecurity,'triggers',
+      (select jsonb_agg(jsonb_build_object('name',g.tgname,'enabled',g.tgenabled,'definition',pg_get_triggerdef(g.oid)) order by g.tgname)
+        from pg_trigger g where g.tgrelid=c.oid and not g.tgisinternal)) order by c.relname)
+      from pg_class c where c.oid in ('_realtime.tenants'::regclass,'_realtime.extensions'::regclass)) as tables,
+    (select jsonb_agg(to_jsonb(t) order by id) from _realtime.tenants t) as tenants,
+    (select jsonb_agg(to_jsonb(e) order by id) from _realtime.extensions e) as extensions`)).rows[0];
+  let before;let verifiedRole=false;
+  try{
+    await installAdapterFixture(db,{beforeWriterGuards:async()=>{
+      // Modeled management tables only, not an installed Realtime service or credentials.
+      // CLI v2.113.0 db-schema.sql.ts + db-setup.ts use _realtime; upstream tenant
+      // migrations 20210706140551 / 20240306114423 create tenants and JSON jwt_jwks.
+      await db.exec(`create role qa_realtime_owner nologin nosuperuser;
+        create role qa_realtime_migrator nosuperuser inherit in role postgres;
+        create schema _realtime authorization postgres;
+        create table _realtime.tenants(id text primary key,jwt_jwks jsonb);
+        create table _realtime.extensions(id text primary key,settings jsonb);
+        insert into _realtime.tenants values('local-registry-only','{"keys":[]}');
+        insert into _realtime.extensions values('local-extension-only','{"preserved":true}');
+        alter table _realtime.tenants owner to qa_realtime_owner;
+        alter table _realtime.extensions owner to qa_realtime_owner;
+        create schema _realtime_app;
+        create schema app_realtime;
+        create table _realtime_app.tenants(id text primary key,payload jsonb);
+        create table app_realtime.tenants(id text primary key,payload jsonb);
+        create table public.tenants(id text primary key,payload jsonb);`);
+      before=await snapshot();
+      await db.exec('set local role qa_realtime_migrator');
+      assert.deepEqual((await db.query(`select rolsuper as superuser,
+        pg_has_role(current_user,'postgres','USAGE') as member,
+        has_table_privilege(current_user,'_realtime.tenants','TRIGGER') as can_trigger,
+        pg_has_role(current_user,'qa_realtime_owner','USAGE') as owns_management
+        from pg_roles where rolname=current_user`)).rows[0],
+      {superuser:false,member:true,can_trigger:false,owns_management:false});
+      verifiedRole=true;
+    }});
+    assert.deepEqual(await snapshot(),before);
+    assert.equal((await db.query(`select count(*)::int n from private.wms_fixture_guard_targets() t
+      join pg_class c on c.oid=t.relation join pg_namespace n on n.oid=c.relnamespace where n.nspname='_realtime'`)).rows[0].n,0);
+    const reserved=createRepresentativeFixturePlan({sourceCommit}).roots[0].id;
+    for(const relation of ['_realtime_app.tenants','app_realtime.tenants','public.tenants']){
+      assert.equal((await db.query('select count(*)::int n from private.wms_fixture_guard_targets() where relation=$1::regclass',[relation])).rows[0].n,1);
+      await db.query(`insert into ${relation}(id,payload) values('ordinary','{"unrelated":true}')`);
+      await assert.rejects(db.query(`insert into ${relation}(id,payload) values('forbidden',$1)`,[JSON.stringify({productId:reserved})]),/isolated fixture/);
+    }
+    await db.exec(`create table public.realtime_foreign_business(id text primary key,payload jsonb);
+      alter table public.realtime_foreign_business owner to qa_realtime_owner;`);
+    assert.equal((await db.query("select count(*)::int n from private.wms_fixture_guard_targets() where relation='public.realtime_foreign_business'::regclass")).rows[0].n,1);
+    await assert.rejects(db.query('select private.wms_fixture_assert_writer_coverage()'),/writer coverage changed/);
+    assert.deepEqual(await snapshot(),before);
+  }catch(error){
+    if(error.code==='42501'){
+      assert.equal(verifiedRole,true,'permission failure must occur in fence installation, not management setup');
+      error.message=`Fence installation denied: ${error.message}`;
+    }
+    throw error;
+  }finally{await db.exec('rollback;reset role');await db.close();}
+});
+
 async function netCatalogFixture(db,{members=true}={}){
   // Catalog predicate fixture only: this does not install or execute pg_net.
   await db.exec(`create role qa_net_owner nologin nosuperuser;

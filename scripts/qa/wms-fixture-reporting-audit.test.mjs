@@ -85,3 +85,26 @@ for(const [name,mutation,message] of [
   await db.exec(mutation);
   await assert.rejects(db.exec(platformAssertion),error=>error.code==='P0001'&&error.message.includes(message));
 }));
+
+async function withRealtimeCatalog(run){
+  await db.exec('begin');
+  try{
+    await db.exec('create schema _realtime;create table _realtime.tenants(id text,payload jsonb)');
+    await run();
+  }finally{await db.exec('rollback');}
+}
+
+test('platform assertion leaves the local Realtime control plane out of fixture coverage',async()=>withRealtimeCatalog(async()=>{
+  const before=(await db.query("select to_jsonb(c) state from pg_class c where relnamespace='_realtime'::regnamespace order by oid")).rows;
+  await db.exec(platformAssertion);
+  assert.deepEqual((await db.query("select to_jsonb(c) state from pg_class c where relnamespace='_realtime'::regnamespace order by oid")).rows,before);
+}));
+
+for(const [name,mutation] of [
+  ['control-plane command target',"create or replace function private.wms_fixture_guard_targets() returns table(relation regclass) language sql stable security definer set search_path='' as $$select '_realtime.tenants'::regclass$$"],
+  ['named fixture trigger','create trigger wms_fixture_unexpected before update on _realtime.tenants for each row execute function reporting_authority._reject_mutation()'],
+  ['renamed fixture trigger','create trigger unrelated_name before update on _realtime.tenants for each row execute function private.wms_fixture_guard_write()'],
+])test(`Realtime assertion rejects ${name}`,async()=>withRealtimeCatalog(async()=>{
+  await db.exec(mutation);
+  await assert.rejects(db.exec(platformAssertion),error=>error.code==='P0001'&&error.message.includes('Realtime control plane'));
+}));

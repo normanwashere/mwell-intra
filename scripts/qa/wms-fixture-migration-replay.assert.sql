@@ -46,7 +46,7 @@ begin
   end loop;
   for expected in select * from (values
     ('private.wms_fixture_tokens(jsonb)','2c507914f36344858b484521263e4885',false,'i'),
-    ('private.wms_fixture_guard_targets()','b5752ac5ea1de143a66ac12f5142589b',true,'s'),
+    ('private.wms_fixture_guard_targets()','24a00a761d0f152eeaf0be64ef709f7a',true,'s'),
     ('private.wms_fixture_guard_write()','3c138d2eb9df1a00bbb06e9555395e9a',true,'v'),
     ('private.wms_fixture_assert_writer_coverage()','e8b746792b07622e501f6b05610fb7ae',true,'s')
   ) t(signature,body_md5,definer,volatility) loop
@@ -94,6 +94,14 @@ begin
         raise exception 'Warehouse fixture guard must not alter pg_net infrastructure: %',name;
       end if;
     end loop;
+  end if;
+  -- Local Supabase keeps its Realtime control plane in a platform-only schema.
+  if exists(select 1 from private.wms_fixture_guard_targets() t join pg_class c on c.oid=t.relation
+      join pg_namespace n on n.oid=c.relnamespace where n.nspname='_realtime')
+    or exists(select 1 from pg_trigger g join pg_class c on c.oid=g.tgrelid
+      join pg_namespace n on n.oid=c.relnamespace where n.nspname='_realtime'
+        and (g.tgname like 'wms_fixture_%' or g.tgfoid='private.wms_fixture_guard_write()'::regprocedure)) then
+    raise exception 'Warehouse fixture guard must not alter the Realtime control plane';
   end if;
   -- This independently owned append-only sink is not a Warehouse command table.
   -- Inspect its catalog only; do not read audit rows or acquire its owner role.
