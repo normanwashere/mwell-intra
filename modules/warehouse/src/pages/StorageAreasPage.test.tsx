@@ -310,6 +310,7 @@ describe('StorageAreasPage putaway availability', () => {
     renderWithProviders(<StorageAreasPage />, { repo, ...(options.liveWithoutHoldAccess
       ? { source: 'supabase' as const, capabilities: ['transfer_stock' as const] }
       : options.live ? { source: 'supabase' as const, capabilities: ['transfer_stock' as const, 'inspect_quality' as const] } : {}) });
+    await user.selectOptions(await screen.findByLabelText('Warehouse'), 'loc-wh');
     await user.click(await screen.findByRole('button', { name: /put away/i }));
     const dialog = await screen.findByRole('dialog', { name: 'Put away stock' });
     await user.type(within(dialog).getByLabelText('Enter stock code manually'), `${options.code ?? 'OCT19-EXT-WATCH-002'}{Enter}`);
@@ -429,6 +430,7 @@ describe('StorageAreasPage putaway availability', () => {
     });
     const user = userEvent.setup();
     renderWithProviders(<StorageAreasPage />, { repo });
+    await user.selectOptions(await screen.findByLabelText('Warehouse'), 'loc-wh');
     await user.click(await screen.findByRole('button', { name: /put away/i }));
     const dialog = await screen.findByRole('dialog', { name: 'Put away stock' });
     await waitFor(() => expect(positions).toHaveBeenCalled());
@@ -587,6 +589,7 @@ describe('StorageAreasPage', () => {
     const before = await repo.getData();
     const user = userEvent.setup();
     renderWithProviders(<StorageAreasPage />, { repo });
+    await user.selectOptions(await screen.findByLabelText('Warehouse'), 'loc-wh');
     const identity = await screen.findByText(code, { exact: true });
     const bin = identity.closest('button')!;
     expect(identity).not.toHaveClass('truncate');
@@ -622,6 +625,7 @@ describe('StorageAreasPage', () => {
     const relocate = vi.spyOn(repo, 'relocate');
     const user = userEvent.setup();
     renderWithProviders(<StorageAreasPage />, { repo });
+    await user.selectOptions(await screen.findByLabelText('Warehouse'), 'loc-wh');
     await user.click(await screen.findByRole('button', { name: /put away/i }));
     const dialog = await screen.findByRole('dialog', { name: /put away stock/i });
     await user.type(within(dialog).getByLabelText('Enter stock code manually'), 'shirt-l{Enter}');
@@ -645,6 +649,7 @@ describe('StorageAreasPage', () => {
     const relocate = vi.spyOn(repo, 'relocate').mockImplementation(() => new Promise((_resolve, rej) => { reject = rej; }));
     const user = userEvent.setup();
     renderWithProviders(<StorageAreasPage />, { repo });
+    await user.selectOptions(await screen.findByLabelText('Warehouse'), 'loc-wh');
     await user.click(await screen.findByRole('button', { name: /put away/i }));
     const dialog = await screen.findByRole('dialog', { name: /put away stock/i });
     await user.type(within(dialog).getByLabelText('Enter stock code manually'), 'shirt-l{Enter}');
@@ -709,6 +714,8 @@ describe('StorageAreasPage', () => {
       role: 'logistics_supervisor',
       route: '/storage?guide=setup-bin&returnTo=%2Fknowledge%3Fflow%3Dwarehouse-setup',
     });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await userEvent.selectOptions(await screen.findByLabelText('Warehouse'), 'loc-wh');
 
     const dialog = await screen.findByRole('dialog', { name: 'Add storage area' });
     const binCode = within(dialog).getByLabelText('Bin code');
@@ -725,6 +732,7 @@ describe('StorageAreasPage', () => {
       role: 'logistics_supervisor',
       route: '/storage?guide=setup-bin&returnTo=https%3A%2F%2Fevil.example',
     });
+    await userEvent.selectOptions(await screen.findByLabelText('Warehouse'), 'loc-wh');
 
     const dialog = await screen.findByRole('dialog', { name: 'Add storage area' });
     expect(
@@ -739,6 +747,7 @@ describe('StorageAreasPage', () => {
       role: 'logistics_supervisor',
       repo,
     });
+    await user.selectOptions(await screen.findByLabelText('Warehouse'), 'loc-wh');
 
     await user.click(await screen.findByRole('button', { name: /put away/i }));
     const dialog = await screen.findByRole('dialog', { name: /put away stock/i });

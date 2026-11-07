@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { tasksReturnPath } from '@/domain/taskNavigation';
 import { clsx } from 'clsx';
 import { useWarehouse } from '@/app/store';
+import { selectedWarehouse } from '@/domain/warehouseSelection';
 import { toStockState } from '@/data/repository';
 import { stockByBin } from '@/domain/storage';
 import { groupProductsByFamily, variantLabel } from '@/domain/inventory';
@@ -80,7 +81,7 @@ function CycleCountSheet() {
       </section> : <p role="status">This count is unavailable or outside your access. No new count was opened.</p>}
     </div>;
   }
-  const activeLocation = locationId || warehouses[0]?.id || '';
+  const activeLocation = pending?.locationId ?? selectedWarehouse(warehouses, locationId);
   const state = toStockState(data);
   const bins = (data.storageAreas ?? []).filter(
     (b) => b.locationId === activeLocation,
@@ -113,7 +114,7 @@ function CycleCountSheet() {
   };
 
   const items = data.products
-    .filter((p) => p.category === category)
+    .filter((p) => Boolean(activeLocation) && p.category === category)
     .map((p) => ({
       product: p,
       expected: expectedForScope(p.id),
@@ -242,7 +243,7 @@ function CycleCountSheet() {
   </label>;
 
   const submit = async () => {
-    if (sendingRef.current || evidenceBusy || recovery.error) return;
+    if (sendingRef.current || evidenceBusy || recovery.error || !activeLocation) return;
     if (!pendingRef.current && (enteredCount === 0 || incompleteLots || invalidQuantities || serialIssues.length > 0 || evidenceUrls.length === 0)) return;
     sendingRef.current = true;
     setSending(true);
@@ -334,7 +335,8 @@ function CycleCountSheet() {
               setEvidenceVersion((version) => version + 1);
             }}
           >
-            {warehouses.map((l) => (
+            <option value="">Select a warehouse</option>
+            {warehouses.filter(l => l.active !== false || l.id === pending?.locationId).map((l) => (
               <option key={l.id} value={l.id}>
                 {l.name}
               </option>
@@ -372,7 +374,7 @@ function CycleCountSheet() {
             </span>
           </div>
         )}
-        {category === 'device' && !locked && (
+        {category === 'device' && !locked && activeLocation && (
           <div className="sm:col-span-2">
             <WarehouseScanFlow
               key={`${activeLocation}:${scope ?? 'general'}:${evidenceVersion}`}
@@ -693,7 +695,7 @@ function CycleCountSheet() {
         <p className="text-sm text-muted">
           Attach a clear photo of the count sheet, rack, or bin before submitting.
         </p>
-        <EvidenceCapture
+        {activeLocation ? <EvidenceCapture
           reference={`cycle-count/${activeLocation}/${scope ?? 'general'}/${evidenceVersion}`}
           value={evidenceUrls}
           onBusyChange={setEvidenceBusy}
@@ -702,7 +704,7 @@ function CycleCountSheet() {
           onChange={(urls) => {
             setEvidenceUrls(urls);
           }}
-        />
+        /> : <p role="status" className="text-sm text-muted">Select the warehouse before counting or attaching evidence.</p>}
         {evidenceUrls.length === 0 && (
           <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
             Evidence is required to create and submit this count atomically.
@@ -720,7 +722,7 @@ function CycleCountSheet() {
           className="btn-primary w-full shadow-pop"
           // An explicit entry is always required — no more one-tap "perfect
           // count" (WH-18).
-          disabled={sending || Boolean(recovery.error) || evidenceBusy || (!pending && (enteredCount === 0 || incompleteLots || invalidQuantities || serialIssues.length > 0 || evidenceUrls.length === 0))}
+          disabled={!activeLocation || sending || Boolean(recovery.error) || evidenceBusy || (!pending && (enteredCount === 0 || incompleteLots || invalidQuantities || serialIssues.length > 0 || evidenceUrls.length === 0))}
           onClick={() => void submit()}
         >
           {sending ? 'Confirming count...' : pending ? 'Retry saved count' : `Submit count (${enteredCount}/${items.length})`}

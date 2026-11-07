@@ -18,6 +18,7 @@ describe("CycleCountsPage", () => {
     const repo = makeRepo();
     const submit = vi.spyOn(repo, 'createAndSubmitCycleCount');
     renderWithProviders(<CycleCountsPage />, { repo, role: 'warehouse_operator' });
+    await userEvent.selectOptions(await screen.findByLabelText("Location"), "loc-wh");
     await user.click(await screen.findByRole('button', { name: /blind count/i }));
     fireEvent.change(screen.getByLabelText(/Counted Event Shirt \(L\)/i), { target: { value: String(counted) } });
     const assertBlind = () => {
@@ -53,6 +54,7 @@ describe("CycleCountsPage", () => {
   it('ignores a preselected variance filter in blind mode without losing normal-mode filtering', async () => {
     const user = userEvent.setup();
     renderWithProviders(<CycleCountsPage />, { route: '/cycle-counts?filter=variances' });
+    await userEvent.selectOptions(await screen.findByLabelText("Location"), "loc-wh");
     const blind = await screen.findByRole('button', { name: /blind count/i });
     expect(screen.queryByLabelText(/Counted Event Shirt \(L\)/i)).not.toBeInTheDocument();
     await user.click(blind);
@@ -70,6 +72,7 @@ describe("CycleCountsPage", () => {
   it('hides blind serialized shortage feedback while preserving unexpected-serial validation', async () => {
     const user = userEvent.setup();
     renderWithProviders(<CycleCountsPage />, { role: 'warehouse_operator' });
+    await userEvent.selectOptions(await screen.findByLabelText("Location"), "loc-wh");
     await user.click(await screen.findByRole('button', { name: /blind count/i }));
     await user.selectOptions(screen.getByLabelText('Category'), 'device');
     const serials = screen.getByLabelText(/Scanned serials ECG Ring \(Size 6\)/i);
@@ -97,6 +100,7 @@ describe("CycleCountsPage", () => {
     "renders governed cycle counts for canonical %s",
     async (role) => {
       renderWithProviders(<CycleCountsPage />, { role });
+      await userEvent.selectOptions(await screen.findByLabelText("Location"), "loc-wh");
       expect(
         await screen.findByRole("heading", { name: /count sheet/i }),
       ).toBeInTheDocument();
@@ -110,6 +114,7 @@ describe("CycleCountsPage", () => {
 
   it("explains that balanced counts close cleanly and material variance needs a distinct Supervisor", async () => {
     renderWithProviders(<CycleCountsPage />, { role: "warehouse_operator" });
+    await userEvent.selectOptions(await screen.findByLabelText("Location"), "loc-wh");
     expect(
       await screen.findByText(/balanced counts close without approval/i),
     ).toBeInTheDocument();
@@ -123,6 +128,7 @@ describe("CycleCountsPage", () => {
   it("requires evidence before atomically creating and submitting a count", async () => {
     const user = userEvent.setup();
     renderWithProviders(<CycleCountsPage />, { role: "warehouse_operator" });
+    await userEvent.selectOptions(await screen.findByLabelText("Location"), "loc-wh");
     await screen.findByRole("heading", { name: /count sheet/i });
 
     await user.type(screen.getByLabelText(/Counted Event Shirt \(L\)/i), "120");
@@ -133,6 +139,7 @@ describe("CycleCountsPage", () => {
 
   it("never prefills counted quantities with the expected number (WH-18)", async () => {
     renderWithProviders(<CycleCountsPage />, { role: "finance" });
+    await userEvent.selectOptions(await screen.findByLabelText("Location"), "loc-wh");
     await screen.findByRole("heading", { name: /count sheet/i });
 
     // Inputs start empty; expected quantities belong in the adjacent column.
@@ -157,6 +164,7 @@ describe("CycleCountsPage", () => {
   it("flags variances once a real value is entered", async () => {
     const user = userEvent.setup();
     renderWithProviders(<CycleCountsPage />, { role: "finance" });
+    await userEvent.selectOptions(await screen.findByLabelText("Location"), "loc-wh");
     await screen.findByRole("heading", { name: /count sheet/i });
 
     const shirtInput = screen.getByLabelText(/Counted Event Shirt \(L\)/i);
@@ -170,6 +178,7 @@ describe("CycleCountsPage", () => {
   it('shows "balanced" only after a matching entry', async () => {
     const user = userEvent.setup();
     renderWithProviders(<CycleCountsPage />, { role: "finance" });
+    await userEvent.selectOptions(await screen.findByLabelText("Location"), "loc-wh");
     await screen.findByRole("heading", { name: /count sheet/i });
 
     const shirtInput = screen.getByLabelText(/Counted Event Shirt \(L\)/i);
@@ -181,6 +190,7 @@ describe("CycleCountsPage", () => {
   it("blind count blanks expected values and records only entered rows", async () => {
     const user = userEvent.setup();
     renderWithProviders(<CycleCountsPage />, { role: "finance" });
+    await userEvent.selectOptions(await screen.findByLabelText("Location"), "loc-wh");
     await screen.findByRole("heading", { name: /count sheet/i });
 
     await user.click(screen.getByRole("button", { name: /blind count/i }));
@@ -199,6 +209,7 @@ describe("CycleCountsPage", () => {
   it("leaves untouched rows uncounted and routes only entered variances for approval", async () => {
     const user = userEvent.setup();
     renderWithProviders(<CycleCountsPage />, { role: "finance" });
+    await userEvent.selectOptions(await screen.findByLabelText("Location"), "loc-wh");
     await screen.findByRole("heading", { name: /count sheet/i });
 
     await user.type(screen.getByLabelText(/Counted Event Shirt \(L\)/i), "100");
@@ -216,6 +227,7 @@ describe("CycleCountsPage", () => {
   it("routes a blind-count variance for supervisor approval", async () => {
     const user = userEvent.setup();
     renderWithProviders(<CycleCountsPage />, { role: "finance" });
+    await userEvent.selectOptions(await screen.findByLabelText("Location"), "loc-wh");
     await screen.findByRole("heading", { name: /count sheet/i });
 
     await user.click(screen.getByRole("button", { name: /blind count/i }));
@@ -232,6 +244,7 @@ describe("CycleCountsPage", () => {
   it("counts serialized devices by presence and blocks unexpected serials", async () => {
     const user = userEvent.setup();
     renderWithProviders(<CycleCountsPage />, { role: "finance" });
+    await userEvent.selectOptions(await screen.findByLabelText("Location"), "loc-wh");
     await screen.findByRole("heading", { name: /count sheet/i });
     await user.selectOptions(screen.getByLabelText("Category"), "device");
 
@@ -254,6 +267,7 @@ describe("CycleCountsPage", () => {
   it("adds an eligible device to the count through the shared scanner", async () => {
     const user = userEvent.setup();
     renderWithProviders(<CycleCountsPage />, { role: "finance" });
+    await userEvent.selectOptions(await screen.findByLabelText("Location"), "loc-wh");
     await screen.findByRole("heading", { name: /count sheet/i });
     await user.selectOptions(screen.getByLabelText("Category"), "device");
 

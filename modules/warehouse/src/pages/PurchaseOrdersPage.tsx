@@ -1,4 +1,5 @@
 import { userFacingError } from '@intra/ui';
+import { selectedWarehouse } from '@/domain/warehouseSelection';
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { inboundQueue, isReceivableInbound } from "@/domain/workQueues";
 import { resolveProductScan } from "@/domain/productScan";
@@ -707,7 +708,7 @@ export function PurchaseOrdersPage() {
     setUncertainReceiptAttempt(null);
     setBridgeReceivePO(handoff);
     setBridgeDeliveryDate("");
-    setBridgeLocation(warehouses[0]?.id ?? "");
+    setBridgeLocation(selectedWarehouse(warehouses, ""));
     setBridgeBin("");
     setBridgeEvidence("");
     setBridgePhotos([]);
@@ -916,7 +917,7 @@ export function PurchaseOrdersPage() {
   const openReceive = (po: PurchaseOrder) => {
     setDetailPOId(null);
     setReceivePO(po);
-    setReceiveLoc(warehouses[0]?.id ?? "");
+    setReceiveLoc(selectedWarehouse(warehouses, ""));
     setReceiveBin("");
     setReceiveQty(
       Object.fromEntries(
@@ -971,7 +972,7 @@ export function PurchaseOrdersPage() {
     setUncertainReceiptAttempt(null);
     setBridgeReceivePO(po);
     setBridgeDeliveryDate("");
-    setBridgeLocation(warehouses[0]?.id ?? "");
+    setBridgeLocation(selectedWarehouse(warehouses, ""));
     setBridgeBin("");
     setBridgeEvidence("");
     setBridgePhotos([]);
@@ -1361,7 +1362,11 @@ export function PurchaseOrdersPage() {
           </div>}
           {(filter === 'closed' || handoffPoId) && closedError && <p role="alert">{closedError} <button type="button" className="btn-ghost" onClick={() => setClosedReload(value => value + 1)}>Retry closed history</button></p>}
           {shownPOs.length === 0 && shownBridged.length === 0 ? (
-            <EmptyState icon="cart" title={`No ${filter} purchase orders`} />
+            <EmptyState icon="cart"
+              title={filter === 'closed' ? 'No closed purchase orders found' : 'No receivable purchase orders'}
+              message={filter === 'closed'
+                ? 'Try a different search. Closed POs remain in history and cannot receive more stock.'
+                : 'No POs are ready to receive in this queue. Check Closed for historical POs, or open Emailed POs and saved arrival drafts above.'} />
           ) : (
             <ul
               className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2"
@@ -1610,7 +1615,7 @@ export function PurchaseOrdersPage() {
                 type="button"
                 className="btn-primary w-full sm:w-auto"
                 onClick={() => void execute(submitReceive)}
-                disabled={pending}
+                disabled={pending || !receiveLoc}
               >
                 Confirm receipt
               </button>
@@ -1634,7 +1639,8 @@ export function PurchaseOrdersPage() {
                   setReceiveBin("");
                 }}
               >
-                {warehouses.map((l) => (
+                <option value="">Select a warehouse</option>
+                {warehouses.filter(l => l.active !== false || l.id === receiveLoc).map((l) => (
                   <option key={l.id} value={l.id}>
                     {l.name}
                   </option>
@@ -1884,7 +1890,8 @@ export function PurchaseOrdersPage() {
                     setBridgeBin("");
                   }}
                 >
-                  {warehouses.map((location) => (
+                  <option value="">Select a warehouse</option>
+                  {warehouses.filter(location => location.active !== false || location.id === bridgeLocation).map((location) => (
                     <option key={location.id} value={location.id}>
                       {location.name}
                     </option>

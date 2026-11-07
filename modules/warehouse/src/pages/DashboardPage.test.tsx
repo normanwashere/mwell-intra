@@ -230,7 +230,7 @@ describe("DashboardPage", () => {
   it("lists low-stock items for logistics", async () => {
     renderWithProviders(<DashboardPage />, { role: "logistics_supervisor" });
     expect(await screen.findByText(/low-stock alerts/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/left$/i).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/left$/i)).length).toBeGreaterThan(0);
   });
 
   it("renders an overview and interactive panels for every role", async () => {

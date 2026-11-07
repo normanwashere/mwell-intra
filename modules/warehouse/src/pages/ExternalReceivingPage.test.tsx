@@ -144,6 +144,18 @@ function savedShipment() {
 }
 
 describe("external receiving workflow", () => {
+  it('keeps registration actions in the fixed footer and binds Save to the unchanged form', async () => {
+    mount();
+    fireEvent.click(await screen.findByRole('button', {name:'Register emailed PO'}));
+    const dialog=screen.getByRole('dialog');
+    const actions=within(dialog).getByRole('group',{name:'Register emailed PO actions'});
+    const save=within(actions).getByRole('button',{name:'Save PO record'}) as HTMLButtonElement;
+    expect(save.form).toBe(dialog.querySelector('form'));
+    expect(actions).not.toContainElement(dialog.querySelector('form'));
+    fireEvent.click(within(actions).getByRole('button',{name:'Cancel'}));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(mock.rpc.mock.calls.some(call=>call[0]==='external_po_command')).toBe(false);
+  });
   it('collapses secondary workflow guidance while keeping search and arrival work visible', async () => {
     mount();
     expect(await screen.findByLabelText('Search emailed POs')).toBeVisible();

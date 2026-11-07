@@ -1,6 +1,14 @@
 # Mwell Intra Standalone Operating Handbook
 
-**Current release authority:** Read the [current release manifest](../handoffs/current/release-status.json) and [Data, Technical and Tester handoff](../handoffs/current/README.md). UAT now serves `dd9048e405bf84c2b7b0d6647309d1a8747c9378`, READY deployment `dpl_tghauqxhngHM6opHbBdyriMNyNGV`, verified at `2026-11-06T00:34:37.828Z`. All11 same-SHA CI jobs passed, with one mobile Procurement retry-pass still disclosed. Privacy, guarded return-balance and Product/export-screen checks passed within their recorded scope; no blanket workflow or human acceptance is implied. G02 is BLOCKED by missing first-putaway bridge; conversion was not run; G01 is blocked by Auth administration. Documentation source was published to GitHub in `eb2148c`, not a live handbook update; this later checkpoint awaits publication. That follow-up CI ended9 successful jobs/2 failed helper-fixture jobs; its database repair is not applied. September and other dated checks remain historical. SMTP is unchanged. The [Reporting API remains disabled in a separate implementation phase](../integrations/reporting-api/SEPARATE-IMPLEMENTATION-PHASE.md).
+**Release status:** Dated checks in this handbook are historical evidence, not proof of the version currently deployed. Verify the current UAT application through its health endpoint and the matching release report. The November 8 application-only changes are described in the [WMS audit remediation release note](../releases/2026-11-08-WMS-AUDIT-REMEDIATION.md). No full certification or department acceptance is implied. SMTP remains unchanged; the Reporting API remains a separate phase.
+
+## November 8 Warehouse Guidance
+
+- **Choose the warehouse:** When multiple sites are available, select the intended site before starting receiving, putaway, bin setup or a cycle count. No new work is assigned to the first site automatically. A saved count or an exact receipt/task link retains its original warehouse context.
+- **Check quantity status:** Unconfirmed or unverified availability is not zero. Review Inventory before requesting replenishment. Warehouse alerts and dashboard shortage summaries use verified quantities; a verified zero still indicates a shortage.
+- **Follow the task:** Staging tasks show the product, SKU and receiving area. For a restricted stock-variance task, send its source reference to the authorized Operations Lead. Do not adjust stock to clear the task or use another account.
+- **Save an emailed PO:** Save PO record and Cancel stay in the form footer while its fields scroll. Cancel closes the unsaved registration. Saving a draft is not evidence confirmation, receiving or Quality acceptance.
+- **Find a PO:** No receivable purchase orders means there are no matching orders eligible for receipt in that list. Check filters, Closed history for past orders, or Emailed POs for the transitional flow. Do not receive the same physical delivery twice.
 
 **Four-QA operating guidance:**
 

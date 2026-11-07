@@ -9,6 +9,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 async function prepare(repo = makeRepo(), blind = true) {
   const user = userEvent.setup();
   const view = renderWithProviders(<CycleCountsPage />, { repo, role: 'warehouse_operator' });
+  await user.selectOptions(await screen.findByLabelText('Location'), 'loc-wh');
   await screen.findByRole('heading', { name: 'Count sheet' });
   if (blind) await user.click(screen.getByRole('button', { name: 'Blind count' }));
   fireEvent.change(screen.getByLabelText(/Counted Event Shirt \(L\)/i), { target: { value: '100' } });
@@ -63,6 +64,7 @@ describe('cycle-count immutable submission', () => {
     const send = vi.spyOn(repo, 'createAndSubmitCycleCount').mockImplementation(input => adapter.createAndSubmitCycleCount(input));
     const user = userEvent.setup();
     renderWithProviders(<CycleCountsPage />, { repo, role: 'warehouse_operator' });
+    await user.selectOptions(await screen.findByLabelText('Location'), 'loc-wh');
     await screen.findByRole('heading', { name: 'Count sheet' });
     fireEvent.change(screen.getAllByLabelText('Event Shirt (L) lot lot-a counted')[0]!, { target: { value: '1' } });
     fireEvent.change(screen.getAllByLabelText('Event Shirt (L) lot Unlotted counted')[0]!, { target: { value: '0' } });
@@ -297,6 +299,7 @@ describe('cycle-count immutable submission', () => {
     const send = vi.spyOn(repo, 'createAndSubmitCycleCount').mockResolvedValue([]);
     const user = userEvent.setup();
     renderWithProviders(<CycleCountsPage />, { repo, role: 'warehouse_operator' });
+    await user.selectOptions(await screen.findByLabelText('Location'), 'loc-wh');
     await screen.findByRole('heading', { name: 'Count sheet' });
     expect(screen.queryByLabelText(/Counted Event Shirt \(L\)$/i)).not.toBeInTheDocument();
     fireEvent.change(screen.getAllByLabelText('Event Shirt (L) lot AUDIT-A counted')[0]!, { target: { value: '1' } });
@@ -329,6 +332,7 @@ describe('cycle-count immutable submission', () => {
     }));
     const user = userEvent.setup();
     renderWithProviders(<CycleCountsPage />, { repo, role: 'warehouse_operator' });
+    await user.selectOptions(await screen.findByLabelText('Location'), 'loc-wh');
     await screen.findByRole('heading', { name: 'Count sheet' });
     fireEvent.change(screen.getAllByLabelText('Event Shirt (L) lot empty-receipt counted')[0]!, { target: { value: '1' } });
     fireEvent.change(screen.getAllByLabelText('Event Shirt (L) lot stocked-receipt counted')[0]!, { target: { value: '1' } });

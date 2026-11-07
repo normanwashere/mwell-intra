@@ -11,7 +11,7 @@ export interface AppNotification {
   icon: IconName;
   title: string;
   detail: string;
-  issueType: 'shortage' | 'reservation';
+  issueType: 'shortage' | 'reservation' | 'unverified';
   owner: string;
   nextStep: string;
   actionable: boolean;
@@ -28,7 +28,7 @@ export interface AppNotification {
 export function buildNotifications(
   data: WarehouseData,
   canOpenRoute: (routeId: WarehouseRouteId) => boolean,
-  actions: { canRecommendReplenishment?: boolean; canIssueStock?: boolean } = {},
+  actions: { canRecommendReplenishment?: boolean; canIssueStock?: boolean; availability?: ReadonlyMap<string, number> | null } = {},
 ): AppNotification[] {
   const state = toStockState(data);
   const notifications: AppNotification[] = [];
@@ -38,7 +38,25 @@ export function buildNotifications(
   const canOpenAllocations = canOpenRoute('allocations');
   const canRecommend = actions.canRecommendReplenishment === true && canOpenRoute('procurement');
 
-  for (const { product, available } of lowStockProducts(state)) {
+  const verified = actions.availability;
+  const shortages = verified === undefined ? lowStockProducts(state) : data.products.flatMap(product => {
+    const available = verified?.get(product.id);
+    return available !== undefined && Number.isFinite(available) && available >= 0 && available <= product.reorderPoint ? [{product, available}] : [];
+  });
+  if (verified !== undefined) for (const product of data.products) {
+    const available = verified?.get(product.id);
+    if (available !== undefined && Number.isFinite(available) && available >= 0) continue;
+    notifications.push({
+      id: `unverified-${product.id}`, tone: 'slate', icon: 'info',
+      title: `${product.name}: quantity not confirmed`,
+      detail: `${product.sku} · Availability has not been verified`,
+      issueType: 'unverified', owner: 'Warehouse operations',
+      nextStep: 'Review inventory availability before requesting replenishment',
+      actionable: false,
+      to: canOpenInventory ? `/inventory/${encodeURIComponent(product.id)}` : undefined,
+    });
+  }
+  for (const { product, available } of shortages) {
     notifications.push({
       id: `low-${product.id}`,
       tone: available === 0 ? 'rose' : 'amber',

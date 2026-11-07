@@ -15,6 +15,7 @@ import {
   type TrainingContextValue,
 } from "@intra/learning";
 import { useWarehouse } from "@/app/store";
+import { selectedWarehouse } from "@/domain/warehouseSelection";
 import { actorName, formatWhen } from "@/domain/format";
 import { isStockQuantity, resolveProductScan } from "@/domain/productScan";
 import {
@@ -313,7 +314,7 @@ export function ReceivingPageSurface({
 
   if (!data) return null;
   const products = data.products;
-  const activeLocation = locationId || warehouses[0]?.id || "";
+  const activeLocation = selectedWarehouse(warehouses, locationId);
   const bins = (data.storageAreas ?? []).filter(
     (b) => b.locationId === activeLocation,
   );
@@ -893,7 +894,8 @@ export function ReceivingPageSurface({
                 value={activeLocation}
                 onChange={(e) => setLocationId(e.target.value)}
               >
-                {warehouses.map((l) => (
+                <option value="">Select a warehouse</option>
+                {warehouses.filter(l => l.active !== false).map((l) => (
                   <option key={l.id} value={l.id}>
                     {l.name}
                   </option>

@@ -1066,6 +1066,9 @@ function roleGuide(definition) {
 }
 
 const SOURCE_ROOT_HEADINGS = {
+  "nov06-warehouse-sample-archive": "Warehouse Sample Cleanup",
+  "nov07-warehouse-cleanup": "Warehouse cleanup and Associate Tasks",
+  "nov08-wms-audit-remediation": "WMS audit fixes - November 8, 2026",
   "nov06-release-readiness": "November 6 Release Readiness",
   "nov05-wms-audit-remediation": "WMS audit remediation - November 5, 2026",
   "oct20-warehouse-transition": "Warehouse Transition Release Record",
@@ -1416,6 +1419,9 @@ function markdownHeadings(source) {
 }
 
 const LEGACY_TARGET_BY_SOURCE_ID = {
+  "nov06-warehouse-sample-archive": ["system", "source-references", "source-nov06-warehouse-sample-archive"],
+  "nov07-warehouse-cleanup": ["system", "source-references", "source-nov07-warehouse-cleanup"],
+  "nov08-wms-audit-remediation": ["system", "source-references", "source-nov08-wms-audit-remediation"],
   "nov06-release-readiness": ["system", "source-references", "source-nov06-release-readiness"],
   "nov05-wms-audit-remediation": ["system", "source-references", "source-nov05-wms-audit-remediation"],
   "oct20-warehouse-transition": ["system", "source-references", "source-oct20-warehouse-transition"],

@@ -3,11 +3,10 @@ import { isFloorWork, FLOOR_WORK_PATH, inboundQueue } from "@/domain/workQueues"
 import { useInboundProcurementPOs } from "@/data/procurementBridge";
 import { Link, useNavigate } from "react-router-dom";
 import { useWarehouse } from "@/app/store";
+import { useInventoryAvailability } from "@/domain/useInventoryAvailability";
 import { toStockState } from "@/data/repository";
 import {
-  availableForProduct,
   inventoryValuation,
-  lowStockProducts,
   onHand,
 } from "@/domain/stock";
 import {
@@ -481,6 +480,7 @@ function OperatorDashboard({
 
 export function DashboardPage() {
   const { data, role, roleLabel, source, can, canOpenRoute } = useWarehouse();
+  const { totals: availability, loading: availabilityLoading, error: availabilityError } = useInventoryAvailability();
   const { profile } = useSession();
   const canExport = useCanPrepareWarehouseExport(source, can("view_analytics") || can("view_finance"));
   const navigate = useNavigate();
@@ -560,7 +560,12 @@ export function DashboardPage() {
         );
 
   // --- shared metrics ---
-  const low = lowStockProducts(state);
+  const verifiedStock = data.products.flatMap(product => {
+    const available = availability?.get(product.id);
+    return available !== undefined ? [{product,available}] : [];
+  });
+  const unverifiedStock = data.products.length - verifiedStock.length;
+  const low = verifiedStock.filter(({product,available}) => available <= product.reorderPoint);
   const value = inventoryValuation(state);
   const devicesValue = inventoryValuation(state, "device");
   const merchValue = inventoryValuation(state, "merchandise");
@@ -608,9 +613,7 @@ export function DashboardPage() {
       const p = data.products.find((x) => x.id === m.productId);
       return p?.promotional ? sum + m.quantity * p.unitCost : sum;
     }, 0);
-  const inStockSkus = data.products.filter(
-    (p) => availableForProduct(state, p.id) > 0,
-  ).length;
+  const inStockSkus = verifiedStock.filter(row => row.available > 0).length;
   const openPOs = data.purchaseOrders.filter(
     (po) => po.status !== "received" && po.status !== "cancelled",
   );
@@ -619,9 +622,8 @@ export function DashboardPage() {
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, 6);
 
-  const reorderRows = data.products
-    .map((p) => {
-      const available = availableForProduct(state, p.id);
+  const reorderRows = verifiedStock
+    .map(({product: p, available}) => {
       const supplier = data.suppliers.find((s) =>
         data.lots.some((l) => l.productId === p.id && l.supplierId === s.id),
       );
@@ -1156,8 +1158,8 @@ export function DashboardPage() {
         {low.length === 0 ? (
           <EmptyState
             icon="check"
-            title="All stocked up"
-            message="No SKUs below reorder threshold."
+            title={unverifiedStock > 0 ? 'Availability needs review' : 'All stocked up'}
+            message={unverifiedStock > 0 ? 'Unconfirmed quantities are not treated as zero stock.' : 'No SKUs below reorder threshold.'}
           />
         ) : (
           <ul className="divide-y divide-line">
@@ -1488,7 +1490,7 @@ export function DashboardPage() {
           }
         />
         {reorderRows.length === 0 ? (
-          <EmptyState icon="check" title="Nothing to reorder" />
+          <EmptyState icon="check" title={unverifiedStock > 0 ? 'Availability needs review' : 'Nothing to reorder'} />
         ) : (
           <ul className="divide-y divide-line">
             {reorderRows.slice(0, 6).map((r) => (
@@ -1692,6 +1694,10 @@ export function DashboardPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
+        {(availabilityLoading || availabilityError || unverifiedStock > 0) && <p role="status" className="text-sm text-muted lg:col-span-2">
+          {availabilityError || (availabilityLoading ? 'Checking stock availability...' : `${unverifiedStock} product quantities are not confirmed. Stock alerts include verified quantities only.`)}
+          {' '}<Link className="underline" to="/inventory">Review inventory availability</Link>
+        </p>}
         {panels.map((id) => PANELS[id])}
       </div>
 

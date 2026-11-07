@@ -20,6 +20,7 @@ describe('Queued capture outcome presentation', () => {
     const before = await repo.getData();
     const user = userEvent.setup();
     renderWithProviders(<ReceivingPage />, { repo });
+    await user.selectOptions(await screen.findByLabelText('Receive into'), 'loc-wh');
     await user.selectOptions(await screen.findByLabelText('Product'), 'doctor-token');
     await user.click(screen.getByRole('button', { name: /add to receipt/i }));
     await user.type(screen.getByLabelText('Exception reason'), 'Approved emergency delivery');
@@ -39,6 +40,7 @@ describe('Queued capture outcome presentation', () => {
     const repo = makeRepo(seed);
     const user = userEvent.setup();
     renderWithProviders(<StorageAreasPage />, { repo });
+    await user.selectOptions(await screen.findByLabelText('Warehouse'), 'loc-wh');
     await user.click(await screen.findByRole('button', { name: /put away/i }));
     const dialog = await screen.findByRole('dialog', { name: /put away stock/i });
     await user.type(within(dialog).getByLabelText('Enter stock code manually'), 'shirt-l{Enter}');

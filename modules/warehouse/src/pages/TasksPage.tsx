@@ -2,7 +2,7 @@ import { userFacingError } from '@intra/ui';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useWarehouse } from '@/app/store';
-import type { WarehouseException, WarehouseTask, QualityInspectionSummary, StockChangeRequest } from '@intra/data-kit';
+import type { WarehouseData, WarehouseException, WarehouseTask, QualityInspectionSummary, StockChangeRequest } from '@intra/data-kit';
 import { useSession } from '@intra/auth';
 import { Badge, EmptyState, PageHeader, SegmentedControl } from '@/components/ui';
 import { Icon } from '@/components/Icon';
@@ -10,6 +10,17 @@ import { loadCompleteControlQueue } from '@/domain/controlQueues';
 import { exceptionPresentation, productIdentity, sourceIdentity } from './workSourcePresentation';
 
 import { parseTaskStatus, sourcePathForTask, type TaskStatus } from '@/domain/taskNavigation';
+
+function stagingContext(data: WarehouseData | null, task: WarehouseTask) {
+  if (task.type !== 'putaway' || !task.sourceId.startsWith('staging:')) return;
+  try {
+    const ids: unknown = JSON.parse(task.sourceId.slice('staging:'.length));
+    if (!Array.isArray(ids) || ids.length !== 2 || !ids.every(id => typeof id === 'string')) return;
+    const product = data?.products.find(p => p.id === ids[0]);
+    const location = data?.locations.find(l => l.id === ids[1]);
+    if (product && location) return { summary: productIdentity(data, product.id), context: `${location.name} / General receiving area` };
+  } catch { /* An invalid source must not break the rest of the task queue. */ }
+}
 
 export function TasksPage() {
   const { data, identityId, capabilities, can, canOpenRoute, loadWarehouseTasks, loadQualityInspectionSummaries, loadExceptions, loadStockChangeRequests } = useWarehouse();
@@ -85,15 +96,21 @@ export function TasksPage() {
             const count = data?.cycleCounts.find(c => c.id === task.sourceId);
             const exception = exceptions.find(e => e.id === task.sourceId);
             const detail = exception ? exceptionPresentation(data, exception, requests, inspections, canOpenRoute) : undefined;
+            const staging = stagingContext(data, task);
+            const handoff = task.type === 'exception' && !mayReadChanges
+              ? exception?.sourceType === 'stock_change_request'
+                ? 'Ask Operations Lead to review this stock variance. Share the source link; do not adjust stock to clear the task.'
+                : 'Ask Operations Lead to review this exception. Share the source link for the next decision.'
+              : undefined;
             const title = task.title.includes(task.sourceId) || /[0-9a-f]{8}-[0-9a-f-]{27}/i.test(task.title)
               ? { quality: 'Inspect quality', putaway: 'Put away accepted stock', cycle_count: 'Review cycle count', exception: 'Review warehouse exception' }[task.type]
               : task.title;
             const summary = inspection ? productIdentity(data, inspection.productId)
               : receipt ? [...new Set(receipt.lines.map(l => productIdentity(data, l.productId)))].join('; ')
-                : count ? [...new Set(count.lines.map(l => productIdentity(data, l.productId)))].join('; ') : detail?.summary;
+                : count ? [...new Set(count.lines.map(l => productIdentity(data, l.productId)))].join('; ') : detail?.summary ?? staging?.summary;
             const context = inspection ? [sourceIdentity(data, inspection.sourceType, inspection.sourceId), inspection.serialNumber].filter(Boolean).join(' / ')
               : receipt ? sourceIdentity(data, 'receipt', receipt.id)
-                : count ? sourceIdentity(data, 'cycle_count', count.id) : detail?.context;
+                : count ? sourceIdentity(data, 'cycle_count', count.id) : detail?.context ?? staging?.context;
             const routeId = task.type === 'quality' ? 'quality' : task.type === 'putaway' ? 'storage'
               : task.type === 'cycle_count' ? 'cycle-counts' : 'exceptions';
             return <li key={task.id} className="grid min-h-16 grid-cols-[auto_minmax(0,1fr)] gap-3 px-4 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
@@ -104,7 +121,8 @@ export function TasksPage() {
                 <span className="block break-words text-sm font-semibold text-ink">{title}</span>
                 {summary && <span className="mt-1 block text-sm text-ink [overflow-wrap:anywhere]">{summary}</span>}
                 {context && <span className="mt-1 block text-xs text-muted [overflow-wrap:anywhere]">{context}</span>}
-                {!summary && !context && <span className="block text-xs text-muted">Source details unavailable or outside your access.</span>}
+                {handoff && <span className="mt-1 block text-sm text-muted">{handoff}</span>}
+                {!summary && !context && !handoff && <span className="block text-xs text-muted">Source details unavailable or outside your access.</span>}
                 <details className="my-1 text-xs text-muted [overflow-wrap:anywhere]"><summary className="cursor-pointer">Source reference</summary><code>{task.sourceId}</code></details>
                 <span className="block whitespace-nowrap text-xs text-faint">{task.dueAt ? `Due ${task.dueAt.slice(0, 10)}` : 'No due date'}</span>
                 <Badge tone={status === 'blocked' ? 'amber' : status === 'completed' ? 'emerald' : 'brand'}>{status}</Badge>

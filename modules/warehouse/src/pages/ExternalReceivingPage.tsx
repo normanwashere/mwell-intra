@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useSession } from "@/auth/session";
 import { useWarehouse } from "@/app/store";
@@ -116,6 +116,7 @@ export function ExternalReceivingPage() {
 }
 
 function LiveExternalReceiving() {
+  const orderFormId = useId();
   const { supabaseClient, profile } = useSession();
   const { data, can, refresh } = useWarehouse();
   const [workspace, setWorkspace] = useState<ExternalReceivingWorkspace | null>(
@@ -521,6 +522,14 @@ function LiveExternalReceiving() {
       <Sheet
         open={sheetOpen}
         size="wide"
+        footer={editor === "order" ? <div className="flex flex-wrap justify-end gap-3">
+          <button type="button" className="btn-outline" disabled={locked} onClick={() => {
+            setSelectedId(null); setEditor(null); setActionError("");
+          }}>Cancel</button>
+          <button type="submit" form={orderFormId} className="btn-primary" disabled={locked}>
+            <Icon name="check" /> Save PO record
+          </button>
+        </div> : undefined}
         title={
           editor === "order"
             ? selected
@@ -544,6 +553,7 @@ function LiveExternalReceiving() {
           {feedback}
           {editor === "order" && (
             <OrderEditor
+              formId={orderFormId}
               key={selected?.id ?? "new"}
               order={selected}
               disabled={locked}
@@ -936,11 +946,13 @@ function TextField({
 }
 
 function OrderEditor({
+  formId,
   order,
   disabled,
   onBusyChange,
   onSubmit,
 }: {
+  formId: string;
   order?: ExternalOrder;
   disabled: boolean;
   onBusyChange: (busy: boolean) => void;
@@ -1005,7 +1017,7 @@ function OrderEditor({
     });
   };
   return (
-    <form onSubmit={save} className="space-y-4">
+    <form id={formId} onSubmit={save} className="space-y-4">
       {error && (
         <p role="alert" className="text-sm text-rose-700">
           {error}
@@ -1197,10 +1209,6 @@ function OrderEditor({
           until the document is attached and confirmed.
         </p>
       )}
-      <button type="submit" className="btn-primary" disabled={disabled}>
-        <Icon name="check" />
-        Save PO record
-      </button>
     </form>
   );
 }

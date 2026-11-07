@@ -522,7 +522,7 @@ const procedureArticles: KnowledgeArticle[] = [
     [
       [
         "Review stock risk",
-        "Start with critical and high-risk candidates. Confirm on-hand quantity, minimum level, suggested quantity, lead time, demand, and inbound supply.",
+        "Start with critical and high-risk candidates. Confirm on-hand quantity, minimum level, suggested quantity, lead time, demand, and inbound supply. An unconfirmed inventory quantity is not zero stock: review availability before requesting replenishment. Warehouse alerts and the dashboard use verified availability.",
         "The recommendation is supported by current warehouse planning facts.",
         "Investigate missing lead time, unusual demand, stale inbound supply, or an existing active recommendation before saving.",
       ],
@@ -559,7 +559,7 @@ const procedureArticles: KnowledgeArticle[] = [
     "/warehouse/storage",
     "warehouse-setup",
     [
-      ["Create location", "Define the warehouse site."],
+      ["Create location", "Define the warehouse site. When several warehouses are available, explicitly select the intended warehouse before viewing bins or adding a bin. A setup guide opens its bin form after this choice."],
       [
         "Check readiness",
         "Use active-bin count, units on hand, and the Operational, Setup required, or Putaway attention label to identify configuration work.",
@@ -599,7 +599,7 @@ const procedureArticles: KnowledgeArticle[] = [
         "Preview an attached photo",
         "In Receiving or Quality, select an attached photo to view it full size. Close the preview to return to the unsent form. Previewing does not submit the receipt or inspection.",
       ],
-      ["Put away", "Move accepted stock to a valid bin."],
+      ["Put away", "Move accepted stock to a valid bin. Choose the warehouse explicitly for new work when several sites are available. A receipt or task link retains its exact warehouse context. Staging tasks show the product, SKU and general receiving area; opening the task does not move stock. A stock-variance task requiring review must go to the authorized Operations Lead, not be cleared by adjusting stock."],
       [
         "Verify ledger",
         "Confirm units, lots, stock levels, and valuation updated.",
@@ -630,7 +630,7 @@ const procedureArticles: KnowledgeArticle[] = [
           {
             title: "Register emailed PO",
             ownerRoleIds: ["warehouse_operator", "warehouse_supervisor", "warehouse_logistics_supervisor", "warehouse_admin"],
-            instruction: "Choose Register emailed PO to register the PO and documents emailed by Procurement. Select supplier and receiving location, match products and quantities to catalogue UOM, retain the source email sender/date and PO number when known, and attach the documents. Save PO record and verify its saved state.",
+            instruction: "Choose Register emailed PO to register the PO and documents emailed by Procurement. Select supplier and receiving location, match products and quantities to catalogue UOM, retain the source email sender/date and PO number when known, and attach the documents. Use Save PO record in the fixed footer and verify its saved state. Cancel closes the unsaved form without registering a PO.",
             expectedOutcome: "An attributable draft is available to authorized readers; no purchase approval or stock is created.",
             exception: "Only the creator edits an unconfirmed record. Missing documents allow draft-only work; resolve catalogue mismatches rather than inventing an item or pack conversion.",
           },
@@ -797,7 +797,7 @@ const procedureArticles: KnowledgeArticle[] = [
     "/warehouse/cycle-counts",
     "cycle-count-adjustment",
     [
-      ["Create draft", "Select bin and count scope."],
+      ["Create draft", "Select the warehouse, bin and count scope. When several sites are available, a new count requires an explicit warehouse choice. Recovering a saved pending count retains its original warehouse."],
       ["Record physical count", "Enter observed quantity and evidence."],
       [
         "Review variance",

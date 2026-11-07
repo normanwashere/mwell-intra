@@ -122,6 +122,8 @@ async function openReceiving(
   if (fillDate && !(within(dialog).getByLabelText("Actual delivery date") as HTMLInputElement).value) {
     fireEvent.change(within(dialog).getByLabelText("Actual delivery date"), { target: { value: "2026-08-27" } });
   }
+  const destination = within(dialog).getByLabelText("Receive into");
+  if (!(destination as HTMLSelectElement).value) await user.selectOptions(destination, "loc-wh");
   return dialog;
 }
 
@@ -206,6 +208,26 @@ class LiveProcurementRepository extends InMemoryRepository {
 }
 
 describe("PurchaseOrdersPage", () => {
+  it("requires an explicit warehouse for a fresh Procurement receipt without changing the PO", async () => {
+    const repo = new LiveProcurementRepository();
+    const before = await repo.getData();
+    renderReceiving(repo);
+    await userEvent.click(within(await screen.findByLabelText("Purchase orders")).getAllByRole("button", {name: /^receive and inspect$/i})[0]!);
+    const dialog = await screen.findByRole("dialog", {name: /receive approved procurement po/i});
+    await waitFor(() => expect(within(dialog).getByRole("button", {name: /save progress/i})).toBeEnabled());
+    expect(within(dialog).getByLabelText("Receive into")).toHaveValue("");
+    expect(within(dialog).getByRole("button", {name: "Confirm governed receipt"})).toBeDisabled();
+    expect(repo.receivedInputs).toEqual([]);
+    expect(await repo.getData()).toEqual(before);
+  });
+  it("explains an empty receivable queue and retains the emailed PO handoff", async () => {
+    const repo = new LiveProcurementRepository();
+    vi.spyOn(repo, "getReceivableProcurementPOs").mockResolvedValue([]);
+    renderReceiving(repo);
+    expect(await screen.findByText("No receivable purchase orders")).toBeVisible();
+    expect(screen.getByText(/Check Closed for historical POs/)).toBeVisible();
+    expect(screen.getByRole("link", {name: "Emailed POs and saved arrival drafts"})).toHaveAttribute("href", "/external-receiving");
+  });
   it.each(['damaged', 'unidentified', 'short', 'excess'] as const)(
     'explains and requires an exception reason for %s, while allowing draft saves', async (outcome) => {
       const repo = new LiveProcurementRepository();
@@ -1033,6 +1055,7 @@ describe("PurchaseOrdersPage", () => {
     const dialog = await screen.findByRole("dialog", {
       name: /receive approved procurement po/i,
     });
+    await user.selectOptions(within(dialog).getByLabelText("Receive into"), "loc-wh");
     await user.click(
       within(dialog).getByRole("checkbox", { name: "Receive Second SKU" }),
     );
@@ -1178,6 +1201,7 @@ describe("PurchaseOrdersPage", () => {
     const dialog = await screen.findByRole("dialog", {
       name: /receive against po/i,
     });
+    await user.selectOptions(within(dialog).getByLabelText("Receive into"), "loc-wh");
     expect(
       within(dialog).getByText(/inspection required/i),
     ).toBeInTheDocument();
@@ -1390,6 +1414,7 @@ describe("PurchaseOrdersPage", () => {
       name: /receive approved procurement po/i,
     });
 
+    await user.selectOptions(within(dialog).getByLabelText("Receive into"), "loc-wh");
     const setQuantity = async (outcome: string, quantity: number) => {
       const input = within(dialog).getByRole("spinbutton", {
         name: new RegExp(`${outcome} quantity for Smart watches`, "i"),
@@ -1585,6 +1610,7 @@ describe("PurchaseOrdersPage", () => {
     const dialog = await screen.findByRole("dialog", {
       name: /receive approved procurement po/i,
     });
+    await user.selectOptions(within(dialog).getByLabelText("Receive into"), "loc-wh");
     await user.type(
       within(dialog).getByLabelText(/delivery evidence url/i),
       "evidence/live.jpg",

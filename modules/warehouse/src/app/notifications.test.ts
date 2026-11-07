@@ -72,6 +72,24 @@ function data(): WarehouseData {
 }
 
 describe("buildNotifications", () => {
+  it('does not turn missing availability into zero or a replenishment request', () => {
+    const notes=buildNotifications(data(),()=>true,{availability:new Map(),canRecommendReplenishment:true});
+    expect(notes.filter(n=>n.issueType==='shortage')).toEqual([]);
+    expect(notes.filter(n=>n.issueType==='unverified')).toHaveLength(2);
+    expect(notes.find(n=>n.id==='unverified-ring')).toMatchObject({owner:'Warehouse operations',actionable:false,to:'/inventory/ring'});
+    expect(notes.find(n=>n.id==='unverified-ring')?.detail).not.toMatch(/0 available/);
+  });
+  it('uses verified availability including holds and commitments, not bootstrap raw stock', () => {
+    const notes=buildNotifications(data(),()=>true,{availability:new Map([['ring',9],['shirt',0]])});
+    expect(notes.find(n=>n.id==='low-ring')).toBeUndefined();
+    expect(notes.find(n=>n.id==='low-shirt')?.title).toContain('out of stock');
+    expect(notes.find(n=>n.id==='low-shirt')?.detail).toContain('0 available');
+  });
+  it('keeps failed or loading availability unknown', () => {
+    const notes=buildNotifications(data(),()=>true,{availability:null});
+    expect(notes.filter(n=>n.issueType==='shortage')).toEqual([]);
+    expect(notes.filter(n=>n.issueType==='unverified')).toHaveLength(2);
+  });
   const allow =
     (...routes: WarehouseRouteId[]) =>
     (route: WarehouseRouteId) =>

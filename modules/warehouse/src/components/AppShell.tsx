@@ -13,6 +13,7 @@ import {
   type ModuleGroup,
 } from "@/app/modules";
 import { buildNotifications, groupNotifications, type NotificationFilter } from "@/app/notifications";
+import { useInventoryAvailability } from "@/domain/useInventoryAvailability";
 import { Sheet, useToast, PageTransition } from "./ui";
 import { ThemeToggle } from "./ThemeToggle";
 import { ContextualHelpLink, DesktopNavigationToggle, useDesktopNavigation } from "@intra/ui";
@@ -240,12 +241,14 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
   };
 
+  const { totals: alertAvailability, loading: alertAvailabilityLoading, error: alertAvailabilityError } = useInventoryAvailability();
   const notifications = useMemo(
     () => (data ? buildNotifications(data, canOpenRoute, {
       canRecommendReplenishment: source === 'supabase' && can('recommend_replenishment'),
       canIssueStock: can('issue_items'),
+      availability: alertAvailability,
     }) : []),
-    [can, canOpenRoute, data, source],
+    [can, canOpenRoute, data, source, alertAvailability],
   );
   const alertGroups = groupNotifications(notifications, alertFilter);
   const filteredAlertCount = alertGroups.reduce((count, group) => count + group.items.length, 0);
@@ -683,6 +686,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         side="right"
       >
         <div className="mb-4 space-y-3 border-b border-line pb-4">
+          {alertAvailabilityLoading && <p role="status" className="text-sm text-muted">Checking stock availability...</p>}
+          {alertAvailabilityError && <p role="status" className="text-sm text-muted">{alertAvailabilityError}</p>}
           <label className="block text-xs font-medium text-muted">
             Search alerts
             <input type="search" className="input mt-1 w-full" value={alertFilter.search ?? ''}
@@ -704,6 +709,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 onChange={event => setAlertFilter(current => ({ ...current, issueType: event.target.value as NotificationFilter['issueType'] }))}>
                 <option value="all">All issue types</option>
                 <option value="shortage">Stock shortages</option>
+                <option value="unverified">Unconfirmed quantities</option>
                 <option value="reservation">Reservations</option>
               </select>
             </label>
@@ -722,7 +728,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <details key={`${group.id}:${alertFilter.search ?? ''}:${alertFilter.scope ?? 'all'}:${alertFilter.issueType ?? 'all'}`}
             open={Boolean(alertFilter.search?.trim()) || undefined} className="border-b border-line pb-3">
             <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-ink [overflow-wrap:anywhere]">
-              {group.issueType === 'shortage' ? 'Stock shortages' : 'Reservations'} / {group.owner} ({group.items.length})
+              {group.issueType === 'shortage' ? 'Stock shortages' : group.issueType === 'unverified' ? 'Unconfirmed quantities' : 'Reservations'} / {group.owner} ({group.items.length})
             </summary>
           <ul className="space-y-2" aria-label={`${group.issueType} alerts for ${group.owner}`}>
             {group.items.map((n) => {

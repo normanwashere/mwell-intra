@@ -149,6 +149,7 @@ describe("Receiving practice completion", () => {
 });
 
 async function evidenceDirectReceipt(user: ReturnType<typeof userEvent.setup>) {
+  await user.selectOptions(screen.getByLabelText("Receive into"), "loc-wh");
   await user.type(
     screen.getByLabelText("Exception reason"),
     "Approved emergency replenishment",

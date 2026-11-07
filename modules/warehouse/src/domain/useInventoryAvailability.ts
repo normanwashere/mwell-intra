@@ -7,7 +7,8 @@ import { productPositionSummaries } from './inventoryPositionSummary';
 const readError = 'Inventory availability could not be verified. Refresh availability before relying on these totals.';
 
 export function useInventoryAvailability() {
-  const { data, source, identityId, capabilities, loading, error, loadInventoryPositions, refresh: refreshSnapshot } = useWarehouse();
+  const { data, source, identityId, capabilities, canOpenRoute, loading, error, loadInventoryPositions, refresh: refreshSnapshot } = useWarehouse();
+  const mayRead = canOpenRoute('reports');
   const scope = JSON.stringify([source, identityId, [...capabilities].sort()]);
   const loader = useRef(loadInventoryPositions);
   loader.current = loadInventoryPositions;
@@ -22,7 +23,7 @@ export function useInventoryAvailability() {
 
   useEffect(() => {
     setResult(null);
-    if (!data || loading || error) return;
+    if (!mayRead || !data || loading || error) return;
     let active = true;
     void loadCompleteControlQueue(loader.current).then((positions) => {
       const totals = new Map<string, number>();
@@ -37,14 +38,14 @@ export function useInventoryAvailability() {
       if (active) setResult({ snapshot: data, revision, scope, totals: null, error: readError });
     });
     return () => { active = false; };
-  }, [data, source, scope, loading, error, revision]);
+  }, [data, source, scope, mayRead, loading, error, revision]);
 
   // Hide the previous snapshot immediately, before the next effect runs.
-  const current = !loading && !error && result?.snapshot === data && result.revision === revision && result.scope === scope ? result : null;
+  const current = mayRead && !loading && !error && result?.snapshot === data && result.revision === revision && result.scope === scope ? result : null;
   const failure = error ? readError : current?.error ?? null;
   return {
     totals: current?.totals ?? null,
-    loading: !failure && !current?.totals,
+    loading: mayRead && !failure && !current?.totals,
     error: failure,
     refresh: () => {
       setRevision((value) => value + 1);

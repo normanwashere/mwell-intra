@@ -25,6 +25,7 @@ import { BarcodeScanner } from '@/components/camera/BarcodeScanner';
 import { WarehouseScanFlow } from '@/components/camera/WarehouseScanFlow';
 import { knowledgeGuideReturnPath } from '@/lib/knowledgeGuide';
 import { loadCompleteControlQueue } from '@/domain/controlQueues';
+import { selectedWarehouse } from '@/domain/warehouseSelection';
 
 const holdAccessMessage = 'Active Quality holds cannot be verified with your current access. No putaway was submitted. Ask Quality or a warehouse supervisor to review this stock.';
 const availabilityReadMessage = 'Stock availability and active Quality holds could not be verified. Keep this capture and check your connection, then refresh stock availability before retrying.';
@@ -90,7 +91,7 @@ export function StorageAreasPage() {
   );
   const [warehouseId, setWarehouseId] = useState('');
   const activeWarehouse = receiptContext ? (receiptReady ? receiptContext.warehouseId : '')
-    : warehouseId || (sourceId !== null ? '' : warehouses[0]?.id) || '';
+    : sourceId !== null ? warehouseId : selectedWarehouse(warehouses, warehouseId);
 
   const state = useMemo(
     () => (data ? toStockState(data) : { products: [], units: [], stockLevels: [] }),
@@ -116,6 +117,7 @@ export function StorageAreasPage() {
     if (
       guideApplied.current ||
       !canManage ||
+      !activeWarehouse ||
       !['setup-start', 'setup-area', 'setup-bin'].includes(
         searchParams.get('guide') ?? '',
       )
@@ -129,7 +131,7 @@ export function StorageAreasPage() {
     setError(null);
     setConfirmDelete(false);
     setOpen(true);
-  }, [canManage, searchParams]);
+  }, [canManage, searchParams, activeWarehouse]);
 
   useEffect(() => {
     if (!open || searchParams.get('guide') !== 'setup-bin') return;
@@ -322,6 +324,10 @@ export function StorageAreasPage() {
 
   const submit = async () => {
     setError(null);
+    if (!editing && !activeWarehouse) {
+      setError('Select a warehouse before adding a bin.');
+      return;
+    }
     if (!code.trim()) {
       setError('A bin code is required.');
       return;
@@ -507,7 +513,7 @@ export function StorageAreasPage() {
         action={
           <div className="flex gap-2">
             {canPutAway && (
-              <button type="button" className="btn-accent btn-sm" disabled={Boolean(receiptContext && !receiptReady) || Boolean(sourceId && (sourceStatus?.state !== 'ready' || !putawayStock))} onClick={openPutaway}>
+              <button type="button" className="btn-accent btn-sm" disabled={!activeWarehouse || Boolean(receiptContext && !receiptReady) || Boolean(sourceId && (sourceStatus?.state !== 'ready' || !putawayStock))} onClick={openPutaway}>
                 <Icon name="pin" /> Put away
               </button>
             )}
@@ -550,8 +556,8 @@ export function StorageAreasPage() {
             disabled={putawaySaving || Boolean(putawayStock) || Boolean(sourceId) || Boolean(receiptContext)}
             onChange={(e) => { setWarehouseId(e.target.value); setPutawayBin(null); }}
           >
-            {!activeWarehouse && <option value="">No warehouse selected</option>}
-            {warehouses.map((w) => (
+            {!activeWarehouse && <option value="">Select a warehouse</option>}
+            {warehouses.filter(w => w.active !== false || w.id === activeWarehouse).map((w) => (
               <option key={w.id} value={w.id}>
                 {w.name}
               </option>
@@ -560,7 +566,7 @@ export function StorageAreasPage() {
         </Field>
       )}
 
-      {!activeWarehouse ? null : bins.length === 0 ? (
+      {!activeWarehouse ? <p role="status" className="text-sm text-muted">Select the warehouse before viewing bins or putting stock away.</p> : bins.length === 0 ? (
         <Card>
           <EmptyState
             icon="pin"

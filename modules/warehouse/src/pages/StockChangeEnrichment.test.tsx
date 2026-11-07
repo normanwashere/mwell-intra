@@ -59,7 +59,9 @@ describe.each([
     const { repo, read, decide, resolve } = await fixture(capabilities);
     renderWithProviders(<Page />, { repo, source: 'supabase', capabilities, role: 'warehouse_supervisor' });
     const queue = await screen.findByRole('list', { name: list });
-    expect(within(queue).getByText(/source details unavailable or outside your access/i)).toBeVisible();
+    expect(within(queue).getByText(name === 'Tasks'
+      ? /Ask Operations Lead to review this stock variance/
+      : /source details unavailable or outside your access/i)).toBeVisible();
     expect(read).not.toHaveBeenCalled();
     expect(within(queue).queryByText(/Reviewed item/)).not.toBeInTheDocument();
     if (name === 'Tasks') {
