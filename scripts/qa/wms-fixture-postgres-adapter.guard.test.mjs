@@ -1,10 +1,66 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import { PGlite } from '@electric-sql/pglite';
 import { installAdapterFixture } from './wms-fixture-postgres-adapter.fixture.mjs';
 import { createPostgresFixtureSessions, createRepresentativeFixturePlan } from './wms-fixture-postgres-adapter.mjs';
 
 const sourceCommit='a'.repeat(40);
+
+test('non-superuser migration preserves the actual reporting audit and never skips foreign business tables',async()=>{
+  const db=new PGlite();
+  const reporting=readFileSync(new URL('../../supabase/migrations/20260923025605_reporting_private_authority_foundation.sql',import.meta.url),'utf8');
+  const auditSnapshot=async()=> (await db.query(`select
+    (select jsonb_build_object('owner',relowner,'acl',relacl,'rls',relrowsecurity,'forced',relforcerowsecurity)
+      from pg_class where oid='reporting_authority.admin_audit'::regclass) as metadata,
+    (select jsonb_agg(jsonb_build_object('name',tgname,'enabled',tgenabled,'definition',pg_get_triggerdef(oid)) order by tgname)
+      from pg_trigger where tgrelid='reporting_authority.admin_audit'::regclass and not tgisinternal) as triggers,
+    (select jsonb_agg(to_jsonb(a) order by audit_id) from reporting_authority.admin_audit a) as rows`)).rows[0];
+  let before; let verifiedRole=false;
+  try{
+    await installAdapterFixture(db,{beforeWriterGuards:async()=>{
+      // The real foundation owns BEGIN/COMMIT; avoid nesting it inside the fixture.
+      await db.exec('commit');
+      await db.exec(reporting);
+      await db.exec("select reporting_authority._audit('register_principal',null,'local-preserved-audit',null,null)");
+      before=await auditSnapshot();
+      const auditOid=(await db.query("select 'reporting_authority.admin_audit'::regclass::oid as oid")).rows[0].oid;
+      await db.exec('create role qa_fixture_migrator nosuperuser inherit in role postgres');
+      await db.exec('begin;set local role qa_fixture_migrator');
+      assert.deepEqual((await db.query(`select current_user as role,rolsuper as superuser,
+        pg_has_role(current_user,'postgres','USAGE') as member,
+        has_table_privilege(current_user,$1::oid,'TRIGGER') as can_trigger
+        from pg_roles where rolname=current_user`,[auditOid])).rows[0],
+      {role:'qa_fixture_migrator',superuser:false,member:true,can_trigger:false});
+      verifiedRole=true;
+    }});
+    assert.deepEqual(await auditSnapshot(),before);
+    assert.equal((await db.query("select count(*)::int n from private.wms_fixture_guard_targets() where relation='reporting_authority.admin_audit'::regclass")).rows[0].n,0);
+    for(const sql of ['update reporting_authority.admin_audit set change_ref=change_ref','delete from reporting_authority.admin_audit','truncate reporting_authority.admin_audit']){
+      await assert.rejects(db.exec(sql),error=>error.code==='23000'&&/immutable/.test(error.message));
+    }
+    assert.deepEqual(await auditSnapshot(),before);
+    await db.exec(`create table reporting_authority.foreign_business_probe(id text primary key,payload jsonb);
+      alter table reporting_authority.foreign_business_probe owner to reporting_authority_owner`);
+    assert.equal((await db.query("select count(*)::int n from private.wms_fixture_guard_targets() where relation='reporting_authority.foreign_business_probe'::regclass")).rows[0].n,1);
+    await assert.rejects(db.query('select private.wms_fixture_assert_writer_coverage()'),/writer coverage changed/);
+    await db.exec('begin;set local role qa_fixture_migrator');
+    try{
+      await assert.rejects(db.exec(`create trigger wms_fixture_registered_write_guard before insert or update or delete
+        on reporting_authority.foreign_business_probe for each row execute function private.wms_fixture_guard_write()`),error=>error.code==='42501');
+    }finally{await db.exec('rollback');}
+  }catch(error){
+    if(error.code==='42501'){
+      assert.equal(verifiedRole,true,'permission failure must be in fence installation, not role setup');
+      error.message=`Fence installation denied: ${error.message}`;
+    }
+    throw error;
+  }finally{
+    await db.exec('rollback;reset role');
+    await db.close();
+  }
+});
+
 async function fixture(fn,{seed=true}={}){
   const db=new PGlite();
   try{

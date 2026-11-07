@@ -26,7 +26,7 @@ test('cleanup append preserves every reviewed historical entry and pins all twel
   });
   assert.deepEqual(appended.at(-1), {
     file: '20261107041749_wms_fixture_registered_writer_fence.sql',
-    sha256: '7dd98a35d5def9879c98605fc403c496447f6ea70104d9ee2cfc969f0ad3ea70',
+    sha256: 'b6fd99cf0d2dd1a9c2a0406bb6beed9b45f991d2b0b9b5d8dd42a981199a9776',
     action: 'execute-forward',
   });
 });

@@ -115,7 +115,7 @@ async function checkSourceContract(client,plan){
   }
   const writerContracts=[
     ['private.wms_fixture_tokens(jsonb)','2c507914f36344858b484521263e4885',false,'i'],
-    ['private.wms_fixture_guard_targets()','899848f0aacd8334d5e4547e53d0eb94',true,'s'],
+    ['private.wms_fixture_guard_targets()','6cdf59eb24c4598160ad2718ed7bf915',true,'s'],
     ['private.wms_fixture_guard_write()','3c138d2eb9df1a00bbb06e9555395e9a',true,'v'],
     ['private.wms_fixture_assert_writer_coverage()','e8b746792b07622e501f6b05610fb7ae',true,'s'],
   ];

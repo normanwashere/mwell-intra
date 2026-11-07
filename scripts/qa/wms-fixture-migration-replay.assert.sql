@@ -2,7 +2,7 @@
 begin read only;
 set local statement_timeout='30s';
 do $verify$
-declare name text; relation regclass; fn regprocedure; api_role text; count_rows bigint; expected record; function_acl aclitem[];
+declare name text; relation regclass; fn regprocedure; api_role text; count_rows bigint; expected record; function_acl aclitem[]; audit_relation oid;
 begin
   if current_setting('server_version_num')::integer/10000<>17 then raise exception 'PostgreSQL17 required'; end if;
   if to_regclass('auth.users') is null or to_regclass('storage.objects') is null or to_regprocedure('auth.uid()') is null then
@@ -46,7 +46,7 @@ begin
   end loop;
   for expected in select * from (values
     ('private.wms_fixture_tokens(jsonb)','2c507914f36344858b484521263e4885',false,'i'),
-    ('private.wms_fixture_guard_targets()','899848f0aacd8334d5e4547e53d0eb94',true,'s'),
+    ('private.wms_fixture_guard_targets()','6cdf59eb24c4598160ad2718ed7bf915',true,'s'),
     ('private.wms_fixture_guard_write()','3c138d2eb9df1a00bbb06e9555395e9a',true,'v'),
     ('private.wms_fixture_assert_writer_coverage()','e8b746792b07622e501f6b05610fb7ae',true,'s')
   ) t(signature,body_md5,definer,volatility) loop
@@ -79,6 +79,28 @@ begin
   end loop;
   perform private.wms_fixture_assert_writer_coverage();
   if not exists(select 1 from private.wms_fixture_guard_targets()) then raise exception 'Writer coverage is empty'; end if;
+  -- This independently owned append-only sink is not a Warehouse command table.
+  -- Inspect its catalog only; do not read audit rows or acquire its owner role.
+  select c.oid into audit_relation from pg_class c join pg_namespace n on n.oid=c.relnamespace
+    where n.nspname='reporting_authority' and c.relname='admin_audit' and c.relkind='r'
+      and pg_get_userbyid(c.relowner)='reporting_authority_owner' and c.relrowsecurity;
+  if audit_relation is null then raise exception 'Reporting audit ownership/RLS changed'; end if;
+  if exists(select 1 from private.wms_fixture_guard_targets() t where t.relation::oid=audit_relation)
+    or exists(select 1 from pg_trigger where tgrelid=audit_relation and tgname like 'wms_fixture_%') then
+    raise exception 'Warehouse fixture guard must not alter the Reporting audit sink';
+  end if;
+  if exists(select 1 from pg_class c cross join lateral aclexplode(coalesce(c.relacl,acldefault('r',c.relowner))) a
+    where c.oid=audit_relation and a.grantee<>c.relowner) then raise exception 'Reporting audit table grants changed'; end if;
+  for expected in select * from (values ('audit_immutable',27),('audit_no_truncate',34)) t(trigger_name,trigger_type) loop
+    if not exists(select 1 from pg_trigger g join pg_proc p on p.oid=g.tgfoid join pg_namespace n on n.oid=p.pronamespace
+      where g.tgrelid=audit_relation and g.tgname=expected.trigger_name and g.tgtype=expected.trigger_type
+        and not g.tgisinternal and g.tgenabled='O' and g.tgqual is null and g.tgnargs=0
+        and n.nspname='reporting_authority' and p.proname='_reject_mutation' and p.pronargs=0
+        and pg_get_userbyid(p.proowner)='reporting_authority_owner'
+        and md5(replace(p.prosrc,chr(13),''))='1c15d5be205f57c6118a7d263aaa2665') then
+      raise exception 'Reporting audit immutability changed: %',expected.trigger_name;
+    end if;
+  end loop;
   foreach relation in array array['warehouse.products'::regclass,'warehouse.inventory_units'::regclass,'private.warehouse_unit_history'::regclass,'private.warehouse_stock_epochs'::regclass] loop
     if not exists(select 1 from pg_trigger where tgrelid=relation and tgname='wms_fixture_registered_write_guard' and tgfoid='private.wms_fixture_guard_write()'::regprocedure and tgenabled='A' and tgtype=31 and tgqual is null and not tgisinternal and tgnargs=0 and tgattr=''::int2vector)
       or not exists(select 1 from pg_trigger where tgrelid=relation and tgname='wms_fixture_registered_truncate_guard' and tgfoid='private.wms_fixture_guard_write()'::regprocedure and tgenabled='A' and tgtype=34 and tgqual is null and not tgisinternal and tgnargs=0) then

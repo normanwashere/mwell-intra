@@ -50,6 +50,10 @@ The rebuild failure was reproduced locally: My Work's recorded definition uses W
 
 The read-only Supabase connection was confirmed as the `postgres` database role on PostgreSQL 17.6. This confirms database access, not the persistent client connection needed for the isolated two-session trial.
 
+Follow-up [42343272163](https://github.com/normanwashere/mwell-intra/actions/runs/42343272163), candidate `9dd62e854201403a8707dfc001a1b93d4c552f32`, passed contracts, native recovery and the earlier archive migration. It reached the final candidate writer-fence migration and stopped with SQLSTATE `42501`. The disposable project was stopped successfully.
+
+Read-only catalog inspection identified a concrete boundary problem: the guard selected Reporting's separately owned `admin_audit` table despite lacking permission to install a trigger there. The candidate now excludes that exact append-only audit sink, without granting access, excluding other Reporting tables or skipping business tables by owner. Nine focused post-schema tests verify its original ownership, permissions and immutable trigger body and reject drift. The complete hosted replay remains required; the UAT trial is still not run.
+
 ## Supabase Access
 
 The application already uses Supabase and management/query access is available. No second database is needed. This test additionally needs the PostgreSQL connection used by a backend client, so that its writer and independent verifier hold separate sessions while locks and interrupted commits are tested. The current local app configuration has API credentials, not that database connection. API keys must not be treated as PostgreSQL passwords. Do not reset the project's password, change role grants, or enable a new authentication method just to run the trial.

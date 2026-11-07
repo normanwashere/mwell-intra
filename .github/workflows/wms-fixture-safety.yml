@@ -84,6 +84,7 @@ jobs:
             scripts/qa/wms-fixture-postgres-adapter.guard.test.mjs \
             scripts/qa/wms-fixture-migration-replay.test.mjs \
             scripts/qa/wms-fixture-migration-replay.native.test.mjs \
+            scripts/qa/wms-fixture-reporting-audit.test.mjs \
             scripts/verify-uat-archive-active-reads.pglite.test.mjs \
             2>&1 | tee test-results/wms-fixture-safety/contracts.tap
       - name: Required native recovery proof on the owned local service
@@ -134,7 +135,7 @@ jobs:
           import { join, resolve } from 'node:path';
           import { inspectReplay, prepareReplay, runSupabaseReplay } from './scripts/qa/wms-fixture-migration-replay.mjs';
           // Replace only with the independently reviewed final candidate inventory digest.
-          const reviewedDigest = '064c23a480afc8bc2b96ec4c5663c5a74b7e330e97bb422398b48057a2a717ba';
+          const reviewedDigest = '673a737757bf60be6be7bebc8c5bb2a61264e6b07a2818ef8434b4828d1c3c41';
           const requiredFiles = ['20261106173133_wms_fixture_postgres_lifecycle.sql', '20261107041749_wms_fixture_registered_writer_fence.sql'];
           let prepared;
           const evidence = resolve('test-results/wms-fixture-safety/replay');

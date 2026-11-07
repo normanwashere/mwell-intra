@@ -93,7 +93,8 @@ test('required offline suites execute serially with propagated exit status', () 
   assert.match(run.run, /set -euo pipefail/);
   for (const file of ['wms-fixture-safety.test.mjs', 'wms-live-fixture-guard.test.mjs',
     'wms-fixture-lifecycle.test.mjs', 'wms-fixture-postgres-adapter.test.mjs', 'wms-fixture-postgres-adapter.cli.test.mjs',
-    'wms-fixture-postgres-adapter.guard.test.mjs', 'wms-fixture-migration-replay.test.mjs', 'wms-fixture-migration-replay.native.test.mjs']) {
+    'wms-fixture-postgres-adapter.guard.test.mjs', 'wms-fixture-migration-replay.test.mjs', 'wms-fixture-migration-replay.native.test.mjs',
+    'wms-fixture-reporting-audit.test.mjs']) {
     assert.ok(run.run.includes(`scripts/qa/${file}`), `${file} is mandatory`);
   }
   assert.match(run.run, /node --test --test-concurrency=1/);

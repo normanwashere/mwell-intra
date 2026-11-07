@@ -57,6 +57,8 @@ language sql stable security definer set search_path='' as $$
     and n.nspname not in ('pg_catalog','information_schema','auth','storage','realtime','extensions','supabase_migrations','supabase_functions','vault','graphql','graphql_public')
     and n.nspname not like 'pg_%'
     and not (n.nspname='core' and c.relname='activity_log')
+    -- Reporting authority history is a separately owned immutable audit sink.
+    and not (n.nspname='reporting_authority' and c.relname='admin_audit')
     and not (n.nspname='private' and c.relname in ('wms_fixture_runs','wms_fixture_leases','wms_fixture_operations','wms_fixture_owned_rows','wms_fixture_identities','uat_warehouse_archive_batches','uat_warehouse_archive_members','uat_admin_reset_archives'))
     and (n.nspname in ('warehouse','product','procurement')
       or (n.nspname='private' and (c.relname like 'stock_conversion_%' or c.relname like 'external_po_%' or c.relname like 'event_custody_%' or c.relname in ('warehouse_unit_history','warehouse_stock_epochs')))
