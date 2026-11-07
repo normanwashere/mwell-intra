@@ -19,7 +19,9 @@ test('failure diagnostics expose only known migration names, error codes and fix
     category:'database-error',sqlstates:['42501'],lastMigration:null,permission:{kind:'schema',object:'net',reason:'denied'}});
   assert.deepEqual(summarizeReplayFailure('ERROR: must be owner of table _http_response (SQLSTATE 42501)'),{
     category:'database-error',sqlstates:['42501'],lastMigration:null,permission:{kind:'table',object:'_http_response',reason:'ownership-required'}});
-  for(const object of ['private_customer_name','net_secret','net;password=secret'])assert.deepEqual(
+  assert.deepEqual(summarizeReplayFailure('\u001b[31mERROR: permission denied for table other_catalog_table (SQLSTATE 42501)\u001b[0m'),{
+    category:'database-error',sqlstates:['42501'],lastMigration:null,permission:{kind:'table',object:'other_catalog_table',reason:'denied'}});
+  for(const object of ["'Private customer value'",'net_secret','net;password=secret','postgres://private.invalid/database'])assert.deepEqual(
     summarizeReplayFailure(`ERROR: permission denied for schema ${object} (SQLSTATE 42501)`),{
       category:'database-error',sqlstates:['42501'],lastMigration:null});
 });

@@ -3,6 +3,7 @@ import {createHash,randomUUID,randomInt} from 'node:crypto';
 import {existsSync,lstatSync,mkdirSync,readFileSync,readdirSync,realpathSync,writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
+import {stripVTControlCharacters} from 'node:util';
 import {spawnSync} from 'node:child_process';
 import {validateCanonicalManifest} from './prepare-learning-postgres.mjs';
 
@@ -87,11 +88,11 @@ export function safeEnvironment(home,source=process.env){
 export function redact(text){return String(text).replace(/postgres(?:ql)?:\/\/[^\s]+/gi,'[local database URL redacted]').replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g,'[JWT redacted]').replace(/^.*(?:password|secret|publishable.?key|service.?role.?key|anon.?key|api.?key).*$/gim,'[credential line redacted]');}
 
 export function summarizeReplayFailure(output,knownFiles=[]){
-  const text=String(output),known=new Set(knownFiles.filter(file=>sqlName.test(file)));
-  const knownPermissionObjects=new Set(['net','http_request_queue','_http_response','net.http_request_queue','net._http_response',
-    'reporting_authority','admin_audit','reporting_authority.admin_audit','private','warehouse','procurement','core','public']);
-  const permission=[...text.matchAll(/^ERROR:\s+(permission denied for|must be owner of)\s+(schema|table|function)\s+"?([a-z_][a-z0-9_.]*)"?(?=\s|$)/gm)]
-    .filter(match=>knownPermissionObjects.has(match[3])).map(match=>({kind:match[2],object:match[3],reason:match[1]==='permission denied for'?'denied':'ownership-required'})).at(-1);
+  // Only bounded catalog identifiers, never query text, row values or connection details.
+  const text=stripVTControlCharacters(String(output)),known=new Set(knownFiles.filter(file=>sqlName.test(file)));
+  const permission=[...text.matchAll(/\bERROR:\s+(permission denied for|must be owner of)\s+(schema|table|relation|function|sequence)\s+"?([a-z_][a-z0-9_.]{0,127})"?(?=\s*\(SQLSTATE 42501\))/g)]
+    .filter(match=>!/(?:password|secret|token|credential)/i.test(match[3]))
+    .map(match=>({kind:match[2],object:match[3],reason:match[1]==='permission denied for'?'denied':'ownership-required'})).at(-1);
   const sqlstates=[...new Set([...text.matchAll(/\bSQLSTATE\s+([0-9A-Z]{5})\b/g)].map(match=>match[1]))].slice(-4);
   const migrations=[...text.matchAll(/Applying migration (\d{14}_[a-z0-9_]+\.sql)\b/g)].map(match=>match[1]).filter(file=>known.has(file));
   const category=sqlstates.length?'database-error'
