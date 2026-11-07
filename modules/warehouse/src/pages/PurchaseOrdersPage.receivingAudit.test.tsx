@@ -55,6 +55,8 @@ it('blocks the saved next delivery before submission with owner and exact handof
   renderWithProviders(<PurchaseOrdersPage />, { repo, role: 'warehouse_operator', route: '/purchase-orders?po=po-partial' });
   const dialog = await screen.findByRole('dialog', { name: /receive approved procurement po/i });
   await within(dialog).findByText(/pending controlled receipt decision/i);
+  expect(within(dialog).getByLabelText('Receive into')).toHaveValue('');
+  await userEvent.selectOptions(within(dialog).getByLabelText('Receive into'), 'loc-wh');
   expect(within(dialog).getByText(/owner: lead-1/i)).toBeVisible();
   expect(within(dialog).getByRole('link', { name: /decision handoff/i })).toHaveAttribute('href', '/purchase-orders?receipt=receipt-first');
   fireEvent.change(within(dialog).getByLabelText('Actual delivery date'), { target: { value: '2026-10-19' } });
