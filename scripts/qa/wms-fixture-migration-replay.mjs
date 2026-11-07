@@ -88,6 +88,10 @@ export function redact(text){return String(text).replace(/postgres(?:ql)?:\/\/[^
 
 export function summarizeReplayFailure(output,knownFiles=[]){
   const text=String(output),known=new Set(knownFiles.filter(file=>sqlName.test(file)));
+  const knownPermissionObjects=new Set(['net','http_request_queue','_http_response','net.http_request_queue','net._http_response',
+    'reporting_authority','admin_audit','reporting_authority.admin_audit','private','warehouse','procurement','core','public']);
+  const permission=[...text.matchAll(/^ERROR:\s+(permission denied for|must be owner of)\s+(schema|table|function)\s+"?([a-z_][a-z0-9_.]*)"?(?=\s|$)/gm)]
+    .filter(match=>knownPermissionObjects.has(match[3])).map(match=>({kind:match[2],object:match[3],reason:match[1]==='permission denied for'?'denied':'ownership-required'})).at(-1);
   const sqlstates=[...new Set([...text.matchAll(/\bSQLSTATE\s+([0-9A-Z]{5})\b/g)].map(match=>match[1]))].slice(-4);
   const migrations=[...text.matchAll(/Applying migration (\d{14}_[a-z0-9_]+\.sql)\b/g)].map(match=>match[1]).filter(file=>known.has(file));
   const category=sqlstates.length?'database-error'
@@ -95,7 +99,7 @@ export function summarizeReplayFailure(output,knownFiles=[]){
       :/pull access denied|failed to pull|manifest unknown|toomanyrequests/i.test(text)?'image-pull-error'
         :/connection refused|ECONNREFUSED|ENOTFOUND|certificate verify failed/i.test(text)?'connection-error'
           :'unclassified-startup-error';
-  return {category,sqlstates,lastMigration:migrations.at(-1)??null};
+  return {category,sqlstates,lastMigration:migrations.at(-1)??null,...(permission?{permission}: {})};
 }
 
 export function checkMigrationList(text,expected){

@@ -15,6 +15,13 @@ test('failure diagnostics expose only known migration names, error codes and fix
   assert.deepEqual(summarizeReplayFailure('Docker daemon is not running'),{category:'docker-unavailable',sqlstates:[],lastMigration:null});
   assert.deepEqual(summarizeReplayFailure('pull access denied for a private image'),{category:'image-pull-error',sqlstates:[],lastMigration:null});
   assert.deepEqual(summarizeReplayFailure('unrecognized failure with private values'),{category:'unclassified-startup-error',sqlstates:[],lastMigration:null});
+  assert.deepEqual(summarizeReplayFailure('ERROR: permission denied for schema net (SQLSTATE 42501)\nDETAIL: password=never-publish'),{
+    category:'database-error',sqlstates:['42501'],lastMigration:null,permission:{kind:'schema',object:'net',reason:'denied'}});
+  assert.deepEqual(summarizeReplayFailure('ERROR: must be owner of table _http_response (SQLSTATE 42501)'),{
+    category:'database-error',sqlstates:['42501'],lastMigration:null,permission:{kind:'table',object:'_http_response',reason:'ownership-required'}});
+  for(const object of ['private_customer_name','net_secret','net;password=secret'])assert.deepEqual(
+    summarizeReplayFailure(`ERROR: permission denied for schema ${object} (SQLSTATE 42501)`),{
+      category:'database-error',sqlstates:['42501'],lastMigration:null});
 });
 function sandbox(){const home=mkdtempSync(path.join(tmpdir(),'wms-replay-test-'));return{home,close(){assert(path.basename(home).startsWith('wms-replay-test-'));rmSync(home,{recursive:true,force:true});}};}
 function copySource(home){const copy=path.join(home,'source');mkdirSync(copy);for(const n of ['supabase/config.toml','supabase/migrations','scripts/qa/canonical-replay-manifest.json','scripts/qa/fixtures/canonical-uat-baseline'])cpSync(path.join(root,n),path.join(copy,n),{recursive:true});return copy;}
