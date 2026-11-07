@@ -4,7 +4,7 @@ import {mkdtempSync,cpSync,mkdirSync,readFileSync,writeFileSync,rmSync,readdirSy
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {inspectReplay,prepareReplay,runSupabaseReplay,safeEnvironment,checkMigrationList,summarizeReplayFailure} from './wms-fixture-migration-replay.mjs';
+import {inspectReplay,prepareReplay,runSupabaseReplay,safeEnvironment,checkMigrationList,checkSchemaResults,summarizeReplayFailure} from './wms-fixture-migration-replay.mjs';
 const root=fileURLToPath(new URL('../../',import.meta.url));
 const ledger='20261106173133_wms_fixture_postgres_lifecycle.sql';
 
@@ -96,17 +96,35 @@ test('post-schema proof requires the real count-epoch trigger and exact fourth o
   assert.match(sql,/begin read only/);
   assert.doesNotMatch(sql,/^\s*(insert into|update\s+\w+|delete from|truncate table|create table)\b/im);
 });
-test('migration list requires both file and selected local database versions, including database-only rows',()=>{
-  checkMigrationList(' Local | Remote | Time\n 00000000000001 | 00000000000001 | x\n 20261106173133 | 20261106173133 | x',['00000000000001','20261106173133']);
-  checkMigrationList(' Local | Local DB | Time\n 00000000000001 \u2502 00000000000001 \u2502 x',['00000000000001']);
-  for(const listing of ['00000000000001 | | x',' | 00000000000001 | x','00000000000001 | 00000000000002 | x','00000000000001 | 00000000000001 | x\n | 20990101000000 | x'])assert.throws(()=>checkMigrationList(listing,['00000000000001']),/Applied migration versions/);
+const migrationOutput=versions=>JSON.stringify({migrations:versions.map(version=>({local:version,remote:version,time:'fixture'})),message:'Migrations listed'});
+const schemaOutput=()=>['BEGIN','SET','DO','SELECT','ROLLBACK'].map(command=>({command,rows:command==='SELECT'?[{result:'wms_fixture_replay_schema_ok'}]:[]}));
+
+test('migration JSON requires both ordered version columns without dropping blanks, extras or duplicate rows',()=>{
+  const expected=['00000000000001','20261106173133'];
+  checkMigrationList(migrationOutput(expected),expected);
+  for(const mutate of [rows=>rows.pop(),rows=>rows.reverse(),rows=>rows.push(rows[0]),rows=>{rows[0].local='';},rows=>{rows[1].remote='';},rows=>{rows[0].remote='20990101000000';}]){
+    const payload=JSON.parse(migrationOutput(expected));mutate(payload.migrations);
+    assert.throws(()=>checkMigrationList(JSON.stringify(payload),expected),/Applied migration versions/);
+  }
+  for(const payload of [{},{data:JSON.parse(migrationOutput(expected))},{migrations:null},{migrations:[null]},{migrations:[{local:1,remote:1}]}])assert.throws(()=>checkMigrationList(JSON.stringify(payload),expected));
+  for(const text of [' Local | Remote | Time','Connecting...\n'+migrationOutput(expected),migrationOutput(expected)+'\nwarning',''])assert.throws(()=>checkMigrationList(text,expected));
+});
+
+test('schema proof requires the exact completed read-only batch and result, not a substring marker',()=>{
+  checkSchemaResults(schemaOutput());
+  for(const mutate of [rows=>rows.pop(),rows=>rows.reverse(),rows=>rows.push(rows[0]),rows=>{rows[3].rows=[];},rows=>{rows[3].rows.push(rows[3].rows[0]);},rows=>{rows[3].rows[0].extra='unexpected';},rows=>{rows[3].rows[0].result+=' not actually passed';},rows=>{rows[4].rows=[{result:'unexpected'}];}]){
+    const results=schemaOutput();mutate(results);assert.throws(()=>checkSchemaResults(results));
+  }
+  assert.throws(()=>checkSchemaResults('wms_fixture_replay_schema_ok'));
 });
 test('runtime errors stop replay; owned cleanup always runs; failed cleanup never reports pass',async()=>{
-  for(const fail of ['start','reset','cleanup',null]){const s=sandbox();try{const calls=[],i=inspectReplay(root);const prepared=prepareReplay({root,parent:s.home,workspace:path.join(s.home,'database'),expectedDigest:i.digest});
-    const result=await runSupabaseReplay(prepared,{execute:async args=>{calls.push(args);if((fail==='start'&&args[0]==='start')||(fail==='reset'&&args[1]==='reset')||(fail==='cleanup'&&args[0]==='stop'))throw Error('native failure');return args[0]==='migration'?i.files.filter(f=>f.output).map(f=>f.output.slice(0,14)+' | '+f.output.slice(0,14)+' | time').join('\n'):args[1]==='query'?'wms_fixture_replay_schema_ok':'ok';}});
+  for(const fail of ['start','reset','listing','schema','schema-result','cleanup',null]){const s=sandbox();try{const calls=[],i=inspectReplay(root);const prepared=prepareReplay({root,parent:s.home,workspace:path.join(s.home,'database'),expectedDigest:i.digest});
+    const result=await runSupabaseReplay(prepared,{execute:async args=>{calls.push(args);if((fail==='start'&&args[0]==='start')||(fail==='reset'&&args[1]==='reset')||(fail==='schema'&&args[0]==='schema-assertions')||(fail==='cleanup'&&args[0]==='stop'))throw Error('native failure');return args[0]==='migration'?(fail==='listing'?'{}':migrationOutput(i.files.filter(f=>f.output).map(f=>f.output.slice(0,14)))):args[0]==='schema-assertions'?(fail==='schema-result'?schemaOutput().slice(0,-1):schemaOutput()):'ok';}});
     assert.equal(result.status,fail?'FAILED':'TEST_DRIVER_PASS');assert.equal(result.fullNativeChainPassed,false);assert(calls.some(a=>a[0]==='stop'));assert.equal(result.closed,fail!=='cleanup');
     assert(calls.every(a=>a.includes(prepared.workspace)));assert(!calls.flat().includes('--linked'));
     if(fail==='start')assert(!calls.some(a=>a[1]==='reset'));
+    if(fail==='listing')assert(!calls.some(a=>a[0]==='schema-assertions'));
+    const listing=calls.find(a=>a[0]==='migration');if(listing)assert.deepEqual(listing.slice(0,5),['migration','list','--local','--output-format','json']);
   }finally{s.close();}}
 });
 test('new candidate after inspection and prepared-byte tampering block execution, not just final reporting',async()=>{

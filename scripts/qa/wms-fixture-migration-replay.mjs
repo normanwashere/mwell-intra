@@ -104,10 +104,39 @@ export function summarizeReplayFailure(output,knownFiles=[]){
 }
 
 export function checkMigrationList(text,expected){
-  // The second column is the selected database, even when an older CLI labels it Remote.
-  const rows=String(text).split(/\r?\n/).map(s=>s.trim().replace(/^\u2502/,'').split(/[|\u2502]/).map(c=>c.trim()))
-    .filter(c=>/^\d+$/.test(c[0])||/^\d+$/.test(c[1]??''));
-  for(const column of [0,1])assert.deepEqual(rows.map(c=>c[column]),expected,'Applied migration versions missing, reordered or unexpected');
+  const payload=JSON.parse(text);
+  assert(payload&&Array.isArray(payload.migrations),'Structured migration list absent');
+  assert(payload.migrations.every(row=>row&&typeof row.local==='string'&&typeof row.remote==='string'),'Malformed migration row');
+  // Remote is the selected local database when --local is explicitly supplied.
+  for(const column of ['local','remote'])assert.deepEqual(payload.migrations.map(row=>row[column]),expected,'Applied migration versions missing, reordered or unexpected');
+}
+export function checkSchemaResults(results){
+  assert(Array.isArray(results),'Schema batch results absent');
+  assert.deepEqual(results.map(result=>result.command),['BEGIN','SET','DO','SELECT','ROLLBACK'],'Schema batch incomplete or unexpected');
+  assert.deepEqual(results[3].rows,[{result:'wms_fixture_replay_schema_ok'}],'Post-schema success result differs');
+  for(const index of [0,1,2,4])assert.deepEqual(results[index].rows,[],'Unexpected schema batch rows');
+}
+async function queryOwnedSchema(prepared){
+  assertFrozen(prepared);
+  // A successful local start owns this randomly allocated port. Never use inherited PG settings.
+  assert(Number.isInteger(prepared.port)&&prepared.port>=20000&&prepared.port<50000,'Invalid owned database port');
+  assert.match(prepared.project,/^wms-replay-[a-f0-9]{32}$/);
+  const container=spawnSync('docker',['inspect','--format','{{json .NetworkSettings.Ports}}','supabase_db_'+prepared.project],{env:safeEnvironment(path.join(prepared.workspace,'home')),windowsHide:true,encoding:'utf8',timeout:10000});
+  assert.equal(container.status,0,'Owned local database container not found');
+  const bindings=JSON.parse(container.stdout)['5432/tcp'];
+  assert(Array.isArray(bindings)&&bindings.length>0&&bindings.every(binding=>binding.HostPort===String(prepared.port)),'Owned database port differs');
+  const {Client}=await import('pg');
+  const client=new Client({host:'127.0.0.1',port:prepared.port,database:'postgres',user:'postgres',password:'postgres',ssl:false,
+    options:'-c default_transaction_read_only=on -c statement_timeout=30000',application_name:'wms-disposable-schema-proof',
+    connectionTimeoutMillis:8000,query_timeout:60000});
+  let connected=false;
+  try{
+    await client.connect();connected=true;
+    // No parameters or prepared statement: pg sends the unchanged batch on one simple-protocol session.
+    return await client.query(readFileSync(path.join(prepared.workspace,'schema-assertions.sql'),'utf8'));
+  }finally{
+    try{if(connected)await client.query('rollback');}finally{await client.end();}
+  }
 }
 function assertFrozen(prepared){
   assert.equal(inspectReplay(prepared.root,{requiredFiles:prepared.inventory.requiredFiles}).rawDigest,prepared.inventory.rawDigest,'Repository inventory changed during replay');
@@ -127,6 +156,7 @@ export async function runSupabaseReplay(prepared,{execute}={}){
   const result={scope:prepared.inventory.scope,inventoryDigest:prepared.inventory.digest,rawInventoryDigest:prepared.inventory.rawDigest,candidateCommit:prepared.candidateCommit,evidenceKind:injected?'test-double':'supabase-cli-native',status:'FAILED',closed:false,steps:[],fullNativeChainPassed:false};
   const persist=()=>writeFileSync(path.join(prepared.workspace,'replay-result.json'),JSON.stringify(result,null,2)+'\n');
   execute??=(async args=>{
+    if(args[0]==='schema-assertions')return queryOwnedSchema(prepared);
     const timeout=['start','reset'].includes(args[0])||args[1]==='reset'?10*60*1000:2*60*1000;
     const r=spawnSync(process.execPath,[cli,...args],{cwd:prepared.workspace,env:safeEnvironment(path.join(prepared.workspace,'home')),windowsHide:true,encoding:'utf8',timeout,maxBuffer:16*1024*1024});
     const output=redact((r.stdout??'')+'\n'+(r.stderr??''));
@@ -136,17 +166,17 @@ export async function runSupabaseReplay(prepared,{execute}={}){
       nativeFailures.set(error,summarizeReplayFailure((r.stdout??'')+'\n'+(r.stderr??''),prepared.inventory.files.filter(file=>file.output).map(file=>file.output)));
       throw error;
     }
-    return output;
+    return r.stdout??'';
   });
   const command=async args=>{const start=Date.now();try{const value=await execute([...args,'--workdir',prepared.workspace]);result.steps.push({command:args,status:'PASS',durationMs:Date.now()-start});persist();return value;}catch(e){result.steps.push({command:args,status:'FAILED',durationMs:Date.now()-start,error:redact(e.message),...(nativeFailures.has(e)?{diagnostic:nativeFailures.get(e)}:{})});persist();throw e;}};
   try{
     await command(['start','--exclude',excludedServices]);
     assertFrozen(prepared);
     await command(['db','reset','--local','--no-seed']);
-    const listing=await command(['migration','list','--local']);
+    const listing=await command(['migration','list','--local','--output-format','json']);
     checkMigrationList(listing,prepared.inventory.files.filter(f=>f.output).map(f=>f.output.slice(0,14)));
-    const schema=await command(['db','query','--local','--file',path.join(prepared.workspace,'schema-assertions.sql')]);
-    assert(schema.includes('wms_fixture_replay_schema_ok'),'Post-schema success marker absent');result.schemaAssertionsPassed=true;
+    const schema=await command(['schema-assertions','--local']);
+    checkSchemaResults(schema);result.schemaAssertionsPassed=true;
     assertFrozen(prepared);result.fullNativeChainPassed=!injected;result.status=injected?'TEST_DRIVER_PASS':'PASS';
   }catch(e){result.error=redact(e.message);}
   finally{try{await command(['stop','--no-backup']);result.closed=true;}catch(e){result.status='FAILED';result.cleanupError=redact(e.message);}persist();}

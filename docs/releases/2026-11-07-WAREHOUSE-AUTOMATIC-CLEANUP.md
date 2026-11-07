@@ -62,6 +62,12 @@ Run [42347079292](https://github.com/normanwashere/mwell-intra/actions/runs/4234
 
 Independent review checked the exact [CLI v2.113.0 bootstrap](https://github.com/supabase/cli/blob/v2.113.0/apps/cli/src/legacy/shared/db-bootstrap/db-setup.ts): it initializes this control-plane schema before project migrations even when the Realtime service is excluded. Other examined local management schemas live in the separate `_supabase` database; no further exclusions were added speculatively.
 
+## CLI Compatibility Check
+
+Run [42348237368](https://github.com/normanwashere/mwell-intra/actions/runs/42348237368), candidate `f0812566ef7b4b1680ba0c87c3868947c013284a`, successfully started the complete disposable Supabase database and reset it through all migrations. The following migration-list comparison failed because CLI 2.113.0 changed its text formatting. Post-schema assertions did not run; the disposable project was stopped successfully.
+
+The runner now requests structured JSON and compares both complete, ordered migration columns. Missing, duplicate, extra, blank and malformed rows still fail. Its read-only schema batch uses one PostgreSQL session pinned to the owned disposable Docker project's port, because the current CLI query command rejects multi-statement batches. The unchanged SQL must return all five command results in order and the exact success row. Partial output or a matching substring cannot pass. Both changes require another hosted verification; no UAT migration or trial has been performed.
+
 ## Supabase Access
 
 The application already uses Supabase and management/query access is available. No second database is needed. This test additionally needs the PostgreSQL connection used by a backend client, so that its writer and independent verifier hold separate sessions while locks and interrupted commits are tested. The current local app configuration has API credentials, not that database connection. API keys must not be treated as PostgreSQL passwords. Do not reset the project's password, change role grants, or enable a new authentication method just to run the trial.
