@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { spawnSync } from 'node:child_process';
 import { parseRunnerInput, runFixtureCommand } from './wms-fixture-postgres-adapter.cli.mjs';
 import { validateNativeAdminInput } from './wms-fixture-postgres-adapter.native.mjs';
 import { connectPostgresFixtureAdapter } from './wms-fixture-postgres-adapter.mjs';
@@ -26,4 +27,15 @@ test('prepare is offline and never echoes connection input',async()=>{
 test('native proof refuses any remote or preexisting fixture database target',()=>{
   validateNativeAdminInput({databaseUrl:'postgres://postgres@127.0.0.1:54322/postgres',outputDir:'owned-output'});
   for(const databaseUrl of [config.databaseUrl,'postgres://postgres@localhost/existing','postgres://postgres@localhost/postgres?options=-csearch_path=public','postgres://other@localhost/postgres'])assert.throws(()=>validateNativeAdminInput({databaseUrl,outputDir:'owned-output'}));
+});
+
+test('native child starts from an inline-module parent without inheriting its stdin-only flag',()=>{
+  const nativeUrl=new URL('./wms-fixture-postgres-adapter.native.mjs',import.meta.url).href;
+  const input=`import assert from 'node:assert/strict';
+    import {killOwnedWorkerAtCommit} from ${JSON.stringify(nativeUrl)};
+    await assert.rejects(killOwnedWorkerAtCommit({}),/^Error: Native worker failed$/);
+    console.log('worker-reached-input-validation');`;
+  const result=spawnSync(process.execPath,['--input-type=module'],{input,encoding:'utf8',timeout:10000,windowsHide:true});
+  assert.equal(result.status,0,result.stderr);
+  assert.equal(result.stdout.trim(),'worker-reached-input-validation');
 });

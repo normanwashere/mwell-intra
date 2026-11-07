@@ -10,8 +10,8 @@ import { assertFixtureDatabaseTarget, createPostgresFixtureSessions, createRepre
 import { installAdapterFixture } from './wms-fixture-postgres-adapter.fixture.mjs';
 import { readWmsFixtureManifest, recoverWmsFixtureLifecycle, runWmsFixtureLifecycle } from './wms-fixture-lifecycle.mjs';
 
-async function killOwnedWorkerAtCommit(input){
-  const child=fork(new URL('./wms-fixture-postgres-adapter.worker.mjs',import.meta.url),[],{stdio:['pipe','ignore','ignore','ipc'],windowsHide:true});
+export async function killOwnedWorkerAtCommit(input){
+  const child=fork(new URL('./wms-fixture-postgres-adapter.worker.mjs',import.meta.url),[],{execArgv:[],stdio:['pipe','ignore','ignore','ipc'],windowsHide:true});
   const exited=new Promise((resolve,reject)=>{child.once('exit',(code,signal)=>resolve({code,signal}));child.once('error',reject);});
   try{
     const boundary=await new Promise((resolve,reject)=>{
