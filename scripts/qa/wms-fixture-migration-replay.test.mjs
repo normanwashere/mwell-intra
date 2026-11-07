@@ -4,7 +4,7 @@ import {mkdtempSync,cpSync,mkdirSync,readFileSync,writeFileSync,rmSync,readdirSy
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {inspectReplay,prepareReplay,runSupabaseReplay,safeEnvironment,checkMigrationList,checkSchemaResults,summarizeReplayFailure} from './wms-fixture-migration-replay.mjs';
+import {inspectReplay,prepareReplay,runSupabaseReplay,safeEnvironment,checkMigrationList,checkSchemaResults,ownedContainerName,checkOwnedContainer,summarizeReplayFailure} from './wms-fixture-migration-replay.mjs';
 const root=fileURLToPath(new URL('../../',import.meta.url));
 const ledger='20261106173133_wms_fixture_postgres_lifecycle.sql';
 
@@ -98,6 +98,20 @@ test('post-schema proof requires the real count-epoch trigger and exact fourth o
 });
 const migrationOutput=versions=>JSON.stringify({migrations:versions.map(version=>({local:version,remote:version,time:'fixture'})),message:'Migrations listed'});
 const schemaOutput=()=>['BEGIN','SET','DO','SELECT','ROLLBACK'].map(command=>({command,rows:command==='SELECT'?[{result:'wms_fixture_replay_schema_ok'}]:[]}));
+
+test('owned database identity follows the CLI 40-character project rule and requires exact workspace, labels and port',()=>{
+  const prepared={project:'wms-replay-'+'a'.repeat(32),workspace:'/owned/workspace',port:23456};
+  const metadata={name:'/supabase_db_wms-replay-'+'a'.repeat(29),running:true,project:'wms-replay-'+'a'.repeat(29),workdir:prepared.workspace,ports:{'5432/tcp':[{HostIp:'127.0.0.1',HostPort:'23456'}]}};
+  assert.equal(ownedContainerName(prepared),metadata.name.slice(1));
+  checkOwnedContainer(JSON.stringify(metadata),prepared);
+  checkOwnedContainer(JSON.stringify({...metadata,ports:{'5432/tcp':[{HostIp:'0.0.0.0',HostPort:'23456'},{HostIp:'::',HostPort:'23456'}]}}),prepared);
+  for(const [key,value] of [['name',metadata.name+'aaa'],['project',prepared.project],['running',false],['workdir','/foreign'],['workdir',null],['ports',{}],['ports',{'5432/tcp':[]}],['ports',{'5432/tcp':[{HostIp:'127.0.0.1',HostPort:'5432'}]}],['ports',{'5432/tcp':[{HostIp:'192.0.2.1',HostPort:'23456'}]}]]){
+    assert.throws(()=>checkOwnedContainer(JSON.stringify({...metadata,[key]:value}),prepared));
+  }
+  for(const HostIp of ['::','::1'])assert.throws(()=>checkOwnedContainer(JSON.stringify({...metadata,ports:{'5432/tcp':[{HostIp,HostPort:'23456'}]}}),prepared),/Owned IPv4 database port differs/);
+  for(const project of ['foreign','../foreign','wms-replay-'+'x'.repeat(32)])assert.throws(()=>ownedContainerName({...prepared,project}));
+  for(const port of [0,5432,50000,'23456'])assert.throws(()=>ownedContainerName({...prepared,port}));
+});
 
 test('migration JSON requires both ordered version columns without dropping blanks, extras or duplicate rows',()=>{
   const expected=['00000000000001','20261106173133'];

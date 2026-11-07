@@ -116,15 +116,28 @@ export function checkSchemaResults(results){
   assert.deepEqual(results[3].rows,[{result:'wms_fixture_replay_schema_ok'}],'Post-schema success result differs');
   for(const index of [0,1,2,4])assert.deepEqual(results[index].rows,[],'Unexpected schema batch rows');
 }
-async function queryOwnedSchema(prepared){
-  assertFrozen(prepared);
-  // A successful local start owns this randomly allocated port. Never use inherited PG settings.
+export function ownedContainerName(prepared){
   assert(Number.isInteger(prepared.port)&&prepared.port>=20000&&prepared.port<50000,'Invalid owned database port');
   assert.match(prepared.project,/^wms-replay-[a-f0-9]{32}$/);
-  const container=spawnSync('docker',['inspect','--format','{{json .NetworkSettings.Ports}}','supabase_db_'+prepared.project],{env:safeEnvironment(path.join(prepared.workspace,'home')),windowsHide:true,encoding:'utf8',timeout:10000});
+  // CLI 2.113 caps sanitized project ids at 40 characters before naming Docker resources.
+  return 'supabase_db_'+prepared.project.slice(0,40);
+}
+export function checkOwnedContainer(text,prepared){
+  const expectedName=ownedContainerName(prepared),metadata=JSON.parse(text);
+  assert.equal(metadata.name,'/'+expectedName,'Owned container name differs');
+  assert.equal(metadata.running,true,'Owned container is not running');
+  assert.equal(metadata.project,prepared.project.slice(0,40),'Owned container project differs');
+  assert.equal(metadata.workdir,prepared.workspace,'Owned container workspace differs');
+  const bindings=metadata.ports?.['5432/tcp'];
+  assert(Array.isArray(bindings)&&bindings.some(binding=>['127.0.0.1','0.0.0.0'].includes(binding.HostIp))&&bindings.every(binding=>binding.HostPort===String(prepared.port)&&['127.0.0.1','0.0.0.0','::','::1'].includes(binding.HostIp)),'Owned IPv4 database port differs');
+}
+async function queryOwnedSchema(prepared){
+  assertFrozen(prepared);
+  // Inspect only non-secret identity fields; never serialize a container's environment.
+  const format='{"name":{{json .Name}},"running":{{json .State.Running}},"ports":{{json .NetworkSettings.Ports}},"project":{{json (index .Config.Labels "com.supabase.cli.project")}},"workdir":{{json (index .Config.Labels "com.supabase.cli.workdir")}}';
+  const container=spawnSync('docker',['inspect','--format',format,ownedContainerName(prepared)],{env:safeEnvironment(path.join(prepared.workspace,'home')),windowsHide:true,encoding:'utf8',timeout:10000});
   assert.equal(container.status,0,'Owned local database container not found');
-  const bindings=JSON.parse(container.stdout)['5432/tcp'];
-  assert(Array.isArray(bindings)&&bindings.length>0&&bindings.every(binding=>binding.HostPort===String(prepared.port)),'Owned database port differs');
+  checkOwnedContainer(container.stdout,prepared);
   const {Client}=await import('pg');
   const client=new Client({host:'127.0.0.1',port:prepared.port,database:'postgres',user:'postgres',password:'postgres',ssl:false,
     options:'-c default_transaction_read_only=on -c statement_timeout=30000',application_name:'wms-disposable-schema-proof',
