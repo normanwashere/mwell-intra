@@ -1,0 +1,339 @@
+name: WMS Fixture Safety (disposable only)
+
+on:
+  push:
+    branches: [main, codex/reporting-security-foundation, codex/warehouse-cleanup-20261107]
+  pull_request:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wms-fixture-safety-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  safety:
+    name: Contracts, native recovery and complete migration replay
+    runs-on: ubuntu-24.04
+    timeout-minutes: 80
+    defaults:
+      run:
+        shell: bash
+    services:
+      fixture-postgres:
+        image: postgres:17.6-alpine
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: postgres
+          # Public disposable-service credential, never a project credential.
+          POSTGRES_PASSWORD: wms-fixture-disposable-only
+          POSTGRES_INITDB_ARGS: --set=cluster_name=wms_fixture_safety
+        ports:
+          - "127.0.0.1:54329:5432"
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.23.0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: pnpm
+      - name: Record exact source and evidence scope
+        id: provenance
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { execFileSync } from 'node:child_process';
+          import { mkdirSync, writeFileSync } from 'node:fs';
+          assert.match(process.env.GITHUB_SHA ?? '', /^[0-9a-f]{40}$/);
+          assert.equal(execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), process.env.GITHUB_SHA);
+          mkdirSync('test-results', { recursive: true });
+          mkdirSync('test-results/wms-fixture-safety');
+          mkdirSync('test-results/wms-fixture-safety/native');
+          writeFileSync('test-results/wms-fixture-safety/source.json', JSON.stringify({
+            commit: process.env.GITHUB_SHA, runId: process.env.GITHUB_RUN_ID,
+            runAttempt: process.env.GITHUB_RUN_ATTEMPT, scope: 'disposable-only',
+            liveAuthorization: false, fullMigrationReplayRequired: true,
+          }, null, 2) + '\n', { mode: 0o600 });
+          NODE
+      - name: Install locked dependencies
+        id: install
+        timeout-minutes: 10
+        run: pnpm install --frozen-lockfile
+      - name: Required workflow, legacy pause and lifecycle contracts
+        id: contracts
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          node --test --test-concurrency=1 \
+            scripts/qa/wms-fixture-safety.test.mjs \
+            scripts/qa/wms-live-fixture-guard.test.mjs \
+            scripts/qa/wms-fixture-lifecycle.test.mjs \
+            scripts/qa/wms-fixture-postgres-adapter.test.mjs \
+            scripts/qa/wms-fixture-postgres-adapter.cli.test.mjs \
+            scripts/qa/wms-fixture-postgres-adapter.guard.test.mjs \
+            scripts/qa/wms-fixture-migration-replay.test.mjs \
+            scripts/qa/wms-fixture-migration-replay.native.test.mjs \
+            2>&1 | tee test-results/wms-fixture-safety/contracts.tap
+      - name: Required native recovery proof on the owned local service
+        id: native
+        timeout-minutes: 10
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { writeFileSync } from 'node:fs';
+          import { Client } from 'pg';
+          import { runNativeFixtureProof } from './scripts/qa/wms-fixture-postgres-adapter.native.mjs';
+          const databaseUrl = 'postgresql://postgres:wms-fixture-disposable-only@127.0.0.1:54329/postgres';
+          const client = new Client({ connectionString: databaseUrl, connectionTimeoutMillis: 8000, statement_timeout: 30000 });
+          try {
+            await client.connect();
+            const version = Number((await client.query('show server_version_num')).rows[0].server_version_num);
+            assert.ok(version >= 170000 && version < 180000);
+            assert.equal((await client.query('show cluster_name')).rows[0].cluster_name, 'wms_fixture_safety');
+            assert.equal((await client.query("select count(*)::int n from pg_roles where rolname in ('anon','authenticated','service_role')")).rows[0].n, 0);
+            // Standard role names in this fresh fixture cluster, not account provisioning.
+            await client.query('create role anon nologin; create role authenticated nologin; create role service_role nologin');
+            const result = await runNativeFixtureProof({ databaseUrl, outputDir: 'test-results/wms-fixture-safety/native' });
+            assert.equal(result.liveCalls, false);
+            assert.equal(result.passed, result.checks.length); assert.ok(result.passed > 0);
+            assert.equal(result.deaths.length, 2);
+            for (const death of result.deaths) {
+              assert.equal(death.residue, 0); assert.equal(death.recoveryAttempts, 2);
+            }
+            const remainingFixtureDatabases = (await client.query("select count(*)::int n from pg_database where datname like 'qa_wms_fixture_%'")).rows[0].n;
+            assert.equal(remainingFixtureDatabases, 0);
+            writeFileSync('test-results/wms-fixture-safety/native-results.json', JSON.stringify({
+              ...result, remainingFixtureDatabases, postgresqlVersion: version,
+              sourceCommit: process.env.GITHUB_SHA,
+              fixtureHealthCommit: 'a'.repeat(40), fullMigrationReplay: false,
+            }, null, 2) + '\n', { mode: 0o600 });
+          } catch {
+            process.stderr.write('Disposable safety proof failed or unavailable; no native pass claimed.\n');
+            process.exitCode = 1;
+          } finally { await client.end(); }
+          NODE
+      - name: Required full candidate migration replay and post-schema assertions
+        id: replay
+        timeout-minutes: 35
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { copyFileSync, existsSync, lstatSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
+          import { join, resolve } from 'node:path';
+          import { inspectReplay, prepareReplay, runSupabaseReplay } from './scripts/qa/wms-fixture-migration-replay.mjs';
+          // Replace only with the independently reviewed final candidate inventory digest.
+          const reviewedDigest = 'ce4137aeec25061b1282c0ae60ea90c388ad31257cc200f6ec5107054ef83429';
+          const requiredFiles = ['20261106173133_wms_fixture_postgres_lifecycle.sql', '20261107041749_wms_fixture_registered_writer_fence.sql'];
+          let prepared;
+          const evidence = resolve('test-results/wms-fixture-safety/replay');
+          try {
+            assert.match(reviewedDigest, /^[0-9a-f]{64}$/);
+            assert.match(process.env.GITHUB_RUN_ID ?? '', /^\d+$/);
+            assert.match(process.env.GITHUB_RUN_ATTEMPT ?? '', /^\d+$/);
+            const parent = realpathSync(process.env.RUNNER_TEMP);
+            const workspace = join(parent, `wms-replay-${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT}`);
+            const inventory = inspectReplay(process.cwd(), { requiredFiles });
+            assert.equal(inventory.digest, reviewedDigest);
+            prepared = prepareReplay({ root: process.cwd(), parent, workspace, expectedDigest: reviewedDigest, requiredFiles });
+            assert.equal(prepared.candidateCommit, process.env.GITHUB_SHA);
+            writeFileSync(`${workspace}.receipt.json`, JSON.stringify({ workspace, project: prepared.project,
+              sourceCommit: process.env.GITHUB_SHA, configSha256: prepared.configSha256 }), { flag: 'wx', mode: 0o600 });
+            const result = await runSupabaseReplay(prepared);
+            assert.equal(result.status, 'PASS'); assert.equal(result.evidenceKind, 'supabase-cli-native');
+            assert.equal(result.fullNativeChainPassed, true); assert.equal(result.schemaAssertionsPassed, true);
+            assert.equal(result.closed, true); assert.equal(result.candidateCommit, process.env.GITHUB_SHA);
+          } catch {
+            process.stderr.write('Required migration replay failed or lacks reviewed prerequisites; no replay pass claimed.\n');
+            process.exitCode = 1;
+          } finally {
+            if (prepared) {
+              mkdirSync(evidence, { recursive: true });
+              for (const name of ['replay-result.json', 'replay-inventory.json']) {
+                const file = join(prepared.workspace, name);
+                if (existsSync(file)) {
+                  assert.ok(lstatSync(file).isFile() && !lstatSync(file).isSymbolicLink());
+                  copyFileSync(file, join(evidence, name));
+                }
+              }
+            }
+          }
+          NODE
+      - name: Stop only the receipted local replay project after failure or timeout
+        id: replay-cleanup
+        if: always()
+        timeout-minutes: 3
+        env:
+          REPLAY_OUTCOME: ${{ steps.replay.outcome }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { createHash } from 'node:crypto';
+          import { spawnSync } from 'node:child_process';
+          import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+          import { join, resolve } from 'node:path';
+          import { safeEnvironment } from './scripts/qa/wms-fixture-migration-replay.mjs';
+          try {
+            assert.match(process.env.GITHUB_RUN_ID ?? '', /^\d+$/);
+            assert.match(process.env.GITHUB_RUN_ATTEMPT ?? '', /^\d+$/);
+            const parent = realpathSync(process.env.RUNNER_TEMP);
+            const workspace = join(parent, `wms-replay-${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT}`);
+            const file = `${workspace}.receipt.json`;
+            if (!existsSync(file)) {
+              assert.notEqual(process.env.REPLAY_OUTCOME, 'success', 'Successful replay needs its owned receipt');
+            } else {
+              assert.ok(lstatSync(file).isFile() && !lstatSync(file).isSymbolicLink());
+              const receipt = JSON.parse(readFileSync(file, 'utf8'));
+              assert.equal(receipt.workspace, workspace); assert.equal(receipt.sourceCommit, process.env.GITHUB_SHA);
+              assert.equal(realpathSync(workspace), workspace); assert.ok(!lstatSync(workspace).isSymbolicLink());
+              assert.match(receipt.project, /^wms-replay-[0-9a-f]{32}$/);
+              const configPath = join(workspace, 'supabase/config.toml');
+              assert.ok(!lstatSync(join(workspace, 'supabase')).isSymbolicLink() && !lstatSync(configPath).isSymbolicLink());
+              const config = readFileSync(configPath);
+              assert.equal(createHash('sha256').update(config).digest('hex'), receipt.configSha256);
+              assert.ok(config.toString().includes(`project_id = "${receipt.project}"`));
+              assert.ok(!existsSync(join(workspace, 'supabase/.temp/project-ref')));
+              assert.ok(!lstatSync(join(workspace, 'home')).isSymbolicLink());
+              const cli = resolve('node_modules/supabase/dist/supabase.js');
+              const stopped = spawnSync(process.execPath, [cli, 'stop', '--no-backup', '--workdir', workspace], {
+                cwd: workspace, env: safeEnvironment(join(workspace, 'home')), encoding: 'utf8', timeout: 120000,
+              });
+              assert.equal(stopped.status, 0);
+              const evidence = resolve('test-results/wms-fixture-safety/replay'); mkdirSync(evidence, { recursive: true });
+              for (const name of ['replay-result.json', 'replay-inventory.json']) {
+                const input = join(workspace, name);
+                if (existsSync(input)) {
+                  assert.ok(lstatSync(input).isFile() && !lstatSync(input).isSymbolicLink());
+                  copyFileSync(input, join(evidence, name));
+                }
+              }
+              writeFileSync(join(evidence, 'replay-cleanup.json'), JSON.stringify({ sourceCommit: process.env.GITHUB_SHA,
+                project: receipt.project, ownedProjectStopped: true, liveCalls: false }) + '\n');
+            }
+          } catch {
+            process.stderr.write('Owned replay cleanup failed or its receipt did not validate.\n');
+            process.exitCode = 1;
+          }
+          NODE
+      - name: Audit exact evidence files before publication
+        id: evidence-audit
+        if: always()
+        timeout-minutes: 2
+        env:
+          NATIVE_OUTCOME: ${{ steps.native.outcome }}
+          CONTRACTS_OUTCOME: ${{ steps.contracts.outcome }}
+          REPLAY_OUTCOME: ${{ steps.replay.outcome }}
+          REPLAY_CLEANUP_OUTCOME: ${{ steps.replay-cleanup.outcome }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { createHash } from 'node:crypto';
+          import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+          import { dirname, join, resolve } from 'node:path';
+          import { pathToFileURL } from 'node:url';
+          try {
+            const root = resolve('test-results/wms-fixture-safety');
+            assert.ok(lstatSync(root).isDirectory() && !lstatSync(root).isSymbolicLink());
+            const files = [];
+            for (const entry of readdirSync(root)) {
+              const stat = lstatSync(join(root, entry)); assert.ok(!stat.isSymbolicLink());
+              if (entry === 'native' || entry === 'replay') {
+                assert.ok(stat.isDirectory());
+                for (const name of readdirSync(join(root, entry))) {
+                  if (entry === 'native') assert.match(name, /^qa_wms_fixture_[a-z0-9]+-[a-z0-9-]+\.jsonl$/);
+                  else assert.ok(['replay-result.json', 'replay-inventory.json', 'replay-cleanup.json'].includes(name));
+                  files.push(`${entry}/${name}`);
+                }
+              } else {
+                assert.ok(['source.json', 'contracts.tap', 'native-results.json'].includes(entry));
+                files.push(entry);
+              }
+            }
+            assert.ok(files.includes('source.json'));
+            const source = JSON.parse(readFileSync(join(root, 'source.json'), 'utf8'));
+            assert.match(process.env.GITHUB_SHA ?? '', /^[0-9a-f]{40}$/);
+            assert.equal(source.commit, process.env.GITHUB_SHA);
+            assert.equal(source.scope, 'disposable-only'); assert.equal(source.liveAuthorization, false);
+            if (process.env.CONTRACTS_OUTCOME === 'success') assert.ok(files.includes('contracts.tap'));
+            if (process.env.REPLAY_OUTCOME === 'success') {
+              for (const name of ['replay-result.json', 'replay-inventory.json', 'replay-cleanup.json']) assert.ok(files.includes(`replay/${name}`));
+              assert.equal(process.env.REPLAY_CLEANUP_OUTCOME, 'success');
+              const result = JSON.parse(readFileSync(join(root, 'replay/replay-result.json'), 'utf8'));
+              const inventory = JSON.parse(readFileSync(join(root, 'replay/replay-inventory.json'), 'utf8'));
+              const cleanup = JSON.parse(readFileSync(join(root, 'replay/replay-cleanup.json'), 'utf8'));
+              assert.equal(result.status, 'PASS'); assert.equal(result.evidenceKind, 'supabase-cli-native');
+              assert.equal(result.fullNativeChainPassed, true); assert.equal(result.schemaAssertionsPassed, true);
+              assert.equal(result.closed, true); assert.equal(result.candidateCommit, process.env.GITHUB_SHA);
+              assert.equal(result.inventoryDigest, inventory.inventory.digest);
+              assert.equal(inventory.candidateCommit, process.env.GITHUB_SHA);
+              assert.equal(cleanup.sourceCommit, process.env.GITHUB_SHA); assert.equal(cleanup.ownedProjectStopped, true);
+            }
+            const journals = files.filter(file => file.endsWith('.jsonl'));
+            if (process.env.NATIVE_OUTCOME === 'success') {
+              assert.ok(files.includes('native-results.json'));
+              const result = JSON.parse(readFileSync(join(root, 'native-results.json'), 'utf8'));
+              assert.equal(result.sourceCommit, process.env.GITHUB_SHA);
+              assert.equal(result.kind, 'native-disposable-postgresql'); assert.equal(result.liveCalls, false);
+              assert.equal(result.remainingFixtureDatabases, 0);
+              assert.equal(result.passed, result.checks.length); assert.ok(result.passed > 0);
+              assert.equal(result.deaths.length, 2);
+              assert.ok(journals.length >= result.deaths.length);
+              const { readWmsFixtureManifest } = await import(pathToFileURL(resolve('scripts/qa/wms-fixture-lifecycle.mjs')).href);
+              for (const journal of journals) readWmsFixtureManifest(join(root, journal));
+            }
+            const forbidden = /postgres(?:ql)?:\/\/|-----BEGIN [A-Z ]*PRIVATE KEY-----|\b(?:sb_secret_|sbp_)[A-Za-z0-9_-]+|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+|(?:^|[\s{,])["']?(?:password|authorization|access[_-]?token|refresh[_-]?token|service[_-]?role[_-]?key|api[_-]?key|client[_-]?secret|secret|token|credentials?|connectionString|databaseUrl)["']?\s*[:=]/i;
+            let bytes = 0;
+            const records = files.map(file => {
+              const filename = join(root, file), stat = lstatSync(filename);
+              assert.ok(stat.isFile() && !stat.isSymbolicLink() && stat.size <= 8 * 1024 * 1024);
+              const data = readFileSync(filename); bytes += data.length;
+              assert.ok(!forbidden.test(data.toString('utf8')));
+              return { file, bytes: data.length, sha256: createHash('sha256').update(data).digest('hex') };
+            });
+            assert.ok(bytes <= 64 * 1024 * 1024);
+            const destination = join(root, 'publish'); assert.ok(!existsSync(destination)); mkdirSync(destination);
+            for (const { file } of records) {
+              mkdirSync(dirname(join(destination, file)), { recursive: true });
+              copyFileSync(join(root, file), join(destination, file));
+            }
+            writeFileSync(join(destination, 'artifact-index.json'), JSON.stringify({
+              sourceCommit: process.env.GITHUB_SHA, nativeOutcome: process.env.NATIVE_OUTCOME,
+              contractsOutcome: process.env.CONTRACTS_OUTCOME, liveAuthorization: false,
+              replayOutcome: process.env.REPLAY_OUTCOME, replayCleanupOutcome: process.env.REPLAY_CLEANUP_OUTCOME,
+              journalsValidated: process.env.NATIVE_OUTCOME === 'success', files: records,
+            }, null, 2) + '\n');
+          } catch {
+            process.stderr.write('Safety evidence audit failed; nothing cleared for publication.\n');
+            process.exitCode = 1;
+          }
+          NODE
+      - name: Preserve audited journals and proof even after test failure
+        id: upload
+        if: ${{ always() && steps.evidence-audit.outcome == 'success' }}
+        timeout-minutes: 3
+        uses: actions/upload-artifact@v6
+        with:
+          name: wms-fixture-safety-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-results/wms-fixture-safety/publish
+          if-no-files-found: error
+          include-hidden-files: false
+          retention-days: 7
+      - name: Stop the owned disposable service
+        id: stop
+        if: always()
+        timeout-minutes: 2
+        env:
+          FIXTURE_CONTAINER: ${{ job.services.fixture-postgres.id }}
+        run: |
+          : "${FIXTURE_CONTAINER:?Owned fixture container is required}"
+          docker stop --time 10 "$FIXTURE_CONTAINER"

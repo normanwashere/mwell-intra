@@ -16,6 +16,8 @@ on:
 
 # Even prepare/routes provision users and complete training. Never run this
 # suite on push; non-mutating source checks belong to CI on the current branch.
+# The one-serial cleanup trial does not authorize this broader mutation suite.
+# Keep its entry and evidence jobs disabled until every runner has safe cleanup.
 
 concurrency:
   group: uat-live-certification
@@ -27,9 +29,20 @@ permissions:
   security-events: write
 
 jobs:
+  mutation-pause:
+    name: Live mutation certification paused
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - name: Explain the preserved-data boundary
+        run: |
+          echo "::error::Live certification is paused before account, training or transaction changes. Use WMS Fixture Safety for local-only checks. The separately reviewed one-serial UAT trial does not enable this suite."
+          exit 1
+
   prepare:
     name: Verify contracts and reconcile UAT personas
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_mutating_certification }}
+    if: ${{ false && github.event_name == 'workflow_dispatch' && inputs.run_mutating_certification }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     environment: uat
@@ -508,7 +521,7 @@ jobs:
 
   bundle:
     name: Bundle certification evidence
-    if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.run_mutating_certification }}
+    if: ${{ false && always() && github.event_name == 'workflow_dispatch' && inputs.run_mutating_certification }}
     needs: [prepare, routes, transactions, cleanup]
     runs-on: ubuntu-latest
     steps:

@@ -409,6 +409,24 @@ test('live mutations require manual consent while preserving the original separa
   assert.match(live.jobs.cleanup.if, /needs.prepare.result == 'success'/);
 });
 
+test('legacy certification stays paused before user provisioning, even with manual consent', () => {
+  const live = workflow('uat-live-certification');
+  for (const id of ['prepare', 'bundle']) {
+    assert.match(live.jobs[id].if, /^\$\{\{ false && /,
+      `${id} must remain disabled until the whole legacy suite has safe cleanup`);
+  }
+  const notice = live.jobs['mutation-pause'];
+  assert.ok(notice, 'A paused run must explain the block, not appear certified');
+  assert.deepEqual(notice.permissions, {});
+  assert.equal(notice.environment, undefined);
+  assert.equal(notice.env, undefined);
+  assert.equal(notice.needs, undefined);
+  assert.equal(notice.steps.length, 1);
+  assert.match(notice.steps[0].run, /exit 1/);
+  assert.match(notice.steps[0].run, /WMS Fixture Safety/);
+  assert.doesNotMatch(notice.steps[0].run, /secrets\.|pnpm|node|curl|fetch|checkout/);
+});
+
 test('both release bundles preserve the documentation tree and current linked handoff sources', async () => {
   const { bundleReleaseDocumentation } = await import('./bundle-release-documentation.mjs');
   const root = fileURLToPath(new URL('../../', import.meta.url));

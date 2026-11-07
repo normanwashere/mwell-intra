@@ -89,6 +89,14 @@ test('recipient evidence continuation pauses before loading runtime, credentials
   assert.equal(tree.statements.filter(n => !ts.isImportDeclaration(n))[0], call.parent);
 });
 
+test('legacy cleanup CLI pauses before discovery, deletion or report creation', () => {
+  const tree = source('./cleanup-uat-live-run.mjs');
+  const call = guardCall(tree);
+  assert.equal(call.arguments.length, 0);
+  const body = nodes(tree, n => ts.isFunctionDeclaration(n) && n.name?.text === 'main')[0].body;
+  assert.equal(body.statements[0], call.parent);
+});
+
 test('governed transactions pause before clients/network; routes and read-only phases remain available', async () => {
   const tree = source('./full-intra-live-e2e.mjs');
   const call = guardCall(tree);

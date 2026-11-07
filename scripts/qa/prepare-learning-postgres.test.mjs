@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -8,6 +9,27 @@ import { PGlite } from '@electric-sql/pglite';
 import { prepareLearningPostgres, validateLegacyPrerequisites, validateCanonicalManifest, validateReplayInventory } from './prepare-learning-postgres.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
+
+test('cleanup append preserves every reviewed historical entry and pins all twelve forward files', () => {
+  const manifest = JSON.parse(readFileSync(path.join(root, 'scripts/qa/canonical-replay-manifest.json')));
+  assert.equal(manifest.sources.length, 280);
+  const prior = { ...manifest, sources: manifest.sources.slice(0, 268) };
+  assert.equal(createHash('sha256').update(JSON.stringify(prior, null, 2) + '\n').digest('hex'),
+    'ea2c0c6f51ffd7eda84e936a3011c9c1396de219c94f4bbe7a2cf263fd72e637');
+  const appended = manifest.sources.slice(268);
+  assert.equal(appended.length, 12);
+  assert(appended.every(entry => entry.action === 'execute-forward'));
+  assert.deepEqual(appended.find(entry => entry.file === '20261106173133_wms_fixture_postgres_lifecycle.sql'), {
+    file: '20261106173133_wms_fixture_postgres_lifecycle.sql',
+    sha256: 'ce17661767f4286f7ea617379003e3d0c52db9a406b8203648b4a6efadb8c526',
+    action: 'execute-forward',
+  });
+  assert.deepEqual(appended.at(-1), {
+    file: '20261107041749_wms_fixture_registered_writer_fence.sql',
+    sha256: '7dd98a35d5def9879c98605fc403c496447f6ea70104d9ee2cfc969f0ad3ea70',
+    action: 'execute-forward',
+  });
+});
 
 test('unknown bootstrap authority, grants and data fail closed while CRLF remains equivalent', () => {
   const fixture = readFileSync(new URL('./fixtures/learning-legacy-prerequisites.sql', import.meta.url), 'utf8');
@@ -29,9 +51,9 @@ test('disposable replay executes canonical baseline plus all classified forward 
     const result = prepareLearningPostgres({ root, temporaryRoot, destination });
     const { files, manifest } = validateReplayInventory(root);
     assert.equal(result.baselineCount, 22);
-    assert.equal(result.migrationCount, 233);
+    assert.equal(result.migrationCount, 245);
     assert.equal(result.preservedCount, 35);
-    assert.equal(manifest.sources.length, 268);
+    assert.equal(manifest.sources.length, 280);
     const bridgeMigration = '20261105233321_stock_conversion_qc_putaway_bridge.sql';
     assert.deepEqual(manifest.sources.find(file => file.file === bridgeMigration), {
       file: bridgeMigration,
@@ -52,7 +74,7 @@ test('disposable replay executes canonical baseline plus all classified forward 
       readFileSync(path.join(destination, 'supabase/migrations', file.output)), file.bytes, file.file);
     const audit = JSON.parse(readFileSync(path.join(destination, 'replay-audit.json')));
     assert.match(audit.scope, /not exact applied-history replay/);
-    assert.equal(audit.files.length, 290);
+    assert.equal(audit.files.length, 302);
     assert.equal(audit.files.filter(file => !file.output && file.reason && file.sha256).length, 35);
     assert.throws(() => prepareLearningPostgres({ root, temporaryRoot, destination }), /already exists/);
     assert.throws(() => prepareLearningPostgres({ root, temporaryRoot, destination: root }), /outside.*temporary/i);

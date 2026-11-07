@@ -1491,6 +1491,66 @@
       "file": "20261106012547_stock_conversion_putaway_authoritative_actor.sql",
       "sha256": "fcede47f4671ab241d9e0a04face6d626aabb559fe8e72e830d6165342339306",
       "action": "execute-forward"
+    },
+    {
+      "file": "20261106134948_uat_archive_restore_test_issued_units.sql",
+      "sha256": "d02839e559bc71f7ab7f1511c16ba7e0cc620217cd2016d69d0dba6b1e6b5158",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20261106134950_uat_restored_unit_return_custody.sql",
+      "sha256": "790025e83d28562d6e7bfcff567eaa0119607833bd8155e7f08053b3d95664d2",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20261106145742_uat_warehouse_fixture_archive.sql",
+      "sha256": "08941f7aa99dbea96970aea764b71c36376f99c5b078d12f227e4b87b0f1710f",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20261106145744_uat_warehouse_archive_active_reads.sql",
+      "sha256": "2fe60133415f22f30100c70ac68db76852379ae55b420a18b3c56ed08ec41fb8",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20261106152118_insights_active_cycle_count_variances.sql",
+      "sha256": "28bb88f3b86637a3c95124b86b47e44f45f4b471c8402cf77afb429a3aca992c",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20261106173133_wms_fixture_postgres_lifecycle.sql",
+      "sha256": "ce17661767f4286f7ea617379003e3d0c52db9a406b8203648b4a6efadb8c526",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20261106174518_uat_archive_external_po_visibility.sql",
+      "sha256": "6710f527a38ae40779b2c6fc0478d180d7fbba79c4494244d2c1341e3e9ff2d8",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20261106180502_uat_archive_event_custody.sql",
+      "sha256": "60575e2ed1618a9b8c14db78fac0bbf76933c628417027beb5635538c7b401ac",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20261106190736_stock_conversion_archive_boundaries.sql",
+      "sha256": "ed70a5e1a5d3ae791b5647ca76882dcb1021a7f3cb4f0b187e41badd71ecf6de",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20261106190738_uat_receiving_archive_boundaries.sql",
+      "sha256": "6eb9ff6268687923bc878e7880244a1bf159ab2cc13f2b801349b4bcc760c2f8",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20261106191404_uat_archive_availability_and_po_queue.sql",
+      "sha256": "b4ed49ce1e18dda0be35fa99d249ffc111db44e5e8938f09d9882087fcf65471",
+      "action": "execute-forward"
+    },
+    {
+      "file": "20261107041749_wms_fixture_registered_writer_fence.sql",
+      "sha256": "7dd98a35d5def9879c98605fc403c496447f6ea70104d9ee2cfc969f0ad3ea70",
+      "action": "execute-forward"
     }
   ]
 }

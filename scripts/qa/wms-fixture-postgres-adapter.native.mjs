@@ -64,7 +64,10 @@ export async function runNativeFixtureProof(input){
     assert.equal((await admin.query("select count(*)::int n from pg_roles where rolname in ('anon','authenticated','service_role')")).rows[0].n,3,'use a disposable local Supabase PostgreSQL cluster with its existing standard roles');
     await admin.query(`create database "${database}" template template0`);created=true;
     const setup=await connect(ownedUrl.href);
-    await installAdapterFixture({exec:sql=>setup.query(sql)},{roles:false});
+    await installAdapterFixture({exec:sql=>setup.query(sql)},{roles:false,beforeWriterGuards:db=>db.exec(`
+      create schema integration_probe;
+      create table integration_probe.references_to_products(item text references warehouse.products(id));
+      create table integration_probe.logical_references(id text primary key,payload jsonb)`)});
     await close(setup);
     const pair=await makePair();
     const options=label=>({plan:createRepresentativeFixturePlan({sourceCommit}),manifestPath:join(resolve(input.outputDir),`${database}-${label}.jsonl`),adapter:pair.adapter,verifier:pair.verifier});
@@ -116,39 +119,84 @@ export async function runNativeFixtureProof(input){
     await pair.adapter.release({plan:closed.plan,fence:lease.fence});
     checks.push('drained fence cannot dispatch a new write');
 
-    await pair.writer.query(`create function private.fixture_failure() returns trigger language plpgsql as $$begin raise exception 'injected fixture rollback';end$$;
-      create trigger fixture_failure before insert on warehouse.inventory_units for each row execute function private.fixture_failure()`);
+    await pair.writer.query("alter table warehouse.inventory_units add constraint injected_fixture_failure check(id='uat-open-unit-preserved') not valid");
     const failed=options('rollback');
-    await assert.rejects(runWmsFixtureLifecycle(failed,r=>r.mutate('seed-one-serial')),/injected fixture rollback/);
+    await assert.rejects(runWmsFixtureLifecycle(failed,r=>r.mutate('seed-one-serial')),/injected_fixture_failure/);
     assert.equal((await pair.reader.query('select count(*)::int n from warehouse.products where id=$1',[failed.plan.roots[0].id])).rows[0].n,0);
-    await pair.writer.query('drop trigger fixture_failure on warehouse.inventory_units;drop function private.fixture_failure()');
+    await pair.writer.query('alter table warehouse.inventory_units drop constraint injected_fixture_failure');
     checks.push('failed transaction leaves no partial fixture');
 
-    await pair.writer.query('create schema integration_probe;create table integration_probe.references_to_products(item text references warehouse.products(id))');
     const locked=options('locked-reference-window');const incoming=await connect(ownedUrl.href);
     await incoming.query("set lock_timeout='250ms'");
-    const beforeArchive=pair.writer.query.bind(pair.writer);let incomingBlocked=false;
+    const beforeArchive=pair.writer.query.bind(pair.writer);let incomingBlocked=0;
+    const foreignAttempts=async(plan,duringArchive=false)=>{
+      await incoming.query("select set_config('app.wms_fixture_run',$1,false)",[plan.runId]);
+      for(const [sql,args] of [
+        ['insert into integration_probe.references_to_products(item) values($1)',[plan.roots[0].id]],
+        ["insert into integration_probe.logical_references values('logical',$1)",[JSON.stringify({productId:plan.roots[0].id})]],
+        ["insert into integration_probe.logical_references values('serial',$1)",[JSON.stringify({serial_numbers:[`\tqa-${plan.runId.slice(12)}\r\n`]})]],
+        ["update warehouse.products set name='Foreign command' where id=$1",[plan.roots[0].id]],
+        ['insert into private.warehouse_stock_epochs(scope_key) values($1)',[JSON.stringify([plan.roots[0].id,'fixture-wh','fixture-bin'])]],
+        ["update private.warehouse_stock_epochs set scope_key='[]' where (scope_key::jsonb)->>0=$1",[plan.roots[0].id]],
+        ['delete from private.warehouse_stock_epochs where (scope_key::jsonb)->>0=$1',[plan.roots[0].id]],
+      ]){
+        await assert.rejects(incoming.query(sql,args),error=>duringArchive&&sql.startsWith('update warehouse.products')
+          ? error.code==='55P03'
+          : error.code==='P0001'&&/isolated fixture|archived UAT test record/.test(error.message));
+        incomingBlocked++;
+      }
+    };
     pair.writer.query=async(sql,args)=>{
       if(sql==='select private.archive_uat_warehouse_fixture($1,$2::jsonb)'){
-        await assert.rejects(incoming.query('insert into integration_probe.references_to_products(item) values($1)',[locked.plan.roots[0].id]),error=>error.code==='55P03');
-        incomingBlocked=true;
+        await foreignAttempts(locked.plan,true);
       }
       return beforeArchive(sql,args);
     };
-    try{await runWmsFixtureLifecycle(locked,r=>r.mutate('seed-one-serial'));}
-    finally{pair.writer.query=beforeArchive;await close(incoming);}
-    assert.equal(incomingBlocked,true);
+    try{
+      await runWmsFixtureLifecycle(locked,async r=>{await r.mutate('seed-one-serial');await foreignAttempts(locked.plan);});
+      await foreignAttempts(locked.plan);
+    }finally{pair.writer.query=beforeArchive;}
+    assert.equal(incomingBlocked,21);
     assert.equal((await pair.reader.query('select count(*)::int n from integration_probe.references_to_products')).rows[0].n,0);
-    checks.push('second-session incoming FK insert between closure check and archive is blocked by exact-root locks');
+    assert.equal((await pair.reader.query('select count(*)::int n from integration_probe.logical_references')).rows[0].n,0);
+    checks.push('21 separate-session FK/logical/whitespace-serial/direct/encoded-epoch attempts denied or root-lock-blocked before, during and after archive');
 
-    const referenced=options('foreign-reference');
-    await assert.rejects(runWmsFixtureLifecycle(referenced,async r=>{
-      await r.mutate('seed-one-serial');
-      await pair.reader.query('insert into integration_probe.references_to_products(item) values($1)',[referenced.plan.roots[0].id]);
-    }),/foreign dependency in integration_probe.references_to_products/);
-    assert.equal((await pair.reader.query('select count(*)::int n from warehouse.active_inventory_units where id=$1',[referenced.plan.roots[1].id])).rows[0].n,1);
-    assert.equal((await pair.reader.query('select count(*)::int n from private.uat_warehouse_archive_members where row_id=$1',[referenced.plan.roots[0].id])).rows[0].n,0);
-    checks.push('cross-schema foreign FK prevents archival; foreign row and active source retained');
+    const stale=options('old-snapshot');
+    await incoming.query('begin isolation level repeatable read');
+    await incoming.query('select count(*) from private.wms_fixture_identities');
+    try{
+      await runWmsFixtureLifecycle(stale,async r=>{
+        await r.mutate('seed-one-serial');
+        await assert.rejects(incoming.query("insert into integration_probe.logical_references values('stale',$1)",[JSON.stringify({productId:stale.plan.roots[0].id})]),/fresh read-committed/);
+      });
+    }finally{await incoming.query('rollback');}
+    checks.push('transaction predating registration cannot hide its identity using a repeatable-read snapshot');
+
+    const registering=options('registration-window');
+    await incoming.query("set lock_timeout='3s'");
+    const oldQuery=pair.writer.query.bind(pair.writer);let blockedRegistration;
+    pair.writer.query=async(sql,args)=>{
+      const result=await oldQuery(sql,args);
+      if(sql.startsWith('insert into private.wms_fixture_identities')){
+        blockedRegistration=incoming.query("insert into integration_probe.logical_references values('registering',$1)",[JSON.stringify({productId:registering.plan.roots[0].id})]).then(()=>({allowed:true}),error=>({allowed:false,code:error.code,message:error.message}));
+        const pid=(await pair.reader.query('select pid from pg_stat_activity where datname=current_database() and pid<>pg_backend_pid() and wait_event_type=\'Lock\' and query like \'insert into integration_probe.logical_references%\'')).rows;
+        // Wait for actual lock state, not timing-based success.
+        const deadline=Date.now()+3000;
+        while(!pid.length){
+          assert.ok(Date.now()<deadline,'Concurrent writer did not reach registration fence');
+          const waiting=(await pair.reader.query("select pid from pg_stat_activity where datname=current_database() and wait_event_type='Lock' and query like 'insert into integration_probe.logical_references%'")).rows;
+          if(waiting.length)break;
+          await new Promise(resolve=>setTimeout(resolve,10));
+        }
+      }
+      return result;
+    };
+    try{await runWmsFixtureLifecycle(registering,r=>r.mutate('seed-one-serial'));}
+    finally{pair.writer.query=oldQuery;}
+    const blocked=await blockedRegistration;
+    assert.equal(blocked.allowed,false);assert.equal(blocked.code,'P0001');assert.match(blocked.message,/isolated fixture/);
+    checks.push('read-committed writer waits for registration commit then sees the new exact identity and is denied');
+    await close(incoming);
 
     const crash=options('lost-connection');
     const execute=pair.adapter.execute;
@@ -182,7 +230,7 @@ export async function runNativeFixtureProof(input){
       checks.push(`actual process SIGKILL ${stopAt}: no response, unrelated user change, fresh recovery without seed replay`);
     }
     return {kind:'native-disposable-postgresql',database,checks,deaths,observations,passed:checks.length,liveCalls:false,
-      deliberateDependencyDenial:{runId:referenced.plan.runId,activeUnitsRetained:1,archivedRows:0,scope:'disposable database only, dropped at end'}};
+      deniedForeignWrites:incomingBlocked,scope:'disposable database only, dropped at end'};
   }finally{
     // Close only owned sessions before dropping only our freshly created DB.
     for(const c of [...clients])if(c!==admin)await close(c);

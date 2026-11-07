@@ -4,7 +4,7 @@ import { WMS_FIXTURE_PROJECT_REF } from './wms-fixture-lifecycle.mjs';
 import { assertWmsLiveFixtureCleanupReady } from './wms-live-fixture-guard.mjs';
 
 const OP='seed-one-serial';
-const tableNames=['warehouse.products','warehouse.inventory_units','private.warehouse_unit_history'];
+const tableNames=['warehouse.products','warehouse.inventory_units','private.warehouse_unit_history','private.warehouse_stock_epochs'];
 const sqlNames=Object.fromEntries(tableNames.map(t=>[t,t.split('.').map(n=>`"${n}"`).join('.')]));
 const digest=x=>createHash('sha256').update(JSON.stringify(x)).digest('hex');
 function check(ok,message){if(!ok){const e=new Error(`WMS PostgreSQL fixture: ${message}`);e.code='WMS_FIXTURE_POSTGRES_BLOCKED';throw e;}}
@@ -47,8 +47,8 @@ async function storedRun(client,plan,bindings){
 async function rowsForRun(client,plan){
   const ids=idParts(plan);const rows=[];
   for(const table of tableNames){
-    const condition=table==='private.warehouse_unit_history'?'unit_id=$1':'id=$1';
-    const id=table==='warehouse.products'?ids.product:ids.unit;
+    const condition=table==='private.warehouse_unit_history'?'unit_id=$1':table==='private.warehouse_stock_epochs'?"(scope_key::jsonb)->>0=$1":'id=$1';
+    const id=table==='warehouse.products'||table==='private.warehouse_stock_epochs'?ids.product:ids.unit;
     const result=await client.query(`select id::text as id,md5(to_jsonb(t)::text) as md5,
       encode(sha256(convert_to(to_jsonb(t)::text,'UTF8')),'hex') as sha256 from ${sqlNames[table]} t where ${condition} order by id`,[id]);
     rows.push(...result.rows.map(r=>({table,id:r.id,md5:r.md5,sha256:r.sha256})));
@@ -64,8 +64,7 @@ async function preservationSnapshot(client,plan){
     where c.relkind in ('r','p') and (n.nspname in ('warehouse','procurement','product')
       or (n.nspname='core' and c.relname in ('profiles','roles','user_roles','activity_log'))
       or (n.nspname='auth' and c.relname in ('users','audit_log_entries'))
-      or (n.nspname='private' and (c.relname='warehouse_unit_history' or c.relname like 'stock_conversion_%'
-        or c.relname like 'external_po_%' or c.relname like 'event_custody_%'))
+      or (n.nspname='private' and c.relname not in ('wms_fixture_runs','wms_fixture_leases','wms_fixture_operations','wms_fixture_owned_rows','wms_fixture_identities','uat_warehouse_archive_batches','uat_warehouse_archive_members'))
       or exists(select 1 from pg_constraint fk where fk.conrelid=c.oid and fk.contype='f'
         and fk.confrelid in ('warehouse.products'::regclass,'warehouse.inventory_units'::regclass))) order by 1,2`)).rows;
   const names=tables.map(t=>`${t.schema}.${t.name}`);
@@ -73,8 +72,8 @@ async function preservationSnapshot(client,plan){
   const result=[];
   for(const t of tables){
     const name=`${t.schema}.${t.name}`;
-    const excluded=name==='warehouse.products'?ids.product:name==='warehouse.inventory_units'||name==='private.warehouse_unit_history'?ids.unit:null;
-    const where=excluded?` where ${name==='private.warehouse_unit_history'?'unit_id':'id'}<>$1`:'';
+    const excluded=name==='warehouse.products'||name==='private.warehouse_stock_epochs'?ids.product:name==='warehouse.inventory_units'||name==='private.warehouse_unit_history'?ids.unit:null;
+    const where=excluded?` where ${name==='private.warehouse_unit_history'?'unit_id':name==='private.warehouse_stock_epochs'?"(scope_key::jsonb)->>0":'id'}<>$1`:'';
     const row=(await client.query(`select count(*)::text count,md5(coalesce(string_agg(md5(to_jsonb(t)::text),'' order by md5(to_jsonb(t)::text)),'')) hash
       from ${sqlIdentifier(t.schema)}.${sqlIdentifier(t.name)} t${where}`,excluded?[excluded]:[])).rows[0];
     result.push({table:name,...row});
@@ -91,7 +90,8 @@ async function exactOwnership(client,plan,run){
   if(!run){check(rows.length===0&&owned.length===0&&operations.length===0,'fixture identity collision');return {rows,operations};}
   check(operations.length<=1&&rows.length===owned.length,'unknown or incomplete operation ownership');
   check(rows.every(r=>owned.some(o=>o.table_name===r.table&&o.row_id===r.id&&o.row_sha256===r.sha256&&o.row_md5===r.md5&&o.operation_id===OP)),'owned row changed or foreign row found');
-  check(!operations.length?rows.length===0:rows.length===3&&rows.filter(r=>r.table==='private.warehouse_unit_history').length===1,'unexpected retained history/fixture closure');
+  check(!operations.length?rows.length===0:rows.length===4&&rows.filter(r=>r.table==='private.warehouse_unit_history').length===1
+    &&rows.filter(r=>r.table==='private.warehouse_stock_epochs').length===1,'unexpected retained history/fixture closure');
   return {rows,operations};
 }
 async function checkBin(client,bindings){
@@ -102,11 +102,46 @@ async function checkBin(client,bindings){
 async function checkSourceContract(client,plan){
   const fingerprints=[['private.archive_uat_warehouse_fixture(text,jsonb)','bee94066b7e49d48782f1168d8ac89a0'],
     ['private.uat_warehouse_references(jsonb,text)','37655d996dc4b6ade61c8147a08542a3'],
-    ['private.warehouse_record_unit_history()','3c7dfcf8c4acc69faa8cd8b2cc1cd534']];
+    ['private.guard_uat_archived_warehouse_write()','1ccd0ed4bb034f13ba6734ecbd54932d'],
+    ['private.warehouse_record_unit_history()','3c7dfcf8c4acc69faa8cd8b2cc1cd534'],
+    ['private.warehouse_advance_stock_epoch()','f46559a09d5636760f37c40d83d277f9'],
+    ['private.warehouse_stock_scope(text,text,text)','bf38a5d379d9a7ca35dbd7be07d65e25'],
+    ['private.normalize_inventory_unit_serial()','40344bb25cc74e0f4b99cb201c4cfbf0'],
+    ['private.lock_serial_custody_identity(text)','641a7661fd659bc3f36a994da56edcaf'],
+    ['private.warehouse_lock_work_location()','6e153048df3b2950cf06169bc86fa64c']];
   for(const [signature,hash] of fingerprints){
     const row=(await client.query("select md5(replace(prosrc,chr(13),'')) hash from pg_proc where oid=to_regprocedure($1)",[signature])).rows[0];
     check(row?.hash===hash,'archive/history source contract drift');
   }
+  const writerContracts=[
+    ['private.wms_fixture_tokens(jsonb)','2c507914f36344858b484521263e4885',false,'i'],
+    ['private.wms_fixture_guard_targets()','899848f0aacd8334d5e4547e53d0eb94',true,'s'],
+    ['private.wms_fixture_guard_write()','3c138d2eb9df1a00bbb06e9555395e9a',true,'v'],
+    ['private.wms_fixture_assert_writer_coverage()','e8b746792b07622e501f6b05610fb7ae',true,'s'],
+  ];
+  for(const [signature,hash,definer,volatility] of writerContracts){
+    const row=(await client.query(`select md5(replace(prosrc,chr(13),'')) hash,prosecdef,provolatile,
+      proowner='postgres'::regrole as owner_ok,proconfig=array['search_path=""'] as config_ok,
+      not exists(select 1 from unnest(array['anon','authenticated','service_role']) r(role)
+        where has_function_privilege(r.role,p.oid,'EXECUTE')) as private_only from pg_proc p where oid=to_regprocedure($1)`,[signature])).rows[0];
+    check(row?.hash===hash&&row.prosecdef===definer&&row.provolatile===volatility&&row.owner_ok&&row.config_ok&&row.private_only,'writer source contract drift');
+  }
+  await client.query('select private.wms_fixture_assert_writer_coverage()');
+  const seedTriggers=[
+    ['warehouse.products','uat_archived_record_write_guard','private.guard_uat_archived_warehouse_write()',31,'O'],
+    ['warehouse.inventory_units','uat_archived_record_write_guard','private.guard_uat_archived_warehouse_write()',31,'O'],
+    ['warehouse.inventory_units','warehouse_count_epoch','private.warehouse_advance_stock_epoch()',31,'O'],
+    ['warehouse.inventory_units','warehouse_inventory_unit_serial_normalize','private.normalize_inventory_unit_serial()',23,'O'],
+    ['warehouse.inventory_units','warehouse_unit_history','private.warehouse_record_unit_history()',29,'O'],
+    ['warehouse.inventory_units','warehouse_work_location_guard','private.warehouse_lock_work_location()',23,'O'],
+    ...tableNames.map(table=>[table,'wms_fixture_registered_write_guard','private.wms_fixture_guard_write()',31,'A']),
+  ].map(([table,name,signature,type,enabled])=>({table,name,signature,type,enabled}));
+  const installed=(await client.query(`select n.nspname||'.'||c.relname as table,g.tgname name,g.tgfoid::regprocedure::text signature,
+    g.tgtype::int type,g.tgenabled enabled,g.tgqual is null as unconditional,g.tgnargs=0 as no_args
+    from pg_trigger g join pg_class c on c.oid=g.tgrelid join pg_namespace n on n.oid=c.relnamespace
+    where not g.tgisinternal and (g.tgtype::int & 4)=4 and (n.nspname||'.'||c.relname)=any($1::text[])`,[tableNames])).rows;
+  check(installed.length===seedTriggers.length&&installed.every(({unconditional,no_args,...t})=>unconditional&&no_args
+    &&seedTriggers.some(expected=>isDeepStrictEqual(t,expected))),'seed trigger source contract drift');
   const ids=idParts(plan);
   const collision=(await client.query(`select (select count(*) from warehouse.products where sku=$1 and id<>$2)
     +(select count(*) from warehouse.inventory_units where serial_number=$1 and id<>$3) as n`,[ids.serial,ids.product,ids.unit])).rows[0];
@@ -151,7 +186,7 @@ async function rejectForeignDependencies(client,plan){
       @.value ? (@.type() == "array")[*] ? (@.type() == "string") like_regex ${JSON.stringify(`^\\s*${ids.serial}\\s*$`)} flag "i")))`;
   const tables=(await client.query(`select n.nspname schema,c.relname name,row_security_active(c.oid) filtered
     from pg_class c join pg_namespace n on n.oid=c.relnamespace
-    where c.relkind in ('r','p') and (n.nspname in ('warehouse','product','procurement')
+    where c.relkind in ('r','p') and not (n.nspname='private' and c.relname='wms_fixture_identities') and (n.nspname in ('warehouse','product','procurement')
       or (n.nspname='private' and (c.relname like 'stock_conversion_%' or c.relname like 'event_custody_%'
         or c.relname like 'external_po_%' or c.relname='warehouse_unit_history'))
       or (n.nspname not in ('pg_catalog','information_schema') and exists(select 1 from pg_attribute a
@@ -203,8 +238,10 @@ export function createPostgresFixtureSessions({writer,reader,readHealth,bindings
   }
   async function lease(client,plan,fence,open=false){
     check(heldRun===plan.runId&&heldFence===fence,'session does not own this fence');
-    const row=(await client.query('select * from private.wms_fixture_leases where run_id=$1 for update',[plan.runId])).rows[0];
-    check(row?.fence===fence&&(!open||row.state==='open'),'stale or closed writer fence');return row;
+    const row=(await client.query(`select *,owner_pid=pg_backend_pid() and owner_backend_start=
+      (select backend_start from pg_stat_activity where pid=pg_backend_pid()) as owns_backend
+      from private.wms_fixture_leases where run_id=$1 for update`,[plan.runId])).rows[0];
+    check(row?.fence===fence&&row.owns_backend&&(!open||row.state==='open'),'stale or closed writer fence');return row;
   }
   const adapter={id:'postgres-exact-one-serial-v1',
     async inspect({plan,records}){
@@ -228,9 +265,15 @@ export function createPostgresFixtureSessions({writer,reader,readHealth,bindings
         await mutateTransaction(plan,'acquire',async before=>{
           await checkSourceContract(writer,plan);const run=await storedRun(writer,plan,bindings);await exactOwnership(writer,plan,run);await checkBin(writer,bindings);
           check(recovery||!run,'existing run requires durable recovery');
+          await writer.query("select pg_advisory_xact_lock(hashtextextended('wms-fixture-registered-writers',0))");
           if(!run)await writer.query('insert into private.wms_fixture_runs(run_id,plan,bindings,preservation) values($1,$2,$3,$4)',[plan.runId,JSON.stringify(plan),JSON.stringify(bindings),JSON.stringify(before)]);
-          await writer.query(`insert into private.wms_fixture_leases(run_id,fence,state) values($1,$2,$3)
-            on conflict(run_id) do update set fence=excluded.fence,state=excluded.state`,[plan.runId,fence,recovery?'drained':'open']);
+          const ids=idParts(plan);
+          await writer.query(`insert into private.wms_fixture_identities(run_id,product_id,unit_id,serial_number) values($1,$2,$3,$4)
+            on conflict(run_id) do nothing`,[plan.runId,ids.product,ids.unit,ids.serial]);
+          await writer.query(`insert into private.wms_fixture_leases(run_id,fence,state,owner_pid,owner_backend_start)
+            select $1,$2,$3,pg_backend_pid(),backend_start from pg_stat_activity where pid=pg_backend_pid()
+            on conflict(run_id) do update set fence=excluded.fence,state=excluded.state,
+              owner_pid=excluded.owner_pid,owner_backend_start=excluded.owner_backend_start,seed_transaction=null`,[plan.runId,fence,recovery?'drained':'open']);
         });
         heldRun=plan.runId;heldFence=fence;return {...envelope(plan),fence};
       }catch(error){await writer.query('select pg_advisory_unlock(hashtextextended($1,0))',[`wms-fixture:${plan.runId}`]);throw error;}
@@ -244,14 +287,16 @@ export function createPostgresFixtureSessions({writer,reader,readHealth,bindings
         const existing=await exactOwnership(writer,plan,run);
         if(existing.operations.length)return {...envelope(plan),fence,operationId:OP,outcome:'applied',receiptId:existing.operations[0].receipt_id,records:recordsFor(plan,existing.rows)};
         await checkBin(writer,bindings);const ids=idParts(plan);
+        await writer.query('update private.wms_fixture_leases set seed_transaction=txid_current() where run_id=$1',[plan.runId]);
         await writer.query(`insert into warehouse.products(id,sku,name,category,serialized,attributes,unit_cost,reorder_point,item_class,serialization_policy,uom)
           values($1,$2,'Owned UAT fixture - cleanup required','device',true,$3,0,0,'sellable_sku','required','piece')`,[ids.product,ids.serial,JSON.stringify({synthetic:true,wms_fixture_run_id:plan.runId})]);
         await writer.query(`insert into warehouse.inventory_units(id,product_id,serial_number,location_id,bin_id,status)
           values($1,$2,$3,$4,$5,'in_stock')`,[ids.unit,ids.product,ids.serial,bindings.locationId,bindings.binId]);
-        const rows=await rowsForRun(writer,plan);check(rows.length===3,'actual registration history must be exactly one row');
+        const rows=await rowsForRun(writer,plan);check(rows.length===4,'actual registration history and stock epoch must each be exactly one row');
         const receiptId=`${plan.runId}:${OP}`;
         await writer.query('insert into private.wms_fixture_operations(run_id,operation_id,receipt_id) values($1,$2,$3)',[plan.runId,OP,receiptId]);
         for(const r of rows)await writer.query('insert into private.wms_fixture_owned_rows(run_id,operation_id,table_name,row_id,row_sha256,row_md5) values($1,$2,$3,$4,$5,$6)',[plan.runId,OP,r.table,r.id,r.sha256,r.md5]);
+        await writer.query('update private.wms_fixture_leases set seed_transaction=null where run_id=$1',[plan.runId]);
         await rejectForeignDependencies(writer,plan);
         return {...envelope(plan),fence,operationId:OP,outcome:'applied',receiptId,records:recordsFor(plan,rows)};
       });
@@ -316,8 +361,8 @@ export function createPostgresFixtureSessions({writer,reader,readHealth,bindings
 }
 
 export async function connectPostgresFixtureAdapter({databaseUrl,bindings,onObservation}){
-  // Logical non-FK writers do not yet all share the archival fence. Local
-  // proof is not permission to enable this live transport; no env bypass.
+  // Writer safeguards require independent review, full replay and an approved
+  // transport before activation. Local proof alone cannot open this connector.
   assertWmsLiveFixtureCleanupReady();
   assertFixtureDatabaseTarget(databaseUrl);
   const {Client}=await import('pg');

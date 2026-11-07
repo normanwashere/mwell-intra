@@ -18,13 +18,13 @@ test("the onboarding live command resolves to a real guarded route audit", async
   assert.match(source, /full-intra-live-e2e\.mjs/);
 });
 
-test("UAT CI certifies the deployed schema without mutating it", async () => {
+test("paused UAT CI retains schema checks without applying migrations", async () => {
   const workflow = await readFile(
     new URL("../../.github/workflows/uat-live-certification.yml", import.meta.url),
     "utf8",
   );
-  assert.match(workflow, /codex\/uat-launch-blockers/);
-  assert.doesNotMatch(workflow, /codex\/unified-finance-module/);
+  assert.match(workflow, /if: \$\{\{ false && github\.event_name == 'workflow_dispatch' && inputs\.run_mutating_certification \}\}/);
+  assert.match(workflow, /Live mutation certification paused/);
   assert.match(workflow, /UAT_SUPABASE_SERVICE_ROLE_KEY/);
   assert.doesNotMatch(workflow, /UAT_SUPABASE_DB_PASSWORD/);
   assert.doesNotMatch(workflow, /supabase db push/);

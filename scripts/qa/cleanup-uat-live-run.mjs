@@ -9,6 +9,7 @@ import { createAuditDatabaseClient } from "./live-e2e-db-verify.mjs";
 import { assertDeterministicAuditRunId } from "./uat-ci-run-id.mjs";
 import { createReceivingAuditEvidence } from "./receiving-audit-evidence.mjs";
 import { cleanupVendorApplicationCase } from './vendor-application-fixture.mjs';
+import { assertWmsLiveFixtureCleanupReady } from './wms-live-fixture-guard.mjs';
 
 const TRANSACTION_VIEWPORTS = new Set(["desktop-1440", "mobile-390"]);
 
@@ -1121,6 +1122,7 @@ function argument(name) {
 }
 
 async function main() {
+  assertWmsLiveFixtureCleanupReady();
   const runId = argument("--run-id") ?? process.env.AUDIT_RUN_ID;
   const viewport = argument("--viewport") ?? process.env.AUDIT_VIEWPORT;
   const outputPath =

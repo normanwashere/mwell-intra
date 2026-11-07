@@ -20,6 +20,24 @@ function sourceTable(file,name){
   assert.ok(ddl,`actual source table ${name}`);return ddl;
 }
 
+// Deliberate corrupt/pre-existing state in disposable PGlite only. Runtime
+// source/trigger coverage is restored before the adapter can inspect anything.
+async function withoutFixtureGuard(db,table,fn){
+  assert.ok(db instanceof PGlite);
+  assert.match(table,/^[a-z_]+\.[a-z_]+$/);
+  await db.exec(`alter table ${table} disable trigger wms_fixture_registered_write_guard`);
+  try{return await fn();}finally{await db.exec(`alter table ${table} enable always trigger wms_fixture_registered_write_guard`);}
+}
+async function guardAddedTestTables(db){
+  assert.ok(db instanceof PGlite);
+  for(const {relation} of (await db.query(`select relation::text from private.wms_fixture_guard_targets() t where not exists
+    (select 1 from pg_trigger where tgrelid=t.relation and tgname='wms_fixture_registered_write_guard')`)).rows){
+    assert.match(relation,/^[a-z_]+\.[a-z_]+$/);
+    await db.exec(`create trigger wms_fixture_registered_write_guard before insert or update or delete on ${relation}
+      for each row execute function private.wms_fixture_guard_write();alter table ${relation} enable always trigger wms_fixture_registered_write_guard`);
+  }
+}
+
 async function fixture(fn) {
   const db=new PGlite();const dir=await mkdtemp(join(tmpdir(),'wms-pg-adapter-'));
   try {
@@ -59,9 +77,8 @@ test('lost mutation response reconciles actual operation receipt and cleanup rem
 }));
 
 test('actual command transaction failure leaves no partial product/unit/receipt',()=>fixture(async({db,options})=>{
-  await db.exec(`create function private.reject_fixture_unit() returns trigger language plpgsql as $$begin raise exception 'injected failure';end$$;
-    create trigger reject_fixture before insert on warehouse.inventory_units for each row execute function private.reject_fixture_unit();`);
-  await assert.rejects(runWmsFixtureLifecycle(options,r=>r.mutate('seed-one-serial')),/injected failure/);
+  await db.exec("alter table warehouse.inventory_units add constraint injected_fixture_failure check(id='uat-open-unit-preserved') not valid");
+  await assert.rejects(runWmsFixtureLifecycle(options,r=>r.mutate('seed-one-serial')),/injected_fixture_failure/);
   assert.equal((await db.query('select count(*)::int n from private.wms_fixture_operations')).rows[0].n,0);
   assert.equal((await db.query('select count(*)::int n from private.uat_warehouse_archive_members')).rows[0].n,0);
 }));
@@ -104,18 +121,18 @@ test('fresh recovery preserves unrelated changes made after a failed cleanup att
   assert.equal((await db.query("select title from procurement.requests where id='preserve-pr'")).rows[0].title,'User work after interruption');
 }));
 
-test('unexpected protected side effects inside the seed transaction roll back',()=>fixture(async({db,options})=>{
+test('unreviewed trigger side effects are rejected before the seed transaction',()=>fixture(async({db,options})=>{
   await db.exec(`create function private.unexpected_fixture_side_effect() returns trigger language plpgsql as $$begin
     update procurement.requests set title='Unauthorized side effect' where id='preserve-pr';return new;end$$;
     create trigger unexpected_fixture_side_effect after insert on warehouse.inventory_units for each row execute function private.unexpected_fixture_side_effect()`);
-  await assert.rejects(runWmsFixtureLifecycle(options,r=>r.mutate('seed-one-serial')),/preservation/);
+  await assert.rejects(runWmsFixtureLifecycle(options,r=>r.mutate('seed-one-serial')),/source contract drift/);
   assert.equal((await db.query("select title from procurement.requests where id='preserve-pr'")).rows[0].title,'Existing audit');
   assert.equal((await db.query('select count(*)::int n from private.wms_fixture_operations')).rows[0].n,0);
 }));
 
 test('owned row drift still blocks cleanup despite fresh unrelated snapshots',()=>fixture(async({db,options,plan})=>{
   await assert.rejects(runWmsFixtureLifecycle(options,async r=>{
-    await r.mutate('seed-one-serial');await db.query("update warehouse.products set name='Unexpected owned edit' where id=$1",[plan.roots[0].id]);
+    await r.mutate('seed-one-serial');await withoutFixtureGuard(db,'warehouse.products',()=>db.query("update warehouse.products set name='Unexpected owned edit' where id=$1",[plan.roots[0].id]));
   }),/owned row changed/);
   assert.equal((await db.query('select count(*)::int n from private.uat_warehouse_archive_members')).rows[0].n,0);
 }));
@@ -141,7 +158,7 @@ for(const abort of [false,true])test(`transaction drift retry ${abort?'honors a 
 test('foreign dependency prevents widening cleanup beyond the exact run',()=>fixture(async({db,options,plan})=>{
   await assert.rejects(runWmsFixtureLifecycle(options,async r=>{
     await r.mutate('seed-one-serial');
-    await db.query("insert into warehouse.cycle_counts(id,lines,status) values('foreign-count',$1,'draft')",[JSON.stringify([{productId:plan.roots[0].id}])]);
+    await withoutFixtureGuard(db,'warehouse.cycle_counts',()=>db.query("insert into warehouse.cycle_counts(id,lines,status) values('foreign-count',$1,'draft')",[JSON.stringify([{productId:plan.roots[0].id}])]));
   }),/dependency|preservation snapshot/);
   assert.equal((await db.query('select count(*)::int n from private.uat_warehouse_archive_members')).rows[0].n,0);
 }));
@@ -158,14 +175,18 @@ for(const kind of ['private-po','product-readiness','conversion-fk','conversion-
   else if(kind==='custody-serial')await db.exec('create table private.event_custody_entries(id uuid primary key,serial_numbers text[] not null)');
   else if(kind==='origin-state')await db.exec(sourceTable('20261105233321_stock_conversion_qc_putaway_bridge','private.stock_conversion_qc_origins'));
   const serial='QA-11111111-1111-4111-8111-111111111111';
+  await guardAddedTestTables(db);
+  const target={'private-po':'private.external_po_lines','product-readiness':'product.readiness_packages','conversion-fk':'private.stock_conversion_recipes','conversion-json':'private.stock_conversion_batches','custody-serial':'private.event_custody_entries','origin-state':'private.stock_conversion_qc_origins'}[kind];
   await assert.rejects(runWmsFixtureLifecycle(options,async r=>{
     await r.mutate('seed-one-serial');
+    await withoutFixtureGuard(db,target,async()=>{
     if(kind==='private-po')await db.query("insert into private.external_po_lines(id,order_id,product_id,quantity,uom) values('00000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000002',$1,1,'piece')",[plan.roots[0].id]);
     else if(kind==='product-readiness')await db.query("insert into product.readiness_packages(product_id,title,version,status,evidence,prepared_by,submitted_by,submitted_at) values($1,'Foreign readiness',1,'submitted','[]','00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001',now())",[plan.roots[0].id]);
     else if(kind==='conversion-fk')await db.query('insert into private.stock_conversion_recipes(id,source_product_id) values(gen_random_uuid(),$1)',[plan.roots[0].id]);
     else if(kind==='conversion-json')await db.query('insert into private.stock_conversion_batches(id,units) values(gen_random_uuid(),$1)',[JSON.stringify([{unitId:plan.roots[1].id}])]);
     else if(kind==='custody-serial')await db.query('insert into private.event_custody_entries values(gen_random_uuid(),$1::text[])',[[serial.toLowerCase()]]);
     else await db.query("insert into private.stock_conversion_qc_origins(inspection_id,unit_id,registration_id,unit_state,inspection_state,receipt_state,lot_state,hold_state) values(gen_random_uuid(),'foreign-unit',1,$1,'{}','{}','{}','{}')",[JSON.stringify({serial_number:serial})]);
+    });
   }),/foreign dependency/);
   assert.equal((await db.query('select count(*)::int n from private.uat_warehouse_archive_members')).rows[0].n,0);
   assert.equal((await db.query('select count(*)::int n from warehouse.active_inventory_units where id=$1',[plan.roots[1].id])).rows[0].n,1);
@@ -173,8 +194,9 @@ for(const kind of ['private-po','product-readiness','conversion-fk','conversion-
 
 test('catalog closure includes a composite FK with unrelated column names in another schema',()=>fixture(async({db,options,plan})=>{
   await db.exec('create schema integration_probe;alter table warehouse.products add unique(id,sku);create table integration_probe.reference_rows(item text,code text,foreign key(item,code) references warehouse.products(id,sku))');
+  await guardAddedTestTables(db);
   await assert.rejects(runWmsFixtureLifecycle(options,async r=>{
-    await r.mutate('seed-one-serial');await db.query('insert into integration_probe.reference_rows select id,sku from warehouse.products where id=$1',[plan.roots[0].id]);
+    await r.mutate('seed-one-serial');await withoutFixtureGuard(db,'integration_probe.reference_rows',()=>db.query('insert into integration_probe.reference_rows select id,sku from warehouse.products where id=$1',[plan.roots[0].id]));
   }),/foreign dependency in integration_probe.reference_rows/);
   assert.equal((await db.query('select count(*)::int n from private.uat_warehouse_archive_members')).rows[0].n,0);
 }));
@@ -182,25 +204,27 @@ test('catalog closure includes a composite FK with unrelated column names in ano
 test('foreign history with matching serial is not exempted as owned history',()=>fixture(async({db,options,plan})=>{
   await assert.rejects(runWmsFixtureLifecycle(options,async r=>{
     await r.mutate('seed-one-serial');
-    await db.query("insert into private.warehouse_unit_history(unit_id,product_id,serial_number,operation,after_state) select 'other-unit','master-preserved',serial_number,'registered','{}' from warehouse.inventory_units where id=$1",[plan.roots[1].id]);
+    await withoutFixtureGuard(db,'private.warehouse_unit_history',()=>db.query("insert into private.warehouse_unit_history(unit_id,product_id,serial_number,operation,after_state) select 'other-unit','master-preserved',serial_number,'registered','{}' from warehouse.inventory_units where id=$1",[plan.roots[1].id]));
   }),/foreign dependency in private.warehouse_unit_history/);
   assert.equal((await db.query('select count(*)::int n from private.uat_warehouse_archive_members')).rows[0].n,0);
 }));
 
 test('unrelated cross-schema rows and text mentions do not become fixture ownership',()=>fixture(async({db,options,plan})=>{
   await db.exec('create schema integration_probe;create table integration_probe.reference_rows(item text references warehouse.products(id),note text)');
+  await guardAddedTestTables(db);
   assert.equal((await runWmsFixtureLifecycle(options,async r=>{
-    await r.mutate('seed-one-serial');await db.query("insert into integration_probe.reference_rows values('master-preserved',$1)",[plan.roots[0].id]);
+    await r.mutate('seed-one-serial');await db.query("insert into integration_probe.reference_rows values('master-preserved',$1)",[`Report about ${plan.roots[0].id}`]);
   })).cleanupVerified,true);
   assert.equal((await db.query('select count(*)::int n from integration_probe.reference_rows')).rows[0].n,1);
 }));
 
 test('strict logical JSON shapes distinguish unrelated scalar/object/array values from an exact serial',()=>fixture(async({db,options,pair})=>{
   await db.exec('create table private.event_custody_entries(id text primary key,serial_numbers jsonb)');
+  await guardAddedTestTables(db);
   for(const [index,value] of [null,42,false,'OTHER-SERIAL',{note:'OTHER-SERIAL'},['OTHER-SERIAL',null,12]].entries())await db.query('insert into private.event_custody_entries values($1,$2)',[String(index),JSON.stringify(value)]);
   const archive=pair.adapter.archive;
   pair.adapter.archive=async context=>{
-    await db.query("insert into private.event_custody_entries values('exact',$1)",[JSON.stringify([null,42,{note:'unrelated'},' qa-11111111-1111-4111-8111-111111111111 '])]);
+    await withoutFixtureGuard(db,'private.event_custody_entries',()=>db.query("insert into private.event_custody_entries values('exact',$1)",[JSON.stringify([null,42,{note:'unrelated'},' qa-11111111-1111-4111-8111-111111111111 '])]));
     return archive(context);
   };
   await assert.rejects(runWmsFixtureLifecycle(options,r=>r.mutate('seed-one-serial')),/foreign dependency in private.event_custody_entries/);
@@ -208,13 +232,17 @@ test('strict logical JSON shapes distinguish unrelated scalar/object/array value
   assert.equal((await db.query('select count(*)::int n from private.uat_warehouse_archive_members')).rows[0].n,0);
 }));
 
-test('fresh transaction preservation includes private external-PO reference surfaces',()=>fixture(async({db,options})=>{
+test('fresh transaction preservation includes private external-PO reference surfaces',()=>fixture(async({db,options,reader})=>{
   await db.exec(`create table private.external_po_probe(id text primary key,amount int);
-    insert into private.external_po_probe values('foreign',10);
-    create function private.unexpected_private_effect() returns trigger language plpgsql as $$begin
-      update private.external_po_probe set amount=999 where id='foreign';return new;end$$;
-    create trigger unexpected_private_effect after insert on warehouse.inventory_units for each row execute function private.unexpected_private_effect()`);
-  await assert.rejects(runWmsFixtureLifecycle(options,r=>r.mutate('seed-one-serial')),/preservation/);
+    insert into private.external_po_probe values('foreign',10)`);
+  await guardAddedTestTables(db);
+  const writer={async query(sql,args){
+    const result=await db.query(sql,args);
+    if(sql.includes('insert into warehouse.inventory_units'))await db.query("update private.external_po_probe set amount=999 where id='foreign'");
+    return result;
+  }};
+  const pair=createPostgresFixtureSessions({writer,reader,readHealth:async()=>health(),bindings});
+  await assert.rejects(runWmsFixtureLifecycle({...options,...pair},r=>r.mutate('seed-one-serial')),/preservation/);
   assert.equal((await db.query("select amount from private.external_po_probe where id='foreign'")).rows[0].amount,10);
   assert.equal((await db.query('select count(*)::int n from private.wms_fixture_operations')).rows[0].n,0);
 }));
@@ -274,7 +302,7 @@ test('source-body drift stops before any fixture write',()=>fixture(async({db,op
 }));
 
 test('foreign SKU collision cannot be treated as synthetic owned stock',()=>fixture(async({db,options})=>{
-  await db.exec("insert into warehouse.products(id,sku,name) values('foreign-product','QA-11111111-1111-4111-8111-111111111111','Foreign')");
+  await withoutFixtureGuard(db,'warehouse.products',()=>db.exec("insert into warehouse.products(id,sku,name) values('foreign-product','QA-11111111-1111-4111-8111-111111111111','Foreign')"));
   await assert.rejects(runWmsFixtureLifecycle(options,r=>r.mutate('seed-one-serial')),/foreign SKU/);
   assert.equal((await db.query('select count(*)::int n from private.wms_fixture_runs')).rows[0].n,0);
 }));

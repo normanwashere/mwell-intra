@@ -12,12 +12,18 @@ The July 6 prototype schemas in the source history use UUID workflow keys. The c
 
 - `../../canonical-replay-manifest.json` accounts for every baseline and repository migration with a SHA-256 checksum. The preparation script also pins the complete manifest checksum.
 - The baseline is executed first under ordered, CI-only version filenames. Original provenance remains in the output `replay-audit.json`.
-- All 231 classified forward-source migrations execute unchanged in repository order, including source/applied-history variants. This tests the candidate source; it is not an exact replay of all recorded UAT SQL.
+- All 245 classified forward-source migrations execute unchanged in repository order, including source/applied-history variants. Together with 22 baseline files, this is 267 executed files. This tests the candidate source; it is not an exact replay of all recorded UAT SQL.
 - Exactly 35 original files remain in the repository but are not replayed: 32 incompatible prototype/pre-cutover files, the replaced cutover variant, and two operational seed files tied to named UAT accounts. Each exclusion has its own checksum and reason in the manifest.
 - Missing, new, changed, unclassified, duplicated, or symlinked SQL is rejected before the disposable workspace is created. Adding a migration requires updating and reviewing the manifest and its checksum.
 - No linked project configuration, credentials, auth users, tester records or operational seed data is copied into the isolated workspace. The existing governed orientation bootstrap and applied-authority tests run afterwards as separate, required steps.
 
 All native PostgreSQL, source, coverage, build, accessibility and browser release gates remain required. Packaging tests alone do not establish that the SQL executed successfully. This change does not migrate UAT or authorize deployment.
+
+## November 7 Forward Inventory Append
+
+Twelve reviewed forward files from `20261106134948_uat_archive_restore_test_issued_units.sql` through `20261107041749_wms_fixture_registered_writer_fence.sql` are appended to the prior 268-source manifest, producing 280 accounted source files. The prior manifest, reconstructed without these entries, must retain SHA256 `ea2c0c6f51ffd7eda84e936a3011c9c1396de219c94f4bbe7a2cf263fd72e637`. All 22 baseline entries and 35 historical exclusions are unchanged. Each new entry is `execute-forward`; the fixture ledger and registered-writer fence remain candidate SQL, not claims of live installation.
+
+The dedicated WMS replay tool additionally requires both fixture filenames, a reviewed line-ending-portable inventory digest, actual local Supabase execution and post-schema trigger/authority checks. Its local PostgreSQL17.6 diagnostic exposed missing Auth/Storage platform prerequisites and is explicitly not a complete replay pass. Required Linux Docker CI must execute the whole chain; no permissive prerequisite replacement or skipped migration is introduced.
 
 ## Forward Source Syntax Correction
 
